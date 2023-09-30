@@ -1,0 +1,43 @@
+
+var w = 76
+var h = 28
+var iter = 100;
+var i = 0
+var x0 = 0
+var y0 = 0
+var xx = 0
+var yy = 0
+var xx2 = 0
+var yy2 = 0
+var i;
+for(i=0; i < h; i++)
+{
+    y0 = (i / h) * 2.5 - 1.25;
+    var j = 0
+    for(j=0; j < w; j++)
+    {
+        x0 = (j / w) * 3.0 - 2.0;
+        xx = 0
+        yy = 0
+        var pch = 32;
+        var ic = 0;
+        while(ic < iter)
+        {
+            xx2 = xx*xx; yy2 = yy*yy;
+            if(xx2 + yy2 < 4.0)
+            {
+                yy = 2*xx*yy + y0;
+                xx = xx2 - yy2 + x0;
+            }
+            else
+            {
+                pch = 64;
+                break;
+            }
+            ic++
+        }
+        print(chr(pch));
+    }
+    println();
+}
+

@@ -1,0 +1,21 @@
+
+class Poop
+{
+    init()
+    {
+        this.stuff = 10;
+    }
+}
+
+var a = 5;
+a++;
+println(a);
+
+
+var p = Poop();
+println(p.stuff++);
+println("p.stuff=", p.stuff);
+
+
+
+
