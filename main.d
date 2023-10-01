@@ -1,1 +1,1 @@
-main.o: main.c prot.inc
+main.o: main.c cvector.h prot.inc

@@ -30,12 +30,9 @@ while (cy <= ymax)
             y2 = ((y * y) >> 12)
             iter++
         }
-        //line += (32 + iter).chr
         print(chr(32 + iter))
         cx = cx + dx
     }
-    //print(line, "\n")
-    //line = ""
     print("\n")
     cy = cy + dy
 }

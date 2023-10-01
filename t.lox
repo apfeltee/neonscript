@@ -13,7 +13,6 @@ println(a);
 
 
 var p = Poop();
-println(p.stuff++);
 println("p.stuff=", p.stuff);
 
 

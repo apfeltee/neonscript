@@ -8,14 +8,14 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <time.h>
-
+#include <math.h>
+#include "cvector.h"
 
 #define UINT8_COUNT (UINT8_MAX + 1)
 
 // In the book, we show them defined, but for working on them locally,
 // we don't want them to be.
-#undef DEBUG_PRINT_CODE
-#undef DEBUG_TRACE_EXECUTION
+#define DEBUG_PRINT_CODE 0
 #undef DEBUG_STRESS_GC
 #undef DEBUG_LOG_GC
 
@@ -30,10 +30,6 @@
 #define IS_NIL(value) ((value).type == VAL_NIL)
 #define IS_NUMBER(value) ((value).type == VAL_NUMBER)
 #define IS_OBJ(value) ((value).type == VAL_OBJ)
-
-#define AS_OBJ(value) ((value).as.obj)
-#define AS_BOOL(value) ((value).as.boolean)
-#define AS_NUMBER(value) ((value).as.number)
 
 #define BOOL_VAL(value) ((Value){ VAL_BOOL, { .boolean = value } })
 #define NIL_VAL ((Value){ VAL_NIL, { .number = 0 } })
@@ -50,6 +46,10 @@
 //#define IS_NATIVE(value) lox_value_isobjtype(value, OBJ_NATIVE)
 #define IS_STRING(value) lox_value_isobjtype(value, OBJ_STRING)
 
+
+#define AS_OBJ(value) ((value).as.obj)
+#define AS_BOOL(value) ((value).as.boolean)
+#define AS_NUMBER(value) ((value).as.number)
 #define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
 #define AS_CLASS(value) ((ObjClass*)AS_OBJ(value))
 #define AS_CLOSURE(value) ((ObjClosure*)AS_OBJ(value))
@@ -58,7 +58,7 @@
 #define AS_NATIVE(value) ((ObjNative*)AS_OBJ(value))
 #define AS_STRING(value) ((ObjString*)AS_OBJ(value))
 #define AS_CSTRING(value) (((ObjString*)AS_OBJ(value))->chars)
-
+#define AS_ARRAY(value) ((ObjArray*)AS_OBJ(value))
 
 #define ALLOCATE(vm, type, count) (type*)lox_mem_realloc(vm, NULL, 0, sizeof(type) * (count))
 
@@ -73,18 +73,10 @@
 
 #define GC_HEAP_GROW_FACTOR 2
 
-#define ALLOCATE_OBJ(vm, type, objecttype) (type*)lox_object_allocobj(vm, sizeof(type), objecttype)
 
 #define TABLE_MAX_LOAD 0.75
 
 
-enum ValueType
-{
-    VAL_BOOL,
-    VAL_NIL,// [user-types]
-    VAL_NUMBER,
-    VAL_OBJ
-};
 
 // OP_FUNCARG - explicitly for function arguments (and default values)?
 
@@ -96,6 +88,7 @@ enum OpCode
     OP_PUSHFALSE,
     OP_PUSHONE,
     OP_POP,
+    OP_POPN,
     OP_DUP,
     OP_LOCALGET,
     OP_LOCALSET,
@@ -117,6 +110,9 @@ enum OpCode
     OP_PRIMMODULO,
     OP_PRIMSHIFTLEFT,
     OP_PRIMSHIFTRIGHT,
+    OP_PRIMBINAND,
+    OP_PRIMBINOR,
+    OP_PRIMBINXOR,
     OP_PRIMNOT,
     OP_PRIMNEGATE,
     OP_DEBUGPRINT,
@@ -132,7 +128,18 @@ enum OpCode
     OP_CLASS,
     OP_INHERIT,
     OP_METHOD,
+    OP_MAKEARRAY,
+    OP_INDEXGET,
+    OP_INDEXSET,
     OP_PSEUDOBREAK,
+};
+
+enum ValueType
+{
+    VAL_BOOL,
+    VAL_NIL,// [user-types]
+    VAL_NUMBER,
+    VAL_OBJ
 };
 
 enum ObjType
@@ -144,7 +151,8 @@ enum ObjType
     OBJ_INSTANCE,
     OBJ_NATIVE,
     OBJ_STRING,
-    OBJ_UPVALUE
+    OBJ_UPVALUE,
+    OBJ_ARRAY,
 };
 
 enum StatusCode
@@ -161,6 +169,8 @@ enum AstTokType
     TOK_PARENCLOSE,
     TOK_BRACEOPEN,
     TOK_BRACECLOSE,
+    TOK_BRACKETOPEN,
+    TOK_BRACKETCLOSE,
     TOK_COMMA,
     TOK_DOT,
     TOK_MINUS,
@@ -170,6 +180,9 @@ enum AstTokType
     TOK_SLASH,
     TOK_STAR,
     TOK_MODULO,
+    TOK_BINAND,
+    TOK_BINOR,
+    TOK_BINXOR,
     // One or two character tokens.
     TOK_SHIFTLEFT,
     TOK_SHIFTRIGHT,
@@ -253,6 +266,7 @@ typedef struct /**/ObjClosure ObjClosure;
 typedef struct /**/ObjClass ObjClass;
 typedef struct /**/ObjInstance ObjInstance;
 typedef struct /**/ObjBoundMethod ObjBoundMethod;
+typedef struct /**/ObjArray ObjArray;
 typedef struct /**/CallFrame CallFrame;
 typedef struct /**/Value Value;
 typedef struct /**/ValArray ValArray;
@@ -293,8 +307,10 @@ struct Value
 
 struct ValArray
 {
-    int capacity;
-    int count;
+    VMState* pvm;
+
+    size_t size;
+    size_t capacity;
     Value* values;
 };
 
@@ -303,7 +319,7 @@ struct Chunk
 {
     int count;
     int capacity;
-    uint8_t* code;
+    int32_t* code;
     int* lines;
     ValArray constants;
 };
@@ -327,6 +343,13 @@ struct Object
     ObjType type;
     bool ismarked;
     Object* next;
+};
+
+struct ObjArray
+{
+    Object obj;
+    VMState* pvm;
+    ValArray vala;
 };
 
 struct ObjFunction
@@ -392,8 +415,8 @@ struct ObjBoundMethod
 struct CallFrame
 {
     ObjClosure* closure;
-    uint8_t* ip;
-    Value* slots;
+    int32_t* ip;
+    int64_t frstackindex;
 };
 
 struct AstToken
@@ -429,7 +452,7 @@ struct AstLocal
 
 struct AstUpvalue
 {
-    uint8_t index;
+    int32_t index;
     bool islocal;
 };
 
@@ -474,13 +497,12 @@ struct AstParser
 
 struct VMState
 {
+    bool conf_shouldprintruntime;
     AstParser* parser;
     CallFrame* currframe;
     CallFrame frames[FRAMES_MAX];
     int framecount;
-
-    Value stack[STACK_MAX];
-    Value* stacktop;
+    
     HashTable globals;
     HashTable strings;
     ObjString* initstring;
@@ -497,13 +519,15 @@ struct VMState
         Object** graystack;
     } gcstate;
 
-    
 
+    int64_t stacktop;
+    Value stack[STACK_MAX];
+ 
 };
 
 #include "prot.inc"
 
-static inline bool lox_value_isobjtype(Value value, ObjType type)
+bool lox_value_isobjtype(Value value, ObjType type)
 {
     return IS_OBJ(value) && AS_OBJ(value)->type == type;
 }
@@ -568,15 +592,15 @@ void lox_gcmem_markvalue(VMState* vm, Value value)
         lox_gcmem_markobject(vm, AS_OBJ(value));
 }
 
-static void lox_gcmem_markvalarray(VMState* vm, ValArray* array)
+void lox_gcmem_markvalarray(VMState* vm, ValArray* array)
 {
-    for(int i = 0; i < array->count; i++)
+    for(int i = 0; i < lox_valarray_count(array); i++)
     {
         lox_gcmem_markvalue(vm, array->values[i]);
     }
 }
 
-static void lox_gcmem_blackenobj(VMState* vm, Object* object)
+void lox_gcmem_blackenobj(VMState* vm, Object* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p blacken ", (void*)object);
@@ -587,45 +611,55 @@ static void lox_gcmem_blackenobj(VMState* vm, Object* object)
     switch(object->type)
     {
         case OBJ_BOUNDMETHOD:
-        {
-            ObjBoundMethod* bound = (ObjBoundMethod*)object;
-            lox_gcmem_markvalue(vm, bound->receiver);
-            lox_gcmem_markobject(vm, (Object*)bound->method);
-            break;
-        }
-        case OBJ_CLASS:
-        {
-            ObjClass* klass = (ObjClass*)object;
-            lox_gcmem_markobject(vm, (Object*)klass->name);
-            lox_gcmem_markhashtable(vm, &klass->methods);
-            break;
-        }
-        case OBJ_CLOSURE:
-        {
-            ObjClosure* closure = (ObjClosure*)object;
-            lox_gcmem_markobject(vm, (Object*)closure->innerfn);
-            for(int i = 0; i < closure->upvaluecount; i++)
             {
-                lox_gcmem_markobject(vm, (Object*)closure->upvalues[i]);
+                ObjBoundMethod* bound = (ObjBoundMethod*)object;
+                lox_gcmem_markvalue(vm, bound->receiver);
+                lox_gcmem_markobject(vm, (Object*)bound->method);
             }
             break;
-        }
+        case OBJ_CLASS:
+            {
+                ObjClass* klass = (ObjClass*)object;
+                lox_gcmem_markobject(vm, (Object*)klass->name);
+                lox_gcmem_markhashtable(vm, &klass->methods);
+            }
+            break;
+
+        case OBJ_CLOSURE:
+            {
+                ObjClosure* closure = (ObjClosure*)object;
+                lox_gcmem_markobject(vm, (Object*)closure->innerfn);
+                for(int i = 0; i < closure->upvaluecount; i++)
+                {
+                    lox_gcmem_markobject(vm, (Object*)closure->upvalues[i]);
+                }
+            }
+            break;
         case OBJ_FUNCTION:
-        {
-            ObjFunction* ofn = (ObjFunction*)object;
-            lox_gcmem_markobject(vm, (Object*)ofn->name);
-            lox_gcmem_markvalarray(vm, &ofn->chunk.constants);
+            {
+                ObjFunction* ofn = (ObjFunction*)object;
+                lox_gcmem_markobject(vm, (Object*)ofn->name);
+                lox_gcmem_markvalarray(vm, &ofn->chunk.constants);
+            }
             break;
-        }
         case OBJ_INSTANCE:
-        {
-            ObjInstance* instance = (ObjInstance*)object;
-            lox_gcmem_markobject(vm, (Object*)instance->klass);
-            lox_gcmem_markhashtable(vm, &instance->fields);
+            {
+                ObjInstance* instance = (ObjInstance*)object;
+                lox_gcmem_markobject(vm, (Object*)instance->klass);
+                lox_gcmem_markhashtable(vm, &instance->fields);
+            }
             break;
-        }
         case OBJ_UPVALUE:
-            lox_gcmem_markvalue(vm, ((ObjUpvalue*)object)->closed);
+            {
+                lox_gcmem_markvalue(vm, ((ObjUpvalue*)object)->closed);
+            }
+            break;
+        case OBJ_ARRAY:
+            {
+                ObjArray* oa;
+                oa = (ObjArray*)object;
+                lox_gcmem_markvalarray(vm, &oa->vala);
+            }
             break;
         case OBJ_NATIVE:
         case OBJ_STRING:
@@ -633,7 +667,8 @@ static void lox_gcmem_blackenobj(VMState* vm, Object* object)
     }
 }
 
-static void lox_object_release(VMState* vm, Object* object)
+
+void lox_object_release(VMState* vm, Object* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void*)object, object->type);
@@ -642,22 +677,25 @@ static void lox_object_release(VMState* vm, Object* object)
     switch(object->type)
     {
         case OBJ_BOUNDMETHOD:
-            FREE(vm, ObjBoundMethod, object);
+            {
+                FREE(vm, ObjBoundMethod, object);
+            }
             break;
         case OBJ_CLASS:
-        {
-            ObjClass* klass = (ObjClass*)object;
-            lox_hashtable_free(vm, &klass->methods);
-            FREE(vm, ObjClass, object);
+            {
+                ObjClass* klass = (ObjClass*)object;
+                lox_hashtable_free(vm, &klass->methods);
+                FREE(vm, ObjClass, object);
+            }
             break;
-        }// [braces]
         case OBJ_CLOSURE:
-        {
-            ObjClosure* closure = (ObjClosure*)object;
-            FREE_ARRAY(vm, ObjUpvalue*, closure->upvalues, closure->upvaluecount);
-            FREE(vm, ObjClosure, object);
+            {
+                ObjClosure* closure = (ObjClosure*)object;
+                FREE_ARRAY(vm, ObjUpvalue*, closure->upvalues, closure->upvaluecount);
+                FREE(vm, ObjClosure, object);
+            }
             break;
-        }
+
         case OBJ_FUNCTION:
         {
             ObjFunction* ofn = (ObjFunction*)object;
@@ -673,26 +711,39 @@ static void lox_object_release(VMState* vm, Object* object)
             break;
         }
         case OBJ_NATIVE:
-            FREE(vm, ObjNative, object);
+            {
+                FREE(vm, ObjNative, object);
+            }
             break;
         case OBJ_STRING:
-        {
-            ObjString* string = (ObjString*)object;
-            FREE_ARRAY(vm, char, string->chars, string->length + 1);
-            FREE(vm, ObjString, object);
+            {
+                ObjString* string = (ObjString*)object;
+                FREE_ARRAY(vm, char, string->chars, string->length + 1);
+                FREE(vm, ObjString, object);
+            }
             break;
-        }
+        case OBJ_ARRAY:
+            {
+                ObjArray* arr;
+                arr = (ObjArray*)object;
+                lox_valarray_free(&arr->vala);
+                FREE(vm, ObjArray, object);
+            }
+            break;
         case OBJ_UPVALUE:
-            FREE(vm, ObjUpvalue, object);
+            {
+                FREE(vm, ObjUpvalue, object);
+            }
             break;
     }
 }
 
-static void lox_gcmem_markroots(VMState* vm)
+void lox_gcmem_markroots(VMState* vm)
 {
-    for(Value* slot = vm->stack; slot < vm->stacktop; slot++)
+    Value* pslot;
+    for(pslot=&vm->stack[0]; pslot < &vm->stack[vm->stacktop]; pslot++)
     {
-        lox_gcmem_markvalue(vm, *slot);
+        lox_gcmem_markvalue(vm, *pslot);
     }
 
     for(int i = 0; i < vm->framecount; i++)
@@ -710,7 +761,7 @@ static void lox_gcmem_markroots(VMState* vm)
     lox_gcmem_markobject(vm, (Object*)vm->initstring);
 }
 
-static void lox_gcmem_tracerefs(VMState* vm)
+void lox_gcmem_tracerefs(VMState* vm)
 {
     while(vm->gcstate.graycount > 0)
     {
@@ -719,7 +770,7 @@ static void lox_gcmem_tracerefs(VMState* vm)
     }
 }
 
-static void lox_gcmem_sweep(VMState* vm)
+void lox_gcmem_sweep(VMState* vm)
 {
     Object* previous = NULL;
     Object* object = vm->gcstate.linkedobjects;
@@ -782,33 +833,194 @@ void lox_vm_gcfreelinkedobjects(VMState* vm)
     free(vm->gcstate.graystack);
 }
 
+#define lox_valarray_computenextgrow(size) \
+    ((size) ? ((size) << 1) : 1)
+
 
 void lox_valarray_init(VMState* vm, ValArray* array)
 {
-    (void)vm;
+    array->pvm = vm;
     array->values = NULL;
     array->capacity = 0;
-    array->count = 0;
+    array->size = 0;
 }
 
-void lox_valarray_push(VMState* vm, ValArray* array, Value value)
+size_t lox_valarray_count(ValArray* array)
 {
+    return array->size;
+}
+
+size_t lox_valarray_size(ValArray* array)
+{
+    return array->size;
+}
+
+Value lox_valarray_at(ValArray* array, size_t i)
+{
+    return array->values[i];
+}
+
+void lox_valarray_grow(ValArray* arr, size_t count)
+{
+    const size_t nsz = count * sizeof(Value);
+    void *p1 = arr->values;
+    void *p2 = realloc(p1, nsz);
+    assert(p2);
+    arr->values = p2;
+    arr->capacity = count;
+
+}
+
+void lox_valarray_push(ValArray* arr, Value value)
+{
+    /*
     int oldcap;
-    if(array->capacity < array->count + 1)
+    if(arr->capacity < arr->size + 1)
     {
-        oldcap = array->capacity;
-        array->capacity = GROW_CAPACITY(oldcap);
-        array->values = GROW_ARRAY(vm, Value, array->values, oldcap, array->capacity);
+        oldcap = arr->capacity;
+        arr->capacity = GROW_CAPACITY(oldcap);
+        arr->values = GROW_ARRAY(arr->pvm, Value, arr->values, oldcap, arr->capacity);
+    }
+    arr->values[arr->size] = value;
+    arr->size++;
+    */
+
+    size_t cap = arr->capacity;
+    if(cap <= arr->size)
+    {
+        lox_valarray_grow(arr, lox_valarray_computenextgrow(cap));
+    }
+    arr->values[arr->size] = (value);
+    arr->size++;
+}
+
+void lox_valarray_insert(ValArray* arr, size_t pos, Value val)
+{
+    size_t oldcap;
+    oldcap = arr->capacity;
+    if (oldcap <= arr->size)
+    {
+        lox_valarray_grow(arr, lox_valarray_computenextgrow(oldcap));
+    }
+    if(pos < arr->size)
+    {
+        memmove(arr->values + pos + 1, arr->values + pos, sizeof(Value) * (arr->size - pos));
+    }
+    arr->values[pos] = val;
+    arr->size++;
+}
+
+void lox_valarray_erase(ValArray* arr, size_t i)
+{
+    const size_t osz = arr->size;
+    if (i < osz)
+    {
+        /*
+        cvector_elem_destructor_t elem_destructor__ = cvector_elem_destructor(vec);
+        if (arr->dtorfunc)
+        {
+            arr->dtorfunc(&arr->values[i]);
+        }
+        */
+        arr->size = osz - 1;
+        arr->size--;
+        memmove(arr->values + i, arr->values + i + 1, sizeof(Value) * (osz - 1 - i));
     }
 
-    array->values[array->count] = value;
-    array->count++;
 }
 
-void lox_valarray_free(VMState* vm, ValArray* array)
+Value lox_valarray_pop(ValArray* arr)
 {
-    FREE_ARRAY(vm, Value, array->values, array->capacity);
-    lox_valarray_init(vm, array);
+    arr->size--;
+    return arr->values[arr->size + 1];
+}
+
+void lox_valarray_free(ValArray* arr)
+{
+    VMState* vm;
+    vm = arr->pvm;
+    FREE_ARRAY(vm, Value, arr->values, arr->capacity);
+    lox_valarray_init(vm, arr);
+}
+
+void lox_writer_printfunction(ObjFunction* ofn)
+{
+    if(ofn->name == NULL)
+    {
+        printf("<script>");
+        return;
+    }
+    printf("<fn %s>", ofn->name->chars);
+}
+
+void lox_writer_printarray(ObjArray* arr)
+{
+    size_t i;
+    size_t asz;
+    asz = lox_valarray_size(&arr->vala);
+    printf("[");
+    for(i=0; i<asz; i++)
+    {
+        lox_writer_printvalue(arr->vala.values[i]);
+        if((i+1) < asz)
+        {
+            printf(",");
+        }
+    }
+    printf("]");
+}
+
+void lox_writer_printobject(Value value)
+{
+    switch(OBJ_TYPE(value))
+    {
+        case OBJ_BOUNDMETHOD:
+            {
+                lox_writer_printfunction(AS_BOUND_METHOD(value)->method->innerfn);
+            }
+            break;
+        case OBJ_CLASS:
+            {
+                printf("%s", AS_CLASS(value)->name->chars);
+            }
+            break;
+        case OBJ_CLOSURE:
+            {
+                lox_writer_printfunction(AS_CLOSURE(value)->innerfn);
+            }
+            break;
+        case OBJ_FUNCTION:
+            {
+                lox_writer_printfunction(AS_FUNCTION(value));
+            }
+            break;
+        case OBJ_INSTANCE:
+            {
+                printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
+            }
+            break;
+        case OBJ_NATIVE:
+            {
+                printf("<native fn>");
+            }
+            break;
+        case OBJ_STRING:
+            {
+                printf("%s", AS_CSTRING(value));
+            }
+            break;
+        case OBJ_UPVALUE:
+            {
+                printf("upvalue");
+            }
+            break;
+        case OBJ_ARRAY:
+            {
+                printf("array printing?");
+                lox_writer_printarray(AS_ARRAY(value));
+            }
+            break;
+    }
 }
 
 void lox_writer_printvalue(Value value)
@@ -829,6 +1041,79 @@ void lox_writer_printvalue(Value value)
             break;
     }
 }
+
+const char* lox_writer_objecttypename(Object* obj)
+{
+    switch(obj->type)
+    {
+        case OBJ_BOUNDMETHOD:
+            {
+                return "boundmethod";
+            }
+            break;
+        case OBJ_CLASS:
+            {
+                return "class";
+            }
+            break;
+        case OBJ_CLOSURE:
+            {
+                return "closure";
+            }
+            break;
+        case OBJ_FUNCTION:
+            {
+                return "function";
+            }
+            break;
+        case OBJ_INSTANCE:
+            {
+                return "instance";
+            }
+            break;
+        case OBJ_NATIVE:
+            {
+                return "nativefunction";
+            }
+            break;
+        case OBJ_STRING:
+            {
+                return "string";
+            }
+            break;
+        case OBJ_UPVALUE:
+            {
+                return "upvalue";
+            }
+            break;
+        case OBJ_ARRAY:
+            {
+                return "array";
+            }
+            break;
+    }
+}
+
+const char* lox_writer_valuetypename(Value value)
+{
+    switch(value.type)
+    {
+        case VAL_BOOL:
+            return "bool";
+            break;
+        case VAL_NIL:
+            return "nil";
+            break;
+        case VAL_NUMBER:
+            return "string";
+            break;
+        case VAL_OBJ:
+            return lox_writer_objecttypename(AS_OBJ(value));
+            break;
+    }
+    return "?unknown?";
+}
+
 
 bool lox_value_equal(Value a, Value b)
 {
@@ -858,7 +1143,7 @@ bool lox_value_equal(Value a, Value b)
     }
 }
 
-static Object* lox_object_allocobj(VMState* vm, size_t size, ObjType type)
+Object* lox_object_allocobj(VMState* vm, size_t size, ObjType type)
 {
     Object* object = (Object*)lox_mem_realloc(vm, NULL, 0, size);
     object->type = type;
@@ -876,7 +1161,7 @@ static Object* lox_object_allocobj(VMState* vm, size_t size, ObjType type)
 
 ObjBoundMethod* lox_object_makeboundmethod(VMState* vm, Value receiver, ObjClosure* method)
 {
-    ObjBoundMethod* bound = ALLOCATE_OBJ(vm, ObjBoundMethod, OBJ_BOUNDMETHOD);
+    ObjBoundMethod* bound = (ObjBoundMethod*)lox_object_allocobj(vm, sizeof(ObjBoundMethod), OBJ_BOUNDMETHOD);
     bound->receiver = receiver;
     bound->method = method;
     return bound;
@@ -884,7 +1169,7 @@ ObjBoundMethod* lox_object_makeboundmethod(VMState* vm, Value receiver, ObjClosu
 
 ObjClass* lox_object_makeclass(VMState* vm, ObjString* name)
 {
-    ObjClass* klass = ALLOCATE_OBJ(vm, ObjClass, OBJ_CLASS);
+    ObjClass* klass = (ObjClass*)lox_object_allocobj(vm, sizeof(ObjClass), OBJ_CLASS);
     klass->name = name;// [klass]
     lox_hashtable_init(&klass->methods);
     return klass;
@@ -898,7 +1183,7 @@ ObjClosure* lox_object_makeclosure(VMState* vm, ObjFunction* ofn)
         upvalues[i] = NULL;
     }
 
-    ObjClosure* closure = ALLOCATE_OBJ(vm, ObjClosure, OBJ_CLOSURE);
+    ObjClosure* closure = (ObjClosure*)lox_object_allocobj(vm, sizeof(ObjClosure), OBJ_CLOSURE);
     closure->innerfn = ofn;
     closure->upvalues = upvalues;
     closure->upvaluecount = ofn->upvaluecount;
@@ -907,7 +1192,7 @@ ObjClosure* lox_object_makeclosure(VMState* vm, ObjFunction* ofn)
 
 ObjFunction* lox_object_makefunction(VMState* vm)
 {
-    ObjFunction* ofn = ALLOCATE_OBJ(vm, ObjFunction, OBJ_FUNCTION);
+    ObjFunction* ofn = (ObjFunction*)lox_object_allocobj(vm, sizeof(ObjFunction), OBJ_FUNCTION);
     ofn->arity = 0;
     ofn->upvaluecount = 0;
     ofn->name = NULL;
@@ -917,7 +1202,7 @@ ObjFunction* lox_object_makefunction(VMState* vm)
 
 ObjInstance* lox_object_makeinstance(VMState* vm, ObjClass* klass)
 {
-    ObjInstance* instance = ALLOCATE_OBJ(vm, ObjInstance, OBJ_INSTANCE);
+    ObjInstance* instance = (ObjInstance*)lox_object_allocobj(vm, sizeof(ObjInstance), OBJ_INSTANCE);
     instance->klass = klass;
     lox_hashtable_init(&instance->fields);
     return instance;
@@ -925,15 +1210,15 @@ ObjInstance* lox_object_makeinstance(VMState* vm, ObjClass* klass)
 
 ObjNative* lox_object_makenative(VMState* vm, NativeFN nat)
 {
-    ObjNative* native = ALLOCATE_OBJ(vm, ObjNative, OBJ_NATIVE);
+    ObjNative* native = (ObjNative*)lox_object_allocobj(vm, sizeof(ObjNative), OBJ_NATIVE);
     native->natfunc = nat;
     return native;
 }
 
 
-static ObjString* lox_string_allocate(VMState* vm, char* chars, int length, uint32_t hash)
+ObjString* lox_string_allocate(VMState* vm, char* chars, int length, uint32_t hash)
 {
-    ObjString* string = ALLOCATE_OBJ(vm, ObjString, OBJ_STRING);
+    ObjString* string = (ObjString*)lox_object_allocobj(vm, sizeof(ObjString), OBJ_STRING);
     string->length = length;
     string->chars = chars;
     string->hash = hash;
@@ -945,12 +1230,12 @@ static ObjString* lox_string_allocate(VMState* vm, char* chars, int length, uint
     return string;
 }
 
-static uint32_t lox_util_hashstring(const char* key, int length)
+uint32_t lox_util_hashstring(const char* key, int length)
 {
     uint32_t hash = 2166136261u;
     for(int i = 0; i < length; i++)
     {
-        hash ^= (uint8_t)key[i];
+        hash ^= (int32_t)key[i];
         hash *= 16777619;
     }
     return hash;
@@ -982,55 +1267,31 @@ ObjString* lox_string_copy(VMState* vm, const char* chars, int length)
     return lox_string_allocate(vm, heapchars, length, hash);
 }
 
-ObjUpvalue* lox_object_makeupvalue(VMState* vm, Value* slot)
+ObjArray* lox_array_make(VMState* vm)
 {
-    ObjUpvalue* upvalue = ALLOCATE_OBJ(vm, ObjUpvalue, OBJ_UPVALUE);
+    ObjArray* oa;
+    oa = (ObjArray*)lox_object_allocobj(vm, sizeof(ObjArray), OBJ_ARRAY);
+    oa->pvm = vm;
+    lox_valarray_init(vm, &oa->vala);
+    oa->vala.size = 0;
+    return oa;
+}
+
+bool lox_array_push(ObjArray* arr, Value val)
+{
+    lox_valarray_push(&arr->vala, val);
+    return true;
+}
+
+ObjUpvalue* lox_object_makeupvalue(VMState* vm, Value* pslot)
+{
+    ObjUpvalue* upvalue = (ObjUpvalue*)lox_object_allocobj(vm, sizeof(ObjUpvalue), OBJ_UPVALUE);
     upvalue->closed = NIL_VAL;
-    upvalue->location = slot;
+    upvalue->location = pslot;
     upvalue->next = NULL;
     return upvalue;
 }
 
-static void lox_writer_printfunction(ObjFunction* ofn)
-{
-    if(ofn->name == NULL)
-    {
-        printf("<script>");
-        return;
-    }
-    printf("<fn %s>", ofn->name->chars);
-}
-
-void lox_writer_printobject(Value value)
-{
-    switch(OBJ_TYPE(value))
-    {
-        case OBJ_BOUNDMETHOD:
-            lox_writer_printfunction(AS_BOUND_METHOD(value)->method->innerfn);
-            break;
-        case OBJ_CLASS:
-            printf("%s", AS_CLASS(value)->name->chars);
-            break;
-        case OBJ_CLOSURE:
-            lox_writer_printfunction(AS_CLOSURE(value)->innerfn);
-            break;
-        case OBJ_FUNCTION:
-            lox_writer_printfunction(AS_FUNCTION(value));
-            break;
-        case OBJ_INSTANCE:
-            printf("%s instance", AS_INSTANCE(value)->klass->name->chars);
-            break;
-        case OBJ_NATIVE:
-            printf("<native fn>");
-            break;
-        case OBJ_STRING:
-            printf("%s", AS_CSTRING(value));
-            break;
-        case OBJ_UPVALUE:
-            printf("upvalue");
-            break;
-    }
-}
 
 void lox_hashtable_init(HashTable* table)
 {
@@ -1047,52 +1308,68 @@ void lox_hashtable_free(VMState* vm, HashTable* table)
 
 // NOTE: The "optimization" chapter has a manual copy of this function.
 // If you change it here, make sure to update that copy.
-static HashEntry* lox_hashtable_findentry(HashEntry* entries, int capacity, ObjString* key)
+HashEntry* lox_hashtable_findentry(HashEntry* entries, int capacity, ObjString* key)
 {
-    uint32_t index = key->hash & (capacity - 1);
-    HashEntry* tombstone = NULL;
-
-    for(;;)
+    uint32_t index;
+    HashEntry* entry;
+    HashEntry* tombstone;
+    index = key->hash & (capacity - 1);
+    tombstone = NULL;
+    if(capacity > 0)
     {
-        HashEntry* entry = &entries[index];
-        if(entry->key == NULL)
+        for(;;)
         {
-            if(IS_NIL(entry->value))
+            entry = &entries[index];
+            if(entry != NULL)
             {
-                // Empty entry.
-                return tombstone != NULL ? tombstone : entry;
+                if(entry->key == NULL)
+                {
+                    if(IS_NIL(entry->value))
+                    {
+                        // Empty entry.
+                        return tombstone != NULL ? tombstone : entry;
+                    }
+                    else
+                    {
+                        // We found a tombstone.
+                        if(tombstone == NULL)
+                            tombstone = entry;
+                    }
+                }
+                else if(entry->key == key)
+                {
+                    // We found the key.
+                    return entry;
+                }
             }
-            else
-            {
-                // We found a tombstone.
-                if(tombstone == NULL)
-                    tombstone = entry;
-            }
+            index = (index + 1) & (capacity - 1);
         }
-        else if(entry->key == key)
-        {
-            // We found the key.
-            return entry;
-        }
-        index = (index + 1) & (capacity - 1);
     }
+    return NULL;
 }
 
 bool lox_hashtable_get(VMState* vm, HashTable* table, ObjString* key, Value* value)
 {
+    HashEntry* entry;
     (void)vm;
     if(table->count == 0)
+    {
         return false;
-
-    HashEntry* entry = lox_hashtable_findentry(table->entries, table->capacity, key);
+    }
+    entry = lox_hashtable_findentry(table->entries, table->capacity, key);
+    if(entry == NULL)
+    {
+        return false;
+    }
     if(entry->key == NULL)
+    {
         return false;
-
+    }
     *value = entry->value;
     return true;
 }
 
-static void lox_hashtable_adjustcap(VMState* vm, HashTable* table, int capacity)
+void lox_hashtable_adjustcap(VMState* vm, HashTable* table, int capacity)
 {
     HashEntry* entries = ALLOCATE(vm, HashEntry, capacity);
     for(int i = 0; i < capacity; i++)
@@ -1223,20 +1500,20 @@ void lox_chunk_init(VMState* vm, Chunk* chunk)
 
 void lox_chunk_free(VMState* vm, Chunk* chunk)
 {
-    FREE_ARRAY(vm, uint8_t, chunk->code, chunk->capacity);
+    FREE_ARRAY(vm, int32_t, chunk->code, chunk->capacity);
     FREE_ARRAY(vm, int, chunk->lines, chunk->capacity);
-    lox_valarray_free(vm, &chunk->constants);
+    lox_valarray_free(&chunk->constants);
     lox_chunk_init(vm, chunk);
 }
 
-void lox_chunk_pushbyte(VMState* vm, Chunk* chunk, uint8_t byte, int line)
+void lox_chunk_pushbyte(VMState* vm, Chunk* chunk, int32_t byte, int line)
 {
     int oldcap;
     if(chunk->capacity < chunk->count + 1)
     {
         oldcap = chunk->capacity;
         chunk->capacity = GROW_CAPACITY(oldcap);
-        chunk->code = GROW_ARRAY(vm, uint8_t, chunk->code, oldcap, chunk->capacity);
+        chunk->code = GROW_ARRAY(vm, int32_t, chunk->code, oldcap, chunk->capacity);
         chunk->lines = GROW_ARRAY(vm, int, chunk->lines, oldcap, chunk->capacity);
     }
     chunk->code[chunk->count] = byte;
@@ -1247,9 +1524,9 @@ void lox_chunk_pushbyte(VMState* vm, Chunk* chunk, uint8_t byte, int line)
 int lox_chunk_pushconst(VMState* vm, Chunk* chunk, Value value)
 {
     lox_vm_stackpush(vm, value);
-    lox_valarray_push(vm, &chunk->constants, value);
+    lox_valarray_push(&chunk->constants, value);
     lox_vm_stackpop(vm);
-    return chunk->constants.count - 1;
+    return lox_valarray_count(&chunk->constants) - 1;
 }
 
 void lox_chunk_disasm(Chunk* chunk, const char* name)
@@ -1262,39 +1539,47 @@ void lox_chunk_disasm(Chunk* chunk, const char* name)
     }
 }
 
-static int lox_dbg_dumpconstinstr(const char* name, Chunk* chunk, int offset)
+int lox_dbg_dumpconstinstr(const char* name, Chunk* chunk, int offset)
 {
-    uint8_t constant = chunk->code[offset + 1];
+    Value val;
+    int32_t constant;
+    val = NIL_VAL;
+    constant = chunk->code[offset + 1];
+    if(chunk->constants.size > 0)
+    {
+        val = chunk->constants.values[constant];
+    }
     printf("%-16s %4d '", name, constant);
-    lox_writer_printvalue(chunk->constants.values[constant]);
+    
+    lox_writer_printvalue(val);
     printf("'\n");
     return offset + 2;
 }
 
-static int lox_dbg_dumpinvokeinstr(const char* name, Chunk* chunk, int offset)
+int lox_dbg_dumpinvokeinstr(const char* name, Chunk* chunk, int offset)
 {
-    uint8_t constant = chunk->code[offset + 1];
-    uint8_t argc = chunk->code[offset + 2];
+    int32_t constant = chunk->code[offset + 1];
+    int32_t argc = chunk->code[offset + 2];
     printf("%-16s (%d args) %4d '", name, argc, constant);
     lox_writer_printvalue(chunk->constants.values[constant]);
     printf("'\n");
     return offset + 3;
 }
 
-static int lox_dbg_dumpsimpleinstr(const char* name, int offset)
+int lox_dbg_dumpsimpleinstr(const char* name, int offset)
 {
     printf("%s\n", name);
     return offset + 1;
 }
 
-static int lox_dbg_dumpbyteinstr(const char* name, Chunk* chunk, int offset)
+int lox_dbg_dumpbyteinstr(const char* name, Chunk* chunk, int offset)
 {
-    uint8_t slot = chunk->code[offset + 1];
-    printf("%-16s %4d\n", name, slot);
+    int32_t islot = chunk->code[offset + 1];
+    printf("%-16s %4d\n", name, islot);
     return offset + 2;// [debug]
 }
 
-static int lox_dbg_dumpjumpinstr(const char* name, int sign, Chunk* chunk, int offset)
+int lox_dbg_dumpjumpinstr(const char* name, int sign, Chunk* chunk, int offset)
 {
     uint16_t jump = (uint16_t)(chunk->code[offset + 1] << 8);
     jump |= chunk->code[offset + 2];
@@ -1305,7 +1590,7 @@ static int lox_dbg_dumpjumpinstr(const char* name, int sign, Chunk* chunk, int o
 int lox_dbg_dumpdisasm(Chunk* chunk, int offset)
 {
     printf("%04d ", offset);
-    if(offset > 0 && chunk->lines[offset] == chunk->lines[offset - 1])
+    if((offset > 0) && (chunk->lines[offset] == chunk->lines[offset - 1]))
     {
         printf("   | ");
     }
@@ -1314,7 +1599,7 @@ int lox_dbg_dumpdisasm(Chunk* chunk, int offset)
         printf("%4d ", chunk->lines[offset]);
     }
 
-    uint8_t instruction = chunk->code[offset];
+    int32_t instruction = chunk->code[offset];
     switch(instruction)
     {
         case OP_PUSHCONST:
@@ -1327,6 +1612,10 @@ int lox_dbg_dumpdisasm(Chunk* chunk, int offset)
             return lox_dbg_dumpsimpleinstr("OP_PUSHTRUE", offset);
         case OP_PUSHFALSE:
             return lox_dbg_dumpsimpleinstr("OP_PUSHFALSE", offset);
+        case OP_MAKEARRAY:
+            return lox_dbg_dumpconstinstr("OP_MAKEARRAY", chunk, offset);
+        case OP_INDEXGET:
+            return lox_dbg_dumpbyteinstr("OP_INDEXGET", chunk, offset);
         case OP_POP:
             return lox_dbg_dumpsimpleinstr("OP_POP", offset);
         case OP_LOCALGET:
@@ -1384,7 +1673,7 @@ int lox_dbg_dumpdisasm(Chunk* chunk, int offset)
         case OP_CLOSURE:
         {
             offset++;
-            uint8_t constant = chunk->code[offset++];
+            int32_t constant = chunk->code[offset++];
             printf("%-16s %4d ", "OP_CLOSURE", constant);
             lox_writer_printvalue(chunk->constants.values[constant]);
             printf("\n");
@@ -1423,33 +1712,33 @@ void lox_lex_init(VMState* vm, AstScanner* scn, const char* source)
     scn->line = 1;
 }
 
-static bool lox_lex_isalpha(char c)
+bool lox_lex_isalpha(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
-static bool lox_lex_isdigit(char c)
+bool lox_lex_isdigit(char c)
 {
     return c >= '0' && c <= '9';
 }
 
-static bool lox_lex_isatend(AstScanner* scn)
+bool lox_lex_isatend(AstScanner* scn)
 {
     return *scn->current == '\0';
 }
 
-static char lox_lex_advance(AstScanner* scn)
+char lox_lex_advance(AstScanner* scn)
 {
     scn->current++;
     return scn->current[-1];
 }
 
-static char lox_lex_peekcurrent(AstScanner* scn)
+char lox_lex_peekcurrent(AstScanner* scn)
 {
     return *scn->current;
 }
 
-static char lox_lex_peeknext(AstScanner* scn)
+char lox_lex_peeknext(AstScanner* scn)
 {
     if(lox_lex_isatend(scn))
     {
@@ -1458,7 +1747,7 @@ static char lox_lex_peeknext(AstScanner* scn)
     return scn->current[1];
 }
 
-static bool lox_lex_match(AstScanner* scn, char expected)
+bool lox_lex_match(AstScanner* scn, char expected)
 {
     if(lox_lex_isatend(scn))
         return false;
@@ -1468,7 +1757,7 @@ static bool lox_lex_match(AstScanner* scn, char expected)
     return true;
 }
 
-static AstToken lox_lex_maketoken(AstScanner* scn, AstTokType type)
+AstToken lox_lex_maketoken(AstScanner* scn, AstTokType type)
 {
     AstToken token;
     token.type = type;
@@ -1478,7 +1767,7 @@ static AstToken lox_lex_maketoken(AstScanner* scn, AstTokType type)
     return token;
 }
 
-static AstToken lox_lex_makeerrortoken(AstScanner* scn, const char* message)
+AstToken lox_lex_makeerrortoken(AstScanner* scn, const char* message)
 {
     AstToken token;
     token.type = TOK_ERROR;
@@ -1488,7 +1777,7 @@ static AstToken lox_lex_makeerrortoken(AstScanner* scn, const char* message)
     return token;
 }
 
-static void lox_lex_skipspace(AstScanner* scn)
+void lox_lex_skipspace(AstScanner* scn)
 {
     for(;;)
     {
@@ -1522,7 +1811,7 @@ static void lox_lex_skipspace(AstScanner* scn)
     }
 }
 
-static AstTokType lox_lex_scankeyword(AstScanner* scn)
+AstTokType lox_lex_scankeyword(AstScanner* scn)
 {
     static const struct
     {
@@ -1568,14 +1857,14 @@ static AstTokType lox_lex_scankeyword(AstScanner* scn)
     return TOK_IDENTIFIER;
 }
 
-static AstToken lox_lex_scanident(AstScanner* scn)
+AstToken lox_lex_scanident(AstScanner* scn)
 {
     while(lox_lex_isalpha(lox_lex_peekcurrent(scn)) || lox_lex_isdigit(lox_lex_peekcurrent(scn)))
         lox_lex_advance(scn);
     return lox_lex_maketoken(scn, lox_lex_scankeyword(scn));
 }
 
-static AstToken lox_lex_scannumber(AstScanner* scn)
+AstToken lox_lex_scannumber(AstScanner* scn)
 {
     while(lox_lex_isdigit(lox_lex_peekcurrent(scn)))
         lox_lex_advance(scn);
@@ -1593,7 +1882,7 @@ static AstToken lox_lex_scannumber(AstScanner* scn)
     return lox_lex_maketoken(scn, TOK_NUMBER);
 }
 
-static AstToken lox_lex_scanstring(AstScanner* scn)
+AstToken lox_lex_scanstring(AstScanner* scn)
 {
     while(lox_lex_peekcurrent(scn) != '"' && !lox_lex_isatend(scn))
     {
@@ -1657,6 +1946,16 @@ AstToken lox_lex_scantoken(AstScanner* scn)
                 return lox_lex_maketoken(scn, TOK_BRACECLOSE);
             }
             break;
+        case '[':
+            {
+                return lox_lex_maketoken(scn, TOK_BRACKETOPEN);
+            }
+            break;
+        case ']':
+            {
+                return lox_lex_maketoken(scn, TOK_BRACKETCLOSE);
+            }
+            break;
         case ';':
             {
                 return lox_lex_maketoken(scn, TOK_SEMICOLON);
@@ -1688,6 +1987,29 @@ AstToken lox_lex_scantoken(AstScanner* scn)
                     return lox_lex_maketoken(scn, TOK_INCREMENT);
                 }
                 return lox_lex_maketoken(scn, TOK_PLUS);
+            }
+            break;
+        case '&':
+            {
+                if(lox_lex_match(scn, '&'))
+                {
+                    return lox_lex_maketoken(scn, TOK_KWAND);
+                }
+                return lox_lex_maketoken(scn, TOK_BINAND);
+            }
+            break;
+        case '|':
+            {
+                if(lox_lex_match(scn, '|'))
+                {
+                    return lox_lex_maketoken(scn, TOK_KWOR);
+                }
+                return lox_lex_maketoken(scn, TOK_BINOR);
+            }
+            break;
+        case '^':
+            {
+                return lox_lex_maketoken(scn, TOK_BINXOR);
             }
             break;
         case '%':
@@ -1767,12 +2089,12 @@ void lox_prs_init(VMState* vm, AstParser* parser, AstScanner* scn)
     parser->currclass = NULL;
 }
 
-static Chunk* lox_prs_currentchunk(AstParser* prs)
+Chunk* lox_prs_currentchunk(AstParser* prs)
 {
     return &prs->currcompiler->compiledfn->chunk;
 }
 
-static void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* message, va_list va)
+void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* message, va_list va)
 {
     if(prs->panicmode)
     {
@@ -1798,7 +2120,7 @@ static void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* m
     prs->haderror = true;
 }
 
-static void lox_prs_raiseerror(AstParser* prs, const char* message, ...)
+void lox_prs_raiseerror(AstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
@@ -1806,7 +2128,7 @@ static void lox_prs_raiseerror(AstParser* prs, const char* message, ...)
     va_end(va);
 }
 
-static void lox_prs_raiseatcurrent(AstParser* prs, const char* message, ...)
+void lox_prs_raiseatcurrent(AstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
@@ -1814,7 +2136,7 @@ static void lox_prs_raiseatcurrent(AstParser* prs, const char* message, ...)
     va_end(va);
 }
 
-static const char* lox_prs_op2str(uint8_t opcode)
+const char* lox_prs_op2str(int32_t opcode)
 {
     switch(opcode)
     {
@@ -1863,7 +2185,7 @@ static const char* lox_prs_op2str(uint8_t opcode)
     return "?unknown?";
 }
 
-static void lox_prs_skipsemicolon(AstParser* prs)
+void lox_prs_skipsemicolon(AstParser* prs)
 {
     
     while(lox_prs_match(prs, TOK_NEWLINE))
@@ -1874,7 +2196,7 @@ static void lox_prs_skipsemicolon(AstParser* prs)
     }
 }
 
-static void lox_prs_advance(AstParser* prs)
+void lox_prs_advance(AstParser* prs)
 {
     prs->previous = prs->current;
     for(;;)
@@ -1888,7 +2210,7 @@ static void lox_prs_advance(AstParser* prs)
     }
 }
 
-static void lox_prs_consume(AstParser* prs, AstTokType type, const char* message)
+void lox_prs_consume(AstParser* prs, AstTokType type, const char* message)
 {
     if(prs->current.type == type)
     {
@@ -1898,12 +2220,12 @@ static void lox_prs_consume(AstParser* prs, AstTokType type, const char* message
     lox_prs_raiseatcurrent(prs, message);
 }
 
-static bool lox_prs_check(AstParser* prs, AstTokType type)
+bool lox_prs_check(AstParser* prs, AstTokType type)
 {
     return prs->current.type == type;
 }
 
-static bool lox_prs_match(AstParser* prs, AstTokType type)
+bool lox_prs_match(AstParser* prs, AstTokType type)
 {
     if(!lox_prs_check(prs, type))
     {
@@ -1913,18 +2235,18 @@ static bool lox_prs_match(AstParser* prs, AstTokType type)
     return true;
 }
 
-static void lox_prs_emit1byte(AstParser* prs, uint8_t byte)
+void lox_prs_emit1byte(AstParser* prs, int32_t byte)
 {
     lox_chunk_pushbyte(prs->pvm, lox_prs_currentchunk(prs), byte, prs->previous.line);
 }
 
-static void lox_prs_emit2byte(AstParser* prs, uint8_t byte1, uint8_t byte2)
+void lox_prs_emit2byte(AstParser* prs, int32_t byte1, int32_t byte2)
 {
     lox_prs_emit1byte(prs, byte1);
     lox_prs_emit1byte(prs, byte2);
 }
 
-static void lox_prs_emitloop(AstParser* prs, int loopstart)
+void lox_prs_emitloop(AstParser* prs, int loopstart)
 {
     int offset;
     lox_prs_emit1byte(prs, OP_LOOP);
@@ -1938,9 +2260,9 @@ static void lox_prs_emitloop(AstParser* prs, int loopstart)
 }
 
 
-static int lox_prs_realgetcodeargscount(const uint8_t* code, int ip)
+int lox_prs_realgetcodeargscount(const int32_t* code, int ip)
 {
-    uint8_t op = code[ip];
+    int32_t op = code[ip];
     switch(op)
     {
         case OP_PUSHTRUE:
@@ -1954,6 +2276,10 @@ static int lox_prs_realgetcodeargscount(const uint8_t* code, int ip)
         case OP_PRIMSUBTRACT:
         case OP_PRIMMULTIPLY:
         case OP_PRIMDIVIDE:
+        case OP_PRIMBINAND:
+        case OP_PRIMBINOR:
+        case OP_PRIMBINXOR:
+        case OP_PRIMMODULO:
         case OP_PRIMSHIFTLEFT:
         case OP_PRIMSHIFTRIGHT:
         case OP_PRIMNOT:
@@ -1965,6 +2291,7 @@ static int lox_prs_realgetcodeargscount(const uint8_t* code, int ip)
         case OP_RETURN:
         case OP_INHERIT:
             return 0;
+        case OP_POPN:
         case OP_PUSHCONST:
         //case OP_CONSTANT_LONG:
         //case OP_POPN:
@@ -1987,6 +2314,7 @@ static int lox_prs_realgetcodeargscount(const uint8_t* code, int ip)
         case OP_CLASS:
         case OP_METHOD:
             return 1;
+        case OP_MAKEARRAY:
         case OP_JUMPNOW:
         case OP_JUMPIFFALSE:
         case OP_PSEUDOBREAK:
@@ -1999,7 +2327,7 @@ static int lox_prs_realgetcodeargscount(const uint8_t* code, int ip)
     return -1;
 }
 
-static int lox_prs_getcodeargscount(const uint8_t* bytecode, int ip)
+int lox_prs_getcodeargscount(const int32_t* bytecode, int ip)
 {
     int rc;
     //const char* os;
@@ -2020,25 +2348,26 @@ void lox_prs_startloop(AstParser* prs, AstLoop* loop)
 void lox_prs_endloop(AstParser* prs)
 {
     int i;
-    int imax;
+    Chunk* chunk;
     i = prs->currcompiler->loop->body;
-    while(i < lox_prs_currentchunk(prs)->count)
+    chunk = lox_prs_currentchunk(prs);
+    while(i < chunk->count)
     {
-        if(lox_prs_currentchunk(prs)->code[i] == OP_PSEUDOBREAK)
+        if(chunk->code[i] == OP_PSEUDOBREAK)
         {
-            lox_prs_currentchunk(prs)->code[i] = OP_JUMPNOW;
+            chunk->code[i] = OP_JUMPNOW;
             lox_prs_emitpatchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            i += 1 + lox_prs_getcodeargscount(lox_prs_currentchunk(prs)->code, i);
+            i += 1 + lox_prs_getcodeargscount(chunk->code, i);
         }
     }
     prs->currcompiler->loop = prs->currcompiler->loop->enclosing;
 }
 
-static int lox_prs_emitjump(AstParser* prs, uint8_t instruction)
+int lox_prs_emitjump(AstParser* prs, int32_t instruction)
 {
     lox_prs_emit1byte(prs, instruction);
     lox_prs_emit1byte(prs, 0xff);
@@ -2046,7 +2375,7 @@ static int lox_prs_emitjump(AstParser* prs, uint8_t instruction)
     return lox_prs_currentchunk(prs)->count - 2;
 }
 
-static void lox_prs_emitreturn(AstParser* prs)
+void lox_prs_emitreturn(AstParser* prs)
 {
     if(prs->currcompiler->type == TYPE_INITIALIZER)
     {
@@ -2059,7 +2388,7 @@ static void lox_prs_emitreturn(AstParser* prs)
     lox_prs_emit1byte(prs, OP_RETURN);
 }
 
-static uint8_t lox_prs_makeconstant(AstParser* prs, Value value)
+int32_t lox_prs_makeconstant(AstParser* prs, Value value)
 {
     int constant;
     constant = lox_chunk_pushconst(prs->pvm, lox_prs_currentchunk(prs), value);
@@ -2068,15 +2397,15 @@ static uint8_t lox_prs_makeconstant(AstParser* prs, Value value)
         lox_prs_raiseerror(prs, "too many constants in one chunk.");
         return 0;
     }
-    return (uint8_t)constant;
+    return (int32_t)constant;
 }
 
-static void lox_prs_emitconstant(AstParser* prs, Value value)
+void lox_prs_emitconstant(AstParser* prs, Value value)
 {
     lox_prs_emit2byte(prs, OP_PUSHCONST, lox_prs_makeconstant(prs, value));
 }
 
-static void lox_prs_emitpatchjump(AstParser* prs, int offset)
+void lox_prs_emitpatchjump(AstParser* prs, int offset)
 {
     int jump;
     // -2 to adjust for the bytecode for the jump offset itself.
@@ -2089,7 +2418,7 @@ static void lox_prs_emitpatchjump(AstParser* prs, int offset)
     lox_prs_currentchunk(prs)->code[offset + 1] = jump & 0xff;
 }
 
-static void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncType type)
+void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncType type)
 {
     AstLocal* local;
     compiler->enclosing = prs->currcompiler;
@@ -2123,12 +2452,12 @@ static void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncT
     }
 }
 
-static ObjFunction* lox_prs_compilerfinish(AstParser* prs)
+ObjFunction* lox_prs_compilerfinish(AstParser* prs)
 {
     ObjFunction* fn;
     lox_prs_emitreturn(prs);
     fn = prs->currcompiler->compiledfn;
-#ifdef DEBUG_PRINT_CODE
+#if (DEBUG_PRINT_CODE == 1)
     if(!prs->haderror)
     {
         lox_chunk_disasm(lox_prs_currentchunk(prs), fn->name != NULL ? fn->name->chars : "<script>");
@@ -2138,12 +2467,12 @@ static ObjFunction* lox_prs_compilerfinish(AstParser* prs)
     return fn;
 }
 
-static void lox_prs_scopebegin(AstParser* prs)
+void lox_prs_scopebegin(AstParser* prs)
 {
     prs->currcompiler->scopedepth++;
 }
 
-static void lox_prs_scopeend(AstParser* prs)
+void lox_prs_scopeend(AstParser* prs)
 {
     AstCompiler* pc;
     pc = prs->currcompiler;
@@ -2162,12 +2491,12 @@ static void lox_prs_scopeend(AstParser* prs)
     }
 }
 
-static uint8_t lox_prs_makeidentconstant(AstParser* prs, AstToken* name)
+int32_t lox_prs_makeidentconstant(AstParser* prs, AstToken* name)
 {
     return lox_prs_makeconstant(prs, OBJ_VAL(lox_string_copy(prs->pvm, name->start, name->length)));
 }
 
-static bool lox_prs_identsequal(AstToken* a, AstToken* b)
+bool lox_prs_identsequal(AstToken* a, AstToken* b)
 {
     if(a->length != b->length)
     {
@@ -2176,7 +2505,7 @@ static bool lox_prs_identsequal(AstToken* a, AstToken* b)
     return memcmp(a->start, b->start, a->length) == 0;
 }
 
-static int lox_prs_resolvelocal(AstParser* prs, AstCompiler* compiler, AstToken* name)
+int lox_prs_resolvelocal(AstParser* prs, AstCompiler* compiler, AstToken* name)
 {
     int i;
     AstLocal* local;
@@ -2195,7 +2524,7 @@ static int lox_prs_resolvelocal(AstParser* prs, AstCompiler* compiler, AstToken*
     return -1;
 }
 
-static int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, uint8_t index, bool islocal)
+int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, int32_t index, bool islocal)
 {
     int i;
     int upvaluecount;
@@ -2219,7 +2548,7 @@ static int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, uint8_t index
     return compiler->compiledfn->upvaluecount++;
 }
 
-static int lox_prs_resolveupval(AstParser* prs, AstCompiler* compiler, AstToken* name)
+int lox_prs_resolveupval(AstParser* prs, AstCompiler* compiler, AstToken* name)
 {
     int local;
     int upvalue;
@@ -2231,17 +2560,17 @@ static int lox_prs_resolveupval(AstParser* prs, AstCompiler* compiler, AstToken*
     if(local != -1)
     {
         compiler->enclosing->locals[local].iscaptured = true;
-        return lox_prs_addupval(prs, compiler, (uint8_t)local, true);
+        return lox_prs_addupval(prs, compiler, (int32_t)local, true);
     }
     upvalue = lox_prs_resolveupval(prs, compiler->enclosing, name);
     if(upvalue != -1)
     {
-        return lox_prs_addupval(prs, compiler, (uint8_t)upvalue, false);
+        return lox_prs_addupval(prs, compiler, (int32_t)upvalue, false);
     }
     return -1;
 }
 
-static void lox_prs_addlocal(AstParser* prs, AstToken name)
+void lox_prs_addlocal(AstParser* prs, AstToken name)
 {
     AstLocal* local;
     if(prs->currcompiler->localcount == UINT8_COUNT)
@@ -2255,7 +2584,7 @@ static void lox_prs_addlocal(AstParser* prs, AstToken name)
     local->iscaptured = false;
 }
 
-static int lox_prs_discardlocals(AstParser* prs, AstCompiler* current)
+int lox_prs_discardlocals(AstParser* prs, AstCompiler* current)
 {
     int n;
     int lc;
@@ -2271,12 +2600,12 @@ static int lox_prs_discardlocals(AstParser* prs, AstCompiler* current)
     }
     if(n != 0)
     {
-        //lox_prs_emit2bytes(prs, OP_POPN, (uint8_t)n);
+        lox_prs_emit2byte(prs, OP_POPN, (int32_t)n);
     }
     return current->localcount - lc - 1;
 }
 
-static void lox_prs_parsevarident(AstParser* prs)
+void lox_prs_parsevarident(AstParser* prs)
 {
     int i;
     AstLocal* local;
@@ -2301,7 +2630,7 @@ static void lox_prs_parsevarident(AstParser* prs)
     lox_prs_addlocal(prs, *name);
 }
 
-static uint8_t lox_prs_parsevarname(AstParser* prs, const char* errormessage)
+int32_t lox_prs_parsevarname(AstParser* prs, const char* errormessage)
 {
     lox_prs_consume(prs, TOK_IDENTIFIER, errormessage);
     lox_prs_parsevarident(prs);
@@ -2312,7 +2641,7 @@ static uint8_t lox_prs_parsevarname(AstParser* prs, const char* errormessage)
     return lox_prs_makeidentconstant(prs, &prs->previous);
 }
 
-static void lox_prs_markinit(AstParser* prs)
+void lox_prs_markinit(AstParser* prs)
 {
     if(prs->currcompiler->scopedepth == 0)
     {
@@ -2321,7 +2650,7 @@ static void lox_prs_markinit(AstParser* prs)
     prs->currcompiler->locals[prs->currcompiler->localcount - 1].depth = prs->currcompiler->scopedepth;
 }
 
-static void lox_prs_emitdefvar(AstParser* prs, uint8_t global)
+void lox_prs_emitdefvar(AstParser* prs, int32_t global)
 {
     if(prs->currcompiler->scopedepth > 0)
     {
@@ -2331,9 +2660,9 @@ static void lox_prs_emitdefvar(AstParser* prs, uint8_t global)
     lox_prs_emit2byte(prs, OP_GLOBALDEFINE, global);
 }
 
-static uint8_t lox_prs_parsearglist(AstParser* prs)
+int32_t lox_prs_parsearglist(AstParser* prs)
 {
-    uint8_t argc = 0;
+    int32_t argc = 0;
     if(!lox_prs_check(prs, TOK_PARENCLOSE))
     {
         do
@@ -2350,7 +2679,7 @@ static uint8_t lox_prs_parsearglist(AstParser* prs)
     return argc;
 }
 
-static void lox_prs_ruleand(AstParser* prs, bool canassign)
+void lox_prs_ruleand(AstParser* prs, bool canassign)
 {
     (void)canassign;
     int endjump;
@@ -2360,7 +2689,7 @@ static void lox_prs_ruleand(AstParser* prs, bool canassign)
     lox_prs_emitpatchjump(prs, endjump);
 }
 
-static void lox_prs_rulebinary(AstParser* prs, bool canassign)
+void lox_prs_rulebinary(AstParser* prs, bool canassign)
 {
     AstRule* rule;
     AstTokType ot;
@@ -2403,6 +2732,15 @@ static void lox_prs_rulebinary(AstParser* prs, bool canassign)
         case TOK_MODULO:
             lox_prs_emit1byte(prs, OP_PRIMMODULO);
             break;
+        case TOK_BINAND:
+            lox_prs_emit1byte(prs, OP_PRIMBINAND);
+            break;
+        case TOK_BINOR:
+            lox_prs_emit1byte(prs, OP_PRIMBINOR);
+            break;
+        case TOK_BINXOR:
+            lox_prs_emit1byte(prs, OP_PRIMBINXOR);
+            break;
         case TOK_SHIFTLEFT:
             lox_prs_emit1byte(prs, OP_PRIMSHIFTLEFT);
             break;
@@ -2414,18 +2752,18 @@ static void lox_prs_rulebinary(AstParser* prs, bool canassign)
     }
 }
 
-static void lox_prs_rulecall(AstParser* prs, bool canassign)
+void lox_prs_rulecall(AstParser* prs, bool canassign)
 {
-    uint8_t argc;
+    int32_t argc;
     (void)canassign;
     argc = lox_prs_parsearglist(prs);
     lox_prs_emit2byte(prs, OP_CALL, argc);
 }
 
-static void lox_prs_ruledot(AstParser* prs, bool canassign)
+void lox_prs_ruledot(AstParser* prs, bool canassign)
 {
-    uint8_t name;
-    uint8_t argc;
+    int32_t name;
+    int32_t argc;
     (void)canassign;
     lox_prs_consume(prs, TOK_IDENTIFIER, "expect property name after '.'.");
     name = lox_prs_makeidentconstant(prs, &prs->previous);
@@ -2446,7 +2784,7 @@ static void lox_prs_ruledot(AstParser* prs, bool canassign)
     }
 }
 
-static void lox_prs_ruleliteral(AstParser* prs, bool canassign)
+void lox_prs_ruleliteral(AstParser* prs, bool canassign)
 {
     (void)canassign;
     switch(prs->previous.type)
@@ -2465,14 +2803,14 @@ static void lox_prs_ruleliteral(AstParser* prs, bool canassign)
     }
 }
 
-static void lox_prs_rulegrouping(AstParser* prs, bool canassign)
+void lox_prs_rulegrouping(AstParser* prs, bool canassign)
 {
     (void)canassign;
     lox_prs_parseexpr(prs);
     lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after expression");
 }
 
-static void lox_prs_rulenumber(AstParser* prs, bool canassign)
+void lox_prs_rulenumber(AstParser* prs, bool canassign)
 {
     double value;
     (void)canassign;
@@ -2480,7 +2818,7 @@ static void lox_prs_rulenumber(AstParser* prs, bool canassign)
     lox_prs_emitconstant(prs, NUMBER_VAL(value));
 }
 
-static void lox_prs_ruleor(AstParser* prs, bool canassign)
+void lox_prs_ruleor(AstParser* prs, bool canassign)
 {
     int endjump;
     int elsejump;
@@ -2502,7 +2840,7 @@ static void lox_prs_ruleor(AstParser* prs, bool canassign)
         } \
         break;
 
-static void lox_prs_rulestring(AstParser* prs, bool canassign)
+void lox_prs_rulestring(AstParser* prs, bool canassign)
 {
     size_t i;
     size_t pi;
@@ -2512,7 +2850,7 @@ static void lox_prs_rulestring(AstParser* prs, bool canassign)
     int nextc;
     bool needalloc;
     char* buf;
-    char* rawstr;
+    const char* rawstr;
     ObjString* os;
     (void)canassign;
     needalloc = false;
@@ -2588,13 +2926,13 @@ static void lox_prs_rulestring(AstParser* prs, bool canassign)
 
 }
 
-static void lox_prs_doassign(AstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
+void lox_prs_doassign(AstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
 {
 
     if(canassign && lox_prs_match(prs, TOK_ASSIGN))
     {
         lox_prs_parseexpr(prs);
-        lox_prs_emit2byte(prs, setop, (uint8_t)arg);
+        lox_prs_emit2byte(prs, setop, (int32_t)arg);
     }
     else if(canassign && lox_prs_match(prs, TOK_INCREMENT))
     {
@@ -2611,14 +2949,14 @@ static void lox_prs_doassign(AstParser* prs, uint8_t getop, uint8_t setop, int a
             lox_prs_emit2byte(prs, getop, 1);
         }
         lox_prs_emit2byte(prs, OP_PUSHONE, OP_PRIMADD);
-        lox_prs_emit2byte(prs, setop, (uint16_t)arg);
+        lox_prs_emit2byte(prs, setop, arg);
     }
     else if(canassign && lox_prs_match(prs, TOK_DECREMENT))
     {
         /*
         if(getop == OpCode::OP_PROPERTYGET || getop == OpCode::OP_PROPERTYGETTHIS)
         {
-            emitByte(OpCode::OP_DUP);
+            emitbyte(OpCode::OP_DUP);
         }
         */
         if(arg != -1)
@@ -2630,7 +2968,7 @@ static void lox_prs_doassign(AstParser* prs, uint8_t getop, uint8_t setop, int a
             lox_prs_emit2byte(prs, getop, 1);
         }
         lox_prs_emit2byte(prs, OP_PUSHONE, OP_PRIMSUBTRACT);
-        lox_prs_emit2byte(prs, setop, (uint16_t)arg);
+        lox_prs_emit2byte(prs, setop, arg);
     }
     else
     {
@@ -2639,23 +2977,23 @@ static void lox_prs_doassign(AstParser* prs, uint8_t getop, uint8_t setop, int a
         {
             if(getop == OpCode::OP_INDEXGET || getop == OpCode::OP_INDEXRANGEDGET)
             {
-                emitBytes(getop, (uint8_t)0);
+                emitbytes(getop, (int32_t)0);
             }
             else
             {
-                emitByteAndShort(getop, (uint16_t)arg);
+                emitbyteandshort(getop, arg);
             }
         }
         else
         */
-        lox_prs_emit2byte(prs, getop, (uint8_t)arg);
+        lox_prs_emit2byte(prs, getop, (int32_t)arg);
     }
 }
 
-static void lox_prs_parsenamedvar(AstParser* prs, AstToken name, bool canassign)
+void lox_prs_parsenamedvar(AstParser* prs, AstToken name, bool canassign)
 {
-    uint8_t getop;
-    uint8_t setop;
+    int32_t getop;
+    int32_t setop;
     int arg;
     (void)canassign;
     arg = lox_prs_resolvelocal(prs, prs->currcompiler, &name);
@@ -2678,14 +3016,12 @@ static void lox_prs_parsenamedvar(AstParser* prs, AstToken name, bool canassign)
     return lox_prs_doassign(prs, getop, setop, arg, canassign);
 }
 
-
-
-static void lox_prs_rulevariable(AstParser* prs, bool canassign)
+void lox_prs_rulevariable(AstParser* prs, bool canassign)
 {
     lox_prs_parsenamedvar(prs, prs->previous, canassign);
 }
 
-static AstToken lox_prs_makesyntoken(AstParser* prs, const char* text)
+AstToken lox_prs_makesyntoken(AstParser* prs, const char* text)
 {
     AstToken token;
     (void)prs;
@@ -2694,10 +3030,10 @@ static AstToken lox_prs_makesyntoken(AstParser* prs, const char* text)
     return token;
 }
 
-static void lox_prs_rulesuper(AstParser* prs, bool canassign)
+void lox_prs_rulesuper(AstParser* prs, bool canassign)
 {
-    uint8_t name;
-    uint8_t argc;
+    int32_t name;
+    int32_t argc;
     (void)canassign;
     if(prs->currclass == NULL)
     {
@@ -2730,7 +3066,7 @@ static void lox_prs_rulesuper(AstParser* prs, bool canassign)
     }
 }
 
-static void lox_prs_rulethis(AstParser* prs, bool canassign)
+void lox_prs_rulethis(AstParser* prs, bool canassign)
 {
     (void)canassign;
     if(prs->currclass == NULL)
@@ -2741,7 +3077,7 @@ static void lox_prs_rulethis(AstParser* prs, bool canassign)
     lox_prs_rulevariable(prs, false);
 }
 
-static void lox_prs_ruleunary(AstParser* prs, bool canassign)
+void lox_prs_ruleunary(AstParser* prs, bool canassign)
 {
     (void)canassign;
     AstTokType ot;
@@ -2765,6 +3101,34 @@ static void lox_prs_ruleunary(AstParser* prs, bool canassign)
     }
 }
 
+void lox_prs_rulearray(AstParser* prs, bool canassign)
+{
+    int count;
+    (void)canassign;
+    fprintf(stderr, "parsing array? ... \n");
+    count = 0;
+    lox_prs_emit1byte(prs, OP_PUSHNIL);// placeholder for the list
+    if(!lox_prs_check(prs, TOK_BRACKETCLOSE))
+    {
+        do
+        {
+            lox_prs_parseexpr(prs);
+            count++;
+        } while(lox_prs_match(prs, TOK_COMMA));
+    }
+    lox_prs_consume(prs, TOK_BRACKETCLOSE, "expected ']' at end of list");
+    fprintf(stderr, "parsing array: count=%d\n", count);
+    lox_prs_emit2byte(prs, OP_MAKEARRAY, count);
+}
+
+void lox_prs_ruleindex(AstParser* prs, bool canassign)
+{
+    fprintf(stderr, "parsing index?\n");
+    lox_prs_parseexpr(prs);
+    lox_prs_consume(prs, TOK_BRACKETCLOSE, "expected ']' after indexing");
+    lox_prs_emit1byte(prs, OP_INDEXGET);
+}
+
 /* clang-format off */
 static const AstRule parserules[] = {
     /* Compiling Expressions rules < Calls and Functions infix-left-paren */
@@ -2773,6 +3137,8 @@ static const AstRule parserules[] = {
     [TOK_PARENCLOSE] = { NULL, NULL, PREC_NONE },
     [TOK_BRACEOPEN] = { NULL, NULL, PREC_NONE },// [big]
     [TOK_BRACECLOSE] = { NULL, NULL, PREC_NONE },
+    [TOK_BRACKETOPEN] = { lox_prs_rulearray, lox_prs_ruleindex, PREC_CALL },
+    [TOK_BRACKETCLOSE] = { NULL, NULL, PREC_NONE },
     [TOK_COMMA] = { NULL, NULL, PREC_NONE },
     /* Compiling Expressions rules < Classes and Instances table-dot */
     // [TOK_DOT]           = {NULL,     NULL,   PREC_NONE},
@@ -2784,6 +3150,9 @@ static const AstRule parserules[] = {
     [TOK_SLASH] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
     [TOK_STAR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
     [TOK_MODULO] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
+    [TOK_BINAND] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
+    [TOK_BINOR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
+    [TOK_BINXOR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
     [TOK_SHIFTLEFT] = {NULL, lox_prs_rulebinary, PREC_SHIFT},
     [TOK_SHIFTRIGHT] = {NULL, lox_prs_rulebinary, PREC_SHIFT},
     [TOK_INCREMENT] = {NULL, NULL, PREC_NONE},
@@ -2855,12 +3224,12 @@ static const AstRule parserules[] = {
 };
 /* clang-format on */
 
-static AstRule* lox_prs_getrule(AstTokType type)
+AstRule* lox_prs_getrule(AstTokType type)
 {
     return (AstRule*)&parserules[type];
 }
 
-static void lox_prs_parseprec(AstParser* prs, AstPrecedence precedence)
+void lox_prs_parseprec(AstParser* prs, AstPrecedence precedence)
 {
     bool canassign;
     AstParseFN infixrule;
@@ -2888,15 +3257,15 @@ static void lox_prs_parseprec(AstParser* prs, AstPrecedence precedence)
     }
 }
 
-static void lox_prs_parseexpr(AstParser* prs)
+void lox_prs_parseexpr(AstParser* prs)
 {
     /* Compiling Expressions expression < Compiling Expressions expression-body
-  // What goes here?
-*/
+    // What goes here?
+    */
     lox_prs_parseprec(prs, PREC_ASSIGNMENT);
 }
 
-static void lox_prs_parseblock(AstParser* prs)
+void lox_prs_parseblock(AstParser* prs)
 {
     while(!lox_prs_check(prs, TOK_BRACECLOSE) && !lox_prs_check(prs, TOK_EOF))
     {
@@ -2905,10 +3274,10 @@ static void lox_prs_parseblock(AstParser* prs)
     lox_prs_consume(prs, TOK_BRACECLOSE, "expect '}' after block.");
 }
 
-static void lox_prs_parsefunction(AstParser* prs, AstFuncType type)
+void lox_prs_parsefunction(AstParser* prs, AstFuncType type)
 {
     int i;
-    uint8_t constant;
+    int32_t constant;
     ObjFunction* fn;
     AstCompiler compiler;
     lox_prs_compilerinit(prs, &compiler, type);
@@ -2941,9 +3310,9 @@ static void lox_prs_parsefunction(AstParser* prs, AstFuncType type)
     }
 }
 
-static void lox_prs_parsemethod(AstParser* prs)
+void lox_prs_parsemethod(AstParser* prs)
 {
-    uint8_t constant;
+    int32_t constant;
     AstFuncType type;
     lox_prs_consume(prs, TOK_IDENTIFIER, "expect method name.");
     constant = lox_prs_makeidentconstant(prs, &prs->previous);
@@ -2959,9 +3328,9 @@ static void lox_prs_parsemethod(AstParser* prs)
     lox_prs_emit2byte(prs, OP_METHOD, constant);
 }
 
-static void lox_prs_parseclassdecl(AstParser* prs)
+void lox_prs_parseclassdecl(AstParser* prs)
 {
-    uint8_t nameconstant;
+    int32_t nameconstant;
     AstToken classname;
     AstClassCompiler classcompiler;
     lox_prs_consume(prs, TOK_IDENTIFIER, "expect class name.");
@@ -3003,18 +3372,18 @@ static void lox_prs_parseclassdecl(AstParser* prs)
     prs->currclass = prs->currclass->enclosing;
 }
 
-static void lox_prs_parsefuncdecl(AstParser* prs)
+void lox_prs_parsefuncdecl(AstParser* prs)
 {
-    uint8_t global;
+    int32_t global;
     global = lox_prs_parsevarname(prs, "expect function name.");
     lox_prs_markinit(prs);
     lox_prs_parsefunction(prs, TYPE_FUNCTION);
     lox_prs_emitdefvar(prs, global);
 }
 
-static void lox_prs_parsevardecl(AstParser* prs)
+void lox_prs_parsevardecl(AstParser* prs)
 {
-    uint8_t global;
+    int32_t global;
     global = lox_prs_parsevarname(prs, "expect variable name.");
     if(lox_prs_match(prs, TOK_ASSIGN))
     {
@@ -3029,7 +3398,7 @@ static void lox_prs_parsevardecl(AstParser* prs)
     lox_prs_emitdefvar(prs, global);
 }
 
-static void lox_prs_parseexprstmt(AstParser* prs)
+void lox_prs_parseexprstmt(AstParser* prs)
 {
     lox_prs_parseexpr(prs);
     //lox_prs_consume(prs, TOK_SEMICOLON, "expect ';' after expression");
@@ -3037,10 +3406,14 @@ static void lox_prs_parseexprstmt(AstParser* prs)
     lox_prs_emit1byte(prs, OP_POP);
 }
 
-static void lox_prs_parseforstmt(AstParser* prs)
+void lox_prs_parseforstmt(AstParser* prs)
 {
-    lox_prs_scopebegin(prs);
+    int loopstart;
+    int exitjump;
+    int bodyjump;
+    int incrementstart;
     AstLoop loop;
+    lox_prs_scopebegin(prs);
     lox_prs_startloop(prs, &loop);
     lox_prs_consume(prs, TOK_PARENOPEN, "Expect '(' after 'for'.");
     if(lox_prs_match(prs, TOK_SEMICOLON))
@@ -3055,8 +3428,8 @@ static void lox_prs_parseforstmt(AstParser* prs)
     {
         lox_prs_parseexprstmt(prs);
     }
-    int loopstart = lox_prs_currentchunk(prs)->count;
-    int exitjump = -1;
+    loopstart = lox_prs_currentchunk(prs)->count;
+    exitjump = -1;
     if(!lox_prs_match(prs, TOK_SEMICOLON))
     {
         lox_prs_parseexpr(prs);
@@ -3067,16 +3440,16 @@ static void lox_prs_parseforstmt(AstParser* prs)
     }
     if(!lox_prs_match(prs, TOK_PARENCLOSE))
     {
-        int bodyJump = lox_prs_emitjump(prs, OP_JUMPNOW);
-        int incrementStart = lox_prs_currentchunk(prs)->count;
+        bodyjump = lox_prs_emitjump(prs, OP_JUMPNOW);
+        incrementstart = lox_prs_currentchunk(prs)->count;
         // when we 'continue' in for loop, we want to jump here
-        prs->currcompiler->loop->start = incrementStart;
+        prs->currcompiler->loop->start = incrementstart;
         lox_prs_parseexpr(prs);
         lox_prs_emit1byte(prs, OP_POP);
         lox_prs_consume(prs, TOK_PARENCLOSE, "Expect ')' after 'for' clauses.");
         lox_prs_emitloop(prs, loopstart);
-        loopstart = incrementStart;
-        lox_prs_emitpatchjump(prs, bodyJump);
+        loopstart = incrementstart;
+        lox_prs_emitpatchjump(prs, bodyjump);
     }
     prs->currcompiler->loop->body = lox_prs_currentchunk(prs)->count;
     lox_prs_parsestmt(prs);
@@ -3088,11 +3461,53 @@ static void lox_prs_parseforstmt(AstParser* prs)
     }
     lox_prs_endloop(prs);
     lox_prs_scopeend(prs);
-
-
 }
 
-static void lox_prs_parseifstmt(AstParser* prs)
+void lox_prs_parsewhilestmt(AstParser* prs)
+{
+    int loopstart;
+    int exitjump;
+    AstLoop loop;
+    lox_prs_startloop(prs, &loop);
+    loopstart = lox_prs_currentchunk(prs)->count;
+    lox_prs_consume(prs, TOK_PARENOPEN, "expect '(' after 'while'");
+    lox_prs_parseexpr(prs);
+    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after condition");
+    exitjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
+    lox_prs_emit1byte(prs, OP_POP);
+    prs->currcompiler->loop->body = lox_prs_currentchunk(prs)->count;
+    lox_prs_parsestmt(prs);
+    lox_prs_emitloop(prs, loopstart);
+    lox_prs_emitpatchjump(prs, exitjump);
+    lox_prs_emit1byte(prs, OP_POP);
+    lox_prs_endloop(prs);
+}
+
+void lox_prs_parsebreakstmt(AstParser* prs)
+{
+    if(prs->currcompiler->loop == NULL)
+    {
+        lox_prs_raiseerror(prs, "'break' can only be used in a loop");
+        return;
+    }
+    lox_prs_skipsemicolon(prs);
+    lox_prs_discardlocals(prs, prs->currcompiler);
+    lox_prs_emitjump(prs, OP_PSEUDOBREAK);
+}
+
+void lox_prs_parsecontinuestmt(AstParser* prs)
+{
+    if(prs->currcompiler->loop == NULL)
+    {
+        lox_prs_raiseerror(prs, "cannot use 'continue' outside of a loop");
+        return;
+    }
+    lox_prs_skipsemicolon(prs);
+    lox_prs_discardlocals(prs, prs->currcompiler);
+    lox_prs_emitloop(prs, prs->currcompiler->loop->start);
+}
+
+void lox_prs_parseifstmt(AstParser* prs)
 {
     int thenjump;
     int elsejump;
@@ -3112,7 +3527,7 @@ static void lox_prs_parseifstmt(AstParser* prs)
     lox_prs_emitpatchjump(prs, elsejump);
 }
 
-static void lox_prs_parseprintstmt(AstParser* prs)
+void lox_prs_parseprintstmt(AstParser* prs)
 {
     lox_prs_parseexpr(prs);
     //lox_prs_consume(prs, TOK_SEMICOLON, "expect ';' after value.");
@@ -3120,7 +3535,7 @@ static void lox_prs_parseprintstmt(AstParser* prs)
     lox_prs_emit1byte(prs, OP_DEBUGPRINT);
 }
 
-static void lox_prs_parsereturnstmt(AstParser* prs)
+void lox_prs_parsereturnstmt(AstParser* prs)
 {
     if(prs->currcompiler->type == TYPE_SCRIPT)
     {
@@ -3143,53 +3558,7 @@ static void lox_prs_parsereturnstmt(AstParser* prs)
     }
 }
 
-void lox_prs_parsebreakstmt(AstParser* prs)
-{
-    if(prs->currcompiler->loop == NULL)
-    {
-        lox_prs_raiseerror(prs, "'break' can only be used in a loop");
-        return;
-    }
-    lox_prs_skipsemicolon(prs);
-    lox_prs_discardlocals(prs, prs->currcompiler);
-    lox_prs_emitjump(prs, OP_PSEUDOBREAK);
-}
-
-
-void lox_prs_parsecontinuestmt(AstParser* prs)
-{
-    if(prs->currcompiler->loop == NULL)
-    {
-        lox_prs_raiseerror(prs, "cannot use 'continue' outside of a loop");
-        return;
-    }
-    lox_prs_skipsemicolon(prs);
-    lox_prs_discardlocals(prs, prs->currcompiler);
-    lox_prs_emitloop(prs, prs->currcompiler->loop->start);
-}
-
-
-static void lox_prs_parsewhilestmt(AstParser* prs)
-{
-    int loopstart;
-    int exitjump;
-    AstLoop loop;
-    lox_prs_startloop(prs, &loop);
-    loopstart = lox_prs_currentchunk(prs)->count;
-    lox_prs_consume(prs, TOK_PARENOPEN, "expect '(' after 'while'");
-    lox_prs_parseexpr(prs);
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after condition");
-    exitjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-    lox_prs_emit1byte(prs, OP_POP);
-    prs->currcompiler->loop->body = lox_prs_currentchunk(prs)->count;
-    lox_prs_parsestmt(prs);
-    lox_prs_emitloop(prs, loopstart);
-    lox_prs_emitpatchjump(prs, exitjump);
-    lox_prs_emit1byte(prs, OP_POP);
-    lox_prs_endloop(prs);
-}
-
-static void lox_prs_synchronize(AstParser* prs)
+void lox_prs_synchronize(AstParser* prs)
 {
     prs->panicmode = false;
     while(prs->current.type != TOK_EOF)
@@ -3219,7 +3588,7 @@ static void lox_prs_synchronize(AstParser* prs)
     }
 }
 
-static void lox_prs_parsedecl(AstParser* prs)
+void lox_prs_parsedecl(AstParser* prs)
 {
     if(lox_prs_match(prs, TOK_KWCLASS))
     {
@@ -3245,7 +3614,7 @@ static void lox_prs_parsedecl(AstParser* prs)
     }
 }
 
-static void lox_prs_parsestmt(AstParser* prs)
+void lox_prs_parsestmt(AstParser* prs)
 {
     if(lox_prs_match(prs, TOK_KWDEBUGPRINT))
     {
@@ -3314,72 +3683,31 @@ ObjFunction* lox_prs_compilesource(VMState* vm, const char* source)
 void lox_prs_markcompilerroots(VMState* vm)
 {
     AstCompiler* compiler;
-    compiler = vm->parser->currcompiler;
-    while(compiler != NULL)
+    if(vm->parser != NULL)
     {
-        lox_gcmem_markobject(vm, (Object*)compiler->compiledfn);
-        compiler = compiler->enclosing;
+        compiler = vm->parser->currcompiler;
+        while(compiler != NULL)
+        {
+            lox_gcmem_markobject(vm, (Object*)compiler->compiledfn);
+            compiler = compiler->enclosing;
+        }
     }
 }
 
-static Value cfn_clock(VMState* vm, int argc, Value* argv)
+void lox_vm_stackreset(VMState* vm)
 {
-    (void)vm;
-    (void)argc;
-    (void)argv;
-    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
-}
-
-static Value cfn_chr(VMState* vm, int argc, Value* argv)
-{
-    double dw;
-    char ch;
-    ObjString* os;
-    (void)vm;
-    (void)argc;
-    (void)argv;
-    dw = argv[0].as.number;
-    ch = (char)dw;
-    os = lox_string_copy(vm, &ch, 1);
-    return OBJ_VAL(os);
-}
-
-static Value cfn_print(VMState* vm, int argc, Value* argv)
-{
-    int i;
-    (void)vm;
-    for(i=0; i<argc; i++)
-    {
-        lox_writer_printvalue(argv[i]);
-    }
-    return NUMBER_VAL(0);
-}
-
-static Value cfn_println(VMState* vm, int argc, Value* argv)
-{
-    cfn_print(vm, argc, argv);
-    printf("\n");
-    return NUMBER_VAL(0);
-}
-
-
-static void lox_vm_stackreset(VMState* vm)
-{
-    vm->stacktop = vm->stack;
+    vm->stacktop = 0;
     vm->framecount = 0;
     vm->openupvalues = NULL;
 }
 
-static void lox_vm_raiseerror(VMState* vm, const char* format, ...)
+void lox_state_vraiseerror(VMState* vm, const char* format, va_list va)
 {
     int i;
     size_t instruction;
-    va_list va;
-    ObjFunction* fn;
     CallFrame* frame;
-    va_start(va, format);
+    ObjFunction* fn;
     vfprintf(stderr, format, va);
-    va_end(va);
     fputs("\n", stderr);
 
     /* Types of Values runtime-error < Calls and Functions runtime-error-temp */
@@ -3414,7 +3742,15 @@ static void lox_vm_raiseerror(VMState* vm, const char* format, ...)
     lox_vm_stackreset(vm);
 }
 
-static void lox_vm_defnative(VMState* vm, const char* name, NativeFN nat)
+void lox_state_raiseerror(VMState* vm, const char* format, ...)
+{
+    va_list va;
+    va_start(va, format);
+    lox_state_vraiseerror(vm, format, va);
+    va_end(va);
+}
+
+void lox_state_defnative(VMState* vm, const char* name, NativeFN nat)
 {
     ObjString* os;
     ObjNative* ofn;
@@ -3432,26 +3768,24 @@ static void lox_vm_defnative(VMState* vm, const char* name, NativeFN nat)
 }
 
 
-void lox_vm_init(VMState* vm)
+void lox_state_init(VMState* vm)
 {
     lox_vm_stackreset(vm);
+    vm->conf_shouldprintruntime = false;
     vm->gcstate.linkedobjects = NULL;
     vm->gcstate.bytesallocd = 0;
     vm->gcstate.nextgc = 1024 * 1024;
     vm->gcstate.graycount = 0;
     vm->gcstate.graycap = 0;
     vm->gcstate.graystack = NULL;
+    vm->parser = NULL;
     lox_hashtable_init(&vm->globals);
     lox_hashtable_init(&vm->strings);
     vm->initstring = NULL;
     vm->initstring = lox_string_copy(vm, "init", 4);
-    lox_vm_defnative(vm, "clock", cfn_clock);
-    lox_vm_defnative(vm, "chr", cfn_chr);
-    lox_vm_defnative(vm, "print", cfn_print);
-    lox_vm_defnative(vm, "println", cfn_println);
 }
 
-void lox_vm_free(VMState* vm)
+void lox_state_free(VMState* vm)
 {
     lox_hashtable_free(vm, &vm->globals);
     lox_hashtable_free(vm, &vm->strings);
@@ -3461,75 +3795,96 @@ void lox_vm_free(VMState* vm)
 
 void lox_vm_stackpush(VMState* vm, Value value)
 {
-    *vm->stacktop = value;
+    vm->stack[vm->stacktop] = value;
     vm->stacktop++;
 }
 
 Value lox_vm_stackpop(VMState* vm)
 {
+    int64_t stop;
+    Value v;
+    stop = vm->stacktop;
     vm->stacktop--;
-    return *vm->stacktop;
+    v = vm->stack[stop - 1];
+    return v;
 }
 
-static Value lox_vm_stackpeek(VMState* vm, int distance)
+Value lox_vm_stackpopn(VMState* vm, int32_t n)
 {
-    return vm->stacktop[-1 - distance];
+    int64_t stop;
+    Value v;
+    stop = vm->stacktop;
+    vm->stacktop -= n;
+    v = vm->stack[stop - n];
+    return v;
 }
 
-static bool lox_vm_callclosure(VMState* vm, ObjClosure* closure, int argc)
+Value lox_vm_stackpeek(VMState* vm, int distance)
+{
+    return vm->stack[vm->stacktop + (-1 - distance)];
+}
+
+bool lox_vm_callclosure(VMState* vm, ObjClosure* closure, int argc)
 {
     CallFrame* frame;
     if(argc != closure->innerfn->arity)
     {
-        lox_vm_raiseerror(vm, "expected %d arguments but got %d.", closure->innerfn->arity, argc);
+        lox_state_raiseerror(vm, "expected %d arguments but got %d.", closure->innerfn->arity, argc);
         return false;
     }
     if(vm->framecount == FRAMES_MAX)
     {
-        lox_vm_raiseerror(vm, "stack overflow.");
+        lox_state_raiseerror(vm, "stack overflow.");
         return false;
     }
     frame = &vm->frames[vm->framecount++];
     frame->closure = closure;
     frame->ip = closure->innerfn->chunk.code;
-    frame->slots = vm->stacktop - argc - 1;
+    frame->frstackindex = (vm->stacktop - argc) - 1;
     return true;
 }
 
-static bool lox_vm_callboundmethod(VMState* vm, Value callee, int argc)
+bool lox_vm_callboundmethod(VMState* vm, Value callee, int argc)
 {
     ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
-    vm->stacktop[-argc - 1] = bound->receiver;
+    vm->stack[vm->stacktop + (-argc - 1)] = bound->receiver;    
     return lox_vm_callclosure(vm, bound->method, argc);
 }
 
-static bool lox_vm_callclassconstructor(VMState* vm, Value callee, int argc)
+bool lox_vm_callclassconstructor(VMState* vm, Value callee, int argc)
 {
-    ObjClass* klass = AS_CLASS(callee);
-    vm->stacktop[-argc - 1] = OBJ_VAL(lox_object_makeinstance(vm, klass));
     Value initializer;
+    ObjClass* klass;
+    ObjInstance* instance;
+    klass = AS_CLASS(callee);
+    instance = lox_object_makeinstance(vm, klass);
+    vm->stack[vm->stacktop + (-argc - 1)] = OBJ_VAL(instance);
     if(lox_hashtable_get(vm, &klass->methods, vm->initstring, &initializer))
     {
         return lox_vm_callclosure(vm, AS_CLOSURE(initializer), argc);
     }
     else if(argc != 0)
     {
-        lox_vm_raiseerror(vm, "expected 0 arguments but got %d.", argc);
+        lox_state_raiseerror(vm, "expected 0 arguments but got %d.", argc);
         return false;
     }
     return true;
 }
 
-static bool lox_vm_callnativefunction(VMState* vm, Value callee, int argc)
+bool lox_vm_callnativefunction(VMState* vm, Value callee, int argc)
 {
-    NativeFN cfunc = ((ObjNative*)AS_OBJ(callee))->natfunc;
-    Value result = cfunc(vm, argc, vm->stacktop - argc);
+    Value result;
+    Value* vargs;
+    NativeFN cfunc;
+    cfunc = ((ObjNative*)AS_OBJ(callee))->natfunc;
+    vargs = (&vm->stack[0] + vm->stacktop) - argc;
+    result = cfunc(vm, argc, vargs);
     vm->stacktop -= argc + 1;
     lox_vm_stackpush(vm, result);
     return true;
 }
 
-static bool lox_vm_callvalue(VMState* vm, Value callee, int argc)
+bool lox_vm_callvalue(VMState* vm, Value callee, int argc)
 {
     if(IS_OBJ(callee))
     {
@@ -3568,22 +3923,22 @@ static bool lox_vm_callvalue(VMState* vm, Value callee, int argc)
                 break;
         }
     }
-    lox_vm_raiseerror(vm, "can only call functions and classes.");
+    lox_state_raiseerror(vm, "can only call functions and classes.");
     return false;
 }
 
-static bool lox_vm_invokefromclass(VMState* vm, ObjClass* klass, ObjString* name, int argc)
+bool lox_vm_invokefromclass(VMState* vm, ObjClass* klass, ObjString* name, int argc)
 {
     Value method;
     if(!lox_hashtable_get(vm, &klass->methods, name, &method))
     {
-        lox_vm_raiseerror(vm, "undefined property '%s'.", name->chars);
+        lox_state_raiseerror(vm, "undefined property '%s'.", name->chars);
         return false;
     }
     return lox_vm_callclosure(vm, AS_CLOSURE(method), argc);
 }
 
-static bool lox_vmdo_invoke(VMState* vm, ObjString* name, int argc)
+bool lox_vmdo_invoke(VMState* vm, ObjString* name, int argc)
 {
     Value value;
     Value receiver;
@@ -3591,25 +3946,25 @@ static bool lox_vmdo_invoke(VMState* vm, ObjString* name, int argc)
     receiver = lox_vm_stackpeek(vm, argc);
     if(!IS_INSTANCE(receiver))
     {
-        lox_vm_raiseerror(vm, "only instances have methods.");
+        lox_state_raiseerror(vm, "only instances have methods.");
         return false;
     }
     instance = AS_INSTANCE(receiver);
     if(lox_hashtable_get(vm, &instance->fields, name, &value))
     {
-        vm->stacktop[-argc - 1] = value;
+        vm->stack[vm->stacktop + (-argc - 1)] = value;
         return lox_vm_callvalue(vm, value, argc);
     }
     return lox_vm_invokefromclass(vm, instance->klass, name, argc);
 }
 
-static bool lox_vmdo_bindmethod(VMState* vm, ObjClass* klass, ObjString* name)
+bool lox_vmdo_bindmethod(VMState* vm, ObjClass* klass, ObjString* name)
 {
     Value method;
     ObjBoundMethod* bound;
     if(!lox_hashtable_get(vm, &klass->methods, name, &method))
     {
-        lox_vm_raiseerror(vm, "undefined property '%s'.", name->chars);
+        lox_state_raiseerror(vm, "undefined property '%s'.", name->chars);
         return false;
     }
     bound = lox_object_makeboundmethod(vm, lox_vm_stackpeek(vm, 0), AS_CLOSURE(method));
@@ -3618,7 +3973,7 @@ static bool lox_vmdo_bindmethod(VMState* vm, ObjClass* klass, ObjString* name)
     return true;
 }
 
-static ObjUpvalue* lox_vm_captureupval(VMState* vm, Value* local)
+ObjUpvalue* lox_vm_captureupval(VMState* vm, Value* local)
 {
     ObjUpvalue* upvalue;
     ObjUpvalue* prevupvalue;
@@ -3647,7 +4002,7 @@ static ObjUpvalue* lox_vm_captureupval(VMState* vm, Value* local)
     return createdupvalue;
 }
 
-static void lox_vmdo_closeupvals(VMState* vm, Value* last)
+void lox_vmdo_closeupvals(VMState* vm, Value* last)
 {
     ObjUpvalue* upvalue;
     while(vm->openupvalues != NULL && vm->openupvalues->location >= last)
@@ -3659,7 +4014,7 @@ static void lox_vmdo_closeupvals(VMState* vm, Value* last)
     }
 }
 
-static void lox_vmdo_defmethod(VMState* vm, ObjString* name)
+void lox_vmdo_defmethod(VMState* vm, ObjString* name)
 {
     Value method;
     ObjClass* klass;
@@ -3669,7 +4024,7 @@ static void lox_vmdo_defmethod(VMState* vm, ObjString* name)
     lox_vm_stackpop(vm);
 }
 
-static bool lox_value_isfalsey(Value value)
+bool lox_value_isfalsey(Value value)
 {
     return (
         IS_NIL(value) || (
@@ -3679,7 +4034,7 @@ static bool lox_value_isfalsey(Value value)
     );
 }
 
-static void lox_vmdo_concat(VMState* vm)
+void lox_vmdo_concat(VMState* vm)
 {
     int length;
     char* buf;
@@ -3705,7 +4060,7 @@ static void lox_vmdo_concat(VMState* vm)
 
 
 /* A Virtual Machine run < Calls and Functions run */
-static inline uint8_t lox_vmbits_readbyte(VMState* vm)
+static inline int32_t lox_vmbits_readbyte(VMState* vm)
 {
     return (*(vm)->currframe->ip++);
 }
@@ -3713,8 +4068,13 @@ static inline uint8_t lox_vmbits_readbyte(VMState* vm)
 /* Jumping Back and Forth read-short < Calls and Functions run */
 static inline uint16_t lox_vmbits_readshort(VMState* vm)
 {
+    /*
+    m_instptr += 2;
+    return (uint16_t)((m_instptr[-2] << 8) | m_instptr[-1]);
+    */
+
     (vm)->currframe->ip += 2;
-    return (uint16_t)(((vm)->currframe->ip[-2] << 8) | (vm)->currframe->ip[-1]);
+    return (uint16_t)((vm->currframe->ip[-2] << 8) | vm->currframe->ip[-1]);
 }
 
 /* Calls and Functions run < Closures read-constant */
@@ -3729,7 +4089,7 @@ static inline ObjString* lox_vmbits_readstring(VMState* vm)
 }
 
 /* A Virtual Machine binary-op < Types of Values binary-op */
-bool BINARY_OP(VMState* vm, bool isbool, uint8_t op)
+bool BINARY_OP(VMState* vm, bool isbool, int32_t op)
 {
     double b;
     double a;
@@ -3739,9 +4099,14 @@ bool BINARY_OP(VMState* vm, bool isbool, uint8_t op)
     Value peekb;
     peeka = lox_vm_stackpeek(vm, 0);
     peekb = lox_vm_stackpeek(vm, 1);
-    if(!IS_NUMBER(peeka) || !IS_NUMBER(peekb))
+    if(!IS_NUMBER(peeka))
     {
-        lox_vm_raiseerror(vm, "operands must be numbers.");
+        lox_state_raiseerror(vm, "operand a (at 0) must be a number");
+        return false;
+    }
+    if(!IS_NUMBER(peekb))
+    {
+        lox_state_raiseerror(vm, "operand b (at 1) must be a number");
         return false;
     }
     b = AS_NUMBER(lox_vm_stackpop(vm));
@@ -3783,6 +4148,21 @@ bool BINARY_OP(VMState* vm, bool isbool, uint8_t op)
                 dw = fmod(a, b);
             }
             break;
+        case OP_PRIMBINAND:
+            {
+                dw = (int)a & (int)b;
+            }
+            break;
+        case OP_PRIMBINOR:
+            {
+                dw = (int)a | (int)b;
+            }
+            break;
+        case OP_PRIMBINXOR:
+            {
+                dw = (int)a ^ (int)b;
+            }
+            break;
         case OP_PRIMSHIFTLEFT:
             {
                 dw = (int)a << (int)b;
@@ -3793,10 +4173,9 @@ bool BINARY_OP(VMState* vm, bool isbool, uint8_t op)
                 dw = (int)a >> (int)b;
             }
             break;
-
         default:
             {
-                lox_vm_raiseerror(vm, "unrecognized instruction for BINARY_OP");
+                lox_state_raiseerror(vm, "unrecognized instruction for BINARY_OP");
                 return false;
             }
             break;
@@ -3813,24 +4192,142 @@ bool BINARY_OP(VMState* vm, bool isbool, uint8_t op)
     return true;
 }
 
-static StatusCode lox_vm_runvm(VMState* vm)
+bool lox_vmdo_indexgetstring(VMState* vm, ObjString* os, Value vidx)
 {
-    uint8_t instruc;
+    char ch;
+    long nidx;
+    ObjString* nos;
+    if(!IS_NUMBER(vidx))
+    {
+        lox_state_raiseerror(vm, "cannot index strings with non-number type <%s>", lox_writer_valuetypename(vidx));
+        return false;
+    }
+    nidx = AS_NUMBER(vidx);
+    if((nidx >= 0) && (nidx < os->length))
+    {
+        ch = os->chars[nidx];
+        nos = lox_string_copy(vm, &ch, 1);
+        lox_vm_stackpush(vm, OBJ_VAL(nos));
+        return true;
+    }
+    return false;
+}
+
+bool lox_vmdo_indexget(VMState* vm)
+{
+    Value vidx;
+    Value peeked;
+    vidx = lox_vm_stackpop(vm);
+    peeked = lox_vm_stackpop(vm);
+    if(IS_STRING(peeked))
+    {
+        if(lox_vmdo_indexgetstring(vm, AS_STRING(peeked), vidx))
+        {
+            return true;
+        }
+    }
+    else
+    {
+        lox_state_raiseerror(vm, "cannot index object type <%s>", lox_writer_valuetypename(peeked));
+    }
+    lox_vm_stackpush(vm, NIL_VAL);
+    return false;
+}
+
+bool lox_vmdo_propertyget(VMState* vm)
+{
+    Value value;
+    Value peeked;
+    Value vidx;
+    ObjString* name;
+    ObjInstance* instance;
+    peeked = lox_vm_stackpeek(vm, 0);
+    if(!IS_INSTANCE(peeked))
+    {
+        lox_state_raiseerror(vm, "only instances have properties.");
+        return false;
+    }
+    vidx = lox_vmbits_readconst(vm);
+    lox_vm_stackpop(vm);// Instance.
+    instance = AS_INSTANCE(peeked);
+    name = AS_STRING(vidx);
+    if(lox_hashtable_get(vm, &instance->fields, name, &value))
+    {
+        lox_vm_stackpush(vm, value);
+        return true;
+    }
+    if(!lox_vmdo_bindmethod(vm, instance->klass, name))
+    {
+        return false;
+    }
+    return true;
+}
+
+bool lox_vmdo_makearray(VMState* vm)
+{
+    int i;
+    int count;
+    Value val;
+    ObjArray* array;
+    count = lox_vmbits_readbyte(vm);
+    array = lox_array_make(vm);
+    fprintf(stderr, "makearray: count=%d\n", count);
+    //lox_vm_stackpush(vm, NIL_VAL);
+    vm->stack[vm->stacktop + (-count - 1)] = OBJ_VAL(array);
+    for(i = count - 1; i >= 0; i--)
+    {
+        val = lox_vm_stackpeek(vm, i);
+        lox_array_push(array, val);
+    }
+    #if 0
+        lox_vm_stackpopn(vm, count - 0);
+    #else
+        for(i=0; i<(count-0); i++)
+        {
+            lox_vm_stackpop(vm);
+        }
+    #endif
+    lox_vm_stackpush(vm, OBJ_VAL(array));
+    return true;
+}
+
+StatusCode lox_vm_runvm(VMState* vm)
+{
+    size_t icnt;
+    int64_t nowpos;
+    int64_t spos;
+    int64_t stacktop;
+    OpCode instruc;
+    Value* pslot;
+    (void)icnt;
+    (void)pslot;
     vm->currframe = &vm->frames[vm->framecount - 1];
     for(;;)
     {
-#ifdef DEBUG_TRACE_EXECUTION
-        printf("          ");
-        for(Value* slot = vm->stack; slot < vm->stacktop; slot++)
-        {
-            printf("[ ");
-            lox_writer_printvalue(*slot);
-            printf(" ]");
-        }
-        printf("\n");
-        lox_dbg_dumpdisasm(&vm->currframe->closure->innerfn->chunk, (int)(vm->currframe->ip - vm->currframe->closure->innerfn->chunk.code));
-#endif
         instruc = lox_vmbits_readbyte(vm);
+        if(vm->conf_shouldprintruntime)
+        {
+            pslot = &vm->stack[0];
+            printf(" at %p (instruc=%d):", pslot, instruc);
+            lox_dbg_dumpdisasm(&vm->currframe->closure->innerfn->chunk, (int)(vm->currframe->ip - vm->currframe->closure->innerfn->chunk.code));
+            printf(" ... stack: [\n");
+            icnt = vm->currframe->frstackindex;
+            stacktop = vm->stacktop;
+            icnt = 0;
+            spos = 0;
+            for(pslot = &vm->stack[0]; pslot < &vm->stack[stacktop]; pslot++)
+            {
+                nowpos = spos;
+                spos++;
+
+                printf("  (%d) ", spos);
+                lox_writer_printvalue(*pslot);
+                printf("\n");
+
+            }
+
+            printf("]\n");
+        }
         switch(instruc)
         {
             case OP_PUSHCONST:
@@ -3864,9 +4361,24 @@ static StatusCode lox_vm_runvm(VMState* vm)
                     lox_vm_stackpush(vm, BOOL_VAL(false));
                 }
                 break;
+            case OP_MAKEARRAY:
+                {
+                    if(!lox_vmdo_makearray(vm))
+                    {
+                        return STATUS_RUNTIMEERROR;
+                    }
+                }
+                break;
             case OP_POP:
                 {
                     lox_vm_stackpop(vm);
+                }
+                break;
+            case OP_POPN:
+                {
+                    int32_t n;
+                    n = lox_vmbits_readbyte(vm);
+                    lox_vm_stackpopn(vm, n);
                 }
                 break;
             case OP_DUP:
@@ -3876,16 +4388,20 @@ static StatusCode lox_vm_runvm(VMState* vm)
                 break;
             case OP_LOCALGET:
                 {
-                    uint8_t slot;
-                    slot = lox_vmbits_readbyte(vm);
-                    lox_vm_stackpush(vm, vm->currframe->slots[slot]);
+                    int32_t islot;
+                    Value val;
+                    islot = lox_vmbits_readbyte(vm);
+                    val = vm->stack[vm->currframe->frstackindex + (islot + 0)];
+                    lox_vm_stackpush(vm, val);
                 }
                 break;
             case OP_LOCALSET:
                 {
-                    uint8_t slot;
-                    slot = lox_vmbits_readbyte(vm);
-                    vm->currframe->slots[slot] = lox_vm_stackpeek(vm, 0);
+                    int32_t islot;
+                    Value val;
+                    islot = lox_vmbits_readbyte(vm);
+                    val = lox_vm_stackpeek(vm, 0);
+                    vm->stack[vm->currframe->frstackindex + (islot + 0)] = val;
                 }
                 break;
             case OP_GLOBALGET:
@@ -3895,7 +4411,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
                     name = lox_vmbits_readstring(vm);
                     if(!lox_hashtable_get(vm, &vm->globals, name, &value))
                     {
-                        lox_vm_raiseerror(vm, "undefined variable '%s'.", name->chars);
+                        lox_state_raiseerror(vm, "undefined variable '%s'.", name->chars);
                         return STATUS_RUNTIMEERROR;
                     }
                     lox_vm_stackpush(vm, value);
@@ -3916,54 +4432,50 @@ static StatusCode lox_vm_runvm(VMState* vm)
                     if(lox_hashtable_set(vm, &vm->globals, name, lox_vm_stackpeek(vm, 0)))
                     {
                         //lox_hashtable_delete(vm, &vm->globals, name);// [delete]
-                        //lox_vm_raiseerror(vm, "undefined variable '%s'.", name->chars);
+                        //lox_state_raiseerror(vm, "undefined variable '%s'.", name->chars);
                         //return STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
             case OP_UPVALGET:
                 {
-                    uint8_t slot = lox_vmbits_readbyte(vm);
-                    lox_vm_stackpush(vm, *vm->currframe->closure->upvalues[slot]->location);
+                    int32_t islot = lox_vmbits_readbyte(vm);
+                    lox_vm_stackpush(vm, *vm->currframe->closure->upvalues[islot]->location);
                 }
                 break;
             case OP_UPVALSET:
                 {
-                    uint8_t slot = lox_vmbits_readbyte(vm);
-                    *vm->currframe->closure->upvalues[slot]->location = lox_vm_stackpeek(vm, 0);
+                    int32_t islot = lox_vmbits_readbyte(vm);
+                    *vm->currframe->closure->upvalues[islot]->location = lox_vm_stackpeek(vm, 0);
                 }
                 break;
+
+            case OP_INDEXGET:
+                {
+                    if(!lox_vmdo_indexget(vm))
+                    {
+                        return STATUS_RUNTIMEERROR;
+                    }
+                }
+                break;
+            
+            
             case OP_PROPERTYGET:
                 {
-                    Value value;
-                    ObjString* name;
-                    ObjInstance* instance;
-                    if(!IS_INSTANCE(lox_vm_stackpeek(vm, 0)))
-                    {
-                        lox_vm_raiseerror(vm, "only instances have properties.");
-                        return STATUS_RUNTIMEERROR;
-                    }
-                    instance = AS_INSTANCE(lox_vm_stackpeek(vm, 0));
-                    name = lox_vmbits_readstring(vm);
-                    if(lox_hashtable_get(vm, &instance->fields, name, &value))
-                    {
-                        lox_vm_stackpop(vm);// Instance.
-                        lox_vm_stackpush(vm, value);
-                        break;
-                    }
-                    if(!lox_vmdo_bindmethod(vm, instance->klass, name))
+                    if(!lox_vmdo_propertyget(vm))
                     {
                         return STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
+
             case OP_PROPERTYSET:
                 {
                     Value value;
                     ObjInstance* instance;
                     if(!IS_INSTANCE(lox_vm_stackpeek(vm, 1)))
                     {
-                        lox_vm_raiseerror(vm, "only instances have fields.");
+                        lox_state_raiseerror(vm, "only instances have fields.");
                         return STATUS_RUNTIMEERROR;
                     }
                     instance = AS_INSTANCE(lox_vm_stackpeek(vm, 1));
@@ -3993,13 +4505,6 @@ static StatusCode lox_vm_runvm(VMState* vm)
                 }
                 break;
             case OP_PRIMGREATER:
-                {
-                    if(!BINARY_OP(vm, true, instruc))
-                    {
-                        return STATUS_RUNTIMEERROR;
-                    }
-                }
-                break;
             case OP_PRIMLESS:
                 {
                     if(!BINARY_OP(vm, true, instruc))
@@ -4023,7 +4528,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
                     }
                     else
                     {
-                        lox_vm_raiseerror(vm, "operands must be two numbers or two strings.");
+                        lox_state_raiseerror(vm, "operands must be two numbers or two strings.");
                         return STATUS_RUNTIMEERROR;
                     }
                 }
@@ -4034,6 +4539,9 @@ static StatusCode lox_vm_runvm(VMState* vm)
             case OP_PRIMMODULO:
             case OP_PRIMSHIFTLEFT:
             case OP_PRIMSHIFTRIGHT:
+            case OP_PRIMBINAND:
+            case OP_PRIMBINOR:
+            case OP_PRIMBINXOR:
                 {
                     if(!BINARY_OP(vm, false, instruc))
                     {
@@ -4050,7 +4558,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
                 {
                     if(!IS_NUMBER(lox_vm_stackpeek(vm, 0)))
                     {
-                        lox_vm_raiseerror(vm, "operand must be a number.");
+                        lox_state_raiseerror(vm, "operand must be a number.");
                         return STATUS_RUNTIMEERROR;
                     }
                     lox_vm_stackpush(vm, NUMBER_VAL(-AS_NUMBER(lox_vm_stackpop(vm))));
@@ -4129,8 +4637,8 @@ static StatusCode lox_vm_runvm(VMState* vm)
             case OP_CLOSURE:
                 {
                     int i;
-                    uint8_t index;
-                    uint8_t islocal;
+                    int32_t index;
+                    int32_t islocal;
                     ObjFunction* fn;
                     ObjClosure* closure;
                     fn = AS_FUNCTION(lox_vmbits_readconst(vm));
@@ -4142,7 +4650,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
                         index = lox_vmbits_readbyte(vm);
                         if(islocal)
                         {
-                            closure->upvalues[i] = lox_vm_captureupval(vm, vm->currframe->slots + index);
+                            closure->upvalues[i] = lox_vm_captureupval(vm, &vm->stack[vm->currframe->frstackindex + index]);
                         }
                         else
                         {
@@ -4153,24 +4661,33 @@ static StatusCode lox_vm_runvm(VMState* vm)
                 break;
             case OP_UPVALCLOSE:
                 {
-                    lox_vmdo_closeupvals(vm, vm->stacktop - 1);
+                    Value* vargs;
+                    vargs = (&vm->stack[0] + vm->stacktop) - 1;
+                    lox_vmdo_closeupvals(vm, vargs);
                     lox_vm_stackpop(vm);
                 }
                 break;
             case OP_RETURN:
                 {
+                    int64_t usable;
                     Value result;
                     result = lox_vm_stackpop(vm);
-                    lox_vmdo_closeupvals(vm, vm->currframe->slots);
+                    if(vm->currframe->frstackindex >= 0)
+                    {
+                        lox_vmdo_closeupvals(vm, &vm->stack[vm->currframe->frstackindex]);
+                    }
                     vm->framecount--;
                     if(vm->framecount == 0)
                     {
                         lox_vm_stackpop(vm);
+                        fprintf(stderr, "returning due to OP_RETURN\n");
                         return STATUS_OK;
                     }
-                    vm->stacktop = vm->currframe->slots;
+                    usable = (vm->currframe->frstackindex - 0);
+                    vm->stacktop = usable;
                     lox_vm_stackpush(vm, result);
                     vm->currframe = &vm->frames[vm->framecount - 1];
+
                 }
                 break;
             case OP_CLASS:
@@ -4185,7 +4702,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
                     superclass = lox_vm_stackpeek(vm, 1);
                     if(!IS_CLASS(superclass))
                     {
-                        lox_vm_raiseerror(vm, "superclass must be a class.");
+                        lox_state_raiseerror(vm, "superclass must be a class.");
                         return STATUS_RUNTIMEERROR;
                     }
                     subclass = AS_CLASS(lox_vm_stackpeek(vm, 0));
@@ -4204,7 +4721,7 @@ static StatusCode lox_vm_runvm(VMState* vm)
 }
 
 
-StatusCode lox_vm_runsource(VMState* vm, const char* source)
+StatusCode lox_state_runsource(VMState* vm, const char* source)
 {
     ObjFunction* fn;
     ObjClosure* closure;
@@ -4221,22 +4738,7 @@ StatusCode lox_vm_runsource(VMState* vm, const char* source)
     return lox_vm_runvm(vm);
 }
 
-static void repl(VMState* vm)
-{
-    char line[1024];
-    for(;;)
-    {
-        printf("> ");
-        if(!fgets(line, sizeof(line), stdin))
-        {
-            printf("\n");
-            break;
-        }
-        lox_vm_runsource(vm, line);
-    }
-}
-
-char* readhandle(FILE* hnd, size_t* dlen)
+static char* lox_util_readhandle(FILE* hnd, size_t* dlen)
 {
     long rawtold;
     /*
@@ -4286,7 +4788,7 @@ char* readhandle(FILE* hnd, size_t* dlen)
     return NULL;
 }
 
-char* readfile(const char* filename, size_t* dlen)
+static char* lox_util_readfile(const char* filename, size_t* dlen)
 {
     char* b;
     FILE* fh;
@@ -4294,18 +4796,19 @@ char* readfile(const char* filename, size_t* dlen)
     {
         return NULL;
     }
-    b = readhandle(fh, dlen);
+    b = lox_util_readhandle(fh, dlen);
     fclose(fh);
     return b;
 }
 
-static void lox_vm_runfile(VMState* vm, const char* path)
+
+void lox_state_runfile(VMState* vm, const char* path)
 {
     size_t fsz;
     char* source;
     StatusCode result;
-    source = readfile(path, &fsz);
-    result = lox_vm_runsource(vm, source);
+    source = lox_util_readfile(path, &fsz);
+    result = lox_state_runsource(vm, source);
     free(source);
     if(result == STATUS_SYNTAXERROR)
     {
@@ -4317,24 +4820,141 @@ static void lox_vm_runfile(VMState* vm, const char* path)
     }
 }
 
-int main(int argc, const char* argv[])
+static void repl(VMState* vm)
 {
-    VMState vm;
-    lox_vm_init(&vm);
-    if(argc == 1)
+    char line[1024];
+    for(;;)
     {
-        repl(&vm);
+        printf("> ");
+        if(!fgets(line, sizeof(line), stdin))
+        {
+            printf("\n");
+            break;
+        }
+        lox_state_runsource(vm, line);
     }
-    else if(argc == 2)
+}
+
+static Value cfn_clock(VMState* vm, int argc, Value* argv)
+{
+    (void)vm;
+    (void)argc;
+    (void)argv;
+    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+}
+
+static Value cfn_chr(VMState* vm, int argc, Value* argv)
+{
+    double dw;
+    char ch;
+    ObjString* os;
+    (void)vm;
+    (void)argc;
+    (void)argv;
+    dw = argv[0].as.number;
+    ch = (char)dw;
+    os = lox_string_copy(vm, &ch, 1);
+    return OBJ_VAL(os);
+}
+
+static Value cfn_print(VMState* vm, int argc, Value* argv)
+{
+    int i;
+    (void)vm;
+    for(i=0; i<argc; i++)
     {
-        lox_vm_runfile(&vm, argv[1]);
+        lox_writer_printvalue(argv[i]);
+    }
+    return NUMBER_VAL(0);
+}
+
+static Value cfn_println(VMState* vm, int argc, Value* argv)
+{
+    cfn_print(vm, argc, argv);
+    printf("\n");
+    return NUMBER_VAL(0);
+}
+
+
+
+int main(int argc, char** argv)
+{
+    int i;
+    int nargc;
+    char oc;
+    char noc;
+    char** nargv;
+    char* codeline;
+    const char* filename;
+    VMState vm;
+    nargv = argv;
+    nargc = argc;
+    codeline = NULL;
+    lox_state_init(&vm);
+    lox_state_defnative(&vm, "clock", cfn_clock);
+    lox_state_defnative(&vm, "chr", cfn_chr);
+    lox_state_defnative(&vm, "print", cfn_print);
+    lox_state_defnative(&vm, "println", cfn_println);
+    for(i=1; i<argc; i++)
+    {
+        if(argv[i][0] == '-')
+        {
+            oc = argv[i][1];
+            noc = argv[i][2];
+            if(oc == 'e')
+            {
+                if(noc == 0)
+                {
+                    if((i+1) != argc)
+                    {
+                        codeline = argv[i+1];
+                        nargc--;
+                        nargv++;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "-e needs a value\n");
+                        return 1;
+                    }
+                }
+                else
+                {
+                    codeline = (argv[i] + 2);
+                }
+                nargc--;
+                nargv++;
+            }
+            else if(oc == 'd')
+            {
+                vm.conf_shouldprintruntime = true;
+                nargc--;
+                nargv++;
+            }
+            else
+            {
+                fprintf(stderr, "invalid flag '-%c'\n", oc);
+                return 1;
+            }
+        }
+    }
+    if(codeline != NULL)
+    {
+        fprintf(stderr, "codeline=%s\n", codeline);
+        lox_state_runsource(&vm, codeline);
     }
     else
     {
-        fprintf(stderr, "usage: clox [path]\n");
-        exit(64);
+        if(argc > 1)
+        {
+            filename = argv[1];
+            fprintf(stderr, "filename=%s\n", filename);
+            lox_state_runfile(&vm, filename);
+        }
+        else
+        {
+            repl(&vm);
+        }
     }
-
-    lox_vm_free(&vm);
+    lox_state_free(&vm);
     return 0;
 }

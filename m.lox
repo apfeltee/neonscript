@@ -1,6 +1,6 @@
 
-a = 5;
-b = 10;
-println(a << b);
+a = 4241;
+b = 124;
+println(a % b);
 
 

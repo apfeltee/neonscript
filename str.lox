@@ -1,3 +1,5 @@
 
-print("hello\tworld!\n")
+a = "hello "
+b = "world!"
+println(a + b)
 
