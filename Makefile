@@ -1,7 +1,7 @@
 
 INCFLAGS = -I.
 
-CC = gcc -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs
+CC = gcc -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs 
 #CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
 CFLAGS = $(INCFLAGS) -O0 -g3 -ggdb3
 LDFLAGS = -flto -ldl -lm  -lreadline -lpthread
@@ -27,7 +27,7 @@ all: $(protofile) $(target)
 ifeq (1, $(havecproto))
 $(protofile): $(srcfiles_all)
 	echo > $(protofile)
-	cproto -si $(srcfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' > $(protofile)_tmp
+	cproto -si $(srcfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' | grep -vP __inline > $(protofile)_tmp
 	mv $(protofile)_tmp $(protofile)
 else
 $(protofile): $(srcfiles_all)

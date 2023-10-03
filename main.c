@@ -26,49 +26,17 @@
 #define FRAMES_MAX 1024
 #define STACK_MAX (FRAMES_MAX * 2)
 
-#define IS_BOOL(value) ((value).type == VAL_BOOL)
-#define IS_NIL(value) ((value).type == VAL_NIL)
-#define IS_NUMBER(value) ((value).type == VAL_NUMBER)
-#define IS_OBJ(value) ((value).type == VAL_OBJ)
 
-#define BOOL_VAL(value) ((Value){ VAL_BOOL, { .boolean = value } })
-#define NIL_VAL ((Value){ VAL_NIL, { .number = 0 } })
-#define NUMBER_VAL(value) ((Value){ VAL_NUMBER, { .number = value } })
-#define OBJ_VAL(object) ((Value){ VAL_OBJ, { .obj = (Object*)object } })
 
-#define OBJ_TYPE(value) (AS_OBJ(value)->type)
+#define ALLOCATE(state, type, count) (type*)neon_mem_realloc(state, NULL, 0, sizeof(type) * (count))
 
-//#define IS_BOUND_METHOD(value) lox_value_isobjtype(value, OBJ_BOUNDMETHOD)
-#define IS_CLASS(value) lox_value_isobjtype(value, OBJ_CLASS)
-//#define IS_CLOSURE(value) lox_value_isobjtype(value, OBJ_CLOSURE)
-//#define IS_FUNCTION(value) lox_value_isobjtype(value, OBJ_FUNCTION)
-#define IS_INSTANCE(value) lox_value_isobjtype(value, OBJ_INSTANCE)
-//#define IS_NATIVE(value) lox_value_isobjtype(value, OBJ_NATIVE)
-#define IS_STRING(value) lox_value_isobjtype(value, OBJ_STRING)
-#define IS_ARRAY(value) lox_value_isobjtype(value, OBJ_ARRAY)
-
-#define AS_OBJ(value) ((value).as.obj)
-#define AS_BOOL(value) ((value).as.boolean)
-#define AS_NUMBER(value) ((value).as.number)
-#define AS_BOUND_METHOD(value) ((ObjBoundMethod*)AS_OBJ(value))
-#define AS_CLASS(value) ((ObjClass*)AS_OBJ(value))
-#define AS_CLOSURE(value) ((ObjClosure*)AS_OBJ(value))
-#define AS_FUNCTION(value) ((ObjFunction*)AS_OBJ(value))
-#define AS_INSTANCE(value) ((ObjInstance*)AS_OBJ(value))
-#define AS_NATIVE(value) ((ObjNative*)AS_OBJ(value))
-#define AS_STRING(value) ((ObjString*)AS_OBJ(value))
-#define AS_CSTRING(value) (((ObjString*)AS_OBJ(value))->sbuf->data)
-#define AS_ARRAY(value) ((ObjArray*)AS_OBJ(value))
-
-#define ALLOCATE(state, type, count) (type*)lox_mem_realloc(state, NULL, 0, sizeof(type) * (count))
-
-#define FREE(state, type, pointer) lox_mem_realloc(state, pointer, sizeof(type), 0)
+#define FREE(state, type, pointer) neon_mem_realloc(state, pointer, sizeof(type), 0)
 
 #define GROW_CAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity)*2)
 
-#define GROW_ARRAY(state, type, pointer, oldcnt, newcnt) (type*)lox_mem_realloc(state, pointer, sizeof(type) * (oldcnt), sizeof(type) * (newcnt))
+#define GROW_ARRAY(state, type, pointer, oldcnt, newcnt) (type*)neon_mem_realloc(state, pointer, sizeof(type) * (oldcnt), sizeof(type) * (newcnt))
 
-#define FREE_ARRAY(state, type, pointer, oldcnt) lox_mem_realloc(state, pointer, sizeof(type) * (oldcnt), 0)
+#define FREE_ARRAY(state, type, pointer, oldcnt) neon_mem_realloc(state, pointer, sizeof(type) * (oldcnt), 0)
 
 
 #define GC_HEAP_GROW_FACTOR 2
@@ -78,521 +46,634 @@
 
 
 
-// OP_FUNCARG - explicitly for function arguments (and default values)?
+// NEON_OP_FUNCARG - explicitly for function arguments (and default values)?
 
-enum OpCode
+enum NeonOpCode
 {
-    OP_PUSHCONST,
-    OP_PUSHNIL,
-    OP_PUSHTRUE,
-    OP_PUSHFALSE,
-    OP_PUSHONE,
-    OP_POP,
-    OP_POPN,
-    OP_DUP,
-    OP_LOCALGET,
-    OP_LOCALSET,
-    OP_GLOBALGET,
-    OP_GLOBALDEFINE,
-    OP_GLOBALSET,
-    OP_UPVALGET,
-    OP_UPVALSET,
-    OP_PROPERTYGET,
-    OP_PROPERTYSET,
-    OP_INSTGETSUPER,
-    OP_EQUAL,
-    OP_PRIMGREATER,
-    OP_PRIMLESS,
-    OP_PRIMADD,
-    OP_PRIMSUBTRACT,
-    OP_PRIMMULTIPLY,
-    OP_PRIMDIVIDE,
-    OP_PRIMMODULO,
-    OP_PRIMSHIFTLEFT,
-    OP_PRIMSHIFTRIGHT,
-    OP_PRIMBINAND,
-    OP_PRIMBINOR,
-    OP_PRIMBINXOR,
-    OP_PRIMNOT,
-    OP_PRIMNEGATE,
-    OP_DEBUGPRINT,
-    OP_JUMPNOW,
-    OP_JUMPIFFALSE,
-    OP_LOOP,
-    OP_CALL,
-    OP_INSTTHISINVOKE,
-    OP_INSTSUPERINVOKE,
-    OP_CLOSURE,
-    OP_UPVALCLOSE,
-    OP_RETURN,
-    OP_CLASS,
-    OP_INHERIT,
-    OP_METHOD,
-    OP_MAKEARRAY,
-    OP_INDEXGET,
-    OP_INDEXSET,
-    OP_HALTVM,
-    OP_PSEUDOBREAK,
+    NEON_OP_PUSHCONST,
+    NEON_OP_PUSHNIL,
+    NEON_OP_PUSHTRUE,
+    NEON_OP_PUSHFALSE,
+    NEON_OP_PUSHONE,
+    NEON_OP_POP,
+    NEON_OP_POPN,
+    NEON_OP_DUP,
+    NEON_OP_LOCALGET,
+    NEON_OP_LOCALSET,
+    NEON_OP_GLOBALGET,
+    NEON_OP_GLOBALDEFINE,
+    NEON_OP_GLOBALSET,
+    NEON_OP_UPVALGET,
+    NEON_OP_UPVALSET,
+    NEON_OP_PROPERTYGET,
+    NEON_OP_PROPERTYSET,
+    NEON_OP_INSTGETSUPER,
+    NEON_OP_EQUAL,
+    NEON_OP_PRIMGREATER,
+    NEON_OP_PRIMLESS,
+    NEON_OP_PRIMADD,
+    NEON_OP_PRIMSUBTRACT,
+    NEON_OP_PRIMMULTIPLY,
+    NEON_OP_PRIMDIVIDE,
+    NEON_OP_PRIMMODULO,
+    NEON_OP_PRIMSHIFTLEFT,
+    NEON_OP_PRIMSHIFTRIGHT,
+    NEON_OP_PRIMBINAND,
+    NEON_OP_PRIMBINOR,
+    NEON_OP_PRIMBINXOR,
+    NEON_OP_PRIMNOT,
+    NEON_OP_PRIMNEGATE,
+    NEON_OP_DEBUGPRINT,
+    NEON_OP_JUMPNOW,
+    NEON_OP_JUMPIFFALSE,
+    NEON_OP_LOOP,
+    NEON_OP_CALL,
+    NEON_OP_INSTTHISINVOKE,
+    NEON_OP_INSTSUPERINVOKE,
+    NEON_OP_CLOSURE,
+    NEON_OP_UPVALCLOSE,
+    NEON_OP_RETURN,
+    NEON_OP_CLASS,
+    NEON_OP_INHERIT,
+    NEON_OP_METHOD,
+    NEON_OP_MAKEARRAY,
+    NEON_OP_INDEXGET,
+    NEON_OP_INDEXSET,
+    NEON_OP_HALTVM,
+    NEON_OP_PSEUDOBREAK,
 };
 
-enum ValueType
+enum NeonValType
 {
-    VAL_BOOL,
-    VAL_NIL,// [user-types]
-    VAL_NUMBER,
-    VAL_OBJ
+    NEON_VAL_BOOL,
+    NEON_VAL_NIL,// [user-types]
+    NEON_VAL_NUMBER,
+    NEON_VAL_OBJ
 };
 
-enum ObjType
+enum NeonObjType
 {
-    OBJ_BOUNDMETHOD,
-    OBJ_CLASS,
-    OBJ_CLOSURE,
-    OBJ_FUNCTION,
-    OBJ_INSTANCE,
-    OBJ_NATIVE,
-    OBJ_STRING,
-    OBJ_UPVALUE,
-    OBJ_ARRAY,
-    OBJ_MAP,
+    NEON_OBJ_BOUNDMETHOD,
+    NEON_OBJ_CLASS,
+    NEON_OBJ_CLOSURE,
+    NEON_OBJ_FUNCTION,
+    NEON_OBJ_INSTANCE,
+    NEON_OBJ_NATIVE,
+    NEON_OBJ_STRING,
+    NEON_OBJ_UPVALUE,
+    NEON_OBJ_ARRAY,
+    NEON_OBJ_MAP,
 };
 
-enum StatusCode
+enum NeonStatusCode
 {
-    STATUS_OK,
-    STATUS_SYNTAXERROR,
-    STATUS_RUNTIMEERROR
+    NEON_STATUS_OK,
+    NEON_STATUS_SYNTAXERROR,
+    NEON_STATUS_RUNTIMEERROR
 };
 
-enum AstTokType
+enum NeonAstTokType
 {
     // Single-character tokens.
-    TOK_PARENOPEN,
-    TOK_PARENCLOSE,
-    TOK_BRACEOPEN,
-    TOK_BRACECLOSE,
-    TOK_BRACKETOPEN,
-    TOK_BRACKETCLOSE,
-    TOK_COMMA,
-    TOK_DOT,
-    TOK_MINUS,
-    TOK_PLUS,
-    TOK_SEMICOLON,
-    TOK_NEWLINE,
-    TOK_SLASH,
-    TOK_STAR,
-    TOK_MODULO,
-    TOK_BINAND,
-    TOK_BINOR,
-    TOK_BINXOR,
+    NEON_TOK_PARENOPEN,
+    NEON_TOK_PARENCLOSE,
+    NEON_TOK_BRACEOPEN,
+    NEON_TOK_BRACECLOSE,
+    NEON_TOK_BRACKETOPEN,
+    NEON_TOK_BRACKETCLOSE,
+    NEON_TOK_COMMA,
+    NEON_TOK_DOT,
+    NEON_TOK_MINUS,
+    NEON_TOK_PLUS,
+    NEON_TOK_SEMICOLON,
+    NEON_TOK_NEWLINE,
+    NEON_TOK_SLASH,
+    NEON_TOK_STAR,
+    NEON_TOK_MODULO,
+    NEON_TOK_BINAND,
+    NEON_TOK_BINOR,
+    NEON_TOK_BINXOR,
     // One or two character tokens.
-    TOK_SHIFTLEFT,
-    TOK_SHIFTRIGHT,
-    TOK_EXCLAM,
-    TOK_COMPNOTEQUAL,
-    TOK_ASSIGN,
-    TOK_COMPEQUAL,
-    TOK_COMPGREATERTHAN,
-    TOK_COMPGREATEREQUAL,
-    TOK_COMPLESSTHAN,
-    TOK_COMPLESSEQUAL,
-    TOK_INCREMENT,
-    TOK_DECREMENT,
+    NEON_TOK_SHIFTLEFT,
+    NEON_TOK_SHIFTRIGHT,
+    NEON_TOK_EXCLAM,
+    NEON_TOK_COMPNOTEQUAL,
+    NEON_TOK_ASSIGN,
+    NEON_TOK_COMPEQUAL,
+    NEON_TOK_COMPGREATERTHAN,
+    NEON_TOK_COMPGREATEREQUAL,
+    NEON_TOK_COMPLESSTHAN,
+    NEON_TOK_COMPLESSEQUAL,
+    NEON_TOK_INCREMENT,
+    NEON_TOK_DECREMENT,
     // Literals.
-    TOK_IDENTIFIER,
-    TOK_STRING,
-    TOK_NUMBER,
+    NEON_TOK_IDENTIFIER,
+    NEON_TOK_STRING,
+    NEON_TOK_NUMBER,
     // Keywords.
-    TOK_KWBREAK,
-    TOK_KWCONTINUE,
-    TOK_KWAND,
-    TOK_KWCLASS,
-    TOK_KWELSE,
-    TOK_KWFALSE,
-    TOK_KWFOR,
-    TOK_KWFUNCTION,
-    TOK_KWIF,
-    TOK_KWNIL,
-    TOK_KWOR,
-    TOK_KWDEBUGPRINT,
-    TOK_KWRETURN,
-    TOK_KWSUPER,
-    TOK_KWTHIS,
-    TOK_KWTRUE,
-    TOK_KWVAR,
-    TOK_KWWHILE,
-    TOK_ERROR,
-    TOK_EOF
+    NEON_TOK_KWBREAK,
+    NEON_TOK_KWCONTINUE,
+    NEON_TOK_KWAND,
+    NEON_TOK_KWCLASS,
+    NEON_TOK_KWELSE,
+    NEON_TOK_KWFALSE,
+    NEON_TOK_KWFOR,
+    NEON_TOK_KWFUNCTION,
+    NEON_TOK_KWIF,
+    NEON_TOK_KWNIL,
+    NEON_TOK_KWOR,
+    NEON_TOK_KWDEBUGPRINT,
+    NEON_TOK_KWRETURN,
+    NEON_TOK_KWSUPER,
+    NEON_TOK_KWTHIS,
+    NEON_TOK_KWTRUE,
+    NEON_TOK_KWVAR,
+    NEON_TOK_KWWHILE,
+    NEON_TOK_ERROR,
+    NEON_TOK_EOF
 };
 
-enum AstPrecedence
+enum NeonAstPrecedence
 {
-    PREC_NONE,
-    PREC_ASSIGNMENT,// =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //=
+    NEON_PREC_NONE,
+    NEON_PREC_ASSIGNMENT,// =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //=
     // ~=
-    PREC_CONDITIONAL,// ?:
-    PREC_OR,// or
-    PREC_AND,// and
-    PREC_EQUALITY,// ==, !=
-    PREC_COMPARISON,// <, >, <=, >=
-    PREC_BIT_OR,// |
-    PREC_BIT_XOR,// ^
-    PREC_BIT_AND,// &
-    PREC_SHIFT,// <<, >>
-    PREC_RANGE,// ..
-    PREC_TERM,// +, -
-    PREC_FACTOR,// *, /, %, **, //
-    PREC_UNARY,// !, -, ~, (++, -- this two will now be treated as statements)
-    PREC_CALL,// ., ()
-    PREC_PRIMARY
+    NEON_PREC_CONDITIONAL,// ?:
+    NEON_PREC_OR,// or
+    NEON_PREC_AND,// and
+    NEON_PREC_EQUALITY,// ==, !=
+    NEON_PREC_COMPARISON,// <, >, <=, >=
+    NEON_PREC_BIT_OR,// |
+    NEON_PREC_BIT_XOR,// ^
+    NEON_PREC_BIT_AND,// &
+    NEON_PREC_SHIFT,// <<, >>
+    NEON_PREC_RANGE,// ..
+    NEON_PREC_TERM,// +, -
+    NEON_PREC_FACTOR,// *, /, %, **, //
+    NEON_PREC_UNARY,// !, -, ~, (++, -- this two will now be treated as statements)
+    NEON_PREC_CALL,// ., ()
+    NEON_PREC_PRIMARY
 };
 
 
-enum AstFuncType
+enum NeonAstFuncType
 {
-    TYPE_FUNCTION,
-    TYPE_INITIALIZER,
-    TYPE_METHOD,
-    TYPE_SCRIPT
+    NEON_TYPE_FUNCTION,
+    NEON_TYPE_INITIALIZER,
+    NEON_TYPE_METHOD,
+    NEON_TYPE_SCRIPT
 };
 
 
-typedef enum ObjType ObjType;
-typedef enum AstPrecedence AstPrecedence;
-typedef enum AstFuncType AstFuncType;
-typedef enum ValueType ValueType;
-typedef enum StatusCode StatusCode;
-typedef enum AstTokType AstTokType;
-typedef enum OpCode OpCode;
+typedef enum NeonObjType NeonObjType;
+typedef enum NeonAstPrecedence NeonAstPrecedence;
+typedef enum NeonAstFuncType NeonAstFuncType;
+typedef enum NeonValType NeonValType;
+typedef enum NeonStatusCode NeonStatusCode;
+typedef enum NeonAstTokType NeonAstTokType;
+typedef enum NeonOpCode NeonOpCode;
 
-typedef struct /**/Object Object;
-typedef struct /**/ObjString ObjString;
-typedef struct /**/ObjFunction ObjFunction;
-typedef struct /**/ObjNative ObjNative;
-typedef struct /**/ObjUpvalue ObjUpvalue;
-typedef struct /**/ObjClosure ObjClosure;
-typedef struct /**/ObjClass ObjClass;
-typedef struct /**/ObjInstance ObjInstance;
-typedef struct /**/ObjBoundMethod ObjBoundMethod;
-typedef struct /**/ObjArray ObjArray;
-typedef struct /**/CallFrame CallFrame;
-typedef struct /**/Value Value;
-typedef struct /**/ValArray ValArray;
-typedef struct /**/Chunk Chunk;
-typedef struct /**/HashEntry HashEntry;
-typedef struct /**/HashTable HashTable;
-typedef struct /**/LoxState LoxState;
-typedef struct /**/AstToken AstToken;
-typedef struct /**/AstRule AstRule;
-typedef struct /**/AstLoop AstLoop;
-typedef struct /**/AstLocal AstLocal;
-typedef struct /**/AstUpvalue AstUpvalue;
-typedef struct /**/AstCompiler AstCompiler;
-typedef struct /**/AstClassCompiler AstClassCompiler;
-typedef struct /**/AstScanner AstScanner;
-typedef struct /**/AstParser AstParser;
-typedef struct /**/Strbuf Strbuf;
-typedef struct /**/Writer Writer;
-typedef struct /**/LoxVMVars LoxVMVars;
-typedef struct /**/LoxGCVars LoxGCVars;
-typedef struct /**/LoxConfig LoxConfig;
+typedef struct /**/NeonObject NeonObject;
+typedef struct /**/NeonObjString NeonObjString;
+typedef struct /**/NeonObjScriptFunction NeonObjScriptFunction;
+typedef struct /**/NeonObjNativeFunction NeonObjNativeFunction;
+typedef struct /**/NeonObjUpvalue NeonObjUpvalue;
+typedef struct /**/NeonObjClosure NeonObjClosure;
+typedef struct /**/NeonObjClass NeonObjClass;
+typedef struct /**/NeonObjInstance NeonObjInstance;
+typedef struct /**/NeonObjBoundFunction NeonObjBoundFunction;
+typedef struct /**/NeonObjArray NeonObjArray;
+typedef struct /**/NeonObjMap NeonObjMap;
+typedef struct /**/NeonCallFrame NeonCallFrame;
+typedef struct /**/NeonValue NeonValue;
+typedef struct /**/NeonValArray NeonValArray;
+typedef struct /**/NeonChunk NeonChunk;
+typedef struct /**/NeonHashEntry NeonHashEntry;
+typedef struct /**/NeonHashTable NeonHashTable;
+typedef struct /**/NeonState NeonState;
+typedef struct /**/NeonAstToken NeonAstToken;
+typedef struct /**/NeonAstRule NeonAstRule;
+typedef struct /**/NeonAstLoop NeonAstLoop;
+typedef struct /**/NeonAstLocal NeonAstLocal;
+typedef struct /**/NeonAstUpvalue NeonAstUpvalue;
+typedef struct /**/NeonAstCompiler NeonAstCompiler;
+typedef struct /**/NeonAstClassCompiler NeonAstClassCompiler;
+typedef struct /**/NeonAstScanner NeonAstScanner;
+typedef struct /**/NeonAstParser NeonAstParser;
+typedef struct /**/NeonStringBuffer NeonStringBuffer;
+typedef struct /**/NeonWriter NeonWriter;
+typedef struct /**/NeonVMVars NeonVMVars;
+typedef struct /**/NeonGCVars NeonGCVars;
+typedef struct /**/NeonConfig NeonConfig;
 
-typedef void (*AstParseFN)(AstParser*, bool);
-typedef Value (*NativeFN)(LoxState*, int, Value*);
-typedef bool (*DestroyFN)(LoxState*, void*, Value);
+typedef void (*NeonAstParseFN)(NeonAstParser*, bool);
+typedef NeonValue (*NeonNativeFN)(NeonState*, int, NeonValue*);
+typedef bool (*NeonValDestroyFN)(NeonState*, void*, NeonValue);
 
-struct Writer
+struct NeonWriter
 {
     bool isstring;
     bool shouldclose;
-    Strbuf* strbuf;
+    NeonStringBuffer* strbuf;
     FILE* handle;
 };
 
 
 /* Chunks of Bytecode value-h < Types of Values value
-typedef double Value;
+typedef double NeonValue;
 */
-struct Value
+struct NeonValue
 {
-    ValueType type;
+    NeonValType type;
 
     union
     {
         bool boolean;
         double number;
-        Object* obj;
+        NeonObject* obj;
     } as;// [as]
 };
 
-struct ValArray
+struct NeonValArray
 {
-    LoxState* pvm;
+    NeonState* pvm;
 
     size_t size;
     size_t capacity;
-    Value* values;
+    NeonValue* values;
 };
 
 
-struct Chunk
+struct NeonChunk
 {
     int count;
     int capacity;
     int32_t* code;
     int* lines;
-    ValArray constants;
+    NeonValArray constants;
 };
 
-struct HashEntry
+struct NeonHashEntry
 {
-    ObjString* key;
-    Value value;
+    NeonObjString* key;
+    NeonValue value;
 };
 
-struct HashTable
+struct NeonHashTable
 {
     int count;
     int capacity;
-    HashEntry* entries;
+    NeonHashEntry* entries;
 };
 
 
-struct Object
+struct NeonObject
 {
-    ObjType type;
+    NeonObjType type;
     bool ismarked;
-    Object* next;
+    NeonObject* next;
 };
 
-struct ObjArray
+struct NeonObjArray
 {
-    Object obj;
-    LoxState* pvm;
-    ValArray vala;
+    NeonObject obj;
+    NeonState* pvm;
+    NeonValArray vala;
 };
 
-struct ObjFunction
+struct NeonObjMap
 {
-    Object obj;
+    NeonObject obj;
+    NeonState* pvm;
+    NeonHashTable mapping;
+};
+
+struct NeonObjScriptFunction
+{
+    NeonObject obj;
     int arity;
     int upvaluecount;
-    Chunk chunk;
-    ObjString* name;
+    NeonChunk chunk;
+    NeonObjString* name;
 };
 
-struct ObjNative
+struct NeonObjNativeFunction
 {
-    Object obj;
-    NativeFN natfunc;
+    NeonObject obj;
+    NeonNativeFN natfunc;
 };
 
-struct Strbuf
+struct NeonStringBuffer
 {
-    LoxState* pvm;
+    NeonState* pvm;
     int length;
     size_t capacity;
     char* data;
 };
 
-struct ObjString
+struct NeonObjString
 {
-    Object obj;
+    NeonObject obj;
     uint32_t hash;
-    // actual string handling is handled by Strbuf.
+    // actual string handling is handled by NeonStringBuffer.
     // this is to avoid to trashing the stack with temporary values
-    Strbuf* sbuf;
+    NeonStringBuffer* sbuf;
 };
 
-struct ObjUpvalue
+struct NeonObjUpvalue
 {
-    Object obj;
-    Value* location;
-    Value closed;
-    ObjUpvalue* next;
+    NeonObject obj;
+    NeonValue* location;
+    NeonValue closed;
+    NeonObjUpvalue* next;
 };
 
-struct ObjClosure
+struct NeonObjClosure
 {
-    Object obj;
-    ObjFunction* innerfn;
-    ObjUpvalue** upvalues;
+    NeonObject obj;
+    NeonObjScriptFunction* innerfn;
+    NeonObjUpvalue** upvalues;
     int upvaluecount;
 };
 
-struct ObjClass
+struct NeonObjClass
 {
-    Object obj;
-    ObjString* name;
-    HashTable methods;
+    NeonObject obj;
+    NeonObjString* name;
+    NeonHashTable methods;
 };
 
-struct ObjInstance
+struct NeonObjInstance
 {
-    Object obj;
-    ObjClass* klass;
-    HashTable fields;// [fields]
+    NeonObject obj;
+    NeonObjClass* klass;
+    NeonHashTable fields;// [fields]
 };
 
-struct ObjBoundMethod
+struct NeonObjBoundFunction
 {
-    Object obj;
-    Value receiver;
-    ObjClosure* method;
+    NeonObject obj;
+    NeonValue receiver;
+    NeonObjClosure* method;
 };
 
-struct CallFrame
+struct NeonCallFrame
 {
-    ObjClosure* closure;
     int32_t* ip;
     int64_t frstackindex;
+    NeonObjClosure* closure;
 };
 
-struct AstToken
+struct NeonAstToken
 {
-    AstTokType type;
-    const char* start;
     int length;
     int line;
+    const char* start;
+    NeonAstTokType type;
 };
 
-struct AstRule
+struct NeonAstRule
 {
-    AstParseFN prefix;
-    AstParseFN infix;
-    AstPrecedence precedence;
+    NeonAstParseFN prefix;
+    NeonAstParseFN infix;
+    NeonAstPrecedence precedence;
 };
 
-struct AstLoop
+struct NeonAstLoop
 {
     int start;
     int body;
     int scopedepth;
-    AstLoop* enclosing;
+    NeonAstLoop* enclosing;
 };
 
 
-struct AstLocal
+struct NeonAstLocal
 {
-    AstToken name;
     int depth;
     bool iscaptured;
+    NeonAstToken name;
 };
 
-struct AstUpvalue
+struct NeonAstUpvalue
 {
     int32_t index;
     bool islocal;
 };
 
-struct AstCompiler
+struct NeonAstCompiler
 {
-    AstCompiler* enclosing;
-    ObjFunction* compiledfn;
-    AstFuncType type;
-
-    AstLocal locals[UINT8_COUNT];
-    int localcount;
-    AstUpvalue upvalues[UINT8_COUNT];
     int scopedepth;
-    AstLoop* loop;
+    int localcount;
+    NeonAstFuncType type;
+    NeonAstCompiler* enclosing;
+    NeonObjScriptFunction* compiledfn;
+    NeonAstLoop* loop;
+    NeonAstUpvalue upvalues[UINT8_COUNT];
+    NeonAstLocal locals[UINT8_COUNT];
+
 };
 
-struct AstClassCompiler
+struct NeonAstClassCompiler
 {
-    AstClassCompiler* enclosing;
     bool hassuperclass;
+    NeonAstClassCompiler* enclosing;
 };
 
-struct AstScanner
+struct NeonAstScanner
 {
-    LoxState* pvm;
+    int line;
     const char* start;
     const char* current;
-    int line;
+    NeonState* pvm;
 };
 
-struct AstParser
+struct NeonAstParser
 {
-    LoxState* pvm;
-    AstScanner* pscn;
-    AstToken current;
-    AstToken previous;
     bool haderror;
     bool panicmode;
-    AstCompiler* currcompiler;
-    AstClassCompiler* currclass;
+    NeonAstToken current;
+    NeonAstToken previous;
+    NeonState* pvm;
+    NeonAstScanner* pscn;
+    NeonAstCompiler* currcompiler;
+    NeonAstClassCompiler* currclass;
 };
 
-struct LoxVMVars
+struct NeonVMVars
 {
-    int64_t stacktop;
-    int framecount;
     bool hasraised;
-    CallFrame* currframe;
-    CallFrame framevalues[FRAMES_MAX];
-    Value stackvalues[STACK_MAX];    
+    int framecount;
+    int64_t stacktop;
+    NeonCallFrame* currframe;
+    NeonCallFrame framevalues[FRAMES_MAX];
+    NeonValue stackvalues[STACK_MAX];
 };
 
-struct LoxGCVars
+struct NeonGCVars
 {
-    size_t bytesallocd;
-    size_t nextgc;
-    Object* linkedobjects;
     int graycount;
     int graycap;
-    Object** graystack;
+    size_t bytesallocd;
+    size_t nextgc;
+    NeonObject* linkedobjects;
+    NeonObject** graystack;
 };
 
-struct LoxConfig
+struct NeonConfig
 {
     bool shouldprintruntime;
 };
 
-struct LoxState
+struct NeonState
 {
-    LoxConfig conf;
-    AstParser* parser;
-    LoxVMVars vmvars;
-    LoxGCVars gcstate;
-    HashTable globals;
-    HashTable strings;
-    ObjString* initstring;
-    ObjUpvalue* openupvalues;
-    Writer* stdoutwriter;
-    Writer* stderrwriter;
+    NeonConfig conf;
+    NeonAstParser* parser;
+    NeonVMVars vmvars;
+    NeonGCVars gcstate;
+    NeonHashTable globals;
+    NeonHashTable strings;
+    NeonObjString* initstring;
+    NeonObjUpvalue* openupvalues;
+    NeonWriter* stdoutwriter;
+    NeonWriter* stderrwriter;
 };
 
 #include "prot.inc"
 
-bool lox_value_isobjtype(Value value, ObjType type)
+static inline NeonValue neon_value_makevalue(NeonValType vt)
 {
-    return IS_OBJ(value) && AS_OBJ(value)->type == type;
+    NeonValue v;
+    v.type = vt;
+    return v;
 }
 
-bool lox_value_isfalsey(Value value)
+static inline NeonValue neon_value_makenil()
+{
+    NeonValue v;
+    v = neon_value_makevalue(NEON_VAL_NIL);
+    return v;
+}
+
+static inline NeonValue neon_value_makebool(bool b)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_BOOL);
+    nv.as.boolean = b;
+    return nv;
+}
+
+static inline NeonValue neon_value_makenumber(double dw)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_NUMBER);
+    nv.as.number = dw;
+    return nv;
+}
+
+#define neon_value_makeobject(obj) neon_value_makeobject_actual((NeonObject*)(obj))
+
+static inline NeonValue neon_value_makeobject_actual(NeonObject* o)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_OBJ);
+    nv.as.obj = o;
+    return nv;
+}
+
+static inline bool neon_value_isbool(NeonValue v)
+{
+    return (v.type == NEON_VAL_BOOL);
+}
+
+static inline bool neon_value_isnil(NeonValue v)
+{
+    return (v.type == NEON_VAL_NIL);
+}
+
+static inline bool neon_value_isnumber(NeonValue v)
+{
+    return (v.type == NEON_VAL_NUMBER);
+}
+
+static inline bool neon_value_isobject(NeonValue v)
+{
+    return (v.type == NEON_VAL_OBJ);
+}
+
+static inline NeonObject* neon_value_asobject(NeonValue v)
+{
+    return v.as.obj;
+}
+
+static inline bool neon_value_isobjtype(NeonValue value, NeonObjType type)
 {
     return (
-        IS_NIL(value) || (
-            IS_BOOL(value) &&
-            !AS_BOOL(value)
+        neon_value_isobject(value) &&
+        (neon_value_asobject(value)->type == type)
+    );
+}
+
+static inline bool neon_value_asbool(NeonValue v)
+{
+    return (v.as.boolean);
+}
+
+static inline double neon_value_asnumber(NeonValue v)
+{
+    return (v.as.number);
+}
+
+#define AS_BOUND_METHOD(value) ((NeonObjBoundFunction*)neon_value_asobject(value))
+#define AS_CLASS(value) ((NeonObjClass*)neon_value_asobject(value))
+#define AS_CLOSURE(value) ((NeonObjClosure*)neon_value_asobject(value))
+#define AS_FUNCTION(value) ((NeonObjScriptFunction*)neon_value_asobject(value))
+#define AS_INSTANCE(value) ((NeonObjInstance*)neon_value_asobject(value))
+#define AS_NATIVE(value) ((NeonObjNativeFunction*)neon_value_asobject(value))
+#define AS_STRING(value) ((NeonObjString*)neon_value_asobject(value))
+#define AS_CSTRING(value) (((NeonObjString*)neon_value_asobject(value))->sbuf->data)
+#define AS_ARRAY(value) ((NeonObjArray*)neon_value_asobject(value))
+#define AS_MAP(value) ((NeonObjMap*)neon_value_asobject(value))
+
+
+static inline NeonObjType neon_value_objtype(NeonValue v)
+{
+    return (neon_value_asobject(v)->type);
+}
+
+//#define IS_BOUND_METHOD(value) neon_value_isobjtype(value, NEON_OBJ_BOUNDMETHOD)
+#define IS_CLASS(value) neon_value_isobjtype(value, NEON_OBJ_CLASS)
+//#define IS_CLOSURE(value) neon_value_isobjtype(value, NEON_OBJ_CLOSURE)
+//#define IS_FUNCTION(value) neon_value_isobjtype(value, NEON_OBJ_FUNCTION)
+#define IS_INSTANCE(value) neon_value_isobjtype(value, NEON_OBJ_INSTANCE)
+//#define IS_NATIVE(value) neon_value_isobjtype(value, NEON_OBJ_NATIVE)
+#define IS_STRING(value) neon_value_isobjtype(value, NEON_OBJ_STRING)
+#define IS_ARRAY(value) neon_value_isobjtype(value, NEON_OBJ_ARRAY)
+#define IS_MAP(value) neon_value_isobjtype(value, NEON_OBJ_MAP)
+
+bool neon_value_isfalsey(NeonValue value)
+{
+    return (
+        neon_value_isnil(value) || (
+            neon_value_isbool(value) &&
+            !neon_value_asbool(value)
         )
     );
 }
 
 
-void* lox_mem_realloc(LoxState* state, void* pointer, size_t oldsz, size_t newsz)
+void* neon_mem_realloc(NeonState* state, void* pointer, size_t oldsz, size_t newsz)
 {
     state->gcstate.bytesallocd += newsz - oldsz;
     if(newsz > oldsz)
     {
 #ifdef DEBUG_STRESS_GC
-        lox_gcmem_collectgarbage(state);
+        neon_gcmem_collectgarbage(state);
 #endif
 
         if(state->gcstate.bytesallocd > state->gcstate.nextgc)
         {
-            lox_gcmem_collectgarbage(state);
+            neon_gcmem_collectgarbage(state);
         }
     }
 
@@ -608,223 +689,244 @@ void* lox_mem_realloc(LoxState* state, void* pointer, size_t oldsz, size_t newsz
     return result;
 }
 
-void lox_gcmem_markroots(LoxState* state)
+void neon_gcmem_markroots(NeonState* state)
 {
-    Value* pslot;
+    int i;
+    NeonValue* pslot;
     for(pslot=&state->vmvars.stackvalues[0]; pslot < &state->vmvars.stackvalues[state->vmvars.stacktop]; pslot++)
     {
-        lox_gcmem_markvalue(state, *pslot);
+        neon_gcmem_markvalue(state, *pslot);
     }
-
-    for(int i = 0; i < state->vmvars.framecount; i++)
+    for(i = 0; i < state->vmvars.framecount; i++)
     {
-        lox_gcmem_markobject(state, (Object*)state->vmvars.framevalues[i].closure);
+        neon_gcmem_markobject(state, (NeonObject*)state->vmvars.framevalues[i].closure);
     }
-
-    for(ObjUpvalue* upvalue = state->openupvalues; upvalue != NULL; upvalue = upvalue->next)
+    for(NeonObjUpvalue* upvalue = state->openupvalues; upvalue != NULL; upvalue = upvalue->next)
     {
-        lox_gcmem_markobject(state, (Object*)upvalue);
+        neon_gcmem_markobject(state, (NeonObject*)upvalue);
     }
-
-    lox_gcmem_markhashtable(state, &state->globals);
-    lox_prs_markcompilerroots(state);
-    lox_gcmem_markobject(state, (Object*)state->initstring);
+    neon_gcmem_markhashtable(state, &state->globals);
+    neon_prs_markcompilerroots(state);
+    neon_gcmem_markobject(state, (NeonObject*)state->initstring);
 }
 
-void lox_gcmem_tracerefs(LoxState* state)
+void neon_gcmem_tracerefs(NeonState* state)
 {
+    NeonObject* obj;
     while(state->gcstate.graycount > 0)
     {
-        Object* object = state->gcstate.graystack[--state->gcstate.graycount];
-        lox_gcmem_blackenobj(state, object);
+        --state->gcstate.graycount;
+        obj = state->gcstate.graystack[state->gcstate.graycount];
+        neon_gcmem_blackenobj(state, obj);
     }
 }
 
-void lox_gcmem_sweep(LoxState* state)
+void neon_gcmem_sweep(NeonState* state)
 {
-    Object* previous = NULL;
-    Object* object = state->gcstate.linkedobjects;
-    while(object != NULL)
+    NeonObject* obj;
+    NeonObject* previous;
+    NeonObject* unreached;
+    previous = NULL;
+    obj = state->gcstate.linkedobjects;
+    while(obj != NULL)
     {
-        if(object->ismarked)
+        if(obj->ismarked)
         {
-            object->ismarked = false;
-            previous = object;
-            object = object->next;
+            obj->ismarked = false;
+            previous = obj;
+            obj = obj->next;
         }
         else
         {
-            Object* unreached = object;
-            object = object->next;
+            unreached = obj;
+            obj = obj->next;
             if(previous != NULL)
             {
-                previous->next = object;
+                previous->next = obj;
             }
             else
             {
-                state->gcstate.linkedobjects = object;
+                state->gcstate.linkedobjects = obj;
             }
-
-            lox_object_release(state, unreached);
+            neon_object_release(state, unreached);
         }
     }
 }
 
-void lox_gcmem_collectgarbage(LoxState* state)
+void neon_gcmem_collectgarbage(NeonState* state)
 {
+    size_t before;
+    (void)before;
 #ifdef DEBUG_LOG_GC
     printf("-- gc begin\n");
-    size_t before = state->gcstate.bytesallocd;
+    before = state->gcstate.bytesallocd;
 #endif
-
-    lox_gcmem_markroots(state);
-    lox_gcmem_tracerefs(state);
-    lox_hashtable_remwhite(state, &state->strings);
-    lox_gcmem_sweep(state);
-
+    neon_gcmem_markroots(state);
+    neon_gcmem_tracerefs(state);
+    neon_hashtable_remwhite(state, &state->strings);
+    neon_gcmem_sweep(state);
     state->gcstate.nextgc = state->gcstate.bytesallocd * GC_HEAP_GROW_FACTOR;
-
 #ifdef DEBUG_LOG_GC
     printf("-- gc end\n");
     printf("   collected %zu bytes (from %zu to %zu) next at %zu\n", before - state->gcstate.bytesallocd, before, state->gcstate.bytesallocd, state->gcstate.nextgc);
 #endif
 }
 
-void lox_vm_gcfreelinkedobjects(LoxState* state)
+void neon_vm_gcfreelinkedobjects(NeonState* state)
 {
-    Object* object = state->gcstate.linkedobjects;
-    while(object != NULL)
+    NeonObject* obj;
+    NeonObject* next;
+    obj = state->gcstate.linkedobjects;
+    while(obj != NULL)
     {
-        Object* next = object->next;
-        lox_object_release(state, object);
-        object = next;
+        next = obj->next;
+        neon_object_release(state, obj);
+        obj = next;
     }
-
     free(state->gcstate.graystack);
 }
 
-void lox_gcmem_markhashtable(LoxState* state, HashTable* table)
+void neon_gcmem_markhashtable(NeonState* state, NeonHashTable* table)
 {
-    for(int i = 0; i < table->capacity; i++)
+    int i;
+    NeonHashEntry* entry;
+    for(i = 0; i < table->capacity; i++)
     {
-        HashEntry* entry = &table->entries[i];
-        lox_gcmem_markobject(state, (Object*)entry->key);
-        lox_gcmem_markvalue(state, entry->value);
+        entry = &table->entries[i];
+        neon_gcmem_markobject(state, (NeonObject*)entry->key);
+        neon_gcmem_markvalue(state, entry->value);
     }
 }
 
-
-void lox_gcmem_markobject(LoxState* state, Object* object)
+void neon_gcmem_markobject(NeonState* state, NeonObject* object)
 {
+    size_t needsz;
     if(object == NULL)
+    {
         return;
+    }
     if(object->ismarked)
+    {
         return;
-
+    }
 #ifdef DEBUG_LOG_GC
-    lox_writer_writeformat(state->stderrwriter, "markobject: at %p: ", (void*)object);
-    lox_writer_printvalue(state->stderrwriter, OBJ_VAL(object), true);
-    lox_writer_writestring(state->stderrwriter, "\n");
+    neon_writer_writeformat(state->stderrwriter, "markobject: at %p: ", (void*)object);
+    neon_writer_printvalue(state->stderrwriter, neon_value_makeobject(object), true);
+    neon_writer_writestring(state->stderrwriter, "\n");
 #endif
-
     object->ismarked = true;
-
-    if(state->gcstate.graycap < state->gcstate.graycount + 1)
+    if(state->gcstate.graycap < (state->gcstate.graycount + 1))
     {
         state->gcstate.graycap = GROW_CAPACITY(state->gcstate.graycap);
-        state->gcstate.graystack = (Object**)realloc(state->gcstate.graystack, sizeof(Object*) * state->gcstate.graycap);
-
+        needsz = sizeof(NeonObject*) * state->gcstate.graycap;
+        state->gcstate.graystack = (NeonObject**)realloc(state->gcstate.graystack, needsz);
         if(state->gcstate.graystack == NULL)
+        {
             exit(1);
+        }
     }
-
     state->gcstate.graystack[state->gcstate.graycount++] = object;
 }
 
-void lox_gcmem_markvalue(LoxState* state, Value value)
+void neon_gcmem_markvalue(NeonState* state, NeonValue value)
 {
-    if(IS_OBJ(value))
-        lox_gcmem_markobject(state, AS_OBJ(value));
-}
-
-void lox_gcmem_markvalarray(LoxState* state, ValArray* array)
-{
-    size_t i;
-    for(i = 0; i < lox_valarray_count(array); i++)
+    if(neon_value_isobject(value))
     {
-        lox_gcmem_markvalue(state, array->values[i]);
+        neon_gcmem_markobject(state, neon_value_asobject(value));
     }
 }
 
-void lox_gcmem_blackenobj(LoxState* state, Object* object)
+void neon_gcmem_markvalarray(NeonState* state, NeonValArray* array)
+{
+    size_t i;
+    for(i = 0; i < neon_valarray_count(array); i++)
+    {
+        neon_gcmem_markvalue(state, array->values[i]);
+    }
+}
+
+void neon_gcmem_blackenobj(NeonState* state, NeonObject* object)
 {
 #ifdef DEBUG_LOG_GC
-    lox_writer_writeformat(state->stderrwriter, "blackenobj: at %p: ", (void*)object);
-    lox_writer_printvalue(state->stderrwriter, OBJ_VAL(object), true);
-    lox_writer_writestring(state->stderrwriter, "\n");
+    neon_writer_writeformat(state->stderrwriter, "blackenobj: at %p: ", (void*)object);
+    neon_writer_printvalue(state->stderrwriter, neon_value_makeobject(object), true);
+    neon_writer_writestring(state->stderrwriter, "\n");
 #endif
 
     switch(object->type)
     {
-        case OBJ_BOUNDMETHOD:
+        case NEON_OBJ_BOUNDMETHOD:
             {
-                ObjBoundMethod* bound = (ObjBoundMethod*)object;
-                lox_gcmem_markvalue(state, bound->receiver);
-                lox_gcmem_markobject(state, (Object*)bound->method);
+                NeonObjBoundFunction* bound;
+                bound = (NeonObjBoundFunction*)object;
+                neon_gcmem_markvalue(state, bound->receiver);
+                neon_gcmem_markobject(state, (NeonObject*)bound->method);
             }
             break;
-        case OBJ_CLASS:
+        case NEON_OBJ_CLASS:
             {
-                ObjClass* klass = (ObjClass*)object;
-                lox_gcmem_markobject(state, (Object*)klass->name);
-                lox_gcmem_markhashtable(state, &klass->methods);
+                NeonObjClass* klass;
+                klass = (NeonObjClass*)object;
+                neon_gcmem_markobject(state, (NeonObject*)klass->name);
+                neon_gcmem_markhashtable(state, &klass->methods);
             }
             break;
 
-        case OBJ_CLOSURE:
+        case NEON_OBJ_CLOSURE:
             {
-                ObjClosure* closure = (ObjClosure*)object;
-                lox_gcmem_markobject(state, (Object*)closure->innerfn);
-                for(int i = 0; i < closure->upvaluecount; i++)
+                int i;
+                NeonObjClosure* closure;
+                closure = (NeonObjClosure*)object;
+                neon_gcmem_markobject(state, (NeonObject*)closure->innerfn);
+                for(i = 0; i < closure->upvaluecount; i++)
                 {
-                    lox_gcmem_markobject(state, (Object*)closure->upvalues[i]);
+                    neon_gcmem_markobject(state, (NeonObject*)closure->upvalues[i]);
                 }
             }
             break;
-        case OBJ_FUNCTION:
+        case NEON_OBJ_FUNCTION:
             {
-                ObjFunction* ofn = (ObjFunction*)object;
-                lox_gcmem_markobject(state, (Object*)ofn->name);
-                lox_gcmem_markvalarray(state, &ofn->chunk.constants);
+                NeonObjScriptFunction* ofn;
+                ofn = (NeonObjScriptFunction*)object;
+                neon_gcmem_markobject(state, (NeonObject*)ofn->name);
+                neon_gcmem_markvalarray(state, &ofn->chunk.constants);
             }
             break;
-        case OBJ_INSTANCE:
+        case NEON_OBJ_INSTANCE:
             {
-                ObjInstance* instance = (ObjInstance*)object;
-                lox_gcmem_markobject(state, (Object*)instance->klass);
-                lox_gcmem_markhashtable(state, &instance->fields);
+                NeonObjInstance* instance;
+                instance = (NeonObjInstance*)object;
+                neon_gcmem_markobject(state, (NeonObject*)instance->klass);
+                neon_gcmem_markhashtable(state, &instance->fields);
             }
             break;
-        case OBJ_UPVALUE:
+        case NEON_OBJ_UPVALUE:
             {
-                lox_gcmem_markvalue(state, ((ObjUpvalue*)object)->closed);
+                neon_gcmem_markvalue(state, ((NeonObjUpvalue*)object)->closed);
             }
             break;
-        case OBJ_ARRAY:
+        case NEON_OBJ_ARRAY:
             {
-                ObjArray* oa;
-                oa = (ObjArray*)object;
-                lox_gcmem_markvalarray(state, &oa->vala);
+                NeonObjArray* oa;
+                oa = (NeonObjArray*)object;
+                neon_gcmem_markvalarray(state, &oa->vala);
             }
             break;
-        case OBJ_NATIVE:
-        case OBJ_STRING:
+        case NEON_OBJ_MAP:
+            {
+                NeonObjMap* om;
+                om = (NeonObjMap*)object;
+                neon_gcmem_markhashtable(state, &om->mapping);
+            }
+            break;
+        case NEON_OBJ_NATIVE:
+        case NEON_OBJ_STRING:
             break;
     }
 }
 
 
-void lox_object_release(LoxState* state, Object* object)
+void neon_object_release(NeonState* state, NeonObject* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void*)object, object->type);
@@ -832,75 +934,82 @@ void lox_object_release(LoxState* state, Object* object)
 
     switch(object->type)
     {
-        case OBJ_BOUNDMETHOD:
+        case NEON_OBJ_BOUNDMETHOD:
             {
-                FREE(state, ObjBoundMethod, object);
+                FREE(state, NeonObjBoundFunction, object);
             }
             break;
-        case OBJ_CLASS:
+        case NEON_OBJ_CLASS:
             {
-                ObjClass* klass = (ObjClass*)object;
-                lox_hashtable_free(state, &klass->methods);
-                FREE(state, ObjClass, object);
+                NeonObjClass* klass;
+                klass = (NeonObjClass*)object;
+                neon_hashtable_free(state, &klass->methods);
+                FREE(state, NeonObjClass, object);
             }
             break;
-        case OBJ_CLOSURE:
+        case NEON_OBJ_CLOSURE:
             {
-                ObjClosure* closure = (ObjClosure*)object;
-                FREE_ARRAY(state, ObjUpvalue*, closure->upvalues, closure->upvaluecount);
-                FREE(state, ObjClosure, object);
+                NeonObjClosure* closure;
+                closure = (NeonObjClosure*)object;
+                FREE_ARRAY(state, NeonObjUpvalue*, closure->upvalues, closure->upvaluecount);
+                FREE(state, NeonObjClosure, object);
             }
             break;
 
-        case OBJ_FUNCTION:
+        case NEON_OBJ_FUNCTION:
         {
-            ObjFunction* ofn = (ObjFunction*)object;
-            lox_chunk_free(state, &ofn->chunk);
-            FREE(state, ObjFunction, object);
+            NeonObjScriptFunction* ofn;
+            ofn = (NeonObjScriptFunction*)object;
+            neon_chunk_free(state, &ofn->chunk);
+            FREE(state, NeonObjScriptFunction, object);
             break;
         }
-        case OBJ_INSTANCE:
+        case NEON_OBJ_INSTANCE:
         {
-            ObjInstance* instance = (ObjInstance*)object;
-            lox_hashtable_free(state, &instance->fields);
-            FREE(state, ObjInstance, object);
+            NeonObjInstance* instance;
+            instance = (NeonObjInstance*)object;
+            neon_hashtable_free(state, &instance->fields);
+            FREE(state, NeonObjInstance, object);
             break;
         }
-        case OBJ_NATIVE:
+        case NEON_OBJ_NATIVE:
             {
-                FREE(state, ObjNative, object);
+                FREE(state, NeonObjNativeFunction, object);
             }
             break;
-        case OBJ_STRING:
+        case NEON_OBJ_STRING:
             {
-                ObjString* string = (ObjString*)object;
-                lox_string_release(state, string);
-                FREE(state, ObjString, object);
+                NeonObjString* string;
+                string = (NeonObjString*)object;
+                neon_string_release(state, string);
+                FREE(state, NeonObjString, object);
             }
             break;
-        case OBJ_ARRAY:
+        case NEON_OBJ_ARRAY:
             {
-                ObjArray* arr;
-                arr = (ObjArray*)object;
-                lox_valarray_free(&arr->vala);
-                FREE(state, ObjArray, object);
+                NeonObjArray* arr;
+                arr = (NeonObjArray*)object;
+                neon_valarray_free(&arr->vala);
+                FREE(state, NeonObjArray, object);
             }
             break;
-        case OBJ_UPVALUE:
+        case NEON_OBJ_MAP:
             {
-                FREE(state, ObjUpvalue, object);
+                NeonObjMap* om;
+                om = (NeonObjMap*)object;
+                neon_hashtable_free(state, &om->mapping);
+                FREE(state, NeonObjMap, object);
+            }
+            break;
+        case NEON_OBJ_UPVALUE:
+            {
+                FREE(state, NeonObjUpvalue, object);
             }
             break;
     }
 }
 
-
-
-#define lox_valarray_computenextgrow(size) \
-    ((size) ? ((size) << 1) : 1)
-
-
-uint32_t lox_util_hashstring(const char* key, size_t length)
+uint32_t neon_util_hashstring(const char* key, size_t length)
 {
     size_t i;
     uint32_t hash;
@@ -914,10 +1023,10 @@ uint32_t lox_util_hashstring(const char* key, size_t length)
 }
 
 
-Strbuf* lox_strbuf_make(LoxState* state)
+NeonStringBuffer* neon_strbuf_make(NeonState* state)
 {
-    Strbuf* sbuf;
-    sbuf = (Strbuf*)malloc(sizeof(Strbuf));
+    NeonStringBuffer* sbuf;
+    sbuf = (NeonStringBuffer*)malloc(sizeof(NeonStringBuffer));
     sbuf->pvm = state;
     sbuf->length = 0;
     sbuf->data = NULL;
@@ -925,12 +1034,12 @@ Strbuf* lox_strbuf_make(LoxState* state)
     return sbuf;
 }
 
-void lox_strbuf_release(LoxState* state, Strbuf* sb)
+void neon_strbuf_release(NeonState* state, NeonStringBuffer* sb)
 {
     FREE_ARRAY(state, char, sb->data, sb->length + 1);
 }
 
-bool lox_strbuf_append(Strbuf* sb, const char* extstr, size_t extlen)
+bool neon_strbuf_append(NeonStringBuffer* sb, const char* extstr, size_t extlen)
 {
     enum {
         string_chunk_size = 52,
@@ -951,7 +1060,7 @@ bool lox_strbuf_append(Strbuf* sb, const char* extstr, size_t extlen)
                 temp = (char*)realloc(sb->data, needsz);
                 if(temp == NULL)
                 {
-                    fprintf(stderr, "lox_strbuf_append: realloc(%ld) failed!\n", needsz);
+                    fprintf(stderr, "neon_strbuf_append: realloc(%ld) failed!\n", needsz);
                 }
                 sb->data = temp;
                 sb->capacity = sb->length + extlen + string_chunk_size;
@@ -982,14 +1091,14 @@ bool lox_strbuf_append(Strbuf* sb, const char* extstr, size_t extlen)
 }
 
 
-Writer* lox_writer_make(LoxState* state)
+NeonWriter* neon_writer_make(NeonState* state)
 {
-    Writer* wr;
+    NeonWriter* wr;
     (void)state;
-    wr = (Writer*)malloc(sizeof(Writer));
+    wr = (NeonWriter*)malloc(sizeof(NeonWriter));
     if(!wr)
     {
-        fprintf(stderr, "cannot allocate Writer\n");
+        fprintf(stderr, "cannot allocate NeonWriter\n");
     }
     wr->isstring = false;
     wr->shouldclose = false;
@@ -998,11 +1107,11 @@ Writer* lox_writer_make(LoxState* state)
     return wr;
 }
 
-void lox_writer_release(LoxState* state, Writer* wr)
+void neon_writer_release(NeonState* state, NeonWriter* wr)
 {
     if(wr->isstring)
     {
-        lox_strbuf_release(state, wr->strbuf);
+        neon_strbuf_release(state, wr->strbuf);
     }
     else
     {
@@ -1014,29 +1123,29 @@ void lox_writer_release(LoxState* state, Writer* wr)
     free(wr);
 }
 
-Writer* lox_writer_makeio(LoxState* state, FILE* fh, bool shouldclose)
+NeonWriter* neon_writer_makeio(NeonState* state, FILE* fh, bool shouldclose)
 {
-    Writer* wr;
-    wr = lox_writer_make(state);
+    NeonWriter* wr;
+    wr = neon_writer_make(state);
     wr->handle = fh;
     wr->shouldclose = shouldclose;
     return wr;
 }
 
-Writer* lox_writer_makestring(LoxState* state)
+NeonWriter* neon_writer_makestring(NeonState* state)
 {
-    Writer* wr;
-    wr = lox_writer_make(state);
+    NeonWriter* wr;
+    wr = neon_writer_make(state);
     wr->isstring = true;
-    wr->strbuf = lox_strbuf_make(state);
+    wr->strbuf = neon_strbuf_make(state);
     return wr;
 }
 
-void lox_writer_writestringl(Writer* wr, const char* estr, size_t elen)
+void neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
 {
     if(wr->isstring)
     {
-        lox_strbuf_append(wr->strbuf, estr, elen);
+        neon_strbuf_append(wr->strbuf, estr, elen);
     }
     else
     {
@@ -1045,18 +1154,18 @@ void lox_writer_writestringl(Writer* wr, const char* estr, size_t elen)
     }
 }
 
-void lox_writer_writestring(Writer* wr, const char* estr)
+void neon_writer_writestring(NeonWriter* wr, const char* estr)
 {
-    return lox_writer_writestringl(wr, estr, strlen(estr));
+    return neon_writer_writestringl(wr, estr, strlen(estr));
 }
 
-void lox_writer_writechar(Writer* wr, int b)
+void neon_writer_writechar(NeonWriter* wr, int b)
 {
     char ch;
     if(wr->isstring)
     {
         ch = b;
-        lox_writer_writestringl(wr, &ch, 1);
+        neon_writer_writestringl(wr, &ch, 1);
     }
     else
     {
@@ -1065,91 +1174,91 @@ void lox_writer_writechar(Writer* wr, int b)
     }
 }
 
-void lox_writer_writeescapedchar(Writer* wr, int ch)
+void neon_writer_writeescapedchar(NeonWriter* wr, int ch)
 {
     switch(ch)
     {
         case '\'':
             {
-                lox_writer_writestring(wr, "\\\'");
+                neon_writer_writestring(wr, "\\\'");
             }
             break;
         case '\"':
             {
-                lox_writer_writestring(wr, "\\\"");
+                neon_writer_writestring(wr, "\\\"");
             }
             break;
         case '\\':
             {
-                lox_writer_writestring(wr, "\\\\");
+                neon_writer_writestring(wr, "\\\\");
             }
             break;
         case '\b':
             {
-                lox_writer_writestring(wr, "\\b");
+                neon_writer_writestring(wr, "\\b");
             }
             break;
         case '\f':
             {
-                lox_writer_writestring(wr, "\\f");
+                neon_writer_writestring(wr, "\\f");
             }
             break;
         case '\n':
             {
-                lox_writer_writestring(wr, "\\n");
+                neon_writer_writestring(wr, "\\n");
             }
             break;
         case '\r':
             {
-                lox_writer_writestring(wr, "\\r");
+                neon_writer_writestring(wr, "\\r");
             }
             break;
         case '\t':
             {
-                lox_writer_writestring(wr, "\\t");
+                neon_writer_writestring(wr, "\\t");
             }
             break;
         case 0:
             {
-                lox_writer_writestring(wr, "\\0");
+                neon_writer_writestring(wr, "\\0");
             }
             break;
         default:
             {
-                lox_writer_writeformat(wr, "\\x%02x", (unsigned char)ch);
+                neon_writer_writeformat(wr, "\\x%02x", (unsigned char)ch);
             }
             break;
     }
 }
 
-void lox_writer_writequotedstring(Writer* wr, const char* str, size_t len, bool withquot)
+void neon_writer_writequotedstring(NeonWriter* wr, const char* str, size_t len, bool withquot)
 {
     int bch;
     size_t i;
     bch = 0;
     if(withquot)
     {
-        lox_writer_writechar(wr, '"');
+        neon_writer_writechar(wr, '"');
     }
     for(i=0; i<len; i++)
     {
         bch = str[i];
         if((bch < 32) || (bch > 127) || (bch == '\"') || (bch == '\\'))
         {
-            lox_writer_writeescapedchar(wr, bch);
+            neon_writer_writeescapedchar(wr, bch);
         }
         else
         {
-            lox_writer_writechar(wr, bch);
+            neon_writer_writechar(wr, bch);
         }
     }
     if(withquot)
     {
-        lox_writer_writechar(wr, '"');
+        neon_writer_writechar(wr, '"');
     }
 }
 
-void lox_writer_vwritefmttostring(Writer* wr, const char* fmt, va_list va)
+void neon_writer_vwritefmttostring(NeonWriter* wr, const char* fmt, va_list va)
 {
     size_t wsz;
     size_t needed;
@@ -1161,15 +1270,15 @@ void lox_writer_vwritefmttostring(Writer* wr, const char* fmt, va_list va)
     buf = (char*)malloc(needed+1);
     memset(buf, 0, needed+1);
     wsz = vsnprintf(buf, needed, fmt, va);
-    lox_writer_writestringl(wr, buf, wsz);
+    neon_writer_writestringl(wr, buf, wsz);
     free(buf);
 }
 
-void lox_writer_vwriteformat(Writer* wr, const char* fmt, va_list va)
+void neon_writer_vwriteformat(NeonWriter* wr, const char* fmt, va_list va)
 {
     if(wr->isstring)
     {
-        return lox_writer_vwritefmttostring(wr, fmt, va);
+        return neon_writer_vwritefmttostring(wr, fmt, va);
     }
     else
     {
@@ -1178,45 +1287,72 @@ void lox_writer_vwriteformat(Writer* wr, const char* fmt, va_list va)
     }
 }
 
-void lox_writer_writeformat(Writer* wr, const char* fmt, ...)
+void neon_writer_writeformat(NeonWriter* wr, const char* fmt, ...)
 {
     va_list va;
     va_start(va, fmt);
-    lox_writer_vwriteformat(wr, fmt, va);
+    neon_writer_vwriteformat(wr, fmt, va);
     va_end(va);
 }
 
-void lox_writer_printfunction(Writer* wr, ObjFunction* ofn)
+void neon_writer_printfunction(NeonWriter* wr, NeonObjScriptFunction* ofn)
 {
     if(ofn->name == NULL)
     {
-        lox_writer_writestring(wr, "<script>");
+        neon_writer_writestring(wr, "<script>");
     }
     else
     {
-        lox_writer_writeformat(wr, "<fn %s>", ofn->name->sbuf->data);
+        neon_writer_writeformat(wr, "<fn %s>", ofn->name->sbuf->data);
     }
 }
 
-void lox_writer_printarray(Writer* wr, ObjArray* arr)
+void neon_writer_printarray(NeonWriter* wr, NeonObjArray* arr)
 {
     size_t i;
     size_t asz;
-    asz = lox_valarray_size(&arr->vala);
-    lox_writer_writestring(wr, "[");
+    asz = neon_valarray_size(&arr->vala);
+    neon_writer_writestring(wr, "[");
     for(i=0; i<asz; i++)
     {
-        lox_writer_writeformat(wr, "%ld:", i);
-        lox_writer_printvalue(wr, arr->vala.values[i], true);
+        neon_writer_writeformat(wr, "%ld:", i);
+        neon_writer_printvalue(wr, arr->vala.values[i], true);
         if((i+1) < asz)
         {
-            lox_writer_writestring(wr, ",");
+            neon_writer_writestring(wr, ",");
         }
     }
-    lox_writer_writestring(wr, "]");
+    neon_writer_writestring(wr, "]");
 }
 
-void lox_writer_printstring(Writer* wr, ObjString* os, bool fixstring)
+void neon_writer_printmap(NeonWriter* wr, NeonObjMap* map)
+{
+    size_t i;
+    size_t cap;
+    NeonHashEntry* entry;
+    cap = map->mapping.capacity;
+    neon_writer_writestring(wr, "{");
+    for(i=0; i<cap; i++)
+    {
+        entry = &map->mapping.entries[i];
+        if(entry != NULL)
+        {
+            if(entry->key != NULL)
+            {
+                neon_writer_printstring(wr, entry->key, true);
+                neon_writer_writeformat(wr, ": ");
+                neon_writer_printvalue(wr, entry->value, true);
+                if((i+1) < cap)
+                {
+                    neon_writer_writestring(wr, ",");
+                }
+            }
+        }
+    }
+    neon_writer_writestring(wr, "}");
+}
+
+void neon_writer_printstring(NeonWriter* wr, NeonObjString* os, bool fixstring)
 {
     size_t len;
     const char* sp;
@@ -1224,160 +1360,170 @@ void lox_writer_printstring(Writer* wr, ObjString* os, bool fixstring)
     sp = os->sbuf->data;
     if(fixstring)
     {
-        lox_writer_writequotedstring(wr, sp, len, true);
+        neon_writer_writequotedstring(wr, sp, len, true);
     }
     else
     {
-        lox_writer_writestringl(wr, sp, len);
+        neon_writer_writestringl(wr, sp, len);
     }
 }
 
-void lox_writer_printobject(Writer* wr, Value value, bool fixstring)
+void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
 {
-    switch(OBJ_TYPE(value))
+    switch(neon_value_objtype(value))
     {
-        case OBJ_BOUNDMETHOD:
+        case NEON_OBJ_BOUNDMETHOD:
             {
-                lox_writer_printfunction(wr, AS_BOUND_METHOD(value)->method->innerfn);
+                neon_writer_printfunction(wr, AS_BOUND_METHOD(value)->method->innerfn);
             }
             break;
-        case OBJ_CLASS:
+        case NEON_OBJ_CLASS:
             {
-                lox_writer_writeformat(wr, "<class '%s'>", AS_CLASS(value)->name->sbuf->data);
+                neon_writer_writeformat(wr, "<class '%s'>", AS_CLASS(value)->name->sbuf->data);
             }
             break;
-        case OBJ_CLOSURE:
+        case NEON_OBJ_CLOSURE:
             {
-                lox_writer_printfunction(wr, AS_CLOSURE(value)->innerfn);
+                neon_writer_printfunction(wr, AS_CLOSURE(value)->innerfn);
             }
             break;
-        case OBJ_FUNCTION:
+        case NEON_OBJ_FUNCTION:
             {
-                lox_writer_printfunction(wr, AS_FUNCTION(value));
+                neon_writer_printfunction(wr, AS_FUNCTION(value));
             }
             break;
-        case OBJ_INSTANCE:
+        case NEON_OBJ_INSTANCE:
             {
-                lox_writer_writeformat(wr, "<instance '%s'>", AS_INSTANCE(value)->klass->name->sbuf->data);
+                neon_writer_writeformat(wr, "<instance '%s'>", AS_INSTANCE(value)->klass->name->sbuf->data);
             }
             break;
-        case OBJ_NATIVE:
+        case NEON_OBJ_NATIVE:
             {
-                lox_writer_writeformat(wr, "<nativefn>");
+                neon_writer_writeformat(wr, "<nativefn>");
             }
             break;
-        case OBJ_STRING:
+        case NEON_OBJ_STRING:
             {
-                lox_writer_printstring(wr, AS_STRING(value), fixstring);
+                neon_writer_printstring(wr, AS_STRING(value), fixstring);
             }
             break;
-        case OBJ_UPVALUE:
+        case NEON_OBJ_UPVALUE:
             {
-                lox_writer_writeformat(wr, "<upvalue>");
+                neon_writer_writeformat(wr, "<upvalue>");
             }
             break;
-        case OBJ_ARRAY:
+        case NEON_OBJ_ARRAY:
             {
-                lox_writer_printarray(wr, AS_ARRAY(value));
+                neon_writer_printarray(wr, AS_ARRAY(value));
+            }
+            break;
+        case NEON_OBJ_MAP:
+            {
+                neon_writer_printmap(wr, AS_MAP(value));
             }
             break;
     }
 }
 
-void lox_writer_printvalue(Writer* wr, Value value, bool fixstring)
+void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
 {
     switch(value.type)
     {
-        case VAL_BOOL:
-            lox_writer_writestring(wr, AS_BOOL(value) ? "true" : "false");
+        case NEON_VAL_BOOL:
+            neon_writer_writestring(wr, neon_value_asbool(value) ? "true" : "false");
             break;
-        case VAL_NIL:
-            lox_writer_writestring(wr, "nil");
+        case NEON_VAL_NIL:
+            neon_writer_writestring(wr, "nil");
             break;
-        case VAL_NUMBER:
-            lox_writer_writeformat(wr, "%g", AS_NUMBER(value));
+        case NEON_VAL_NUMBER:
+            neon_writer_writeformat(wr, "%g", neon_value_asnumber(value));
             break;
-        case VAL_OBJ:
-            lox_writer_printobject(wr, value, fixstring);
+        case NEON_VAL_OBJ:
+            neon_writer_printobject(wr, value, fixstring);
             break;
     }
 }
 
-const char* lox_writer_objecttypename(Object* obj)
+const char* neon_writer_objecttypename(NeonObject* obj)
 {
     switch(obj->type)
     {
-        case OBJ_BOUNDMETHOD:
+        case NEON_OBJ_BOUNDMETHOD:
             {
                 return "boundmethod";
             }
             break;
-        case OBJ_CLASS:
+        case NEON_OBJ_CLASS:
             {
                 return "class";
             }
             break;
-        case OBJ_CLOSURE:
+        case NEON_OBJ_CLOSURE:
             {
                 return "closure";
             }
             break;
-        case OBJ_FUNCTION:
+        case NEON_OBJ_FUNCTION:
             {
                 return "function";
             }
             break;
-        case OBJ_INSTANCE:
+        case NEON_OBJ_INSTANCE:
             {
                 return "instance";
             }
             break;
-        case OBJ_NATIVE:
+        case NEON_OBJ_NATIVE:
             {
                 return "nativefunction";
             }
             break;
-        case OBJ_STRING:
+        case NEON_OBJ_STRING:
             {
                 return "string";
             }
             break;
-        case OBJ_UPVALUE:
+        case NEON_OBJ_UPVALUE:
             {
                 return "upvalue";
             }
             break;
-        case OBJ_ARRAY:
+        case NEON_OBJ_ARRAY:
             {
                 return "array";
+            }
+            break;
+        case NEON_OBJ_MAP:
+            {
+                return "map";
             }
             break;
     }
     return "?unknownobject?";
 }
 
-const char* lox_writer_valuetypename(Value value)
+const char* neon_writer_valuetypename(NeonValue value)
 {
     switch(value.type)
     {
-        case VAL_BOOL:
+        case NEON_VAL_BOOL:
             return "bool";
             break;
-        case VAL_NIL:
+        case NEON_VAL_NIL:
             return "nil";
             break;
-        case VAL_NUMBER:
+        case NEON_VAL_NUMBER:
             return "string";
             break;
-        case VAL_OBJ:
-            return lox_writer_objecttypename(AS_OBJ(value));
+        case NEON_VAL_OBJ:
+            return neon_writer_objecttypename(neon_value_asobject(value));
             break;
     }
     return "?unknownvalue?";
 }
 
 
-bool lox_value_equal(Value a, Value b)
+bool neon_value_equal(NeonValue a, NeonValue b)
 {
     if(a.type != b.type)
     {
@@ -1385,26 +1531,26 @@ bool lox_value_equal(Value a, Value b)
     }
     switch(a.type)
     {
-        case VAL_BOOL:
+        case NEON_VAL_BOOL:
             {
-                return AS_BOOL(a) == AS_BOOL(b);
+                return neon_value_asbool(a) == neon_value_asbool(b);
             }
             break;
-        case VAL_NIL:
+        case NEON_VAL_NIL:
             {
                 return true;
             }
             break;
-        case VAL_NUMBER:
+        case NEON_VAL_NUMBER:
             {
-                return AS_NUMBER(a) == AS_NUMBER(b);
+                return neon_value_asnumber(a) == neon_value_asnumber(b);
             }
             break;
             /* Strings strings-equal < Hash Tables equal */
-        case VAL_OBJ:
+        case NEON_VAL_OBJ:
             {
-                ObjString* aos;
-                ObjString* bos;
+                NeonObjString* aos;
+                NeonObjString* bos;
                 if(IS_STRING(a) && IS_STRING(b))
                 {
                     aos = AS_STRING(a);
@@ -1418,7 +1564,7 @@ bool lox_value_equal(Value a, Value b)
                     }
                     return false;
                 }
-                return AS_OBJ(a) == AS_OBJ(b);
+                return neon_value_asobject(a) == neon_value_asobject(b);
             }
             break;
         default:
@@ -1427,9 +1573,7 @@ bool lox_value_equal(Value a, Value b)
     return false;
 }
 
-
-
-void lox_valarray_init(LoxState* state, ValArray* array)
+void neon_valarray_init(NeonState* state, NeonValArray* array)
 {
     array->pvm = state;
     array->values = NULL;
@@ -1437,27 +1581,33 @@ void lox_valarray_init(LoxState* state, ValArray* array)
     array->size = 0;
 }
 
-size_t lox_valarray_count(ValArray* array)
+size_t neon_valarray_count(NeonValArray* array)
 {
     return array->size;
 }
 
-size_t lox_valarray_size(ValArray* array)
+size_t neon_valarray_size(NeonValArray* array)
 {
     return array->size;
 }
 
-Value lox_valarray_at(ValArray* array, size_t i)
+NeonValue neon_valarray_at(NeonValArray* array, size_t i)
 {
     return array->values[i];
 }
 
-bool lox_valarray_grow(ValArray* arr, size_t count)
+
+static inline size_t neon_valarray_computenextgrow(size_t size)
+{
+    return (size ? (size << 1) : 1);
+}
+
+bool neon_valarray_grow(NeonValArray* arr, size_t count)
 {
     size_t nsz;
     void* p1;
     void* newbuf;
-    nsz = count * sizeof(Value);
+    nsz = count * sizeof(NeonValue);
     p1 = arr->values;
     newbuf = realloc(p1, nsz);
     if(newbuf == NULL)
@@ -1469,13 +1619,13 @@ bool lox_valarray_grow(ValArray* arr, size_t count)
     return true;
 }
 
-bool lox_valarray_push(ValArray* arr, Value value)
+bool neon_valarray_push(NeonValArray* arr, NeonValue value)
 {
     size_t cap;
     cap = arr->capacity;
     if(cap <= arr->size)
     {
-        if(!lox_valarray_grow(arr, lox_valarray_computenextgrow(cap)))
+        if(!neon_valarray_grow(arr, neon_valarray_computenextgrow(cap)))
         {
             return false;
         }
@@ -1485,7 +1635,7 @@ bool lox_valarray_push(ValArray* arr, Value value)
     return true;
 }
 
-bool lox_valarray_insert(ValArray* arr, size_t pos, Value val)
+bool neon_valarray_insert(NeonValArray* arr, size_t pos, NeonValue val)
 {
     size_t i;
     size_t asz;
@@ -1495,7 +1645,7 @@ bool lox_valarray_insert(ValArray* arr, size_t pos, Value val)
     oldcap = arr->capacity;
     if (oldcap <= arr->size)
     {
-        if(!lox_valarray_grow(arr, lox_valarray_computenextgrow(oldcap)))
+        if(!neon_valarray_grow(arr, neon_valarray_computenextgrow(oldcap)))
         {
             return false;
         }
@@ -1505,7 +1655,7 @@ bool lox_valarray_insert(ValArray* arr, size_t pos, Value val)
         asz = arr->size;
         for(i=0; i<(pos+1); i++)
         {
-            lox_valarray_push(arr, NIL_VAL);
+            neon_valarray_push(arr, neon_value_makenil());
         }
     }
     arr->values[pos] = val;
@@ -1516,7 +1666,7 @@ bool lox_valarray_insert(ValArray* arr, size_t pos, Value val)
     return true;
 }
 
-bool lox_valarray_erase(ValArray* arr, size_t idx)
+bool neon_valarray_erase(NeonValArray* arr, size_t idx)
 {
     size_t i;
     size_t ni;
@@ -1524,7 +1674,6 @@ bool lox_valarray_erase(ValArray* arr, size_t idx)
     osz = arr->size;
     if(idx < osz)
     {
-        //arr->size = osz - 1;
         arr->size--;
         ni = 0;
         for(i=0; i<osz; i++)
@@ -1549,24 +1698,24 @@ bool lox_valarray_erase(ValArray* arr, size_t idx)
     return false;
 }
 
-Value lox_valarray_pop(ValArray* arr)
+NeonValue neon_valarray_pop(NeonValArray* arr)
 {
     arr->size--;
     return arr->values[arr->size + 1];
 }
 
-void lox_valarray_free(ValArray* arr)
+void neon_valarray_free(NeonValArray* arr)
 {
-    LoxState* state;
+    NeonState* state;
     state = arr->pvm;
-    FREE_ARRAY(state, Value, arr->values, arr->capacity);
-    lox_valarray_init(state, arr);
+    FREE_ARRAY(state, NeonValue, arr->values, arr->capacity);
+    neon_valarray_init(state, arr);
 }
 
-Object* lox_object_allocobj(LoxState* state, size_t size, ObjType type)
+NeonObject* neon_object_allocobj(NeonState* state, size_t size, NeonObjType type)
 {
-    Object* baseobj;
-    baseobj = (Object*)lox_mem_realloc(state, NULL, 0, size);
+    NeonObject* baseobj;
+    baseobj = (NeonObject*)neon_mem_realloc(state, NULL, 0, size);
     baseobj->type = type;
     baseobj->ismarked = false;
     baseobj->next = state->gcstate.linkedobjects;
@@ -1577,174 +1726,194 @@ Object* lox_object_allocobj(LoxState* state, size_t size, ObjType type)
     return baseobj;
 }
 
-ObjBoundMethod* lox_object_makeboundmethod(LoxState* state, Value receiver, ObjClosure* method)
+NeonObjBoundFunction* neon_object_makeboundmethod(NeonState* state, NeonValue receiver, NeonObjClosure* method)
 {
-    ObjBoundMethod* obj;
-    obj = (ObjBoundMethod*)lox_object_allocobj(state, sizeof(ObjBoundMethod), OBJ_BOUNDMETHOD);
+    NeonObjBoundFunction* obj;
+    obj = (NeonObjBoundFunction*)neon_object_allocobj(state, sizeof(NeonObjBoundFunction), NEON_OBJ_BOUNDMETHOD);
     obj->receiver = receiver;
     obj->method = method;
     return obj;
 }
 
-ObjClass* lox_object_makeclass(LoxState* state, ObjString* name)
+NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name)
 {
-    ObjClass* obj;
-    obj = (ObjClass*)lox_object_allocobj(state, sizeof(ObjClass), OBJ_CLASS);
-    obj->name = name;// [klass]
-    lox_hashtable_init(&obj->methods);
+    NeonObjClass* obj;
+    obj = (NeonObjClass*)neon_object_allocobj(state, sizeof(NeonObjClass), NEON_OBJ_CLASS);
+    obj->name = name;
+    neon_hashtable_init(&obj->methods);
     return obj;
 }
 
-ObjClosure* lox_object_makeclosure(LoxState* state, ObjFunction* ofn)
+NeonObjClosure* neon_object_makeclosure(NeonState* state, NeonObjScriptFunction* ofn)
 {
     int i;
-    ObjClosure* closure;
-    ObjUpvalue** upvals;
-    upvals = ALLOCATE(state, ObjUpvalue*, ofn->upvaluecount);
+    NeonObjClosure* closure;
+    NeonObjUpvalue** upvals;
+    upvals = ALLOCATE(state, NeonObjUpvalue*, ofn->upvaluecount);
     for(i = 0; i < ofn->upvaluecount; i++)
     {
         upvals[i] = NULL;
     }
-    closure = (ObjClosure*)lox_object_allocobj(state, sizeof(ObjClosure), OBJ_CLOSURE);
+    closure = (NeonObjClosure*)neon_object_allocobj(state, sizeof(NeonObjClosure), NEON_OBJ_CLOSURE);
     closure->innerfn = ofn;
     closure->upvalues = upvals;
     closure->upvaluecount = ofn->upvaluecount;
     return closure;
 }
 
-ObjFunction* lox_object_makefunction(LoxState* state)
+NeonObjScriptFunction* neon_object_makefunction(NeonState* state)
 {
-    ObjFunction* obj;
-    obj = (ObjFunction*)lox_object_allocobj(state, sizeof(ObjFunction), OBJ_FUNCTION);
+    NeonObjScriptFunction* obj;
+    obj = (NeonObjScriptFunction*)neon_object_allocobj(state, sizeof(NeonObjScriptFunction), NEON_OBJ_FUNCTION);
     obj->arity = 0;
     obj->upvaluecount = 0;
     obj->name = NULL;
-    lox_chunk_init(state, &obj->chunk);
+    neon_chunk_init(state, &obj->chunk);
     return obj;
 }
 
-ObjInstance* lox_object_makeinstance(LoxState* state, ObjClass* klass)
+NeonObjInstance* neon_object_makeinstance(NeonState* state, NeonObjClass* klass)
 {
-    ObjInstance* obj;
-    obj = (ObjInstance*)lox_object_allocobj(state, sizeof(ObjInstance), OBJ_INSTANCE);
+    NeonObjInstance* obj;
+    obj = (NeonObjInstance*)neon_object_allocobj(state, sizeof(NeonObjInstance), NEON_OBJ_INSTANCE);
     obj->klass = klass;
-    lox_hashtable_init(&obj->fields);
+    neon_hashtable_init(&obj->fields);
     return obj;
 }
 
-ObjNative* lox_object_makenative(LoxState* state, NativeFN nat)
+NeonObjNativeFunction* neon_object_makenative(NeonState* state, NeonNativeFN nat)
 {
-    ObjNative* obj;
-    obj = (ObjNative*)lox_object_allocobj(state, sizeof(ObjNative), OBJ_NATIVE);
+    NeonObjNativeFunction* obj;
+    obj = (NeonObjNativeFunction*)neon_object_allocobj(state, sizeof(NeonObjNativeFunction), NEON_OBJ_NATIVE);
     obj->natfunc = nat;
     return obj;
 }
 
-ObjString* lox_string_allocfromstrbuf(LoxState* state, Strbuf* sbuf, uint32_t hash)
+NeonObjString* neon_string_allocfromstrbuf(NeonState* state, NeonStringBuffer* sbuf, uint32_t hash)
 {
-    ObjString* rs;
-    rs = (ObjString*)lox_object_allocobj(state, sizeof(ObjString), OBJ_STRING);
+    NeonObjString* rs;
+    rs = (NeonObjString*)neon_object_allocobj(state, sizeof(NeonObjString), NEON_OBJ_STRING);
     rs->sbuf = sbuf;
     rs->hash = hash;
-    lox_vm_stackpush(state, OBJ_VAL(rs));
-    lox_hashtable_set(state, &state->strings, rs, NIL_VAL);
-    lox_vm_stackpop(state);
+    neon_vm_stackpush(state, neon_value_makeobject(rs));
+    neon_hashtable_set(state, &state->strings, rs, neon_value_makenil());
+    neon_vm_stackpop(state);
     return rs;
 }
 
-ObjString* lox_string_allocate(LoxState* state, const char* estr, size_t elen, uint32_t hash)
+NeonObjString* neon_string_allocate(NeonState* state, const char* estr, size_t elen, uint32_t hash)
 {
-    Strbuf* sbuf;
-    sbuf = lox_strbuf_make(state);
-    lox_strbuf_append(sbuf, estr, elen);
-    return lox_string_allocfromstrbuf(state, sbuf, hash);
+    NeonStringBuffer* sbuf;
+    sbuf = neon_strbuf_make(state);
+    neon_strbuf_append(sbuf, estr, elen);
+    return neon_string_allocfromstrbuf(state, sbuf, hash);
 }
 
-ObjString* lox_string_take(LoxState* state, char* estr, size_t elen)
+NeonObjString* neon_string_take(NeonState* state, char* estr, size_t elen)
 {
     uint32_t hash;
-    ObjString* rs;
-    hash = lox_util_hashstring(estr, elen);
-    rs = lox_hashtable_findstring(state, &state->strings, estr, elen, hash);
+    NeonObjString* rs;
+    hash = neon_util_hashstring(estr, elen);
+    rs = neon_hashtable_findstring(state, &state->strings, estr, elen, hash);
     if(rs == NULL)
     {
-        rs = lox_string_copy(state, (const char*)estr, elen);
+        rs = neon_string_copy(state, (const char*)estr, elen);
     }
     FREE_ARRAY(state, char, estr, elen + 1);
     return rs;
 }
 
-ObjString* lox_string_copy(LoxState* state, const char* estr, int elen)
+NeonObjString* neon_string_copy(NeonState* state, const char* estr, int elen)
 {
     uint32_t hash;
-    ObjString* rs;
-    hash = lox_util_hashstring(estr, elen);
-    rs = lox_hashtable_findstring(state, &state->strings, estr, elen, hash);
+    NeonObjString* rs;
+    hash = neon_util_hashstring(estr, elen);
+    rs = neon_hashtable_findstring(state, &state->strings, estr, elen, hash);
     if(rs != NULL)
     {
         return rs;
     }
-    rs = lox_string_allocate(state, estr, elen, hash);
+    rs = neon_string_allocate(state, estr, elen, hash);
     return rs;
 }
 
-void lox_string_release(LoxState* state, ObjString* os)
+void neon_string_release(NeonState* state, NeonObjString* os)
 {
-    lox_strbuf_release(state, os->sbuf);
+    neon_strbuf_release(state, os->sbuf);
     free(os->sbuf);
 }
 
-bool lox_string_append(ObjString* os, const char* extstr, size_t extlen)
+bool neon_string_append(NeonObjString* os, const char* extstr, size_t extlen)
 {
-    return lox_strbuf_append(os->sbuf, extstr, extlen);
+    return neon_strbuf_append(os->sbuf, extstr, extlen);
 }
 
-ObjArray* lox_array_make(LoxState* state)
+NeonObjArray* neon_array_make(NeonState* state)
 {
-    ObjArray* oa;
-    oa = (ObjArray*)lox_object_allocobj(state, sizeof(ObjArray), OBJ_ARRAY);
+    NeonObjArray* oa;
+    oa = (NeonObjArray*)neon_object_allocobj(state, sizeof(NeonObjArray), NEON_OBJ_ARRAY);
     oa->pvm = state;
-    lox_valarray_init(state, &oa->vala);
+    neon_valarray_init(state, &oa->vala);
     oa->vala.size = 0;
     return oa;
 }
 
-bool lox_array_push(ObjArray* arr, Value val)
+bool neon_array_push(NeonObjArray* arr, NeonValue val)
 {
-    lox_valarray_push(&arr->vala, val);
+    neon_valarray_push(&arr->vala, val);
     return true;
 }
 
-ObjUpvalue* lox_object_makeupvalue(LoxState* state, Value* pslot)
+NeonObjMap* neon_object_makemap(NeonState* state)
 {
-    ObjUpvalue* upvalue = (ObjUpvalue*)lox_object_allocobj(state, sizeof(ObjUpvalue), OBJ_UPVALUE);
-    upvalue->closed = NIL_VAL;
-    upvalue->location = pslot;
-    upvalue->next = NULL;
-    return upvalue;
+    NeonObjMap* obj;
+    obj = (NeonObjMap*)neon_object_allocobj(state, sizeof(NeonObjMap), NEON_OBJ_MAP);
+    obj->pvm = state;
+    neon_hashtable_init(&obj->mapping);
+    return obj;
 }
 
+bool neon_map_set(NeonObjMap* map, NeonObjString* name, NeonValue val)
+{
+    return neon_hashtable_set(map->pvm, &map->mapping, name, val);
+}
 
-void lox_hashtable_init(HashTable* table)
+//bool neon_hashtable_get(NeonState* state, NeonHashTable* table, NeonObjString* key, NeonValue* value)
+bool neon_map_get(NeonObjMap* map, NeonObjString* key, NeonValue* dest)
+{
+    return neon_hashtable_get(map->pvm, &map->mapping, key, dest);
+}
+
+NeonObjUpvalue* neon_object_makeupvalue(NeonState* state, NeonValue* pslot)
+{
+    NeonObjUpvalue* obj;
+    obj = (NeonObjUpvalue*)neon_object_allocobj(state, sizeof(NeonObjUpvalue), NEON_OBJ_UPVALUE);
+    obj->closed = neon_value_makenil();
+    obj->location = pslot;
+    obj->next = NULL;
+    return obj;
+}
+
+void neon_hashtable_init(NeonHashTable* table)
 {
     table->count = 0;
     table->capacity = 0;
     table->entries = NULL;
 }
 
-void lox_hashtable_free(LoxState* state, HashTable* table)
+void neon_hashtable_free(NeonState* state, NeonHashTable* table)
 {
-    FREE_ARRAY(state, HashEntry, table->entries, table->capacity);
-    lox_hashtable_init(table);
+    FREE_ARRAY(state, NeonHashEntry, table->entries, table->capacity);
+    neon_hashtable_init(table);
 }
 
 // NOTE: The "optimization" chapter has a manual copy of this function.
 // If you change it here, make sure to update that copy.
-HashEntry* lox_hashtable_findentry(HashEntry* entries, int capacity, ObjString* key)
+NeonHashEntry* neon_hashtable_findentry(NeonHashEntry* entries, int capacity, NeonObjString* key)
 {
     uint32_t index;
-    HashEntry* entry;
-    HashEntry* tombstone;
+    NeonHashEntry* entry;
+    NeonHashEntry* tombstone;
     index = key->hash & (capacity - 1);
     tombstone = NULL;
     if(capacity > 0)
@@ -1756,7 +1925,7 @@ HashEntry* lox_hashtable_findentry(HashEntry* entries, int capacity, ObjString* 
             {
                 if(entry->key == NULL)
                 {
-                    if(IS_NIL(entry->value))
+                    if(neon_value_isnil(entry->value))
                     {
                         // Empty entry.
                         return tombstone != NULL ? tombstone : entry;
@@ -1780,15 +1949,15 @@ HashEntry* lox_hashtable_findentry(HashEntry* entries, int capacity, ObjString* 
     return NULL;
 }
 
-bool lox_hashtable_get(LoxState* state, HashTable* table, ObjString* key, Value* value)
+bool neon_hashtable_get(NeonState* state, NeonHashTable* table, NeonObjString* key, NeonValue* value)
 {
-    HashEntry* entry;
+    NeonHashEntry* entry;
     (void)state;
     if(table->count == 0)
     {
         return false;
     }
-    entry = lox_hashtable_findentry(table->entries, table->capacity, key);
+    entry = neon_hashtable_findentry(table->entries, table->capacity, key);
     if(entry == NULL)
     {
         return false;
@@ -1801,17 +1970,17 @@ bool lox_hashtable_get(LoxState* state, HashTable* table, ObjString* key, Value*
     return true;
 }
 
-void lox_hashtable_adjustcap(LoxState* state, HashTable* table, int capacity)
+void neon_hashtable_adjustcap(NeonState* state, NeonHashTable* table, int capacity)
 {
     int i;
-    HashEntry* dest;
-    HashEntry* entry;
-    HashEntry* entries;
-    entries = ALLOCATE(state, HashEntry, capacity);
+    NeonHashEntry* dest;
+    NeonHashEntry* entry;
+    NeonHashEntry* entries;
+    entries = ALLOCATE(state, NeonHashEntry, capacity);
     for(i = 0; i < capacity; i++)
     {
         entries[i].key = NULL;
-        entries[i].value = NIL_VAL;
+        entries[i].value = neon_value_makenil();
     }
     table->count = 0;
     for(i = 0; i < table->capacity; i++)
@@ -1821,30 +1990,30 @@ void lox_hashtable_adjustcap(LoxState* state, HashTable* table, int capacity)
         {
             continue;
         }
-        dest = lox_hashtable_findentry(entries, capacity, entry->key);
+        dest = neon_hashtable_findentry(entries, capacity, entry->key);
         dest->key = entry->key;
         dest->value = entry->value;
         table->count++;
     }
 
-    FREE_ARRAY(state, HashEntry, table->entries, table->capacity);
+    FREE_ARRAY(state, NeonHashEntry, table->entries, table->capacity);
     table->entries = entries;
     table->capacity = capacity;
 }
 
-bool lox_hashtable_set(LoxState* state, HashTable* table, ObjString* key, Value value)
+bool neon_hashtable_set(NeonState* state, NeonHashTable* table, NeonObjString* key, NeonValue value)
 {
     int capacity;
     bool isnewkey;
-    HashEntry* entry;
+    NeonHashEntry* entry;
     if(table->count + 1 > table->capacity * TABLE_MAX_LOAD)
     {
         capacity = GROW_CAPACITY(table->capacity);
-        lox_hashtable_adjustcap(state, table, capacity);
+        neon_hashtable_adjustcap(state, table, capacity);
     }
-    entry = lox_hashtable_findentry(table->entries, table->capacity, key);
+    entry = neon_hashtable_findentry(table->entries, table->capacity, key);
     isnewkey = entry->key == NULL;
-    if(isnewkey && IS_NIL(entry->value))
+    if(isnewkey && neon_value_isnil(entry->value))
     {
         table->count++;
     }
@@ -1853,44 +2022,44 @@ bool lox_hashtable_set(LoxState* state, HashTable* table, ObjString* key, Value 
     return isnewkey;
 }
 
-bool lox_hashtable_delete(LoxState* state, HashTable* table, ObjString* key)
+bool neon_hashtable_delete(NeonState* state, NeonHashTable* table, NeonObjString* key)
 {
-    HashEntry* entry;
+    NeonHashEntry* entry;
     (void)state;
     if(table->count == 0)
     {
         return false;
     }
     // Find the entry.
-    entry = lox_hashtable_findentry(table->entries, table->capacity, key);
+    entry = neon_hashtable_findentry(table->entries, table->capacity, key);
     if(entry->key == NULL)
     {
         return false;
     }
     // Place a tombstone in the entry.
     entry->key = NULL;
-    entry->value = BOOL_VAL(true);
+    entry->value = neon_value_makebool(true);
     return true;
 }
 
-void lox_hashtable_addall(LoxState* state, HashTable* from, HashTable* to)
+void neon_hashtable_addall(NeonState* state, NeonHashTable* from, NeonHashTable* to)
 {
     int i;
-    HashEntry* entry;
+    NeonHashEntry* entry;
     for(i = 0; i < from->capacity; i++)
     {
         entry = &from->entries[i];
         if(entry->key != NULL)
         {
-            lox_hashtable_set(state, to, entry->key, entry->value);
+            neon_hashtable_set(state, to, entry->key, entry->value);
         }
     }
 }
 
-ObjString* lox_hashtable_findstring(LoxState* state, HashTable* table, const char* estr, int elen, uint32_t hash)
+NeonObjString* neon_hashtable_findstring(NeonState* state, NeonHashTable* table, const char* estr, int elen, uint32_t hash)
 {
     uint32_t index;
-    HashEntry* entry;
+    NeonHashEntry* entry;
     (void)state;
     if(table->count == 0)
     {
@@ -1903,7 +2072,7 @@ ObjString* lox_hashtable_findstring(LoxState* state, HashTable* table, const cha
         if(entry->key == NULL)
         {
             // Stop if we find an empty non-tombstone entry.
-            if(IS_NIL(entry->value))
+            if(neon_value_isnil(entry->value))
             {
                 return NULL;
             }
@@ -1918,38 +2087,38 @@ ObjString* lox_hashtable_findstring(LoxState* state, HashTable* table, const cha
     return NULL;
 }
 
-void lox_hashtable_remwhite(LoxState* state, HashTable* table)
+void neon_hashtable_remwhite(NeonState* state, NeonHashTable* table)
 {
     int i;
-    HashEntry* entry;
+    NeonHashEntry* entry;
     for(i = 0; i < table->capacity; i++)
     {
         entry = &table->entries[i];
         if(entry->key != NULL && !entry->key->obj.ismarked)
         {
-            lox_hashtable_delete(state, table, entry->key);
+            neon_hashtable_delete(state, table, entry->key);
         }
     }
 }
 
-void lox_chunk_init(LoxState* state, Chunk* chunk)
+void neon_chunk_init(NeonState* state, NeonChunk* chunk)
 {
     chunk->count = 0;
     chunk->capacity = 0;
     chunk->code = NULL;
     chunk->lines = NULL;
-    lox_valarray_init(state, &chunk->constants);
+    neon_valarray_init(state, &chunk->constants);
 }
 
-void lox_chunk_free(LoxState* state, Chunk* chunk)
+void neon_chunk_free(NeonState* state, NeonChunk* chunk)
 {
     FREE_ARRAY(state, int32_t, chunk->code, chunk->capacity);
     FREE_ARRAY(state, int, chunk->lines, chunk->capacity);
-    lox_valarray_free(&chunk->constants);
-    lox_chunk_init(state, chunk);
+    neon_valarray_free(&chunk->constants);
+    neon_chunk_init(state, chunk);
 }
 
-void lox_chunk_pushbyte(LoxState* state, Chunk* chunk, int32_t byte, int line)
+void neon_chunk_pushbyte(NeonState* state, NeonChunk* chunk, int32_t byte, int line)
 {
     int oldcap;
     if(chunk->capacity < chunk->count + 1)
@@ -1964,211 +2133,211 @@ void lox_chunk_pushbyte(LoxState* state, Chunk* chunk, int32_t byte, int line)
     chunk->count++;
 }
 
-int lox_chunk_pushconst(LoxState* state, Chunk* chunk, Value value)
+int neon_chunk_pushconst(NeonState* state, NeonChunk* chunk, NeonValue value)
 {
-    lox_vm_stackpush(state, value);
-    lox_valarray_push(&chunk->constants, value);
-    lox_vm_stackpop(state);
-    return lox_valarray_count(&chunk->constants) - 1;
+    neon_vm_stackpush(state, value);
+    neon_valarray_push(&chunk->constants, value);
+    neon_vm_stackpop(state);
+    return neon_valarray_count(&chunk->constants) - 1;
 }
 
-void lox_chunk_disasm(LoxState* state, Writer* wr, Chunk* chunk, const char* name)
+void neon_chunk_disasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, const char* name)
 {
     int offset;
-    lox_writer_writeformat(wr, "== %s ==\n", name);
+    neon_writer_writeformat(wr, "== %s ==\n", name);
     for(offset = 0; offset < chunk->count;)
     {
-        offset = lox_dbg_dumpdisasm(state, wr, chunk, offset);
+        offset = neon_dbg_dumpdisasm(state, wr, chunk, offset);
     }
 }
 
-int lox_dbg_dumpconstinstr(LoxState* state, Writer* wr, const char* name, Chunk* chunk, int offset)
+int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
 {
-    Value val;
+    NeonValue val;
     int32_t constant;
     (void)state;
-    val = NIL_VAL;
+    val = neon_value_makenil();
     constant = chunk->code[offset + 1];
     if(chunk->constants.size > 0)
     {
         val = chunk->constants.values[constant];
     }
-    lox_writer_writeformat(wr, "%-16s %4d '", name, constant);
-    lox_writer_printvalue(wr, val, true);
-    lox_writer_writestring(wr, "'\n");
+    neon_writer_writeformat(wr, "%-16s %4d '", name, constant);
+    neon_writer_printvalue(wr, val, true);
+    neon_writer_writestring(wr, "'\n");
     return offset + 2;
 }
 
-int lox_dbg_dumpinvokeinstr(LoxState* state, Writer* wr, const char* name, Chunk* chunk, int offset)
+int neon_dbg_dumpinvokeinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
 {
     int32_t argc;
     int32_t constant;
     (void)state;
     constant = chunk->code[offset + 1];
     argc = chunk->code[offset + 2];
-    lox_writer_writeformat(wr, "%-16s (%d args) %4d {", name, argc, constant);
-    lox_writer_printvalue(wr, chunk->constants.values[constant], true);
-    lox_writer_writestring(wr, "}\n");
+    neon_writer_writeformat(wr, "%-16s (%d args) %4d {", name, argc, constant);
+    neon_writer_printvalue(wr, chunk->constants.values[constant], true);
+    neon_writer_writestring(wr, "}\n");
     return offset + 3;
 }
 
-int lox_dbg_dumpsimpleinstr(LoxState* state, Writer* wr, const char* name, int offset)
+int neon_dbg_dumpsimpleinstr(NeonState* state, NeonWriter* wr, const char* name, int offset)
 {
     (void)state;
-    lox_writer_writeformat(wr, "%s\n", name);
+    neon_writer_writeformat(wr, "%s\n", name);
     return offset + 1;
 }
 
-int lox_dbg_dumpbyteinstr(LoxState* state, Writer* wr, const char* name, Chunk* chunk, int offset)
+int neon_dbg_dumpbyteinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
 {
     int32_t islot;
     (void)state;
     islot = chunk->code[offset + 1];
-    lox_writer_writeformat(wr, "%-16s %4d\n", name, islot);
+    neon_writer_writeformat(wr, "%-16s %4d\n", name, islot);
     return offset + 2;// [debug]
 }
 
-int lox_dbg_dumpjumpinstr(LoxState* state, Writer* wr, const char* name, int sign, Chunk* chunk, int offset)
+int neon_dbg_dumpjumpinstr(NeonState* state, NeonWriter* wr, const char* name, int sign, NeonChunk* chunk, int offset)
 {
     uint16_t jump;
     (void)state;
     jump= (uint16_t)(chunk->code[offset + 1] << 8);
     jump |= chunk->code[offset + 2];
-    lox_writer_writeformat(wr, "%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
+    neon_writer_writeformat(wr, "%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
     return offset + 3;
 }
 
-int lox_dbg_dumpclosure(LoxState* state, Writer* wr, Chunk* chunk, int offset)
+int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int offset)
 {
     int j;
     int index;
     int islocal;
     int32_t constant;
-    ObjFunction* fn;
+    NeonObjScriptFunction* fn;
     (void)state;
     offset++;
     constant = chunk->code[offset++];
-    lox_writer_writeformat(wr, "%-16s %4d ", "OP_CLOSURE", constant);
-    lox_writer_printvalue(wr, chunk->constants.values[constant], true);
-    lox_writer_writestring(wr, "\n");
+    neon_writer_writeformat(wr, "%-16s %4d ", "NEON_OP_CLOSURE", constant);
+    neon_writer_printvalue(wr, chunk->constants.values[constant], true);
+    neon_writer_writestring(wr, "\n");
     fn = AS_FUNCTION(chunk->constants.values[constant]);
     for(j = 0; j < fn->upvaluecount; j++)
     {
         islocal = chunk->code[offset++];
         index = chunk->code[offset++];
-        lox_writer_writeformat(wr, "%04d      |                     %s %d\n", offset - 2, islocal ? "local" : "upvalue", index);
+        neon_writer_writeformat(wr, "%04d      |                     %s %d\n", offset - 2, islocal ? "local" : "upvalue", index);
     }
     return offset;
 }
 
-int lox_dbg_dumpdisasm(LoxState* state, Writer* wr, Chunk* chunk, int offset)
+int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int offset)
 {
     int32_t instruction;
     (void)state;
-    lox_writer_writeformat(wr, "%04d ", offset);
+    neon_writer_writeformat(wr, "%04d ", offset);
     if((offset > 0) && (chunk->lines[offset] == chunk->lines[offset - 1]))
     {
-        lox_writer_writeformat(wr, "   | ");
+        neon_writer_writeformat(wr, "   | ");
     }
     else
     {
-        lox_writer_writeformat(wr, "%4d ", chunk->lines[offset]);
+        neon_writer_writeformat(wr, "%4d ", chunk->lines[offset]);
     }
     instruction = chunk->code[offset];
     switch(instruction)
     {
-        case OP_PUSHCONST:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_PUSHCONST", chunk, offset);
-        case OP_PUSHONE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PUSHONE", offset);
-        case OP_PUSHNIL:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PUSHNIL", offset);
-        case OP_PUSHTRUE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PUSHTRUE", offset);
-        case OP_PUSHFALSE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PUSHFALSE", offset);
-        case OP_MAKEARRAY:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_MAKEARRAY", chunk, offset);
-        case OP_INDEXGET:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_INDEXGET", chunk, offset);
-        case OP_POP:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_POP", offset);
-        case OP_LOCALGET:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_LOCALGET", chunk, offset);
-        case OP_LOCALSET:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_LOCALSET", chunk, offset);
-        case OP_GLOBALGET:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_GLOBALGET", chunk, offset);
-        case OP_GLOBALDEFINE:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_GLOBALDEFINE", chunk, offset);
-        case OP_GLOBALSET:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_GLOBALSET", chunk, offset);
-        case OP_UPVALGET:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_UPVALGET", chunk, offset);
-        case OP_UPVALSET:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_UPVALSET", chunk, offset);
-        case OP_PROPERTYGET:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_PROPERTYGET", chunk, offset);
-        case OP_PROPERTYSET:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_PROPERTYSET", chunk, offset);
-        case OP_INSTGETSUPER:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_INSTGETSUPER", chunk, offset);
-        case OP_EQUAL:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_EQUAL", offset);
-        case OP_PRIMGREATER:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMGREATER", offset);
-        case OP_PRIMLESS:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMLESS", offset);
-        case OP_PRIMADD:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMADD", offset);
-        case OP_PRIMSUBTRACT:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMSUBTRACT", offset);
-        case OP_PRIMMULTIPLY:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMMULTIPLY", offset);
-        case OP_PRIMDIVIDE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMDIVIDE", offset);
-        case OP_PRIMNOT:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMNOT", offset);
-        case OP_PRIMNEGATE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRIMNEGATE", offset);
-        case OP_DEBUGPRINT:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_PRINT", offset);
-        case OP_JUMPNOW:
-            return lox_dbg_dumpjumpinstr(state, wr, "OP_JUMPNOW", 1, chunk, offset);
-        case OP_JUMPIFFALSE:
-            return lox_dbg_dumpjumpinstr(state, wr, "OP_JUMPIFFALSE", 1, chunk, offset);
-        case OP_LOOP:
-            return lox_dbg_dumpjumpinstr(state, wr, "OP_LOOP", -1, chunk, offset);
-        case OP_CALL:
-            return lox_dbg_dumpbyteinstr(state, wr, "OP_CALL", chunk, offset);
-        case OP_INSTTHISINVOKE:
-            return lox_dbg_dumpinvokeinstr(state, wr, "OP_INSTTHISINVOKE", chunk, offset);
-        case OP_INSTSUPERINVOKE:
-            return lox_dbg_dumpinvokeinstr(state, wr, "OP_INSTSUPERINVOKE", chunk, offset);
-        case OP_CLOSURE:
+        case NEON_OP_PUSHCONST:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_PUSHCONST", chunk, offset);
+        case NEON_OP_PUSHONE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PUSHONE", offset);
+        case NEON_OP_PUSHNIL:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PUSHNIL", offset);
+        case NEON_OP_PUSHTRUE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PUSHTRUE", offset);
+        case NEON_OP_PUSHFALSE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PUSHFALSE", offset);
+        case NEON_OP_MAKEARRAY:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_MAKEARRAY", chunk, offset);
+        case NEON_OP_INDEXGET:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_INDEXGET", chunk, offset);
+        case NEON_OP_POP:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_POP", offset);
+        case NEON_OP_LOCALGET:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_LOCALGET", chunk, offset);
+        case NEON_OP_LOCALSET:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_LOCALSET", chunk, offset);
+        case NEON_OP_GLOBALGET:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_GLOBALGET", chunk, offset);
+        case NEON_OP_GLOBALDEFINE:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_GLOBALDEFINE", chunk, offset);
+        case NEON_OP_GLOBALSET:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_GLOBALSET", chunk, offset);
+        case NEON_OP_UPVALGET:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_UPVALGET", chunk, offset);
+        case NEON_OP_UPVALSET:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_UPVALSET", chunk, offset);
+        case NEON_OP_PROPERTYGET:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_PROPERTYGET", chunk, offset);
+        case NEON_OP_PROPERTYSET:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_PROPERTYSET", chunk, offset);
+        case NEON_OP_INSTGETSUPER:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_INSTGETSUPER", chunk, offset);
+        case NEON_OP_EQUAL:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_EQUAL", offset);
+        case NEON_OP_PRIMGREATER:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMGREATER", offset);
+        case NEON_OP_PRIMLESS:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMLESS", offset);
+        case NEON_OP_PRIMADD:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMADD", offset);
+        case NEON_OP_PRIMSUBTRACT:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMSUBTRACT", offset);
+        case NEON_OP_PRIMMULTIPLY:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMMULTIPLY", offset);
+        case NEON_OP_PRIMDIVIDE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMDIVIDE", offset);
+        case NEON_OP_PRIMNOT:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMNOT", offset);
+        case NEON_OP_PRIMNEGATE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRIMNEGATE", offset);
+        case NEON_OP_DEBUGPRINT:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PRINT", offset);
+        case NEON_OP_JUMPNOW:
+            return neon_dbg_dumpjumpinstr(state, wr, "NEON_OP_JUMPNOW", 1, chunk, offset);
+        case NEON_OP_JUMPIFFALSE:
+            return neon_dbg_dumpjumpinstr(state, wr, "NEON_OP_JUMPIFFALSE", 1, chunk, offset);
+        case NEON_OP_LOOP:
+            return neon_dbg_dumpjumpinstr(state, wr, "NEON_OP_LOOP", -1, chunk, offset);
+        case NEON_OP_CALL:
+            return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_CALL", chunk, offset);
+        case NEON_OP_INSTTHISINVOKE:
+            return neon_dbg_dumpinvokeinstr(state, wr, "NEON_OP_INSTTHISINVOKE", chunk, offset);
+        case NEON_OP_INSTSUPERINVOKE:
+            return neon_dbg_dumpinvokeinstr(state, wr, "NEON_OP_INSTSUPERINVOKE", chunk, offset);
+        case NEON_OP_CLOSURE:
             {
-                offset = lox_dbg_dumpclosure(state, wr, chunk, offset);
+                offset = neon_dbg_dumpclosure(state, wr, chunk, offset);
                 return offset;
             }
-        case OP_UPVALCLOSE:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_UPVALCLOSE", offset);
-        case OP_RETURN:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_RETURN", offset);
-        case OP_CLASS:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_CLASS", chunk, offset);
-        case OP_INHERIT:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_INHERIT", offset);
-        case OP_METHOD:
-            return lox_dbg_dumpconstinstr(state, wr, "OP_METHOD", chunk, offset);
-        case OP_HALTVM:
-            return lox_dbg_dumpsimpleinstr(state, wr, "OP_HALTVM", offset);
+        case NEON_OP_UPVALCLOSE:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_UPVALCLOSE", offset);
+        case NEON_OP_RETURN:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_RETURN", offset);
+        case NEON_OP_CLASS:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_CLASS", chunk, offset);
+        case NEON_OP_INHERIT:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_INHERIT", offset);
+        case NEON_OP_METHOD:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_METHOD", chunk, offset);
+        case NEON_OP_HALTVM:
+            return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_HALTVM", offset);
         default:
-            lox_writer_writeformat(wr, "!!!!unknown opcode %d!!!!\n", instruction);
+            neon_writer_writeformat(wr, "!!!!unknown opcode %d!!!!\n", instruction);
             return offset + 1;
     }
 }
 
-void lox_lex_init(LoxState* state, AstScanner* scn, const char* source)
+void neon_lex_init(NeonState* state, NeonAstScanner* scn, const char* source)
 {
     scn->pvm = state;
     scn->start = source;
@@ -2176,44 +2345,44 @@ void lox_lex_init(LoxState* state, AstScanner* scn, const char* source)
     scn->line = 1;
 }
 
-bool lox_lex_isalpha(char c)
+bool neon_lex_isalpha(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
-bool lox_lex_isdigit(char c)
+bool neon_lex_isdigit(char c)
 {
     return c >= '0' && c <= '9';
 }
 
-bool lox_lex_isatend(AstScanner* scn)
+bool neon_lex_isatend(NeonAstScanner* scn)
 {
     return *scn->current == '\0';
 }
 
-char lox_lex_advance(AstScanner* scn)
+char neon_lex_advance(NeonAstScanner* scn)
 {
     scn->current++;
     return scn->current[-1];
 }
 
-char lox_lex_peekcurrent(AstScanner* scn)
+char neon_lex_peekcurrent(NeonAstScanner* scn)
 {
     return *scn->current;
 }
 
-char lox_lex_peeknext(AstScanner* scn)
+char neon_lex_peeknext(NeonAstScanner* scn)
 {
-    if(lox_lex_isatend(scn))
+    if(neon_lex_isatend(scn))
     {
         return '\0';
     }
     return scn->current[1];
 }
 
-bool lox_lex_match(AstScanner* scn, char expected)
+bool neon_lex_match(NeonAstScanner* scn, char expected)
 {
-    if(lox_lex_isatend(scn))
+    if(neon_lex_isatend(scn))
         return false;
     if(*scn->current != expected)
         return false;
@@ -2221,9 +2390,9 @@ bool lox_lex_match(AstScanner* scn, char expected)
     return true;
 }
 
-AstToken lox_lex_maketoken(AstScanner* scn, AstTokType type)
+NeonAstToken neon_lex_maketoken(NeonAstScanner* scn, NeonAstTokType type)
 {
-    AstToken token;
+    NeonAstToken token;
     token.type = type;
     token.start = scn->start;
     token.length = (int)(scn->current - scn->start);
@@ -2231,44 +2400,44 @@ AstToken lox_lex_maketoken(AstScanner* scn, AstTokType type)
     return token;
 }
 
-AstToken lox_lex_makeerrortoken(AstScanner* scn, const char* message)
+NeonAstToken neon_lex_makeerrortoken(NeonAstScanner* scn, const char* message)
 {
-    AstToken token;
-    token.type = TOK_ERROR;
+    NeonAstToken token;
+    token.type = NEON_TOK_ERROR;
     token.start = message;
     token.length = (int)strlen(message);
     token.line = scn->line;
     return token;
 }
 
-void lox_lex_skipspace(AstScanner* scn)
+void neon_lex_skipspace(NeonAstScanner* scn)
 {
     char c;
     for(;;)
     {
-        c = lox_lex_peekcurrent(scn);
+        c = neon_lex_peekcurrent(scn);
         switch(c)
         {
             case ' ':
             case '\r':
             case '\t':
                 {
-                    lox_lex_advance(scn);
+                    neon_lex_advance(scn);
                 }
                 break;
             case '\n':
                 {
                     scn->line++;
-                    lox_lex_advance(scn);
+                    neon_lex_advance(scn);
                 }
                 break;
             case '/':
                 {
-                    if(lox_lex_peeknext(scn) == '/')
+                    if(neon_lex_peeknext(scn) == '/')
                     {
                         // A comment goes until the end of the line.
-                        while(lox_lex_peekcurrent(scn) != '\n' && !lox_lex_isatend(scn))
-                            lox_lex_advance(scn);
+                        while(neon_lex_peekcurrent(scn) != '\n' && !neon_lex_isatend(scn))
+                            neon_lex_advance(scn);
                     }
                     else
                     {
@@ -2282,34 +2451,34 @@ void lox_lex_skipspace(AstScanner* scn)
     }
 }
 
-AstTokType lox_lex_scankeyword(AstScanner* scn)
+NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
 {
     static const struct
     {
         const char* str;
-        AstTokType type;
+        NeonAstTokType type;
     } keywords[] =
     {
-        {"and", TOK_KWAND},
-        {"break", TOK_KWBREAK},
-        {"continue", TOK_KWCONTINUE},
-        {"class", TOK_KWCLASS},
-        {"else", TOK_KWELSE},
-        {"false", TOK_KWFALSE},
-        {"for", TOK_KWFOR},
-        {"function", TOK_KWFUNCTION},
-        {"fun", TOK_KWFUNCTION},
-        {"if", TOK_KWIF},
-        {"nil", TOK_KWNIL},
-        {"or", TOK_KWOR},
-        {"debugprint", TOK_KWDEBUGPRINT},
-        {"return", TOK_KWRETURN},
-        {"super", TOK_KWSUPER},
-        {"this", TOK_KWTHIS},
-        {"true", TOK_KWTRUE},
-        {"var", TOK_KWVAR},
-        {"while", TOK_KWWHILE},
-        {NULL, (AstTokType)0},
+        {"and", NEON_TOK_KWAND},
+        {"break", NEON_TOK_KWBREAK},
+        {"continue", NEON_TOK_KWCONTINUE},
+        {"class", NEON_TOK_KWCLASS},
+        {"else", NEON_TOK_KWELSE},
+        {"false", NEON_TOK_KWFALSE},
+        {"for", NEON_TOK_KWFOR},
+        {"function", NEON_TOK_KWFUNCTION},
+        {"fun", NEON_TOK_KWFUNCTION},
+        {"if", NEON_TOK_KWIF},
+        {"nil", NEON_TOK_KWNIL},
+        {"or", NEON_TOK_KWOR},
+        {"debugprint", NEON_TOK_KWDEBUGPRINT},
+        {"return", NEON_TOK_KWRETURN},
+        {"super", NEON_TOK_KWSUPER},
+        {"this", NEON_TOK_KWTHIS},
+        {"true", NEON_TOK_KWTRUE},
+        {"var", NEON_TOK_KWVAR},
+        {"while", NEON_TOK_KWWHILE},
+        {NULL, (NeonAstTokType)0},
     };
     size_t i;
     size_t kwlen;
@@ -2325,236 +2494,236 @@ AstTokType lox_lex_scankeyword(AstScanner* scn)
             return keywords[i].type;
         }
     }
-    return TOK_IDENTIFIER;
+    return NEON_TOK_IDENTIFIER;
 }
 
-AstToken lox_lex_scanident(AstScanner* scn)
+NeonAstToken neon_lex_scanident(NeonAstScanner* scn)
 {
-    while(lox_lex_isalpha(lox_lex_peekcurrent(scn)) || lox_lex_isdigit(lox_lex_peekcurrent(scn)))
+    while(neon_lex_isalpha(neon_lex_peekcurrent(scn)) || neon_lex_isdigit(neon_lex_peekcurrent(scn)))
     {
-        lox_lex_advance(scn);
+        neon_lex_advance(scn);
     }
-    return lox_lex_maketoken(scn, lox_lex_scankeyword(scn));
+    return neon_lex_maketoken(scn, neon_lex_scankeyword(scn));
 }
 
-AstToken lox_lex_scannumber(AstScanner* scn)
+NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
 {
-    while(lox_lex_isdigit(lox_lex_peekcurrent(scn)))
+    while(neon_lex_isdigit(neon_lex_peekcurrent(scn)))
     {
-        lox_lex_advance(scn);
+        neon_lex_advance(scn);
     }
     // Look for a fractional part.
-    if(lox_lex_peekcurrent(scn) == '.' && lox_lex_isdigit(lox_lex_peeknext(scn)))
+    if(neon_lex_peekcurrent(scn) == '.' && neon_lex_isdigit(neon_lex_peeknext(scn)))
     {
         // Consume the ".".
-        lox_lex_advance(scn);
-        while(lox_lex_isdigit(lox_lex_peekcurrent(scn)))
+        neon_lex_advance(scn);
+        while(neon_lex_isdigit(neon_lex_peekcurrent(scn)))
         {
-            lox_lex_advance(scn);
+            neon_lex_advance(scn);
         }
     }
-    return lox_lex_maketoken(scn, TOK_NUMBER);
+    return neon_lex_maketoken(scn, NEON_TOK_NUMBER);
 }
 
-AstToken lox_lex_scanstring(AstScanner* scn)
+NeonAstToken neon_lex_scanstring(NeonAstScanner* scn)
 {
-    while(lox_lex_peekcurrent(scn) != '"' && !lox_lex_isatend(scn))
+    while(neon_lex_peekcurrent(scn) != '"' && !neon_lex_isatend(scn))
     {
-        if(lox_lex_peekcurrent(scn) == '\n')
+        if(neon_lex_peekcurrent(scn) == '\n')
         {
             scn->line++;
         }
-        lox_lex_advance(scn);
+        neon_lex_advance(scn);
     }
-    if(lox_lex_isatend(scn))
+    if(neon_lex_isatend(scn))
     {
-        return lox_lex_makeerrortoken(scn, "unterminated string.");
+        return neon_lex_makeerrortoken(scn, "unterminated string.");
     }
     // The closing quote.
-    lox_lex_advance(scn);
-    return lox_lex_maketoken(scn, TOK_STRING);
+    neon_lex_advance(scn);
+    return neon_lex_maketoken(scn, NEON_TOK_STRING);
 }
 
-AstToken lox_lex_scantoken(AstScanner* scn)
+NeonAstToken neon_lex_scantoken(NeonAstScanner* scn)
 {
     char c;
-    lox_lex_skipspace(scn);
+    neon_lex_skipspace(scn);
     scn->start = scn->current;
-    if(lox_lex_isatend(scn))
+    if(neon_lex_isatend(scn))
     {
-        return lox_lex_maketoken(scn, TOK_EOF);
+        return neon_lex_maketoken(scn, NEON_TOK_EOF);
     }
-    c = lox_lex_advance(scn);
-    if(lox_lex_isalpha(c))
+    c = neon_lex_advance(scn);
+    if(neon_lex_isalpha(c))
     {
-        return lox_lex_scanident(scn);
+        return neon_lex_scanident(scn);
     }
-    if(lox_lex_isdigit(c))
+    if(neon_lex_isdigit(c))
     {
-        return lox_lex_scannumber(scn);
+        return neon_lex_scannumber(scn);
     }
     switch(c)
     {
         case '\n':
             {
-                return lox_lex_maketoken(scn, TOK_NEWLINE);
+                return neon_lex_maketoken(scn, NEON_TOK_NEWLINE);
             }
             break;
         case '(':
             {
-                return lox_lex_maketoken(scn, TOK_PARENOPEN);
+                return neon_lex_maketoken(scn, NEON_TOK_PARENOPEN);
             }
             break;
         case ')':
             {
-                return lox_lex_maketoken(scn, TOK_PARENCLOSE);
+                return neon_lex_maketoken(scn, NEON_TOK_PARENCLOSE);
             }
             break;
         case '{':
             {
-                return lox_lex_maketoken(scn, TOK_BRACEOPEN);
+                return neon_lex_maketoken(scn, NEON_TOK_BRACEOPEN);
             }
             break;
         case '}':
             {
-                return lox_lex_maketoken(scn, TOK_BRACECLOSE);
+                return neon_lex_maketoken(scn, NEON_TOK_BRACECLOSE);
             }
             break;
         case '[':
             {
-                return lox_lex_maketoken(scn, TOK_BRACKETOPEN);
+                return neon_lex_maketoken(scn, NEON_TOK_BRACKETOPEN);
             }
             break;
         case ']':
             {
-                return lox_lex_maketoken(scn, TOK_BRACKETCLOSE);
+                return neon_lex_maketoken(scn, NEON_TOK_BRACKETCLOSE);
             }
             break;
         case ';':
             {
-                return lox_lex_maketoken(scn, TOK_SEMICOLON);
+                return neon_lex_maketoken(scn, NEON_TOK_SEMICOLON);
             }
             break;
         case ',':
             {
-                return lox_lex_maketoken(scn, TOK_COMMA);
+                return neon_lex_maketoken(scn, NEON_TOK_COMMA);
             }
             break;
         case '.':
             {
-                return lox_lex_maketoken(scn, TOK_DOT);
+                return neon_lex_maketoken(scn, NEON_TOK_DOT);
             }
             break;
         case '-':
             {
-                if(lox_lex_match(scn, '-'))
+                if(neon_lex_match(scn, '-'))
                 {
-                    return lox_lex_maketoken(scn, TOK_DECREMENT);
+                    return neon_lex_maketoken(scn, NEON_TOK_DECREMENT);
                 }
-                return lox_lex_maketoken(scn, TOK_MINUS);
+                return neon_lex_maketoken(scn, NEON_TOK_MINUS);
             }
             break;
         case '+':
             {
-                if(lox_lex_match(scn, '+'))
+                if(neon_lex_match(scn, '+'))
                 {
-                    return lox_lex_maketoken(scn, TOK_INCREMENT);
+                    return neon_lex_maketoken(scn, NEON_TOK_INCREMENT);
                 }
-                return lox_lex_maketoken(scn, TOK_PLUS);
+                return neon_lex_maketoken(scn, NEON_TOK_PLUS);
             }
             break;
         case '&':
             {
-                if(lox_lex_match(scn, '&'))
+                if(neon_lex_match(scn, '&'))
                 {
-                    return lox_lex_maketoken(scn, TOK_KWAND);
+                    return neon_lex_maketoken(scn, NEON_TOK_KWAND);
                 }
-                return lox_lex_maketoken(scn, TOK_BINAND);
+                return neon_lex_maketoken(scn, NEON_TOK_BINAND);
             }
             break;
         case '|':
             {
-                if(lox_lex_match(scn, '|'))
+                if(neon_lex_match(scn, '|'))
                 {
-                    return lox_lex_maketoken(scn, TOK_KWOR);
+                    return neon_lex_maketoken(scn, NEON_TOK_KWOR);
                 }
-                return lox_lex_maketoken(scn, TOK_BINOR);
+                return neon_lex_maketoken(scn, NEON_TOK_BINOR);
             }
             break;
         case '^':
             {
-                return lox_lex_maketoken(scn, TOK_BINXOR);
+                return neon_lex_maketoken(scn, NEON_TOK_BINXOR);
             }
             break;
         case '%':
             {
-                return lox_lex_maketoken(scn, TOK_MODULO);
+                return neon_lex_maketoken(scn, NEON_TOK_MODULO);
             }
             break;
         case '/':
             {
-                return lox_lex_maketoken(scn, TOK_SLASH);
+                return neon_lex_maketoken(scn, NEON_TOK_SLASH);
             }
             break;
         case '*':
             {
-                return lox_lex_maketoken(scn, TOK_STAR);
+                return neon_lex_maketoken(scn, NEON_TOK_STAR);
             }
             break;
         case '!':
             {
-                if(lox_lex_match(scn, '='))
+                if(neon_lex_match(scn, '='))
                 {
-                    return lox_lex_maketoken(scn, TOK_COMPNOTEQUAL);
+                    return neon_lex_maketoken(scn, NEON_TOK_COMPNOTEQUAL);
                 }
-                return lox_lex_maketoken(scn, TOK_EXCLAM);
+                return neon_lex_maketoken(scn, NEON_TOK_EXCLAM);
             }
             break;
         case '=':
             {
-                if(lox_lex_match(scn, '='))
+                if(neon_lex_match(scn, '='))
                 {
-                    return lox_lex_maketoken(scn, TOK_COMPEQUAL);
+                    return neon_lex_maketoken(scn, NEON_TOK_COMPEQUAL);
                 }
-                return lox_lex_maketoken(scn, TOK_ASSIGN);
+                return neon_lex_maketoken(scn, NEON_TOK_ASSIGN);
             }
             break;
         case '<':
             {
-                if(lox_lex_match(scn, '='))
+                if(neon_lex_match(scn, '='))
                 {
-                    return lox_lex_maketoken(scn, TOK_COMPLESSEQUAL);
+                    return neon_lex_maketoken(scn, NEON_TOK_COMPLESSEQUAL);
                 }
-                else if(lox_lex_match(scn, '<'))
+                else if(neon_lex_match(scn, '<'))
                 {
-                    return lox_lex_maketoken(scn, TOK_SHIFTLEFT);
+                    return neon_lex_maketoken(scn, NEON_TOK_SHIFTLEFT);
                 }
-                return lox_lex_maketoken(scn, TOK_COMPLESSTHAN);
+                return neon_lex_maketoken(scn, NEON_TOK_COMPLESSTHAN);
             }
             break;
         case '>':
             {
-                if(lox_lex_match(scn, '='))
+                if(neon_lex_match(scn, '='))
                 {
-                    return lox_lex_maketoken(scn, TOK_COMPGREATEREQUAL);
+                    return neon_lex_maketoken(scn, NEON_TOK_COMPGREATEREQUAL);
                 }
-                else if(lox_lex_match(scn, '>'))
+                else if(neon_lex_match(scn, '>'))
                 {
-                    return lox_lex_maketoken(scn, TOK_SHIFTRIGHT);
+                    return neon_lex_maketoken(scn, NEON_TOK_SHIFTRIGHT);
                 }
-                return lox_lex_maketoken(scn, TOK_COMPGREATERTHAN);
+                return neon_lex_maketoken(scn, NEON_TOK_COMPGREATERTHAN);
             }
             break;
         case '"':
             {
-                return lox_lex_scanstring(scn);
+                return neon_lex_scanstring(scn);
             }
             break;
     }
-    return lox_lex_makeerrortoken(scn, "unexpected character.");
+    return neon_lex_makeerrortoken(scn, "unexpected character.");
 }
 
-void lox_prs_init(LoxState* state, AstParser* parser, AstScanner* scn)
+void neon_prs_init(NeonState* state, NeonAstParser* parser, NeonAstScanner* scn)
 {
     state->parser = parser;
     parser->pvm = state;
@@ -2563,12 +2732,12 @@ void lox_prs_init(LoxState* state, AstParser* parser, AstScanner* scn)
     parser->currclass = NULL;
 }
 
-Chunk* lox_prs_currentchunk(AstParser* prs)
+NeonChunk* neon_prs_currentchunk(NeonAstParser* prs)
 {
     return &prs->currcompiler->compiledfn->chunk;
 }
 
-void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* message, va_list va)
+void neon_prs_vraiseattoken(NeonAstParser* prs, NeonAstToken* token, const char* message, va_list va)
 {
     if(prs->panicmode)
     {
@@ -2576,11 +2745,11 @@ void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* message,
     }
     prs->panicmode = true;
     fprintf(stderr, "[line %d] error", token->line);
-    if(token->type == TOK_EOF)
+    if(token->type == NEON_TOK_EOF)
     {
         fprintf(stderr, " at end");
     }
-    else if(token->type == TOK_ERROR)
+    else if(token->type == NEON_TOK_ERROR)
     {
         // Nothing.
     }
@@ -2594,316 +2763,316 @@ void lox_prs_vraiseattoken(AstParser* prs, AstToken* token, const char* message,
     prs->haderror = true;
 }
 
-void lox_prs_raiseerror(AstParser* prs, const char* message, ...)
+void neon_prs_raiseerror(NeonAstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
-    lox_prs_vraiseattoken(prs, &prs->previous, message, va);
+    neon_prs_vraiseattoken(prs, &prs->previous, message, va);
     va_end(va);
 }
 
-void lox_prs_raiseatcurrent(AstParser* prs, const char* message, ...)
+void neon_prs_raiseatcurrent(NeonAstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
-    lox_prs_vraiseattoken(prs, &prs->current, message, va);
+    neon_prs_vraiseattoken(prs, &prs->current, message, va);
     va_end(va);
 }
 
-const char* lox_prs_op2str(int32_t opcode)
+const char* neon_prs_op2str(int32_t opcode)
 {
     switch(opcode)
     {
-        case OP_PUSHCONST: return "OP_PUSHCONST";
-        case OP_PUSHNIL: return "OP_PUSHNIL";
-        case OP_PUSHTRUE: return "OP_PUSHTRUE";
-        case OP_PUSHFALSE: return "OP_PUSHFALSE";
-        case OP_PUSHONE: return "OP_PUSHONE";
-        case OP_POP: return "OP_POP";
-        case OP_DUP: return "OP_DUP";
-        case OP_LOCALGET: return "OP_LOCALGET";
-        case OP_LOCALSET: return "OP_LOCALSET";
-        case OP_GLOBALGET: return "OP_GLOBALGET";
-        case OP_GLOBALDEFINE: return "OP_GLOBALDEFINE";
-        case OP_GLOBALSET: return "OP_GLOBALSET";
-        case OP_UPVALGET: return "OP_UPVALGET";
-        case OP_UPVALSET: return "OP_UPVALSET";
-        case OP_PROPERTYGET: return "OP_PROPERTYGET";
-        case OP_PROPERTYSET: return "OP_PROPERTYSET";
-        case OP_INSTGETSUPER: return "OP_INSTGETSUPER";
-        case OP_EQUAL: return "OP_EQUAL";
-        case OP_PRIMGREATER: return "OP_PRIMGREATER";
-        case OP_PRIMLESS: return "OP_PRIMLESS";
-        case OP_PRIMADD: return "OP_PRIMADD";
-        case OP_PRIMSUBTRACT: return "OP_PRIMSUBTRACT";
-        case OP_PRIMMULTIPLY: return "OP_PRIMMULTIPLY";
-        case OP_PRIMDIVIDE: return "OP_PRIMDIVIDE";
-        case OP_PRIMNOT: return "OP_PRIMNOT";
-        case OP_PRIMNEGATE: return "OP_PRIMNEGATE";
-        case OP_DEBUGPRINT: return "OP_DEBUGPRINT";
-        case OP_JUMPNOW: return "OP_JUMPNOW";
-        case OP_JUMPIFFALSE: return "OP_JUMPIFFALSE";
-        case OP_LOOP: return "OP_LOOP";
-        case OP_CALL: return "OP_CALL";
-        case OP_INSTTHISINVOKE: return "OP_INSTTHISINVOKE";
-        case OP_INSTSUPERINVOKE: return "OP_INSTSUPERINVOKE";
-        case OP_CLOSURE: return "OP_CLOSURE";
-        case OP_UPVALCLOSE: return "OP_UPVALCLOSE";
-        case OP_RETURN: return "OP_RETURN";
-        case OP_CLASS: return "OP_CLASS";
-        case OP_INHERIT: return "OP_INHERIT";
-        case OP_METHOD: return "OP_METHOD";
-        case OP_PSEUDOBREAK: return "OP_PSEUDOBREAK";
+        case NEON_OP_PUSHCONST: return "NEON_OP_PUSHCONST";
+        case NEON_OP_PUSHNIL: return "NEON_OP_PUSHNIL";
+        case NEON_OP_PUSHTRUE: return "NEON_OP_PUSHTRUE";
+        case NEON_OP_PUSHFALSE: return "NEON_OP_PUSHFALSE";
+        case NEON_OP_PUSHONE: return "NEON_OP_PUSHONE";
+        case NEON_OP_POP: return "NEON_OP_POP";
+        case NEON_OP_DUP: return "NEON_OP_DUP";
+        case NEON_OP_LOCALGET: return "NEON_OP_LOCALGET";
+        case NEON_OP_LOCALSET: return "NEON_OP_LOCALSET";
+        case NEON_OP_GLOBALGET: return "NEON_OP_GLOBALGET";
+        case NEON_OP_GLOBALDEFINE: return "NEON_OP_GLOBALDEFINE";
+        case NEON_OP_GLOBALSET: return "NEON_OP_GLOBALSET";
+        case NEON_OP_UPVALGET: return "NEON_OP_UPVALGET";
+        case NEON_OP_UPVALSET: return "NEON_OP_UPVALSET";
+        case NEON_OP_PROPERTYGET: return "NEON_OP_PROPERTYGET";
+        case NEON_OP_PROPERTYSET: return "NEON_OP_PROPERTYSET";
+        case NEON_OP_INSTGETSUPER: return "NEON_OP_INSTGETSUPER";
+        case NEON_OP_EQUAL: return "NEON_OP_EQUAL";
+        case NEON_OP_PRIMGREATER: return "NEON_OP_PRIMGREATER";
+        case NEON_OP_PRIMLESS: return "NEON_OP_PRIMLESS";
+        case NEON_OP_PRIMADD: return "NEON_OP_PRIMADD";
+        case NEON_OP_PRIMSUBTRACT: return "NEON_OP_PRIMSUBTRACT";
+        case NEON_OP_PRIMMULTIPLY: return "NEON_OP_PRIMMULTIPLY";
+        case NEON_OP_PRIMDIVIDE: return "NEON_OP_PRIMDIVIDE";
+        case NEON_OP_PRIMNOT: return "NEON_OP_PRIMNOT";
+        case NEON_OP_PRIMNEGATE: return "NEON_OP_PRIMNEGATE";
+        case NEON_OP_DEBUGPRINT: return "NEON_OP_DEBUGPRINT";
+        case NEON_OP_JUMPNOW: return "NEON_OP_JUMPNOW";
+        case NEON_OP_JUMPIFFALSE: return "NEON_OP_JUMPIFFALSE";
+        case NEON_OP_LOOP: return "NEON_OP_LOOP";
+        case NEON_OP_CALL: return "NEON_OP_CALL";
+        case NEON_OP_INSTTHISINVOKE: return "NEON_OP_INSTTHISINVOKE";
+        case NEON_OP_INSTSUPERINVOKE: return "NEON_OP_INSTSUPERINVOKE";
+        case NEON_OP_CLOSURE: return "NEON_OP_CLOSURE";
+        case NEON_OP_UPVALCLOSE: return "NEON_OP_UPVALCLOSE";
+        case NEON_OP_RETURN: return "NEON_OP_RETURN";
+        case NEON_OP_CLASS: return "NEON_OP_CLASS";
+        case NEON_OP_INHERIT: return "NEON_OP_INHERIT";
+        case NEON_OP_METHOD: return "NEON_OP_METHOD";
+        case NEON_OP_PSEUDOBREAK: return "NEON_OP_PSEUDOBREAK";
 
     }
     return "?unknown?";
 }
 
-void lox_prs_skipsemicolon(AstParser* prs)
+void neon_prs_skipsemicolon(NeonAstParser* prs)
 {
-    while(lox_prs_match(prs, TOK_NEWLINE))
+    while(neon_prs_match(prs, NEON_TOK_NEWLINE))
     {
     }
-    while(lox_prs_match(prs, TOK_SEMICOLON))
+    while(neon_prs_match(prs, NEON_TOK_SEMICOLON))
     {
     }
 }
 
-void lox_prs_advance(AstParser* prs)
+void neon_prs_advance(NeonAstParser* prs)
 {
     prs->previous = prs->current;
     for(;;)
     {
-        prs->current = lox_lex_scantoken(prs->pscn);
-        if(prs->current.type != TOK_ERROR)
+        prs->current = neon_lex_scantoken(prs->pscn);
+        if(prs->current.type != NEON_TOK_ERROR)
         {
             break;
         }
-        lox_prs_raiseatcurrent(prs, prs->current.start);
+        neon_prs_raiseatcurrent(prs, prs->current.start);
     }
 }
 
-void lox_prs_consume(AstParser* prs, AstTokType type, const char* message)
+void neon_prs_consume(NeonAstParser* prs, NeonAstTokType type, const char* message)
 {
     if(prs->current.type == type)
     {
-        lox_prs_advance(prs);
+        neon_prs_advance(prs);
         return;
     }
-    lox_prs_raiseatcurrent(prs, message);
+    neon_prs_raiseatcurrent(prs, message);
 }
 
-bool lox_prs_check(AstParser* prs, AstTokType type)
+bool neon_prs_check(NeonAstParser* prs, NeonAstTokType type)
 {
     return prs->current.type == type;
 }
 
-bool lox_prs_match(AstParser* prs, AstTokType type)
+bool neon_prs_match(NeonAstParser* prs, NeonAstTokType type)
 {
-    if(!lox_prs_check(prs, type))
+    if(!neon_prs_check(prs, type))
     {
         return false;
     }
-    lox_prs_advance(prs);
+    neon_prs_advance(prs);
     return true;
 }
 
-void lox_prs_emit1byte(AstParser* prs, int32_t byte)
+void neon_prs_emit1byte(NeonAstParser* prs, int32_t byte)
 {
-    lox_chunk_pushbyte(prs->pvm, lox_prs_currentchunk(prs), byte, prs->previous.line);
+    neon_chunk_pushbyte(prs->pvm, neon_prs_currentchunk(prs), byte, prs->previous.line);
 }
 
-void lox_prs_emit2byte(AstParser* prs, int32_t byte1, int32_t byte2)
+void neon_prs_emit2byte(NeonAstParser* prs, int32_t byte1, int32_t byte2)
 {
-    lox_prs_emit1byte(prs, byte1);
-    lox_prs_emit1byte(prs, byte2);
+    neon_prs_emit1byte(prs, byte1);
+    neon_prs_emit1byte(prs, byte2);
 }
 
-void lox_prs_emitloop(AstParser* prs, int loopstart)
+void neon_prs_emitloop(NeonAstParser* prs, int loopstart)
 {
     int offset;
-    lox_prs_emit1byte(prs, OP_LOOP);
-    offset = lox_prs_currentchunk(prs)->count - loopstart + 2;
+    neon_prs_emit1byte(prs, NEON_OP_LOOP);
+    offset = neon_prs_currentchunk(prs)->count - loopstart + 2;
     if(offset > UINT16_MAX)
     {
-        lox_prs_raiseerror(prs, "loop body too large.");
+        neon_prs_raiseerror(prs, "loop body too large.");
     }
-    lox_prs_emit1byte(prs, (offset >> 8) & 0xff);
-    lox_prs_emit1byte(prs, offset & 0xff);
+    neon_prs_emit1byte(prs, (offset >> 8) & 0xff);
+    neon_prs_emit1byte(prs, offset & 0xff);
 }
 
 
-int lox_prs_realgetcodeargscount(const int32_t* code, int ip)
+int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
 {
     int32_t op = code[ip];
     switch(op)
     {
-        case OP_PUSHTRUE:
-        case OP_PUSHFALSE:
-        case OP_PUSHNIL:
-        case OP_POP:
-        case OP_EQUAL:
-        case OP_PRIMGREATER:
-        case OP_PRIMLESS:
-        case OP_PRIMADD:
-        case OP_PRIMSUBTRACT:
-        case OP_PRIMMULTIPLY:
-        case OP_PRIMDIVIDE:
-        case OP_PRIMBINAND:
-        case OP_PRIMBINOR:
-        case OP_PRIMBINXOR:
-        case OP_PRIMMODULO:
-        case OP_PRIMSHIFTLEFT:
-        case OP_PRIMSHIFTRIGHT:
-        case OP_PRIMNOT:
-        case OP_PRIMNEGATE:
-        case OP_DEBUGPRINT:
-        //case OP_DUP:
-        case OP_PUSHONE:
-        case OP_UPVALCLOSE:
-        case OP_RETURN:
-        case OP_INHERIT:
+        case NEON_OP_PUSHTRUE:
+        case NEON_OP_PUSHFALSE:
+        case NEON_OP_PUSHNIL:
+        case NEON_OP_POP:
+        case NEON_OP_EQUAL:
+        case NEON_OP_PRIMGREATER:
+        case NEON_OP_PRIMLESS:
+        case NEON_OP_PRIMADD:
+        case NEON_OP_PRIMSUBTRACT:
+        case NEON_OP_PRIMMULTIPLY:
+        case NEON_OP_PRIMDIVIDE:
+        case NEON_OP_PRIMBINAND:
+        case NEON_OP_PRIMBINOR:
+        case NEON_OP_PRIMBINXOR:
+        case NEON_OP_PRIMMODULO:
+        case NEON_OP_PRIMSHIFTLEFT:
+        case NEON_OP_PRIMSHIFTRIGHT:
+        case NEON_OP_PRIMNOT:
+        case NEON_OP_PRIMNEGATE:
+        case NEON_OP_DEBUGPRINT:
+        //case NEON_OP_DUP:
+        case NEON_OP_PUSHONE:
+        case NEON_OP_UPVALCLOSE:
+        case NEON_OP_RETURN:
+        case NEON_OP_INHERIT:
             return 0;
-        case OP_POPN:
-        case OP_PUSHCONST:
-        //case OP_CONSTANT_LONG:
-        //case OP_POPN:
-        case OP_LOCALSET:
-        case OP_LOCALGET:
-        case OP_UPVALSET:
-        case OP_UPVALGET:
-        case OP_PROPERTYGET:
-        case OP_PROPERTYSET:
+        case NEON_OP_POPN:
+        case NEON_OP_PUSHCONST:
+        //case NEON_OP_CONSTANT_LONG:
+        //case NEON_OP_POPN:
+        case NEON_OP_LOCALSET:
+        case NEON_OP_LOCALGET:
+        case NEON_OP_UPVALSET:
+        case NEON_OP_UPVALGET:
+        case NEON_OP_PROPERTYGET:
+        case NEON_OP_PROPERTYSET:
         /*
-        case OP_GET_EXPR_PROPERTY:
-        case OP_SET_EXPR_PROPERTY:
+        case NEON_OP_GET_EXPR_PROPERTY:
+        case NEON_OP_SET_EXPR_PROPERTY:
         */
-        case OP_CALL:
-        case OP_INSTGETSUPER:
-        case OP_GLOBALGET:
-        case OP_GLOBALDEFINE:
-        case OP_GLOBALSET:
-        case OP_CLOSURE:
-        case OP_CLASS:
-        case OP_METHOD:
+        case NEON_OP_CALL:
+        case NEON_OP_INSTGETSUPER:
+        case NEON_OP_GLOBALGET:
+        case NEON_OP_GLOBALDEFINE:
+        case NEON_OP_GLOBALSET:
+        case NEON_OP_CLOSURE:
+        case NEON_OP_CLASS:
+        case NEON_OP_METHOD:
             return 1;
-        case OP_MAKEARRAY:
-        case OP_JUMPNOW:
-        case OP_JUMPIFFALSE:
-        case OP_PSEUDOBREAK:
-        case OP_LOOP:
-        case OP_INSTTHISINVOKE:
-        case OP_INSTSUPERINVOKE:
+        case NEON_OP_MAKEARRAY:
+        case NEON_OP_JUMPNOW:
+        case NEON_OP_JUMPIFFALSE:
+        case NEON_OP_PSEUDOBREAK:
+        case NEON_OP_LOOP:
+        case NEON_OP_INSTTHISINVOKE:
+        case NEON_OP_INSTSUPERINVOKE:
             return 2;
     }
     fprintf(stderr, "internal error: failed to compute operand argument size\n");
     return -1;
 }
 
-int lox_prs_getcodeargscount(const int32_t* bytecode, int ip)
+int neon_prs_getcodeargscount(const int32_t* bytecode, int ip)
 {
     int rc;
     //const char* os;
-    rc = lox_prs_realgetcodeargscount(bytecode, ip);
-    //os = lox_prs_op2str(bytecode[ip]);
+    rc = neon_prs_realgetcodeargscount(bytecode, ip);
+    //os = neon_prs_op2str(bytecode[ip]);
     //fprintf(stderr, "getcodeargscount(..., code=%s) = %d\n", os, rc);
     return rc;
 }
 
-void lox_prs_startloop(AstParser* prs, AstLoop* loop)
+void neon_prs_startloop(NeonAstParser* prs, NeonAstLoop* loop)
 {
     loop->enclosing = prs->currcompiler->loop;
-    loop->start = lox_prs_currentchunk(prs)->count;
+    loop->start = neon_prs_currentchunk(prs)->count;
     loop->scopedepth = prs->currcompiler->scopedepth;
     prs->currcompiler->loop = loop;
 }
 
-void lox_prs_endloop(AstParser* prs)
+void neon_prs_endloop(NeonAstParser* prs)
 {
     int i;
-    Chunk* chunk;
+    NeonChunk* chunk;
     i = prs->currcompiler->loop->body;
-    chunk = lox_prs_currentchunk(prs);
+    chunk = neon_prs_currentchunk(prs);
     while(i < chunk->count)
     {
-        if(chunk->code[i] == OP_PSEUDOBREAK)
+        if(chunk->code[i] == NEON_OP_PSEUDOBREAK)
         {
-            chunk->code[i] = OP_JUMPNOW;
-            lox_prs_emitpatchjump(prs, i + 1);
+            chunk->code[i] = NEON_OP_JUMPNOW;
+            neon_prs_emitpatchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            i += 1 + lox_prs_getcodeargscount(chunk->code, i);
+            i += 1 + neon_prs_getcodeargscount(chunk->code, i);
         }
     }
     prs->currcompiler->loop = prs->currcompiler->loop->enclosing;
 }
 
-int lox_prs_emitjump(AstParser* prs, int32_t instruction)
+int neon_prs_emitjump(NeonAstParser* prs, int32_t instruction)
 {
-    lox_prs_emit1byte(prs, instruction);
-    lox_prs_emit1byte(prs, 0xff);
-    lox_prs_emit1byte(prs, 0xff);
-    return lox_prs_currentchunk(prs)->count - 2;
+    neon_prs_emit1byte(prs, instruction);
+    neon_prs_emit1byte(prs, 0xff);
+    neon_prs_emit1byte(prs, 0xff);
+    return neon_prs_currentchunk(prs)->count - 2;
 }
 
-void lox_prs_emitreturn(AstParser* prs)
+void neon_prs_emitreturn(NeonAstParser* prs)
 {
-    if(prs->currcompiler->type == TYPE_INITIALIZER)
+    if(prs->currcompiler->type == NEON_TYPE_INITIALIZER)
     {
-        lox_prs_emit2byte(prs, OP_LOCALGET, 0);
+        neon_prs_emit2byte(prs, NEON_OP_LOCALGET, 0);
     }
     else
     {
-        lox_prs_emit1byte(prs, OP_PUSHNIL);
+        neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
     }
-    lox_prs_emit1byte(prs, OP_RETURN);
+    neon_prs_emit1byte(prs, NEON_OP_RETURN);
 }
 
-int32_t lox_prs_makeconstant(AstParser* prs, Value value)
+int32_t neon_prs_makeconstant(NeonAstParser* prs, NeonValue value)
 {
     int constant;
-    constant = lox_chunk_pushconst(prs->pvm, lox_prs_currentchunk(prs), value);
+    constant = neon_chunk_pushconst(prs->pvm, neon_prs_currentchunk(prs), value);
     if(constant > UINT8_MAX)
     {
-        lox_prs_raiseerror(prs, "too many constants in one chunk.");
+        neon_prs_raiseerror(prs, "too many constants in one chunk.");
         return 0;
     }
     return (int32_t)constant;
 }
 
-void lox_prs_emitconstant(AstParser* prs, Value value)
+void neon_prs_emitconstant(NeonAstParser* prs, NeonValue value)
 {
-    lox_prs_emit2byte(prs, OP_PUSHCONST, lox_prs_makeconstant(prs, value));
+    neon_prs_emit2byte(prs, NEON_OP_PUSHCONST, neon_prs_makeconstant(prs, value));
 }
 
-void lox_prs_emitpatchjump(AstParser* prs, int offset)
+void neon_prs_emitpatchjump(NeonAstParser* prs, int offset)
 {
     int jump;
     // -2 to adjust for the bytecode for the jump offset itself.
-    jump = lox_prs_currentchunk(prs)->count - offset - 2;
+    jump = neon_prs_currentchunk(prs)->count - offset - 2;
     if(jump > UINT16_MAX)
     {
-        lox_prs_raiseerror(prs, "too much code to jump over.");
+        neon_prs_raiseerror(prs, "too much code to jump over.");
     }
-    lox_prs_currentchunk(prs)->code[offset] = (jump >> 8) & 0xff;
-    lox_prs_currentchunk(prs)->code[offset + 1] = jump & 0xff;
+    neon_prs_currentchunk(prs)->code[offset] = (jump >> 8) & 0xff;
+    neon_prs_currentchunk(prs)->code[offset + 1] = jump & 0xff;
 }
 
-void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncType type)
+void neon_prs_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstFuncType type)
 {
-    AstLocal* local;
+    NeonAstLocal* local;
     compiler->enclosing = prs->currcompiler;
     compiler->compiledfn = NULL;
     compiler->type = type;
     compiler->localcount = 0;
     compiler->scopedepth = 0;
-    compiler->compiledfn = lox_object_makefunction(prs->pvm);
+    compiler->compiledfn = neon_object_makefunction(prs->pvm);
     prs->currcompiler = compiler;
-    if(type != TYPE_SCRIPT)
+    if(type != NEON_TYPE_SCRIPT)
     {
-        prs->currcompiler->compiledfn->name = lox_string_copy(prs->pvm, prs->previous.start, prs->previous.length);
+        prs->currcompiler->compiledfn->name = neon_string_copy(prs->pvm, prs->previous.start, prs->previous.length);
     }
     local = &prs->currcompiler->locals[prs->currcompiler->localcount++];
     local->depth = 0;
@@ -2913,7 +3082,7 @@ void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncType typ
     local->name.start = "";
     local->name.length = 0;
     */
-    if(type != TYPE_FUNCTION)
+    if(type != NEON_TYPE_FUNCTION)
     {
         local->name.start = "this";
         local->name.length = 4;
@@ -2925,55 +3094,55 @@ void lox_prs_compilerinit(AstParser* prs, AstCompiler* compiler, AstFuncType typ
     }
 }
 
-ObjFunction* lox_prs_compilerfinish(AstParser* prs, bool ismainfn)
+NeonObjScriptFunction* neon_prs_compilerfinish(NeonAstParser* prs, bool ismainfn)
 {
-    ObjFunction* fn;
-    lox_prs_emitreturn(prs);
+    NeonObjScriptFunction* fn;
+    neon_prs_emitreturn(prs);
     if(ismainfn)
     {
-        lox_prs_emit1byte(prs, OP_HALTVM);
+        neon_prs_emit1byte(prs, NEON_OP_HALTVM);
     }
     fn = prs->currcompiler->compiledfn;
 #if (DEBUG_PRINT_CODE == 1)
     if(!prs->haderror)
     {
-        lox_chunk_disasm(prs->pvm, prs->pvm->stderrwriter, lox_prs_currentchunk(prs), fn->name != NULL ? fn->name->sbuf->data : "<script>");
+        neon_chunk_disasm(prs->pvm, prs->pvm->stderrwriter, neon_prs_currentchunk(prs), fn->name != NULL ? fn->name->sbuf->data : "<script>");
     }
 #endif
     prs->currcompiler = prs->currcompiler->enclosing;
     return fn;
 }
 
-void lox_prs_scopebegin(AstParser* prs)
+void neon_prs_scopebegin(NeonAstParser* prs)
 {
     prs->currcompiler->scopedepth++;
 }
 
-void lox_prs_scopeend(AstParser* prs)
+void neon_prs_scopeend(NeonAstParser* prs)
 {
-    AstCompiler* pc;
+    NeonAstCompiler* pc;
     pc = prs->currcompiler;
     pc->scopedepth--;
     while(pc->localcount > 0 && pc->locals[pc->localcount - 1].depth > pc->scopedepth)
     {
         if(pc->locals[pc->localcount - 1].iscaptured)
         {
-            lox_prs_emit1byte(prs, OP_UPVALCLOSE);
+            neon_prs_emit1byte(prs, NEON_OP_UPVALCLOSE);
         }
         else
         {
-            lox_prs_emit1byte(prs, OP_POP);
+            neon_prs_emit1byte(prs, NEON_OP_POP);
         }
         pc->localcount--;
     }
 }
 
-int32_t lox_prs_makeidentconstant(AstParser* prs, AstToken* name)
+int32_t neon_prs_makeidentconstant(NeonAstParser* prs, NeonAstToken* name)
 {
-    return lox_prs_makeconstant(prs, OBJ_VAL(lox_string_copy(prs->pvm, name->start, name->length)));
+    return neon_prs_makeconstant(prs, neon_value_makeobject(neon_string_copy(prs->pvm, name->start, name->length)));
 }
 
-bool lox_prs_identsequal(AstToken* a, AstToken* b)
+bool neon_prs_identsequal(NeonAstToken* a, NeonAstToken* b)
 {
     if(a->length != b->length)
     {
@@ -2982,18 +3151,18 @@ bool lox_prs_identsequal(AstToken* a, AstToken* b)
     return memcmp(a->start, b->start, a->length) == 0;
 }
 
-int lox_prs_resolvelocal(AstParser* prs, AstCompiler* compiler, AstToken* name)
+int neon_prs_resolvelocal(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
 {
     int i;
-    AstLocal* local;
+    NeonAstLocal* local;
     for(i = compiler->localcount - 1; i >= 0; i--)
     {
         local = &compiler->locals[i];
-        if(lox_prs_identsequal(name, &local->name))
+        if(neon_prs_identsequal(name, &local->name))
         {
             if(local->depth == -1)
             {
-                lox_prs_raiseerror(prs, "can't read local variable in its own initializer.");
+                neon_prs_raiseerror(prs, "can't read local variable in its own initializer.");
             }
             return i;
         }
@@ -3001,11 +3170,11 @@ int lox_prs_resolvelocal(AstParser* prs, AstCompiler* compiler, AstToken* name)
     return -1;
 }
 
-int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, int32_t index, bool islocal)
+int neon_prs_addupval(NeonAstParser* prs, NeonAstCompiler* compiler, int32_t index, bool islocal)
 {
     int i;
     int upvaluecount;
-    AstUpvalue* upvalue;
+    NeonAstUpvalue* upvalue;
     upvaluecount = compiler->compiledfn->upvaluecount;
     for(i = 0; i < upvaluecount; i++)
     {
@@ -3017,7 +3186,7 @@ int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, int32_t index, bool 
     }
     if(upvaluecount == UINT8_COUNT)
     {
-        lox_prs_raiseerror(prs, "too many closure variables in function.");
+        neon_prs_raiseerror(prs, "too many closure variables in function.");
         return 0;
     }
     compiler->upvalues[upvaluecount].islocal = islocal;
@@ -3025,7 +3194,7 @@ int lox_prs_addupval(AstParser* prs, AstCompiler* compiler, int32_t index, bool 
     return compiler->compiledfn->upvaluecount++;
 }
 
-int lox_prs_resolveupval(AstParser* prs, AstCompiler* compiler, AstToken* name)
+int neon_prs_resolveupval(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
 {
     int local;
     int upvalue;
@@ -3033,26 +3202,26 @@ int lox_prs_resolveupval(AstParser* prs, AstCompiler* compiler, AstToken* name)
     {
         return -1;
     }
-    local = lox_prs_resolvelocal(prs, compiler->enclosing, name);
+    local = neon_prs_resolvelocal(prs, compiler->enclosing, name);
     if(local != -1)
     {
         compiler->enclosing->locals[local].iscaptured = true;
-        return lox_prs_addupval(prs, compiler, (int32_t)local, true);
+        return neon_prs_addupval(prs, compiler, (int32_t)local, true);
     }
-    upvalue = lox_prs_resolveupval(prs, compiler->enclosing, name);
+    upvalue = neon_prs_resolveupval(prs, compiler->enclosing, name);
     if(upvalue != -1)
     {
-        return lox_prs_addupval(prs, compiler, (int32_t)upvalue, false);
+        return neon_prs_addupval(prs, compiler, (int32_t)upvalue, false);
     }
     return -1;
 }
 
-void lox_prs_addlocal(AstParser* prs, AstToken name)
+void neon_prs_addlocal(NeonAstParser* prs, NeonAstToken name)
 {
-    AstLocal* local;
+    NeonAstLocal* local;
     if(prs->currcompiler->localcount == UINT8_COUNT)
     {
-        lox_prs_raiseerror(prs, "too many local variables in function.");
+        neon_prs_raiseerror(prs, "too many local variables in function.");
         return;
     }
     local = &prs->currcompiler->locals[prs->currcompiler->localcount++];
@@ -3061,7 +3230,7 @@ void lox_prs_addlocal(AstParser* prs, AstToken name)
     local->iscaptured = false;
 }
 
-int lox_prs_discardlocals(AstParser* prs, AstCompiler* current)
+int neon_prs_discardlocals(NeonAstParser* prs, NeonAstCompiler* current)
 {
     int n;
     int lc;
@@ -3077,16 +3246,16 @@ int lox_prs_discardlocals(AstParser* prs, AstCompiler* current)
     }
     if(n != 0)
     {
-        lox_prs_emit2byte(prs, OP_POPN, (int32_t)n);
+        neon_prs_emit2byte(prs, NEON_OP_POPN, (int32_t)n);
     }
     return current->localcount - lc - 1;
 }
 
-void lox_prs_parsevarident(AstParser* prs)
+void neon_prs_parsevarident(NeonAstParser* prs)
 {
     int i;
-    AstLocal* local;
-    AstToken* name;
+    NeonAstLocal* local;
+    NeonAstToken* name;
     if(prs->currcompiler->scopedepth == 0)
     {
         return;
@@ -3099,26 +3268,26 @@ void lox_prs_parsevarident(AstParser* prs)
         {
             break;// [negative]
         }
-        if(lox_prs_identsequal(name, &local->name))
+        if(neon_prs_identsequal(name, &local->name))
         {
-            lox_prs_raiseerror(prs, "already a variable with this name in this scope.");
+            neon_prs_raiseerror(prs, "already a variable with this name in this scope.");
         }
     }
-    lox_prs_addlocal(prs, *name);
+    neon_prs_addlocal(prs, *name);
 }
 
-int32_t lox_prs_parsevarname(AstParser* prs, const char* errormessage)
+int32_t neon_prs_parsevarname(NeonAstParser* prs, const char* errormessage)
 {
-    lox_prs_consume(prs, TOK_IDENTIFIER, errormessage);
-    lox_prs_parsevarident(prs);
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, errormessage);
+    neon_prs_parsevarident(prs);
     if(prs->currcompiler->scopedepth > 0)
     {
         return 0;
     }
-    return lox_prs_makeidentconstant(prs, &prs->previous);
+    return neon_prs_makeidentconstant(prs, &prs->previous);
 }
 
-void lox_prs_markinit(AstParser* prs)
+void neon_prs_markinit(NeonAstParser* prs)
 {
     if(prs->currcompiler->scopedepth == 0)
     {
@@ -3127,185 +3296,185 @@ void lox_prs_markinit(AstParser* prs)
     prs->currcompiler->locals[prs->currcompiler->localcount - 1].depth = prs->currcompiler->scopedepth;
 }
 
-void lox_prs_emitdefvar(AstParser* prs, int32_t global)
+void neon_prs_emitdefvar(NeonAstParser* prs, int32_t global)
 {
     if(prs->currcompiler->scopedepth > 0)
     {
-        lox_prs_markinit(prs);
+        neon_prs_markinit(prs);
         return;
     }
-    lox_prs_emit2byte(prs, OP_GLOBALDEFINE, global);
+    neon_prs_emit2byte(prs, NEON_OP_GLOBALDEFINE, global);
 }
 
-int32_t lox_prs_parsearglist(AstParser* prs)
+int32_t neon_prs_parsearglist(NeonAstParser* prs)
 {
     int32_t argc = 0;
-    if(!lox_prs_check(prs, TOK_PARENCLOSE))
+    if(!neon_prs_check(prs, NEON_TOK_PARENCLOSE))
     {
         do
         {
-            lox_prs_parseexpr(prs);
+            neon_prs_parseexpr(prs);
             if(argc == 255)
             {
-                lox_prs_raiseerror(prs, "can't have more than 255 arguments.");
+                neon_prs_raiseerror(prs, "can't have more than 255 arguments.");
             }
             argc++;
-        } while(lox_prs_match(prs, TOK_COMMA));
+        } while(neon_prs_match(prs, NEON_TOK_COMMA));
     }
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after arguments.");
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after arguments.");
     return argc;
 }
 
-void lox_prs_ruleand(AstParser* prs, bool canassign)
+void neon_prs_ruleand(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     int endjump;
-    endjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-    lox_prs_emit1byte(prs, OP_POP);
-    lox_prs_parseprec(prs, PREC_AND);
-    lox_prs_emitpatchjump(prs, endjump);
+    endjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    neon_prs_parseprec(prs, NEON_PREC_AND);
+    neon_prs_emitpatchjump(prs, endjump);
 }
 
-void lox_prs_rulebinary(AstParser* prs, bool canassign)
+void neon_prs_rulebinary(NeonAstParser* prs, bool canassign)
 {
-    AstRule* rule;
-    AstTokType ot;
+    NeonAstRule* rule;
+    NeonAstTokType ot;
     (void)canassign;
     ot = prs->previous.type;
-    rule = lox_prs_getrule(ot);
-    lox_prs_parseprec(prs, (AstPrecedence)(rule->precedence + 1));
+    rule = neon_prs_getrule(ot);
+    neon_prs_parseprec(prs, (NeonAstPrecedence)(rule->precedence + 1));
     switch(ot)
     {
-        case TOK_COMPNOTEQUAL:
-            lox_prs_emit2byte(prs, OP_EQUAL, OP_PRIMNOT);
+        case NEON_TOK_COMPNOTEQUAL:
+            neon_prs_emit2byte(prs, NEON_OP_EQUAL, NEON_OP_PRIMNOT);
             break;
-        case TOK_COMPEQUAL:
-            lox_prs_emit1byte(prs, OP_EQUAL);
+        case NEON_TOK_COMPEQUAL:
+            neon_prs_emit1byte(prs, NEON_OP_EQUAL);
             break;
-        case TOK_COMPGREATERTHAN:
-            lox_prs_emit1byte(prs, OP_PRIMGREATER);
+        case NEON_TOK_COMPGREATERTHAN:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMGREATER);
             break;
-        case TOK_COMPGREATEREQUAL:
-            lox_prs_emit2byte(prs, OP_PRIMLESS, OP_PRIMNOT);
+        case NEON_TOK_COMPGREATEREQUAL:
+            neon_prs_emit2byte(prs, NEON_OP_PRIMLESS, NEON_OP_PRIMNOT);
             break;
-        case TOK_COMPLESSTHAN:
-            lox_prs_emit1byte(prs, OP_PRIMLESS);
+        case NEON_TOK_COMPLESSTHAN:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMLESS);
             break;
-        case TOK_COMPLESSEQUAL:
-            lox_prs_emit2byte(prs, OP_PRIMGREATER, OP_PRIMNOT);
+        case NEON_TOK_COMPLESSEQUAL:
+            neon_prs_emit2byte(prs, NEON_OP_PRIMGREATER, NEON_OP_PRIMNOT);
             break;
-        case TOK_PLUS:
-            lox_prs_emit1byte(prs, OP_PRIMADD);
+        case NEON_TOK_PLUS:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMADD);
             break;
-        case TOK_MINUS:
-            lox_prs_emit1byte(prs, OP_PRIMSUBTRACT);
+        case NEON_TOK_MINUS:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMSUBTRACT);
             break;
-        case TOK_STAR:
-            lox_prs_emit1byte(prs, OP_PRIMMULTIPLY);
+        case NEON_TOK_STAR:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMMULTIPLY);
             break;
-        case TOK_SLASH:
-            lox_prs_emit1byte(prs, OP_PRIMDIVIDE);
+        case NEON_TOK_SLASH:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMDIVIDE);
             break;
-        case TOK_MODULO:
-            lox_prs_emit1byte(prs, OP_PRIMMODULO);
+        case NEON_TOK_MODULO:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMMODULO);
             break;
-        case TOK_BINAND:
-            lox_prs_emit1byte(prs, OP_PRIMBINAND);
+        case NEON_TOK_BINAND:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMBINAND);
             break;
-        case TOK_BINOR:
-            lox_prs_emit1byte(prs, OP_PRIMBINOR);
+        case NEON_TOK_BINOR:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMBINOR);
             break;
-        case TOK_BINXOR:
-            lox_prs_emit1byte(prs, OP_PRIMBINXOR);
+        case NEON_TOK_BINXOR:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMBINXOR);
             break;
-        case TOK_SHIFTLEFT:
-            lox_prs_emit1byte(prs, OP_PRIMSHIFTLEFT);
+        case NEON_TOK_SHIFTLEFT:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMSHIFTLEFT);
             break;
-        case TOK_SHIFTRIGHT:
-            lox_prs_emit1byte(prs, OP_PRIMSHIFTRIGHT);
+        case NEON_TOK_SHIFTRIGHT:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMSHIFTRIGHT);
             break;
         default:
             return;// Unreachable.
     }
 }
 
-void lox_prs_rulecall(AstParser* prs, bool canassign)
+void neon_prs_rulecall(NeonAstParser* prs, bool canassign)
 {
     int32_t argc;
     (void)canassign;
-    argc = lox_prs_parsearglist(prs);
-    lox_prs_emit2byte(prs, OP_CALL, argc);
+    argc = neon_prs_parsearglist(prs);
+    neon_prs_emit2byte(prs, NEON_OP_CALL, argc);
 }
 
-void lox_prs_ruledot(AstParser* prs, bool canassign)
+void neon_prs_ruledot(NeonAstParser* prs, bool canassign)
 {
     int32_t name;
     int32_t argc;
     (void)canassign;
-    lox_prs_consume(prs, TOK_IDENTIFIER, "expect property name after '.'.");
-    name = lox_prs_makeidentconstant(prs, &prs->previous);
-    if(canassign && lox_prs_match(prs, TOK_ASSIGN))
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect property name after '.'.");
+    name = neon_prs_makeidentconstant(prs, &prs->previous);
+    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
     {
-        lox_prs_parseexpr(prs);
-        lox_prs_emit2byte(prs, OP_PROPERTYSET, name);
+        neon_prs_parseexpr(prs);
+        neon_prs_emit2byte(prs, NEON_OP_PROPERTYSET, name);
     }
-    else if(lox_prs_match(prs, TOK_PARENOPEN))
+    else if(neon_prs_match(prs, NEON_TOK_PARENOPEN))
     {
-        argc = lox_prs_parsearglist(prs);
-        lox_prs_emit2byte(prs, OP_INSTTHISINVOKE, name);
-        lox_prs_emit1byte(prs, argc);
+        argc = neon_prs_parsearglist(prs);
+        neon_prs_emit2byte(prs, NEON_OP_INSTTHISINVOKE, name);
+        neon_prs_emit1byte(prs, argc);
     }
     else
     {
-        lox_prs_emit2byte(prs, OP_PROPERTYGET, name);
+        neon_prs_emit2byte(prs, NEON_OP_PROPERTYGET, name);
     }
 }
 
-void lox_prs_ruleliteral(AstParser* prs, bool canassign)
+void neon_prs_ruleliteral(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     switch(prs->previous.type)
     {
-        case TOK_KWFALSE:
-            lox_prs_emit1byte(prs, OP_PUSHFALSE);
+        case NEON_TOK_KWFALSE:
+            neon_prs_emit1byte(prs, NEON_OP_PUSHFALSE);
             break;
-        case TOK_KWNIL:
-            lox_prs_emit1byte(prs, OP_PUSHNIL);
+        case NEON_TOK_KWNIL:
+            neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
             break;
-        case TOK_KWTRUE:
-            lox_prs_emit1byte(prs, OP_PUSHTRUE);
+        case NEON_TOK_KWTRUE:
+            neon_prs_emit1byte(prs, NEON_OP_PUSHTRUE);
             break;
         default:
             return;// Unreachable.
     }
 }
 
-void lox_prs_rulegrouping(AstParser* prs, bool canassign)
+void neon_prs_rulegrouping(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
-    lox_prs_parseexpr(prs);
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after expression");
+    neon_prs_parseexpr(prs);
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after expression");
 }
 
-void lox_prs_rulenumber(AstParser* prs, bool canassign)
+void neon_prs_rulenumber(NeonAstParser* prs, bool canassign)
 {
     double value;
     (void)canassign;
     value = strtod(prs->previous.start, NULL);
-    lox_prs_emitconstant(prs, NUMBER_VAL(value));
+    neon_prs_emitconstant(prs, neon_value_makenumber(value));
 }
 
-void lox_prs_ruleor(AstParser* prs, bool canassign)
+void neon_prs_ruleor(NeonAstParser* prs, bool canassign)
 {
     int endjump;
     int elsejump;
     (void)canassign;
-    elsejump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-    endjump = lox_prs_emitjump(prs, OP_JUMPNOW);
-    lox_prs_emitpatchjump(prs, elsejump);
-    lox_prs_emit1byte(prs, OP_POP);
-    lox_prs_parseprec(prs, PREC_OR);
-    lox_prs_emitpatchjump(prs, endjump);
+    elsejump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    endjump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
+    neon_prs_emitpatchjump(prs, elsejump);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    neon_prs_parseprec(prs, NEON_PREC_OR);
+    neon_prs_emitpatchjump(prs, endjump);
 }
 
 #define stringesc1(c, rpl1) \
@@ -3317,7 +3486,7 @@ void lox_prs_ruleor(AstParser* prs, bool canassign)
         } \
         break;
 
-void lox_prs_rulestring(AstParser* prs, bool canassign)
+void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
 {
     size_t i;
     size_t pi;
@@ -3328,7 +3497,7 @@ void lox_prs_rulestring(AstParser* prs, bool canassign)
     bool needalloc;
     char* buf;
     const char* rawstr;
-    ObjString* os;
+    NeonObjString* os;
     (void)canassign;
     needalloc = false;
     rawstr = prs->previous.start + 1;
@@ -3379,7 +3548,7 @@ void lox_prs_rulestring(AstParser* prs, bool canassign)
                         stringesc1('e', '\e');
                         default:
                             {
-                                lox_prs_raiseerror(prs, "unknown string escape character '%c'", nextc);
+                                neon_prs_raiseerror(prs, "unknown string escape character '%c'", nextc);
                             }
                             break;
                     }
@@ -3393,772 +3562,772 @@ void lox_prs_rulestring(AstParser* prs, bool canassign)
             }
             i++;
         }
-        os = lox_string_take(prs->pvm, buf, nlen);
+        os = neon_string_take(prs->pvm, buf, nlen);
     }
     else
     {
-        os = lox_string_copy(prs->pvm, rawstr, rawlen);
+        os = neon_string_copy(prs->pvm, rawstr, rawlen);
     }
-    lox_prs_emitconstant(prs, OBJ_VAL(os));
+    neon_prs_emitconstant(prs, neon_value_makeobject(os));
 
 }
 
-void lox_prs_doassign(AstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
+void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
 {
 
-    if(canassign && lox_prs_match(prs, TOK_ASSIGN))
+    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
     {
-        lox_prs_parseexpr(prs);
-        lox_prs_emit2byte(prs, setop, (int32_t)arg);
+        neon_prs_parseexpr(prs);
+        neon_prs_emit2byte(prs, setop, (int32_t)arg);
     }
-    else if(canassign && lox_prs_match(prs, TOK_INCREMENT))
+    else if(canassign && neon_prs_match(prs, NEON_TOK_INCREMENT))
     {
-        if(getop == OP_PROPERTYGET /*|| getop == OP_GETPROPERTYGETTHIS*/)
+        if(getop == NEON_OP_PROPERTYGET /*|| getop == NEON_OP_GETPROPERTYGETTHIS*/)
         {
-            lox_prs_emit1byte(prs, OP_DUP);
+            neon_prs_emit1byte(prs, NEON_OP_DUP);
         }
         if(arg != -1)
         {
-            lox_prs_emit2byte(prs, getop, arg);
+            neon_prs_emit2byte(prs, getop, arg);
         }
         else
         {
-            lox_prs_emit2byte(prs, getop, 1);
+            neon_prs_emit2byte(prs, getop, 1);
         }
-        lox_prs_emit2byte(prs, OP_PUSHONE, OP_PRIMADD);
-        lox_prs_emit2byte(prs, setop, arg);
+        neon_prs_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMADD);
+        neon_prs_emit2byte(prs, setop, arg);
     }
-    else if(canassign && lox_prs_match(prs, TOK_DECREMENT))
+    else if(canassign && neon_prs_match(prs, NEON_TOK_DECREMENT))
     {
         /*
-        if(getop == OpCode::OP_PROPERTYGET || getop == OpCode::OP_PROPERTYGETTHIS)
+        if(getop == NeonOpCode::NEON_OP_PROPERTYGET || getop == NeonOpCode::NEON_OP_PROPERTYGETTHIS)
         {
-            emitbyte(OpCode::OP_DUP);
+            emitbyte(NeonOpCode::NEON_OP_DUP);
         }
         */
         if(arg != -1)
         {
-            lox_prs_emit2byte(prs, getop, arg);
+            neon_prs_emit2byte(prs, getop, arg);
         }
         else
         {
-            lox_prs_emit2byte(prs, getop, 1);
+            neon_prs_emit2byte(prs, getop, 1);
         }
-        lox_prs_emit2byte(prs, OP_PUSHONE, OP_PRIMSUBTRACT);
-        lox_prs_emit2byte(prs, setop, arg);
+        neon_prs_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMSUBTRACT);
+        neon_prs_emit2byte(prs, setop, arg);
     }
     else
     {
         if(arg != -1)
         {
-            if(getop == OP_INDEXGET)
+            if(getop == NEON_OP_INDEXGET)
             {
-                lox_prs_emit2byte(prs, getop, (int32_t)0);
+                neon_prs_emit2byte(prs, getop, (int32_t)0);
             }
             else
             {
-                lox_prs_emit2byte(prs, getop, arg);
+                neon_prs_emit2byte(prs, getop, arg);
             }
         }
         else
         {
-            lox_prs_emit2byte(prs, getop, (int32_t)arg);
+            neon_prs_emit2byte(prs, getop, (int32_t)arg);
         }
     }
 }
 
-void lox_prs_parsenamedvar(AstParser* prs, AstToken name, bool canassign)
+void neon_prs_parsenamedvar(NeonAstParser* prs, NeonAstToken name, bool canassign)
 {
     int32_t getop;
     int32_t setop;
     int arg;
     (void)canassign;
-    arg = lox_prs_resolvelocal(prs, prs->currcompiler, &name);
+    arg = neon_prs_resolvelocal(prs, prs->currcompiler, &name);
     if(arg != -1)
     {
-        getop = OP_LOCALGET;
-        setop = OP_LOCALSET;
+        getop = NEON_OP_LOCALGET;
+        setop = NEON_OP_LOCALSET;
     }
-    else if((arg = lox_prs_resolveupval(prs, prs->currcompiler, &name)) != -1)
+    else if((arg = neon_prs_resolveupval(prs, prs->currcompiler, &name)) != -1)
     {
-        getop = OP_UPVALGET;
-        setop = OP_UPVALSET;
+        getop = NEON_OP_UPVALGET;
+        setop = NEON_OP_UPVALSET;
     }
     else
     {
-        arg = lox_prs_makeidentconstant(prs, &name);
-        getop = OP_GLOBALGET;
-        setop = OP_GLOBALSET;
+        arg = neon_prs_makeidentconstant(prs, &name);
+        getop = NEON_OP_GLOBALGET;
+        setop = NEON_OP_GLOBALSET;
     }
-    return lox_prs_doassign(prs, getop, setop, arg, canassign);
+    return neon_prs_doassign(prs, getop, setop, arg, canassign);
 }
 
-void lox_prs_rulevariable(AstParser* prs, bool canassign)
+void neon_prs_rulevariable(NeonAstParser* prs, bool canassign)
 {
-    lox_prs_parsenamedvar(prs, prs->previous, canassign);
+    neon_prs_parsenamedvar(prs, prs->previous, canassign);
 }
 
-AstToken lox_prs_makesyntoken(AstParser* prs, const char* text)
+NeonAstToken neon_prs_makesyntoken(NeonAstParser* prs, const char* text)
 {
-    AstToken token;
+    NeonAstToken token;
     (void)prs;
     token.start = text;
     token.length = (int)strlen(text);
     return token;
 }
 
-void lox_prs_rulesuper(AstParser* prs, bool canassign)
+void neon_prs_rulesuper(NeonAstParser* prs, bool canassign)
 {
     int32_t name;
     int32_t argc;
     (void)canassign;
     if(prs->currclass == NULL)
     {
-        lox_prs_raiseerror(prs, "can't use 'super' outside of a class.");
+        neon_prs_raiseerror(prs, "can't use 'super' outside of a class.");
     }
     else if(!prs->currclass->hassuperclass)
     {
-        lox_prs_raiseerror(prs, "can't use 'super' in a class with no superclass.");
+        neon_prs_raiseerror(prs, "can't use 'super' in a class with no superclass.");
     }
-    lox_prs_consume(prs, TOK_DOT, "expect '.' after 'super'.");
-    lox_prs_consume(prs, TOK_IDENTIFIER, "expect superclass method name.");
-    name = lox_prs_makeidentconstant(prs, &prs->previous);
-    lox_prs_parsenamedvar(prs, lox_prs_makesyntoken(prs, "this"), false);
+    neon_prs_consume(prs, NEON_TOK_DOT, "expect '.' after 'super'.");
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect superclass method name.");
+    name = neon_prs_makeidentconstant(prs, &prs->previous);
+    neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "this"), false);
     /* Superclasses super-get < Superclasses super-invoke */
     /*
-    lox_prs_parsenamedvar(prs, lox_prs_makesyntoken(prs, "super"), false);
-    lox_prs_emit2byte(prs, OP_INSTGETSUPER, name);
+    neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
+    neon_prs_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
     */
-    if(lox_prs_match(prs, TOK_PARENOPEN))
+    if(neon_prs_match(prs, NEON_TOK_PARENOPEN))
     {
-        argc = lox_prs_parsearglist(prs);
-        lox_prs_parsenamedvar(prs, lox_prs_makesyntoken(prs, "super"), false);
-        lox_prs_emit2byte(prs, OP_INSTSUPERINVOKE, name);
-        lox_prs_emit1byte(prs, argc);
+        argc = neon_prs_parsearglist(prs);
+        neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
+        neon_prs_emit2byte(prs, NEON_OP_INSTSUPERINVOKE, name);
+        neon_prs_emit1byte(prs, argc);
     }
     else
     {
-        lox_prs_parsenamedvar(prs, lox_prs_makesyntoken(prs, "super"), false);
-        lox_prs_emit2byte(prs, OP_INSTGETSUPER, name);
+        neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
+        neon_prs_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
     }
 }
 
-void lox_prs_rulethis(AstParser* prs, bool canassign)
+void neon_prs_rulethis(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     if(prs->currclass == NULL)
     {
-        lox_prs_raiseerror(prs, "can't use 'this' outside of a class.");
+        neon_prs_raiseerror(prs, "can't use 'this' outside of a class.");
         return;
     }
-    lox_prs_rulevariable(prs, false);
+    neon_prs_rulevariable(prs, false);
 }
 
-void lox_prs_ruleunary(AstParser* prs, bool canassign)
+void neon_prs_ruleunary(NeonAstParser* prs, bool canassign)
 {
-    AstTokType ot;
+    NeonAstTokType ot;
     (void)canassign;
     ot = prs->previous.type;
     // Compile the operand.
     /* Compiling Expressions unary < Compiling Expressions unary-operand */
-    //lox_prs_parseexpr(prs);
-    lox_prs_parseprec(prs, PREC_UNARY);
+    //neon_prs_parseexpr(prs);
+    neon_prs_parseprec(prs, NEON_PREC_UNARY);
     // Emit the operator instruction.
     switch(ot)
     {
-        case TOK_EXCLAM:
-            lox_prs_emit1byte(prs, OP_PRIMNOT);
+        case NEON_TOK_EXCLAM:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMNOT);
             break;
-        case TOK_MINUS:
-            lox_prs_emit1byte(prs, OP_PRIMNEGATE);
+        case NEON_TOK_MINUS:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMNEGATE);
             break;
         default:
             return;// Unreachable.
     }
 }
 
-void lox_prs_rulearray(AstParser* prs, bool canassign)
+void neon_prs_rulearray(NeonAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
     fprintf(stderr, "parsing array? ... \n");
     count = 0;
-    lox_prs_emit1byte(prs, OP_PUSHNIL);// placeholder for the list
-    if(!lox_prs_check(prs, TOK_BRACKETCLOSE))
+    neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);// placeholder for the list
+    if(!neon_prs_check(prs, NEON_TOK_BRACKETCLOSE))
     {
         do
         {
-            lox_prs_parseexpr(prs);
+            neon_prs_parseexpr(prs);
             count++;
-        } while(lox_prs_match(prs, TOK_COMMA));
+        } while(neon_prs_match(prs, NEON_TOK_COMMA));
     }
-    lox_prs_consume(prs, TOK_BRACKETCLOSE, "expected ']' at end of list");
+    neon_prs_consume(prs, NEON_TOK_BRACKETCLOSE, "expected ']' at end of list");
     fprintf(stderr, "parsing array: count=%d\n", count);
-    lox_prs_emit2byte(prs, OP_MAKEARRAY, count);
+    neon_prs_emit2byte(prs, NEON_OP_MAKEARRAY, count);
 }
 
-void lox_prs_ruleindex(AstParser* prs, bool canassign)
+void neon_prs_ruleindex(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     fprintf(stderr, "parsing index?\n");
-    lox_prs_parseexpr(prs);
-    if(!lox_prs_match(prs, TOK_BRACKETCLOSE))
+    neon_prs_parseexpr(prs);
+    if(!neon_prs_match(prs, NEON_TOK_BRACKETCLOSE))
     {
         canassign = false;
     }
-    //lox_prs_consume(prs, TOK_BRACKETCLOSE, "expected ']' after indexing");
+    //neon_prs_consume(prs, NEON_TOK_BRACKETCLOSE, "expected ']' after indexing");
     if(canassign)
     {
-        lox_prs_doassign(prs, OP_INDEXGET, OP_INDEXSET, -1, canassign);
+        neon_prs_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, canassign);
     }
     else
     {
-        lox_prs_emit1byte(prs, OP_INDEXGET);
+        neon_prs_emit1byte(prs, NEON_OP_INDEXGET);
     }
 }
 
 /* clang-format off */
-static const AstRule parserules[] = {
+static const NeonAstRule parserules[] = {
     /* Compiling Expressions rules < Calls and Functions infix-left-paren */
-    // [TOK_PARENOPEN]    = {grouping, NULL,   PREC_NONE},
-    [TOK_PARENOPEN] = { lox_prs_rulegrouping, lox_prs_rulecall, PREC_CALL },
-    [TOK_PARENCLOSE] = { NULL, NULL, PREC_NONE },
-    [TOK_BRACEOPEN] = { NULL, NULL, PREC_NONE },// [big]
-    [TOK_BRACECLOSE] = { NULL, NULL, PREC_NONE },
-    [TOK_BRACKETOPEN] = { lox_prs_rulearray, lox_prs_ruleindex, PREC_CALL },
-    [TOK_BRACKETCLOSE] = { NULL, NULL, PREC_NONE },
-    [TOK_COMMA] = { NULL, NULL, PREC_NONE },
+    // [NEON_TOK_PARENOPEN]    = {grouping, NULL,   NEON_PREC_NONE},
+    [NEON_TOK_PARENOPEN] = { neon_prs_rulegrouping, neon_prs_rulecall, NEON_PREC_CALL },
+    [NEON_TOK_PARENCLOSE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_BRACEOPEN] = { NULL, NULL, NEON_PREC_NONE },// [big]
+    [NEON_TOK_BRACECLOSE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_BRACKETOPEN] = { neon_prs_rulearray, neon_prs_ruleindex, NEON_PREC_CALL },
+    [NEON_TOK_BRACKETCLOSE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_COMMA] = { NULL, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Classes and Instances table-dot */
-    // [TOK_DOT]           = {NULL,     NULL,   PREC_NONE},
-    [TOK_DOT] = { NULL, lox_prs_ruledot, PREC_CALL },
-    [TOK_MINUS] = { lox_prs_ruleunary, lox_prs_rulebinary, PREC_TERM },
-    [TOK_PLUS] = { NULL, lox_prs_rulebinary, PREC_TERM },
-    [TOK_SEMICOLON] = { NULL, NULL, PREC_NONE },
-    [TOK_NEWLINE] = { NULL, NULL, PREC_NONE },
-    [TOK_SLASH] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_STAR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_MODULO] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_BINAND] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_BINOR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_BINXOR] = { NULL, lox_prs_rulebinary, PREC_FACTOR },
-    [TOK_SHIFTLEFT] = {NULL, lox_prs_rulebinary, PREC_SHIFT},
-    [TOK_SHIFTRIGHT] = {NULL, lox_prs_rulebinary, PREC_SHIFT},
-    [TOK_INCREMENT] = {NULL, NULL, PREC_NONE},
-    [TOK_DECREMENT] = {NULL, NULL, PREC_NONE},
+    // [NEON_TOK_DOT]           = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_DOT] = { NULL, neon_prs_ruledot, NEON_PREC_CALL },
+    [NEON_TOK_MINUS] = { neon_prs_ruleunary, neon_prs_rulebinary, NEON_PREC_TERM },
+    [NEON_TOK_PLUS] = { NULL, neon_prs_rulebinary, NEON_PREC_TERM },
+    [NEON_TOK_SEMICOLON] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_NEWLINE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_SLASH] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_STAR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_MODULO] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_BINAND] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_BINOR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_BINXOR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
+    [NEON_TOK_SHIFTLEFT] = {NULL, neon_prs_rulebinary, NEON_PREC_SHIFT},
+    [NEON_TOK_SHIFTRIGHT] = {NULL, neon_prs_rulebinary, NEON_PREC_SHIFT},
+    [NEON_TOK_INCREMENT] = {NULL, NULL, NEON_PREC_NONE},
+    [NEON_TOK_DECREMENT] = {NULL, NULL, NEON_PREC_NONE},
     /* Compiling Expressions rules < Types of Values table-not */
-    // [TOK_EXCLAM]          = {NULL,     NULL,   PREC_NONE},
-    [TOK_EXCLAM] = { lox_prs_ruleunary, NULL, PREC_NONE },
+    // [NEON_TOK_EXCLAM]          = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_EXCLAM] = { neon_prs_ruleunary, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Types of Values table-equal */
-    // [TOK_COMPNOTEQUAL]    = {NULL,     NULL,   PREC_NONE},
-    [TOK_COMPNOTEQUAL] = { NULL, lox_prs_rulebinary, PREC_EQUALITY },
-    [TOK_ASSIGN] = { NULL, NULL, PREC_NONE },
+    // [NEON_TOK_COMPNOTEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_COMPNOTEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY },
+    [NEON_TOK_ASSIGN] = { NULL, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Types of Values table-comparisons */
-    // [TOK_COMPEQUAL]   = {NULL,     NULL,   PREC_NONE},
-    // [TOK_COMPGREATERTHAN]       = {NULL,     NULL,   PREC_NONE},
-    // [TOK_COMPGREATEREQUAL] = {NULL,     NULL,   PREC_NONE},
-    // [TOK_COMPLESSTHAN]          = {NULL,     NULL,   PREC_NONE},
-    // [TOK_COMPLESSEQUAL]    = {NULL,     NULL,   PREC_NONE},
-    [TOK_COMPEQUAL] = { NULL, lox_prs_rulebinary, PREC_EQUALITY },
-    [TOK_COMPGREATERTHAN] = { NULL, lox_prs_rulebinary, PREC_COMPARISON },
-    [TOK_COMPGREATEREQUAL] = { NULL, lox_prs_rulebinary, PREC_COMPARISON },
-    [TOK_COMPLESSTHAN] = { NULL, lox_prs_rulebinary, PREC_COMPARISON },
-    [TOK_COMPLESSEQUAL] = { NULL, lox_prs_rulebinary, PREC_COMPARISON },
+    // [NEON_TOK_COMPEQUAL]   = {NULL,     NULL,   NEON_PREC_NONE},
+    // [NEON_TOK_COMPGREATERTHAN]       = {NULL,     NULL,   NEON_PREC_NONE},
+    // [NEON_TOK_COMPGREATEREQUAL] = {NULL,     NULL,   NEON_PREC_NONE},
+    // [NEON_TOK_COMPLESSTHAN]          = {NULL,     NULL,   NEON_PREC_NONE},
+    // [NEON_TOK_COMPLESSEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_COMPEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY },
+    [NEON_TOK_COMPGREATERTHAN] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
+    [NEON_TOK_COMPGREATEREQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
+    [NEON_TOK_COMPLESSTHAN] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
+    [NEON_TOK_COMPLESSEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
     /* Compiling Expressions rules < Global Variables table-identifier */
-    // [TOK_IDENTIFIER]    = {NULL,     NULL,   PREC_NONE},
-    [TOK_IDENTIFIER] = { lox_prs_rulevariable, NULL, PREC_NONE },
+    // [NEON_TOK_IDENTIFIER]    = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_IDENTIFIER] = { neon_prs_rulevariable, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Strings table-string */
-    // [TOK_STRING]        = {NULL,     NULL,   PREC_NONE},
-    [TOK_STRING] = { lox_prs_rulestring, NULL, PREC_NONE },
-    [TOK_NUMBER] = { lox_prs_rulenumber, NULL, PREC_NONE },
+    // [NEON_TOK_STRING]        = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_STRING] = { neon_prs_rulestring, NULL, NEON_PREC_NONE },
+    [NEON_TOK_NUMBER] = { neon_prs_rulenumber, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Jumping Back and Forth table-and */
-    // [TOK_KWAND]           = {NULL,     NULL,   PREC_NONE},
-    [TOK_KWBREAK] = {NULL, NULL, PREC_NONE},
-    [TOK_KWCONTINUE] = { NULL, NULL, PREC_NONE },
-    [TOK_KWAND] = { NULL, lox_prs_ruleand, PREC_AND },
-    [TOK_KWCLASS] = { NULL, NULL, PREC_NONE },
-    [TOK_KWELSE] = { NULL, NULL, PREC_NONE },
+    // [NEON_TOK_KWAND]           = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_KWBREAK] = {NULL, NULL, NEON_PREC_NONE},
+    [NEON_TOK_KWCONTINUE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWAND] = { NULL, neon_prs_ruleand, NEON_PREC_AND },
+    [NEON_TOK_KWCLASS] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWELSE] = { NULL, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Types of Values table-false */
-    // [TOK_KWFALSE]         = {NULL,     NULL,   PREC_NONE},
-    [TOK_KWFALSE] = { lox_prs_ruleliteral, NULL, PREC_NONE },
-    [TOK_KWFOR] = { NULL, NULL, PREC_NONE },
-    [TOK_KWFUNCTION] = { NULL, NULL, PREC_NONE },
-    [TOK_KWIF] = { NULL, NULL, PREC_NONE },
+    // [NEON_TOK_KWFALSE]         = {NULL,     NULL,   NEON_PREC_NONE},
+    [NEON_TOK_KWFALSE] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWFOR] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWFUNCTION] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWIF] = { NULL, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Types of Values table-nil
-    * [TOK_KWNIL]           = {NULL,     NULL,   PREC_NONE},
+    * [NEON_TOK_KWNIL]           = {NULL,     NULL,   NEON_PREC_NONE},
     */
-    [TOK_KWNIL] = { lox_prs_ruleliteral, NULL, PREC_NONE },
+    [NEON_TOK_KWNIL] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Jumping Back and Forth table-or
-    * [TOK_KWOR]            = {NULL,     NULL,   PREC_NONE},
+    * [NEON_TOK_KWOR]            = {NULL,     NULL,   NEON_PREC_NONE},
     */
-    [TOK_KWOR] = { NULL, lox_prs_ruleor, PREC_OR },
-    [TOK_KWDEBUGPRINT] = { NULL, NULL, PREC_NONE },
-    [TOK_KWRETURN] = { NULL, NULL, PREC_NONE },
+    [NEON_TOK_KWOR] = { NULL, neon_prs_ruleor, NEON_PREC_OR },
+    [NEON_TOK_KWDEBUGPRINT] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWRETURN] = { NULL, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Superclasses table-super
-    * [TOK_KWSUPER]         = {NULL,     NULL,   PREC_NONE},
+    * [NEON_TOK_KWSUPER]         = {NULL,     NULL,   NEON_PREC_NONE},
     */
-    [TOK_KWSUPER] = { lox_prs_rulesuper, NULL, PREC_NONE },
+    [NEON_TOK_KWSUPER] = { neon_prs_rulesuper, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Methods and Initializers table-this
-    * [TOK_KWTHIS]          = {NULL,     NULL,   PREC_NONE},
+    * [NEON_TOK_KWTHIS]          = {NULL,     NULL,   NEON_PREC_NONE},
     */
-    [TOK_KWTHIS] = { lox_prs_rulethis, NULL, PREC_NONE },
+    [NEON_TOK_KWTHIS] = { neon_prs_rulethis, NULL, NEON_PREC_NONE },
     /* Compiling Expressions rules < Types of Values table-true
-    * [TOK_KWTRUE]          = {NULL,     NULL,   PREC_NONE},
+    * [NEON_TOK_KWTRUE]          = {NULL,     NULL,   NEON_PREC_NONE},
     */
-    [TOK_KWTRUE] = { lox_prs_ruleliteral, NULL, PREC_NONE },
-    [TOK_KWVAR] = { NULL, NULL, PREC_NONE },
-    [TOK_KWWHILE] = { NULL, NULL, PREC_NONE },
-    [TOK_ERROR] = { NULL, NULL, PREC_NONE },
-    [TOK_EOF] = { NULL, NULL, PREC_NONE },
+    [NEON_TOK_KWTRUE] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWVAR] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_KWWHILE] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_ERROR] = { NULL, NULL, NEON_PREC_NONE },
+    [NEON_TOK_EOF] = { NULL, NULL, NEON_PREC_NONE },
 };
 /* clang-format on */
 
-AstRule* lox_prs_getrule(AstTokType type)
+NeonAstRule* neon_prs_getrule(NeonAstTokType type)
 {
-    return (AstRule*)&parserules[type];
+    return (NeonAstRule*)&parserules[type];
 }
 
-void lox_prs_parseprec(AstParser* prs, AstPrecedence precedence)
+void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
 {
     bool canassign;
-    AstParseFN infixrule;
-    AstParseFN prefixrule;
-    lox_prs_advance(prs);
-    prefixrule = lox_prs_getrule(prs->previous.type)->prefix;
+    NeonAstParseFN infixrule;
+    NeonAstParseFN prefixrule;
+    neon_prs_advance(prs);
+    prefixrule = neon_prs_getrule(prs->previous.type)->prefix;
     if(prefixrule == NULL)
     {
-        lox_prs_raiseerror(prs, "expected expression");
+        neon_prs_raiseerror(prs, "expected expression");
         return;
     }
-    canassign = precedence <= PREC_ASSIGNMENT;
+    canassign = precedence <= NEON_PREC_ASSIGNMENT;
     prefixrule(prs, canassign);
-    while(precedence <= lox_prs_getrule(prs->current.type)->precedence)
+    while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
     {
-        lox_prs_advance(prs);
-        infixrule = lox_prs_getrule(prs->previous.type)->infix;
+        neon_prs_advance(prs);
+        infixrule = neon_prs_getrule(prs->previous.type)->infix;
         /* Compiling Expressions infix < Global Variables infix-rule */
         //infixrule();
         infixrule(prs, canassign);
     }
-    if(canassign && lox_prs_match(prs, TOK_ASSIGN))
+    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
     {
-        lox_prs_raiseerror(prs, "invalid assignment target");
+        neon_prs_raiseerror(prs, "invalid assignment target");
     }
 }
 
-void lox_prs_parseexpr(AstParser* prs)
+void neon_prs_parseexpr(NeonAstParser* prs)
 {
     /* Compiling Expressions expression < Compiling Expressions expression-body
     // What goes here?
     */
-    lox_prs_parseprec(prs, PREC_ASSIGNMENT);
+    neon_prs_parseprec(prs, NEON_PREC_ASSIGNMENT);
 }
 
-void lox_prs_parseblock(AstParser* prs)
+void neon_prs_parseblock(NeonAstParser* prs)
 {
-    while(!lox_prs_check(prs, TOK_BRACECLOSE) && !lox_prs_check(prs, TOK_EOF))
+    while(!neon_prs_check(prs, NEON_TOK_BRACECLOSE) && !neon_prs_check(prs, NEON_TOK_EOF))
     {
-        lox_prs_parsedecl(prs);
+        neon_prs_parsedecl(prs);
     }
-    lox_prs_consume(prs, TOK_BRACECLOSE, "expect '}' after block.");
+    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expect '}' after block.");
 }
 
-void lox_prs_parsefunction(AstParser* prs, AstFuncType type)
+void neon_prs_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
 {
     int i;
     int32_t constant;
-    ObjFunction* fn;
-    AstCompiler compiler;
-    lox_prs_compilerinit(prs, &compiler, type);
-    lox_prs_scopebegin(prs);// [no-end-scope]
-    lox_prs_consume(prs, TOK_PARENOPEN, "expect '(' after function name.");
-    if(!lox_prs_check(prs, TOK_PARENCLOSE))
+    NeonObjScriptFunction* fn;
+    NeonAstCompiler compiler;
+    neon_prs_compilerinit(prs, &compiler, type);
+    neon_prs_scopebegin(prs);// [no-end-scope]
+    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expect '(' after function name.");
+    if(!neon_prs_check(prs, NEON_TOK_PARENCLOSE))
     {
         do
         {
             prs->currcompiler->compiledfn->arity++;
             if(prs->currcompiler->compiledfn->arity > 255)
             {
-                lox_prs_raiseatcurrent(prs, "can't have more than 255 parameters.");
+                neon_prs_raiseatcurrent(prs, "can't have more than 255 parameters.");
             }
-            constant = lox_prs_parsevarname(prs, "expect parameter name.");
-            lox_prs_emitdefvar(prs, constant);
-        } while(lox_prs_match(prs, TOK_COMMA));
+            constant = neon_prs_parsevarname(prs, "expect parameter name.");
+            neon_prs_emitdefvar(prs, constant);
+        } while(neon_prs_match(prs, NEON_TOK_COMMA));
     }
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after parameters.");
-    lox_prs_consume(prs, TOK_BRACEOPEN, "expect '{' before function body.");
-    lox_prs_parseblock(prs);
-    fn = lox_prs_compilerfinish(prs, false);
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after parameters.");
+    neon_prs_consume(prs, NEON_TOK_BRACEOPEN, "expect '{' before function body.");
+    neon_prs_parseblock(prs);
+    fn = neon_prs_compilerfinish(prs, false);
     /* Calls and Functions compile-function < Closures emit-closure */
-    // lox_prs_emit2byte(prs, OP_PUSHCONST, lox_prs_makeconstant(prs, OBJ_VAL(fn)));
-    lox_prs_emit2byte(prs, OP_CLOSURE, lox_prs_makeconstant(prs, OBJ_VAL(fn)));
+    // neon_prs_emit2byte(prs, NEON_OP_PUSHCONST, neon_prs_makeconstant(prs, neon_value_makeobject(fn)));
+    neon_prs_emit2byte(prs, NEON_OP_CLOSURE, neon_prs_makeconstant(prs, neon_value_makeobject(fn)));
     for(i = 0; i < fn->upvaluecount; i++)
     {
-        lox_prs_emit1byte(prs, compiler.upvalues[i].islocal ? 1 : 0);
-        lox_prs_emit1byte(prs, compiler.upvalues[i].index);
+        neon_prs_emit1byte(prs, compiler.upvalues[i].islocal ? 1 : 0);
+        neon_prs_emit1byte(prs, compiler.upvalues[i].index);
     }
 }
 
-void lox_prs_parsemethod(AstParser* prs)
+void neon_prs_parsemethod(NeonAstParser* prs)
 {
     int32_t constant;
-    AstFuncType type;
-    lox_prs_consume(prs, TOK_IDENTIFIER, "expect method name.");
-    constant = lox_prs_makeidentconstant(prs, &prs->previous);
+    NeonAstFuncType type;
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect method name.");
+    constant = neon_prs_makeidentconstant(prs, &prs->previous);
 
     /* Methods and Initializers method-body < Methods and Initializers method-type */
-    //type = TYPE_FUNCTION;
-    type = TYPE_METHOD;
+    //type = NEON_TYPE_FUNCTION;
+    type = NEON_TYPE_METHOD;
     if(prs->previous.length == 4 && memcmp(prs->previous.start, "init", 4) == 0)
     {
-        type = TYPE_INITIALIZER;
+        type = NEON_TYPE_INITIALIZER;
     }
-    lox_prs_parsefunction(prs, type);
-    lox_prs_emit2byte(prs, OP_METHOD, constant);
+    neon_prs_parsefunction(prs, type);
+    neon_prs_emit2byte(prs, NEON_OP_METHOD, constant);
 }
 
-void lox_prs_parseclassdecl(AstParser* prs)
+void neon_prs_parseclassdecl(NeonAstParser* prs)
 {
     int32_t nameconstant;
-    AstToken classname;
-    AstClassCompiler classcompiler;
-    lox_prs_consume(prs, TOK_IDENTIFIER, "expect class name.");
+    NeonAstToken classname;
+    NeonAstClassCompiler classcompiler;
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect class name.");
     classname = prs->previous;
-    nameconstant = lox_prs_makeidentconstant(prs, &prs->previous);
-    lox_prs_parsevarident(prs);
-    lox_prs_emit2byte(prs, OP_CLASS, nameconstant);
-    lox_prs_emitdefvar(prs, nameconstant);
+    nameconstant = neon_prs_makeidentconstant(prs, &prs->previous);
+    neon_prs_parsevarident(prs);
+    neon_prs_emit2byte(prs, NEON_OP_CLASS, nameconstant);
+    neon_prs_emitdefvar(prs, nameconstant);
     classcompiler.hassuperclass = false;
     classcompiler.enclosing = prs->currclass;
     prs->currclass = &classcompiler;
-    if(lox_prs_match(prs, TOK_COMPLESSTHAN))
+    if(neon_prs_match(prs, NEON_TOK_COMPLESSTHAN))
     {
-        lox_prs_consume(prs, TOK_IDENTIFIER, "expect superclass name");
-        lox_prs_rulevariable(prs, false);
-        if(lox_prs_identsequal(&classname, &prs->previous))
+        neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect superclass name");
+        neon_prs_rulevariable(prs, false);
+        if(neon_prs_identsequal(&classname, &prs->previous))
         {
-            lox_prs_raiseerror(prs, "a class cannot inherit from itself");
+            neon_prs_raiseerror(prs, "a class cannot inherit from itself");
         }
-        lox_prs_scopebegin(prs);
-        lox_prs_addlocal(prs, lox_prs_makesyntoken(prs, "super"));
-        lox_prs_emitdefvar(prs, 0);
-        lox_prs_parsenamedvar(prs, classname, false);
-        lox_prs_emit1byte(prs, OP_INHERIT);
+        neon_prs_scopebegin(prs);
+        neon_prs_addlocal(prs, neon_prs_makesyntoken(prs, "super"));
+        neon_prs_emitdefvar(prs, 0);
+        neon_prs_parsenamedvar(prs, classname, false);
+        neon_prs_emit1byte(prs, NEON_OP_INHERIT);
         classcompiler.hassuperclass = true;
     }
-    lox_prs_parsenamedvar(prs, classname, false);
-    lox_prs_consume(prs, TOK_BRACEOPEN, "expect '{' before class body");
-    while(!lox_prs_check(prs, TOK_BRACECLOSE) && !lox_prs_check(prs, TOK_EOF))
+    neon_prs_parsenamedvar(prs, classname, false);
+    neon_prs_consume(prs, NEON_TOK_BRACEOPEN, "expect '{' before class body");
+    while(!neon_prs_check(prs, NEON_TOK_BRACECLOSE) && !neon_prs_check(prs, NEON_TOK_EOF))
     {
-        lox_prs_parsemethod(prs);
+        neon_prs_parsemethod(prs);
     }
-    lox_prs_consume(prs, TOK_BRACECLOSE, "expect '}' after class body");
-    lox_prs_emit1byte(prs, OP_POP);
+    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expect '}' after class body");
+    neon_prs_emit1byte(prs, NEON_OP_POP);
     if(classcompiler.hassuperclass)
     {
-        lox_prs_scopeend(prs);
+        neon_prs_scopeend(prs);
     }
     prs->currclass = prs->currclass->enclosing;
 }
 
-void lox_prs_parsefuncdecl(AstParser* prs)
+void neon_prs_parsefuncdecl(NeonAstParser* prs)
 {
     int32_t global;
-    global = lox_prs_parsevarname(prs, "expect function name.");
-    lox_prs_markinit(prs);
-    lox_prs_parsefunction(prs, TYPE_FUNCTION);
-    lox_prs_emitdefvar(prs, global);
+    global = neon_prs_parsevarname(prs, "expect function name.");
+    neon_prs_markinit(prs);
+    neon_prs_parsefunction(prs, NEON_TYPE_FUNCTION);
+    neon_prs_emitdefvar(prs, global);
 }
 
-void lox_prs_parsevardecl(AstParser* prs)
+void neon_prs_parsevardecl(NeonAstParser* prs)
 {
     int32_t global;
-    global = lox_prs_parsevarname(prs, "expect variable name.");
-    if(lox_prs_match(prs, TOK_ASSIGN))
+    global = neon_prs_parsevarname(prs, "expect variable name.");
+    if(neon_prs_match(prs, NEON_TOK_ASSIGN))
     {
-        lox_prs_parseexpr(prs);
+        neon_prs_parseexpr(prs);
     }
     else
     {
-        lox_prs_emit1byte(prs, OP_PUSHNIL);
+        neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
     }
-    lox_prs_skipsemicolon(prs);
-    lox_prs_emitdefvar(prs, global);
+    neon_prs_skipsemicolon(prs);
+    neon_prs_emitdefvar(prs, global);
 }
 
-void lox_prs_parseexprstmt(AstParser* prs)
+void neon_prs_parseexprstmt(NeonAstParser* prs)
 {
-    lox_prs_parseexpr(prs);
-    lox_prs_skipsemicolon(prs);
-    lox_prs_emit1byte(prs, OP_POP);
+    neon_prs_parseexpr(prs);
+    neon_prs_skipsemicolon(prs);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
 }
 
-void lox_prs_parseforstmt(AstParser* prs)
+void neon_prs_parseforstmt(NeonAstParser* prs)
 {
     int loopstart;
     int exitjump;
     int bodyjump;
     int incrementstart;
-    AstLoop loop;
-    lox_prs_scopebegin(prs);
-    lox_prs_startloop(prs, &loop);
-    lox_prs_consume(prs, TOK_PARENOPEN, "Expect '(' after 'for'.");
-    if(lox_prs_match(prs, TOK_SEMICOLON))
+    NeonAstLoop loop;
+    neon_prs_scopebegin(prs);
+    neon_prs_startloop(prs, &loop);
+    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "Expect '(' after 'for'.");
+    if(neon_prs_match(prs, NEON_TOK_SEMICOLON))
     {
         // No initializer.
     }
-    else if(lox_prs_match(prs, TOK_KWVAR))
+    else if(neon_prs_match(prs, NEON_TOK_KWVAR))
     {
-        lox_prs_parsevardecl(prs);
+        neon_prs_parsevardecl(prs);
     }
     else
     {
-        lox_prs_parseexprstmt(prs);
+        neon_prs_parseexprstmt(prs);
     }
-    loopstart = lox_prs_currentchunk(prs)->count;
+    loopstart = neon_prs_currentchunk(prs)->count;
     exitjump = -1;
-    if(!lox_prs_match(prs, TOK_SEMICOLON))
+    if(!neon_prs_match(prs, NEON_TOK_SEMICOLON))
     {
-        lox_prs_parseexpr(prs);
-        lox_prs_consume(prs, TOK_SEMICOLON, "Expect ';' after loop condition.");
+        neon_prs_parseexpr(prs);
+        neon_prs_consume(prs, NEON_TOK_SEMICOLON, "Expect ';' after loop condition.");
         // Jump out of the loop if the condition is false.
-        exitjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-        lox_prs_emit1byte(prs, OP_POP);// Condition
+        exitjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
+        neon_prs_emit1byte(prs, NEON_OP_POP);// Condition
     }
-    if(!lox_prs_match(prs, TOK_PARENCLOSE))
+    if(!neon_prs_match(prs, NEON_TOK_PARENCLOSE))
     {
-        bodyjump = lox_prs_emitjump(prs, OP_JUMPNOW);
-        incrementstart = lox_prs_currentchunk(prs)->count;
+        bodyjump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
+        incrementstart = neon_prs_currentchunk(prs)->count;
         // when we 'continue' in for loop, we want to jump here
         prs->currcompiler->loop->start = incrementstart;
-        lox_prs_parseexpr(prs);
-        lox_prs_emit1byte(prs, OP_POP);
-        lox_prs_consume(prs, TOK_PARENCLOSE, "Expect ')' after 'for' clauses.");
-        lox_prs_emitloop(prs, loopstart);
+        neon_prs_parseexpr(prs);
+        neon_prs_emit1byte(prs, NEON_OP_POP);
+        neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "Expect ')' after 'for' clauses.");
+        neon_prs_emitloop(prs, loopstart);
         loopstart = incrementstart;
-        lox_prs_emitpatchjump(prs, bodyjump);
+        neon_prs_emitpatchjump(prs, bodyjump);
     }
-    prs->currcompiler->loop->body = lox_prs_currentchunk(prs)->count;
-    lox_prs_parsestmt(prs);
-    lox_prs_emitloop(prs, loopstart);
+    prs->currcompiler->loop->body = neon_prs_currentchunk(prs)->count;
+    neon_prs_parsestmt(prs);
+    neon_prs_emitloop(prs, loopstart);
     if(exitjump != -1)
     {
-        lox_prs_emitpatchjump(prs, exitjump);
-        lox_prs_emit1byte(prs, OP_POP);
+        neon_prs_emitpatchjump(prs, exitjump);
+        neon_prs_emit1byte(prs, NEON_OP_POP);
     }
-    lox_prs_endloop(prs);
-    lox_prs_scopeend(prs);
+    neon_prs_endloop(prs);
+    neon_prs_scopeend(prs);
 }
 
-void lox_prs_parsewhilestmt(AstParser* prs)
+void neon_prs_parsewhilestmt(NeonAstParser* prs)
 {
     int loopstart;
     int exitjump;
-    AstLoop loop;
-    lox_prs_startloop(prs, &loop);
-    loopstart = lox_prs_currentchunk(prs)->count;
-    lox_prs_consume(prs, TOK_PARENOPEN, "expect '(' after 'while'");
-    lox_prs_parseexpr(prs);
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after condition");
-    exitjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-    lox_prs_emit1byte(prs, OP_POP);
-    prs->currcompiler->loop->body = lox_prs_currentchunk(prs)->count;
-    lox_prs_parsestmt(prs);
-    lox_prs_emitloop(prs, loopstart);
-    lox_prs_emitpatchjump(prs, exitjump);
-    lox_prs_emit1byte(prs, OP_POP);
-    lox_prs_endloop(prs);
+    NeonAstLoop loop;
+    neon_prs_startloop(prs, &loop);
+    loopstart = neon_prs_currentchunk(prs)->count;
+    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expect '(' after 'while'");
+    neon_prs_parseexpr(prs);
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after condition");
+    exitjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    prs->currcompiler->loop->body = neon_prs_currentchunk(prs)->count;
+    neon_prs_parsestmt(prs);
+    neon_prs_emitloop(prs, loopstart);
+    neon_prs_emitpatchjump(prs, exitjump);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    neon_prs_endloop(prs);
 }
 
-void lox_prs_parsebreakstmt(AstParser* prs)
+void neon_prs_parsebreakstmt(NeonAstParser* prs)
 {
     if(prs->currcompiler->loop == NULL)
     {
-        lox_prs_raiseerror(prs, "'break' can only be used in a loop");
+        neon_prs_raiseerror(prs, "'break' can only be used in a loop");
         return;
     }
-    lox_prs_skipsemicolon(prs);
-    lox_prs_discardlocals(prs, prs->currcompiler);
-    lox_prs_emitjump(prs, OP_PSEUDOBREAK);
+    neon_prs_skipsemicolon(prs);
+    neon_prs_discardlocals(prs, prs->currcompiler);
+    neon_prs_emitjump(prs, NEON_OP_PSEUDOBREAK);
 }
 
-void lox_prs_parsecontinuestmt(AstParser* prs)
+void neon_prs_parsecontinuestmt(NeonAstParser* prs)
 {
     if(prs->currcompiler->loop == NULL)
     {
-        lox_prs_raiseerror(prs, "cannot use 'continue' outside of a loop");
+        neon_prs_raiseerror(prs, "cannot use 'continue' outside of a loop");
         return;
     }
-    lox_prs_skipsemicolon(prs);
-    lox_prs_discardlocals(prs, prs->currcompiler);
-    lox_prs_emitloop(prs, prs->currcompiler->loop->start);
+    neon_prs_skipsemicolon(prs);
+    neon_prs_discardlocals(prs, prs->currcompiler);
+    neon_prs_emitloop(prs, prs->currcompiler->loop->start);
 }
 
-void lox_prs_parseifstmt(AstParser* prs)
+void neon_prs_parseifstmt(NeonAstParser* prs)
 {
     int thenjump;
     int elsejump;
-    lox_prs_consume(prs, TOK_PARENOPEN, "expect '(' after 'if'.");
-    lox_prs_parseexpr(prs);
-    lox_prs_consume(prs, TOK_PARENCLOSE, "expect ')' after condition.");// [paren]
-    thenjump = lox_prs_emitjump(prs, OP_JUMPIFFALSE);
-    lox_prs_emit1byte(prs, OP_POP);
-    lox_prs_parsestmt(prs);
-    elsejump = lox_prs_emitjump(prs, OP_JUMPNOW);
-    lox_prs_emitpatchjump(prs, thenjump);
-    lox_prs_emit1byte(prs, OP_POP);
-    if(lox_prs_match(prs, TOK_KWELSE))
+    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expect '(' after 'if'.");
+    neon_prs_parseexpr(prs);
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after condition.");// [paren]
+    thenjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    neon_prs_parsestmt(prs);
+    elsejump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
+    neon_prs_emitpatchjump(prs, thenjump);
+    neon_prs_emit1byte(prs, NEON_OP_POP);
+    if(neon_prs_match(prs, NEON_TOK_KWELSE))
     {
-        lox_prs_parsestmt(prs);
+        neon_prs_parsestmt(prs);
     }
-    lox_prs_emitpatchjump(prs, elsejump);
+    neon_prs_emitpatchjump(prs, elsejump);
 }
 
-void lox_prs_parseprintstmt(AstParser* prs)
+void neon_prs_parseprintstmt(NeonAstParser* prs)
 {
-    lox_prs_parseexpr(prs);
-    //lox_prs_consume(prs, TOK_SEMICOLON, "expect ';' after value.");
-    lox_prs_skipsemicolon(prs);
-    lox_prs_emit1byte(prs, OP_DEBUGPRINT);
+    neon_prs_parseexpr(prs);
+    //neon_prs_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after value.");
+    neon_prs_skipsemicolon(prs);
+    neon_prs_emit1byte(prs, NEON_OP_DEBUGPRINT);
 }
 
-void lox_prs_parsereturnstmt(AstParser* prs)
+void neon_prs_parsereturnstmt(NeonAstParser* prs)
 {
-    if(prs->currcompiler->type == TYPE_SCRIPT)
+    if(prs->currcompiler->type == NEON_TYPE_SCRIPT)
     {
-        lox_prs_raiseerror(prs, "cannot return from top-level code");
+        neon_prs_raiseerror(prs, "cannot return from top-level code");
     }
-    if(lox_prs_match(prs, TOK_SEMICOLON) || lox_prs_match(prs, TOK_NEWLINE))
+    if(neon_prs_match(prs, NEON_TOK_SEMICOLON) || neon_prs_match(prs, NEON_TOK_NEWLINE))
     {
-        lox_prs_emitreturn(prs);
+        neon_prs_emitreturn(prs);
     }
     else
     {
-        if(prs->currcompiler->type == TYPE_INITIALIZER)
+        if(prs->currcompiler->type == NEON_TYPE_INITIALIZER)
         {
-            lox_prs_raiseerror(prs, "cannot return a value from an initializer");
+            neon_prs_raiseerror(prs, "cannot return a value from an initializer");
         }
-        lox_prs_parseexpr(prs);
-        //lox_prs_consume(prs, TOK_SEMICOLON, "expect ';' after return value.");
-        lox_prs_skipsemicolon(prs);
-        lox_prs_emit1byte(prs, OP_RETURN);
+        neon_prs_parseexpr(prs);
+        //neon_prs_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after return value.");
+        neon_prs_skipsemicolon(prs);
+        neon_prs_emit1byte(prs, NEON_OP_RETURN);
     }
 }
 
-void lox_prs_synchronize(AstParser* prs)
+void neon_prs_synchronize(NeonAstParser* prs)
 {
     prs->panicmode = false;
-    while(prs->current.type != TOK_EOF)
+    while(prs->current.type != NEON_TOK_EOF)
     {
-        if(prs->previous.type == TOK_SEMICOLON)
+        if(prs->previous.type == NEON_TOK_SEMICOLON)
         {
             return;
         }
         switch(prs->current.type)
         {
-            case TOK_KWBREAK:
-            case TOK_KWCONTINUE:
-            case TOK_KWCLASS:
-            case TOK_KWFUNCTION:
-            case TOK_KWVAR:
-            case TOK_KWFOR:
-            case TOK_KWIF:
-            case TOK_KWWHILE:
-            case TOK_KWDEBUGPRINT:
-            case TOK_KWRETURN:
+            case NEON_TOK_KWBREAK:
+            case NEON_TOK_KWCONTINUE:
+            case NEON_TOK_KWCLASS:
+            case NEON_TOK_KWFUNCTION:
+            case NEON_TOK_KWVAR:
+            case NEON_TOK_KWFOR:
+            case NEON_TOK_KWIF:
+            case NEON_TOK_KWWHILE:
+            case NEON_TOK_KWDEBUGPRINT:
+            case NEON_TOK_KWRETURN:
                 return;
             default:
                 // Do nothing.
                 break;
         }
-        lox_prs_advance(prs);
+        neon_prs_advance(prs);
     }
 }
 
-void lox_prs_parsedecl(AstParser* prs)
+void neon_prs_parsedecl(NeonAstParser* prs)
 {
-    if(lox_prs_match(prs, TOK_KWCLASS))
+    if(neon_prs_match(prs, NEON_TOK_KWCLASS))
     {
-        lox_prs_parseclassdecl(prs);
+        neon_prs_parseclassdecl(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWFUNCTION))
+    else if(neon_prs_match(prs, NEON_TOK_KWFUNCTION))
     {
-        lox_prs_parsefuncdecl(prs);
+        neon_prs_parsefuncdecl(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWVAR))
+    else if(neon_prs_match(prs, NEON_TOK_KWVAR))
     {
-        lox_prs_parsevardecl(prs);
+        neon_prs_parsevardecl(prs);
     }
     else
     {
-        lox_prs_parsestmt(prs);
+        neon_prs_parsestmt(prs);
     }
     /* Global Variables declaration < Global Variables match-var */
-    // lox_prs_parsestmt(prs);
+    // neon_prs_parsestmt(prs);
     if(prs->panicmode)
     {
-        lox_prs_synchronize(prs);
+        neon_prs_synchronize(prs);
     }
 }
 
-void lox_prs_parsestmt(AstParser* prs)
+void neon_prs_parsestmt(NeonAstParser* prs)
 {
-    if(lox_prs_match(prs, TOK_KWDEBUGPRINT))
+    if(neon_prs_match(prs, NEON_TOK_KWDEBUGPRINT))
     {
-        lox_prs_parseprintstmt(prs);
+        neon_prs_parseprintstmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWBREAK))
+    else if(neon_prs_match(prs, NEON_TOK_KWBREAK))
     {
-        lox_prs_parsebreakstmt(prs);
+        neon_prs_parsebreakstmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWCONTINUE))
+    else if(neon_prs_match(prs, NEON_TOK_KWCONTINUE))
     {
-        lox_prs_parsecontinuestmt(prs);
+        neon_prs_parsecontinuestmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWFOR))
+    else if(neon_prs_match(prs, NEON_TOK_KWFOR))
     {
-        lox_prs_parseforstmt(prs);
+        neon_prs_parseforstmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWIF))
+    else if(neon_prs_match(prs, NEON_TOK_KWIF))
     {
-        lox_prs_parseifstmt(prs);
+        neon_prs_parseifstmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWRETURN))
+    else if(neon_prs_match(prs, NEON_TOK_KWRETURN))
     {
-        lox_prs_parsereturnstmt(prs);
+        neon_prs_parsereturnstmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_KWWHILE))
+    else if(neon_prs_match(prs, NEON_TOK_KWWHILE))
     {
-        lox_prs_parsewhilestmt(prs);
+        neon_prs_parsewhilestmt(prs);
     }
-    else if(lox_prs_match(prs, TOK_BRACEOPEN))
+    else if(neon_prs_match(prs, NEON_TOK_BRACEOPEN))
     {
-        lox_prs_scopebegin(prs);
-        lox_prs_parseblock(prs);
-        lox_prs_scopeend(prs);
+        neon_prs_scopebegin(prs);
+        neon_prs_parseblock(prs);
+        neon_prs_scopeend(prs);
     }
     else
     {
-        lox_prs_parseexprstmt(prs);
+        neon_prs_parseexprstmt(prs);
     }
 }
 
-ObjFunction* lox_prs_compilesource(LoxState* state, const char* source)
+NeonObjScriptFunction* neon_prs_compilesource(NeonState* state, const char* source)
 {
-    AstScanner scn;
-    AstParser parser;
-    AstCompiler compiler;
-    ObjFunction* fn;
-    lox_lex_init(state, &scn, source);
-    lox_prs_init(state, &parser, &scn);
-    lox_prs_compilerinit(&parser, &compiler, TYPE_SCRIPT);
+    NeonAstScanner scn;
+    NeonAstParser parser;
+    NeonAstCompiler compiler;
+    NeonObjScriptFunction* fn;
+    neon_lex_init(state, &scn, source);
+    neon_prs_init(state, &parser, &scn);
+    neon_prs_compilerinit(&parser, &compiler, NEON_TYPE_SCRIPT);
     parser.haderror = false;
     parser.panicmode = false;
-    lox_prs_advance(&parser);
-    while(!lox_prs_match(&parser, TOK_EOF))
+    neon_prs_advance(&parser);
+    while(!neon_prs_match(&parser, NEON_TOK_EOF))
     {
-        lox_prs_parsedecl(&parser);
+        neon_prs_parsedecl(&parser);
     }
-    fn = lox_prs_compilerfinish(&parser, true);
+    fn = neon_prs_compilerfinish(&parser, true);
     if(parser.haderror)
     {
         return NULL;
@@ -4166,33 +4335,33 @@ ObjFunction* lox_prs_compilesource(LoxState* state, const char* source)
     return fn;
 }
 
-void lox_prs_markcompilerroots(LoxState* state)
+void neon_prs_markcompilerroots(NeonState* state)
 {
-    AstCompiler* compiler;
+    NeonAstCompiler* compiler;
     if(state->parser != NULL)
     {
         compiler = state->parser->currcompiler;
         while(compiler != NULL)
         {
-            lox_gcmem_markobject(state, (Object*)compiler->compiledfn);
+            neon_gcmem_markobject(state, (NeonObject*)compiler->compiledfn);
             compiler = compiler->enclosing;
         }
     }
 }
 
-void lox_vm_stackreset(LoxState* state)
+void neon_vm_stackreset(NeonState* state)
 {
     state->vmvars.stacktop = 0;
     state->vmvars.framecount = 0;
     state->openupvalues = NULL;
 }
 
-void lox_state_vraiseerror(LoxState* state, const char* format, va_list va)
+void neon_state_vraiseerror(NeonState* state, const char* format, va_list va)
 {
     int i;
     size_t instruction;
-    CallFrame* frame;
-    ObjFunction* fn;
+    NeonCallFrame* frame;
+    NeonObjScriptFunction* fn;
     state->vmvars.hasraised = true;
     vfprintf(stderr, format, va);
     fputs("\n", stderr);
@@ -4202,7 +4371,7 @@ void lox_state_vraiseerror(LoxState* state, const char* format, va_list va)
     //int line = state->chunk->lines[instruction];
 
     /* Calls and Functions runtime-error-temp < Calls and Functions runtime-error-stack */
-    //CallFrame* frame = &state->vmvars.framevalues[state->vmvars.framecount - 1];
+    //NeonCallFrame* frame = &state->vmvars.framevalues[state->vmvars.framecount - 1];
     //size_t instruction = frame->ip - frame->innerfn->chunk.code - 1;
     //int line = frame->innerfn->chunk.lines[instruction];
  
@@ -4213,7 +4382,7 @@ void lox_state_vraiseerror(LoxState* state, const char* format, va_list va)
     {
         frame = &state->vmvars.framevalues[i];
         /* Calls and Functions runtime-error-stack < Closures runtime-error-function */
-        // ObjFunction* function = frame->innerfn;
+        // NeonObjScriptFunction* function = frame->innerfn;
         fn = frame->closure->innerfn;
         instruction = frame->ip - fn->chunk.code - 1;
         fprintf(stderr, "[line %d] in ", fn->chunk.lines[instruction]);
@@ -4226,45 +4395,45 @@ void lox_state_vraiseerror(LoxState* state, const char* format, va_list va)
             fprintf(stderr, "%s()\n", fn->name->sbuf->data);
         }
     }
-    lox_vm_stackreset(state);
+    neon_vm_stackreset(state);
 }
 
-void lox_state_raiseerror(LoxState* state, const char* format, ...)
+void neon_state_raiseerror(NeonState* state, const char* format, ...)
 {
     va_list va;
     va_start(va, format);
-    lox_state_vraiseerror(state, format, va);
+    neon_state_vraiseerror(state, format, va);
     va_end(va);
 }
 
-void lox_state_defnative(LoxState* state, const char* name, NativeFN nat)
+void neon_state_defnative(NeonState* state, const char* name, NeonNativeFN nat)
 {
-    ObjString* os;
-    ObjNative* ofn;
-    os = lox_string_copy(state, name, (int)strlen(name));
-    lox_vm_stackpush(state, OBJ_VAL(os));
+    NeonObjString* os;
+    NeonObjNativeFunction* ofn;
+    os = neon_string_copy(state, name, (int)strlen(name));
+    neon_vm_stackpush(state, neon_value_makeobject(os));
     {
-        ofn = lox_object_makenative(state, nat);
-        lox_vm_stackpush(state, OBJ_VAL(ofn));
+        ofn = neon_object_makenative(state, nat);
+        neon_vm_stackpush(state, neon_value_makeobject(ofn));
         {
-            lox_hashtable_set(state, &state->globals, AS_STRING(state->vmvars.stackvalues[0]), state->vmvars.stackvalues[1]);
+            neon_hashtable_set(state, &state->globals, AS_STRING(state->vmvars.stackvalues[0]), state->vmvars.stackvalues[1]);
         }
-        lox_vm_stackpop(state);
+        neon_vm_stackpop(state);
     }
-    lox_vm_stackpop(state);
+    neon_vm_stackpop(state);
 }
 
 
-LoxState* lox_state_init()
+NeonState* neon_state_init()
 {
-    LoxState* state;
-    state = (LoxState*)malloc(sizeof(LoxState));
+    NeonState* state;
+    state = (NeonState*)malloc(sizeof(NeonState));
     if(state == NULL)
     {
         return NULL;
     }
-    memset(state, 0, sizeof(LoxState));
-    lox_vm_stackreset(state);
+    memset(state, 0, sizeof(NeonState));
+    neon_vm_stackreset(state);
     state->vmvars.hasraised = false;
     state->conf.shouldprintruntime = false;
     state->gcstate.linkedobjects = NULL;
@@ -4274,29 +4443,29 @@ LoxState* lox_state_init()
     state->gcstate.graycap = 0;
     state->gcstate.graystack = NULL;
     state->parser = NULL;
-    state->stdoutwriter = lox_writer_makeio(state, stdout, false);
-    state->stderrwriter = lox_writer_makeio(state, stderr, false);
-    lox_hashtable_init(&state->globals);
-    lox_hashtable_init(&state->strings);
+    state->stdoutwriter = neon_writer_makeio(state, stdout, false);
+    state->stderrwriter = neon_writer_makeio(state, stderr, false);
+    neon_hashtable_init(&state->globals);
+    neon_hashtable_init(&state->strings);
     state->initstring = NULL;
-    state->initstring = lox_string_copy(state, "init", 4);
+    state->initstring = neon_string_copy(state, "init", 4);
     return state;
 }
 
-void lox_state_free(LoxState* state)
+void neon_state_free(NeonState* state)
 {
-    lox_writer_release(state, state->stdoutwriter);
-    lox_writer_release(state, state->stderrwriter);
-    lox_hashtable_free(state, &state->globals);
-    lox_hashtable_free(state, &state->strings);
+    neon_writer_release(state, state->stdoutwriter);
+    neon_writer_release(state, state->stderrwriter);
+    neon_hashtable_free(state, &state->globals);
+    neon_hashtable_free(state, &state->strings);
     state->initstring = NULL;
-    lox_vm_gcfreelinkedobjects(state);
+    neon_vm_gcfreelinkedobjects(state);
     free(state);
 }
 
 
 /* A Virtual Machine run < Calls and Functions run */
-static inline int32_t lox_vmbits_readbyte(LoxState* state)
+static inline int32_t neon_vmbits_readbyte(NeonState* state)
 {
     uint32_t r;
     r = *state->vmvars.currframe->ip;
@@ -4305,102 +4474,102 @@ static inline int32_t lox_vmbits_readbyte(LoxState* state)
 }
 
 /* Jumping Back and Forth read-short < Calls and Functions run */
-static inline uint16_t lox_vmbits_readshort(LoxState* state)
+static inline uint16_t neon_vmbits_readshort(NeonState* state)
 {
     (state)->vmvars.currframe->ip += 2;
     return (uint16_t)((state->vmvars.currframe->ip[-2] << 8) | state->vmvars.currframe->ip[-1]);
 }
 
 /* Calls and Functions run < Closures read-constant */
-static inline Value lox_vmbits_readconst(LoxState* state)
+static inline NeonValue neon_vmbits_readconst(NeonState* state)
 {
     int32_t b;
     size_t vsz;
-    ValArray* vaconst;
+    NeonValArray* vaconst;
     (void)vsz;
     if(state->vmvars.currframe->closure == NULL)
     {
-        return NIL_VAL;
+        return neon_value_makenil();
     }
     vaconst = &state->vmvars.currframe->closure->innerfn->chunk.constants;
     if(vaconst == NULL)
     {
-        return NIL_VAL;
+        return neon_value_makenil();
     }
     vsz = vaconst->size;
-    b = lox_vmbits_readbyte(state);
+    b = neon_vmbits_readbyte(state);
     return (vaconst->values[b]);
 }
 
-static inline ObjString* lox_vmbits_readstring(LoxState* state)
+static inline NeonObjString* neon_vmbits_readstring(NeonState* state)
 {
-    return AS_STRING(lox_vmbits_readconst(state));
+    return AS_STRING(neon_vmbits_readconst(state));
 }
 
-static inline void lox_vmbits_stackpush(LoxState* state, Value value)
+static inline void neon_vmbits_stackpush(NeonState* state, NeonValue value)
 {
     state->vmvars.stackvalues[state->vmvars.stacktop] = value;
     state->vmvars.stacktop++;
 }
 
-static inline Value lox_vmbits_stackpop(LoxState* state)
+static inline NeonValue neon_vmbits_stackpop(NeonState* state)
 {
     int64_t stop;
-    Value v;
+    NeonValue v;
     stop = state->vmvars.stacktop;
     state->vmvars.stacktop--;
     v = state->vmvars.stackvalues[stop - 1];
     return v;
 }
 
-static inline Value lox_vmbits_stackpopn(LoxState* state, int32_t n)
+static inline NeonValue neon_vmbits_stackpopn(NeonState* state, int32_t n)
 {
     int64_t stop;
-    Value v;
+    NeonValue v;
     stop = state->vmvars.stacktop;
     state->vmvars.stacktop -= n;
     v = state->vmvars.stackvalues[stop - n];
     return v;
 }
 
-static inline Value lox_vmbits_stackpeek(LoxState* state, int distance)
+static inline NeonValue neon_vmbits_stackpeek(NeonState* state, int distance)
 {
     return state->vmvars.stackvalues[state->vmvars.stacktop + (-1 - distance)];
 }
 
 //---------------------
 
-void lox_vm_stackpush(LoxState* state, Value value)
+void neon_vm_stackpush(NeonState* state, NeonValue value)
 {
-    return lox_vmbits_stackpush(state, value);
+    return neon_vmbits_stackpush(state, value);
 }
 
-Value lox_vm_stackpop(LoxState* state)
+NeonValue neon_vm_stackpop(NeonState* state)
 {
-    return lox_vmbits_stackpop(state);
+    return neon_vmbits_stackpop(state);
 }
 
-Value lox_vm_stackpopn(LoxState* state, int32_t n)
+NeonValue neon_vm_stackpopn(NeonState* state, int32_t n)
 {
-    return lox_vmbits_stackpopn(state, n);
+    return neon_vmbits_stackpopn(state, n);
 }
 
-Value lox_vm_stackpeek(LoxState* state, int distance)
+NeonValue neon_vm_stackpeek(NeonState* state, int distance)
 {
-    return lox_vmbits_stackpeek(state, distance);
+    return neon_vmbits_stackpeek(state, distance);
 }
 
-bool lox_vmbits_callclosure(LoxState* state, ObjClosure* closure, int argc)
+bool neon_vmbits_callclosure(NeonState* state, NeonObjClosure* closure, int argc)
 {
-    CallFrame* frame;
+    NeonCallFrame* frame;
     if(argc != closure->innerfn->arity)
     {
-        lox_state_raiseerror(state, "expected %d arguments but got %d.", closure->innerfn->arity, argc);
+        neon_state_raiseerror(state, "expected %d arguments but got %d.", closure->innerfn->arity, argc);
         return false;
     }
     if(state->vmvars.framecount == FRAMES_MAX)
     {
-        lox_state_raiseerror(state, "stack overflow.");
+        neon_state_raiseerror(state, "stack overflow.");
         return false;
     }
     frame = &state->vmvars.framevalues[state->vmvars.framecount++];
@@ -4410,45 +4579,45 @@ bool lox_vmbits_callclosure(LoxState* state, ObjClosure* closure, int argc)
     return true;
 }
 
-bool lox_vmbits_callboundmethod(LoxState* state, Value callee, int argc)
+bool neon_vmbits_callboundmethod(NeonState* state, NeonValue callee, int argc)
 {
-    ObjBoundMethod* bound = AS_BOUND_METHOD(callee);
+    NeonObjBoundFunction* bound = AS_BOUND_METHOD(callee);
     state->vmvars.stackvalues[state->vmvars.stacktop + (-argc - 1)] = bound->receiver;    
-    return lox_vmbits_callclosure(state, bound->method, argc);
+    return neon_vmbits_callclosure(state, bound->method, argc);
 }
 
-bool lox_vmbits_callclassconstructor(LoxState* state, Value callee, int argc)
+bool neon_vmbits_callclassconstructor(NeonState* state, NeonValue callee, int argc)
 {
-    Value initializer;
-    ObjClass* klass;
-    ObjInstance* instance;
+    NeonValue initializer;
+    NeonObjClass* klass;
+    NeonObjInstance* instance;
     klass = AS_CLASS(callee);
-    instance = lox_object_makeinstance(state, klass);
-    state->vmvars.stackvalues[state->vmvars.stacktop + (-argc - 1)] = OBJ_VAL(instance);
-    if(lox_hashtable_get(state, &klass->methods, state->initstring, &initializer))
+    instance = neon_object_makeinstance(state, klass);
+    state->vmvars.stackvalues[state->vmvars.stacktop + (-argc - 1)] = neon_value_makeobject(instance);
+    if(neon_hashtable_get(state, &klass->methods, state->initstring, &initializer))
     {
-        return lox_vmbits_callclosure(state, AS_CLOSURE(initializer), argc);
+        return neon_vmbits_callclosure(state, AS_CLOSURE(initializer), argc);
     }
     else if(argc != 0)
     {
-        lox_state_raiseerror(state, "expected 0 arguments but got %d.", argc);
+        neon_state_raiseerror(state, "expected 0 arguments but got %d.", argc);
         return false;
     }
     return true;
 }
 
-bool lox_vmbits_callnativefunction(LoxState* state, Value callee, int argc)
+bool neon_vmbits_callnativefunction(NeonState* state, NeonValue callee, int argc)
 {
-    Value result;
-    Value* vargs;
-    NativeFN cfunc;
-    ObjNative* nfn;
-    nfn = (ObjNative*)AS_OBJ(callee);
+    NeonValue result;
+    NeonValue* vargs;
+    NeonNativeFN cfunc;
+    NeonObjNativeFunction* nfn;
+    nfn = (NeonObjNativeFunction*)neon_value_asobject(callee);
     cfunc = nfn->natfunc;
     vargs = (&state->vmvars.stackvalues[0] + state->vmvars.stacktop) - argc;
     result = cfunc(state, argc, vargs);
     state->vmvars.stacktop -= argc + 1;
-    lox_vmbits_stackpush(state, result);
+    neon_vmbits_stackpush(state, result);
     if(state->vmvars.hasraised)
     {
         return false;
@@ -4456,38 +4625,38 @@ bool lox_vmbits_callnativefunction(LoxState* state, Value callee, int argc)
     return true;
 }
 
-bool lox_vmbits_callvalue(LoxState* state, Value callee, int argc)
+bool neon_vmbits_callvalue(NeonState* state, NeonValue callee, int argc)
 {
-    if(IS_OBJ(callee))
+    if(neon_value_isobject(callee))
     {
-        switch(OBJ_TYPE(callee))
+        switch(neon_value_objtype(callee))
         {
-            case OBJ_BOUNDMETHOD:
+            case NEON_OBJ_BOUNDMETHOD:
                 {
-                    return lox_vmbits_callboundmethod(state, callee, argc);
+                    return neon_vmbits_callboundmethod(state, callee, argc);
                 }
                 break;
-            case OBJ_CLASS:
+            case NEON_OBJ_CLASS:
                 {
-                    return lox_vmbits_callclassconstructor(state, callee, argc);
+                    return neon_vmbits_callclassconstructor(state, callee, argc);
                 }
                 break;
-            case OBJ_CLOSURE:
+            case NEON_OBJ_CLOSURE:
                 {
-                    return lox_vmbits_callclosure(state, AS_CLOSURE(callee), argc);
+                    return neon_vmbits_callclosure(state, AS_CLOSURE(callee), argc);
                 }
                 break;
                 /* Calls and Functions call-value < Closures call-value-closure */
                 #if 0
-            case OBJ_FUNCTION: // [switch]
+            case NEON_OBJ_FUNCTION: // [switch]
                 {
-                    return lox_vmbits_callclosure(state, AS_FUNCTION(callee), argc);
+                    return neon_vmbits_callclosure(state, AS_FUNCTION(callee), argc);
                 }
                 break;
                 #endif
-            case OBJ_NATIVE:
+            case NEON_OBJ_NATIVE:
                 {
-                    return lox_vmbits_callnativefunction(state, callee, argc);
+                    return neon_vmbits_callnativefunction(state, callee, argc);
                 }
                 break;
             default:
@@ -4495,61 +4664,61 @@ bool lox_vmbits_callvalue(LoxState* state, Value callee, int argc)
                 break;
         }
     }
-    lox_state_raiseerror(state, "can only call functions and classes.");
+    neon_state_raiseerror(state, "can only call functions and classes.");
     return false;
 }
 
-bool lox_vmbits_invokefromclass(LoxState* state, ObjClass* klass, ObjString* name, int argc)
+bool neon_vmbits_invokefromclass(NeonState* state, NeonObjClass* klass, NeonObjString* name, int argc)
 {
-    Value method;
-    if(!lox_hashtable_get(state, &klass->methods, name, &method))
+    NeonValue method;
+    if(!neon_hashtable_get(state, &klass->methods, name, &method))
     {
-        lox_state_raiseerror(state, "undefined property '%s'.", name->sbuf->data);
+        neon_state_raiseerror(state, "undefined property '%s'.", name->sbuf->data);
         return false;
     }
-    return lox_vmbits_callclosure(state, AS_CLOSURE(method), argc);
+    return neon_vmbits_callclosure(state, AS_CLOSURE(method), argc);
 }
 
-bool lox_vmbits_invoke(LoxState* state, ObjString* name, int argc)
+bool neon_vmbits_invoke(NeonState* state, NeonObjString* name, int argc)
 {
-    Value value;
-    Value receiver;
-    ObjInstance* instance;
-    receiver = lox_vmbits_stackpeek(state, argc);
+    NeonValue value;
+    NeonValue receiver;
+    NeonObjInstance* instance;
+    receiver = neon_vmbits_stackpeek(state, argc);
     if(!IS_INSTANCE(receiver))
     {
-        lox_state_raiseerror(state, "only instances have methods.");
+        neon_state_raiseerror(state, "only instances have methods.");
         return false;
     }
     instance = AS_INSTANCE(receiver);
-    if(lox_hashtable_get(state, &instance->fields, name, &value))
+    if(neon_hashtable_get(state, &instance->fields, name, &value))
     {
         state->vmvars.stackvalues[state->vmvars.stacktop + (-argc - 1)] = value;
-        return lox_vmbits_callvalue(state, value, argc);
+        return neon_vmbits_callvalue(state, value, argc);
     }
-    return lox_vmbits_invokefromclass(state, instance->klass, name, argc);
+    return neon_vmbits_invokefromclass(state, instance->klass, name, argc);
 }
 
-bool lox_vmbits_bindmethod(LoxState* state, ObjClass* klass, ObjString* name)
+bool neon_vmbits_bindmethod(NeonState* state, NeonObjClass* klass, NeonObjString* name)
 {
-    Value method;
-    ObjBoundMethod* bound;
-    if(!lox_hashtable_get(state, &klass->methods, name, &method))
+    NeonValue method;
+    NeonObjBoundFunction* bound;
+    if(!neon_hashtable_get(state, &klass->methods, name, &method))
     {
-        lox_state_raiseerror(state, "undefined property '%s'.", name->sbuf->data);
+        neon_state_raiseerror(state, "undefined property '%s'.", name->sbuf->data);
         return false;
     }
-    bound = lox_object_makeboundmethod(state, lox_vmbits_stackpeek(state, 0), AS_CLOSURE(method));
-    lox_vmbits_stackpop(state);
-    lox_vmbits_stackpush(state, OBJ_VAL(bound));
+    bound = neon_object_makeboundmethod(state, neon_vmbits_stackpeek(state, 0), AS_CLOSURE(method));
+    neon_vmbits_stackpop(state);
+    neon_vmbits_stackpush(state, neon_value_makeobject(bound));
     return true;
 }
 
-ObjUpvalue* lox_vmbits_captureupval(LoxState* state, Value* local)
+NeonObjUpvalue* neon_vmbits_captureupval(NeonState* state, NeonValue* local)
 {
-    ObjUpvalue* upvalue;
-    ObjUpvalue* prevupvalue;
-    ObjUpvalue* createdupvalue;
+    NeonObjUpvalue* upvalue;
+    NeonObjUpvalue* prevupvalue;
+    NeonObjUpvalue* createdupvalue;
     prevupvalue = NULL;
     upvalue = state->openupvalues;
     while(upvalue != NULL && upvalue->location > local)
@@ -4561,7 +4730,7 @@ ObjUpvalue* lox_vmbits_captureupval(LoxState* state, Value* local)
     {
         return upvalue;
     }
-    createdupvalue = lox_object_makeupvalue(state, local);
+    createdupvalue = neon_object_makeupvalue(state, local);
     createdupvalue->next = upvalue;
     if(prevupvalue == NULL)
     {
@@ -4574,9 +4743,9 @@ ObjUpvalue* lox_vmbits_captureupval(LoxState* state, Value* local)
     return createdupvalue;
 }
 
-void lox_vmbits_closeupvals(LoxState* state, Value* last)
+void neon_vmbits_closeupvals(NeonState* state, NeonValue* last)
 {
-    ObjUpvalue* upvalue;
+    NeonObjUpvalue* upvalue;
     while(state->openupvalues != NULL && state->openupvalues->location >= last)
     {
         upvalue = state->openupvalues;
@@ -4586,331 +4755,379 @@ void lox_vmbits_closeupvals(LoxState* state, Value* last)
     }
 }
 
-void lox_vmbits_defmethod(LoxState* state, ObjString* name)
+void neon_vmbits_defmethod(NeonState* state, NeonObjString* name)
 {
-    Value method;
-    ObjClass* klass;
-    method = lox_vmbits_stackpeek(state, 0);
-    klass = AS_CLASS(lox_vmbits_stackpeek(state, 1));
-    lox_hashtable_set(state, &klass->methods, name, method);
-    lox_vmbits_stackpop(state);
+    NeonValue method;
+    NeonObjClass* klass;
+    method = neon_vmbits_stackpeek(state, 0);
+    klass = AS_CLASS(neon_vmbits_stackpeek(state, 1));
+    neon_hashtable_set(state, &klass->methods, name, method);
+    neon_vmbits_stackpop(state);
 }
 
-static inline bool lox_vmexec_concat(LoxState* state)
+static inline bool neon_vmexec_concat(NeonState* state)
 {
-    ObjString* b;
-    ObjString* a;
-    ObjString* result;
-    Strbuf* sb;
-    b = AS_STRING(lox_vmbits_stackpeek(state, 0));
-    a = AS_STRING(lox_vmbits_stackpeek(state, 1));
-    sb = lox_strbuf_make(state);
-    lox_strbuf_append(sb, a->sbuf->data, a->sbuf->length);
-    lox_strbuf_append(sb, b->sbuf->data, b->sbuf->length);
-    result = lox_string_allocfromstrbuf(state, sb, lox_util_hashstring(sb->data, sb->length));
-    lox_vmbits_stackpop(state);
-    lox_vmbits_stackpop(state);
-    lox_vmbits_stackpush(state, OBJ_VAL(result));
+    NeonObjString* b;
+    NeonObjString* a;
+    NeonObjString* result;
+    NeonStringBuffer* sb;
+    b = AS_STRING(neon_vmbits_stackpeek(state, 0));
+    a = AS_STRING(neon_vmbits_stackpeek(state, 1));
+    sb = neon_strbuf_make(state);
+    neon_strbuf_append(sb, a->sbuf->data, a->sbuf->length);
+    neon_strbuf_append(sb, b->sbuf->data, b->sbuf->length);
+    result = neon_string_allocfromstrbuf(state, sb, neon_util_hashstring(sb->data, sb->length));
+    neon_vmbits_stackpop(state);
+    neon_vmbits_stackpop(state);
+    neon_vmbits_stackpush(state, neon_value_makeobject(result));
     return true;
 }
 
 /* A Virtual Machine binary-op < Types of Values binary-op */
-static inline bool lox_vmexec_dobinary(LoxState* state, bool isbool, int32_t op)
+static inline bool neon_vmexec_dobinary(NeonState* state, bool isbool, int32_t op)
 {
     double b;
     double a;
     double dw;
-    Value res;
-    Value peeka;
-    Value peekb;
-    peeka = lox_vmbits_stackpeek(state, 0);
-    peekb = lox_vmbits_stackpeek(state, 1);
-    if(!IS_NUMBER(peeka))
+    NeonValue res;
+    NeonValue peeka;
+    NeonValue peekb;
+    peeka = neon_vmbits_stackpeek(state, 0);
+    peekb = neon_vmbits_stackpeek(state, 1);
+    if(!neon_value_isnumber(peeka))
     {
-        lox_state_raiseerror(state, "operand a (at 0) must be a number");
+        neon_state_raiseerror(state, "operand a (at 0) must be a number");
         return false;
     }
-    if(!IS_NUMBER(peekb))
+    if(!neon_value_isnumber(peekb))
     {
-        lox_state_raiseerror(state, "operand b (at 1) must be a number");
+        neon_state_raiseerror(state, "operand b (at 1) must be a number");
         return false;
     }
-    b = AS_NUMBER(lox_vmbits_stackpop(state));
-    a = AS_NUMBER(lox_vmbits_stackpop(state));
+    b = neon_value_asnumber(neon_vmbits_stackpop(state));
+    a = neon_value_asnumber(neon_vmbits_stackpop(state));
     switch(op)
     {
-        case OP_PRIMGREATER:
+        case NEON_OP_PRIMGREATER:
             {
                 dw = a > b;
             }
             break;
-        case OP_PRIMLESS:
+        case NEON_OP_PRIMLESS:
             {
                 dw = a < b;
             }
             break;
-        case OP_PRIMADD:
+        case NEON_OP_PRIMADD:
             {
                 dw = a + b;
             }
             break;
-        case OP_PRIMSUBTRACT:
+        case NEON_OP_PRIMSUBTRACT:
             {
                 dw = a - b;
             }
             break;
-        case OP_PRIMMULTIPLY:
+        case NEON_OP_PRIMMULTIPLY:
             {
                 dw = a * b;
             }
             break;
-        case OP_PRIMDIVIDE:
+        case NEON_OP_PRIMDIVIDE:
             {
                 dw = a / b;
             }
             break;
-        case OP_PRIMMODULO:
+        case NEON_OP_PRIMMODULO:
             {
                 dw = fmod(a, b);
             }
             break;
-        case OP_PRIMBINAND:
+        case NEON_OP_PRIMBINAND:
             {
                 dw = (int)a & (int)b;
             }
             break;
-        case OP_PRIMBINOR:
+        case NEON_OP_PRIMBINOR:
             {
                 dw = (int)a | (int)b;
             }
             break;
-        case OP_PRIMBINXOR:
+        case NEON_OP_PRIMBINXOR:
             {
                 dw = (int)a ^ (int)b;
             }
             break;
-        case OP_PRIMSHIFTLEFT:
+        case NEON_OP_PRIMSHIFTLEFT:
             {
                 dw = (int)a << (int)b;
             }
             break;
-        case OP_PRIMSHIFTRIGHT:
+        case NEON_OP_PRIMSHIFTRIGHT:
             {
                 dw = (int)a >> (int)b;
             }
             break;
         default:
             {
-                lox_state_raiseerror(state, "unrecognized instruction for binary");
+                neon_state_raiseerror(state, "unrecognized instruction for binary");
                 return false;
             }
             break;
     }
     if(isbool)
     {
-        res = BOOL_VAL(dw);
+        res = neon_value_makebool(dw);
     }
     else
     {
-        res = NUMBER_VAL(dw);
+        res = neon_value_makenumber(dw);
     }
-    lox_vmbits_stackpush(state, res);
+    neon_vmbits_stackpush(state, res);
     return true;
 }
 
-static inline bool lox_vmexec_indexgetstring(LoxState* state, ObjString* os, Value vidx)
+static inline bool neon_vmexec_indexgetstring(NeonState* state, NeonObjString* os, NeonValue vidx)
 {
     char ch;
     long nidx;
-    ObjString* nos;
-    if(!IS_NUMBER(vidx))
+    NeonObjString* nos;
+    if(!neon_value_isnumber(vidx))
     {
-        lox_state_raiseerror(state, "cannot index strings with non-number type <%s>", lox_writer_valuetypename(vidx));
+        neon_state_raiseerror(state, "cannot index strings with non-number type <%s>", neon_writer_valuetypename(vidx));
         return false;
     }
-    nidx = AS_NUMBER(vidx);
+    nidx = neon_value_asnumber(vidx);
     if((nidx >= 0) && (nidx < os->sbuf->length))
     {
         ch = os->sbuf->data[nidx];
-        nos = lox_string_copy(state, &ch, 1);
-        lox_vmbits_stackpush(state, OBJ_VAL(nos));
+        nos = neon_string_copy(state, &ch, 1);
+        neon_vmbits_stackpush(state, neon_value_makeobject(nos));
         return true;
     }
     return false;
 }
 
 
-static inline bool lox_vmexec_indexgetarray(LoxState* state, ObjArray* oa, Value vidx)
+static inline bool neon_vmexec_indexgetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx)
 {
     long nidx;
-    Value val;
-    if(!IS_NUMBER(vidx))
+    NeonValue val;
+    if(!neon_value_isnumber(vidx))
     {
-        lox_state_raiseerror(state, "cannot index arrays with non-number type <%s>", lox_writer_valuetypename(vidx));
+        neon_state_raiseerror(state, "cannot index arrays with non-number type <%s>", neon_writer_valuetypename(vidx));
         return false;
     }
-    nidx = AS_NUMBER(vidx);
+    nidx = neon_value_asnumber(vidx);
     if((nidx >= 0) && (nidx < (long)oa->vala.size))
     {
         val = oa->vala.values[nidx];
-        lox_vmbits_stackpush(state, val);
+        neon_vmbits_stackpush(state, val);
         return true;
     }
     return false;
 }
 
-
-static inline bool lox_vmexec_indexget(LoxState* state)
+static inline bool neon_vmexec_indexgetmap(NeonState* state, NeonObjMap* om, NeonValue vidx)
 {
-    Value vidx;
-    Value peeked;
-    vidx = lox_vmbits_stackpop(state);
-    peeked = lox_vmbits_stackpop(state);
+    NeonValue val;
+    NeonObjString* key;
+    if(!IS_STRING(vidx))
+    {
+        neon_state_raiseerror(state, "cannot index maps with non-string type <%s>", neon_writer_valuetypename(vidx));
+        return false;
+    }
+    key = AS_STRING(vidx);
+    if(neon_map_get(om, key, &val))
+    {
+        neon_vmbits_stackpush(state, val);
+    }
+    else
+    {
+        neon_vmbits_stackpush(state, neon_value_makenil());
+    }
+    return true;
+}
+
+static inline bool neon_vmexec_indexget(NeonState* state)
+{
+    NeonValue vidx;
+    NeonValue peeked;
+    vidx = neon_vmbits_stackpop(state);
+    peeked = neon_vmbits_stackpop(state);
     if(IS_STRING(peeked))
     {
-        if(lox_vmexec_indexgetstring(state, AS_STRING(peeked), vidx))
+        if(neon_vmexec_indexgetstring(state, AS_STRING(peeked), vidx))
         {
             return true;
         }
     }
     else if(IS_ARRAY(peeked))
     {
-        if(lox_vmexec_indexgetarray(state, AS_ARRAY(peeked), vidx))
+        if(neon_vmexec_indexgetarray(state, AS_ARRAY(peeked), vidx))
+        {
+            return true;
+        }
+    }
+    else if(IS_MAP(peeked))
+    {
+        if(neon_vmexec_indexgetmap(state, AS_MAP(peeked), vidx))
         {
             return true;
         }
     }
     else
     {
-        lox_state_raiseerror(state, "cannot get index object type <%s>", lox_writer_valuetypename(peeked));
+        neon_state_raiseerror(state, "cannot get index object type <%s>", neon_writer_valuetypename(peeked));
     }
-    lox_vmbits_stackpush(state, NIL_VAL);
+    neon_vmbits_stackpush(state, neon_value_makenil());
     return false;
 }
 
-static inline bool lox_vmexec_indexsetarray(LoxState* state, ObjArray* oa, Value vidx, Value setval)
+static inline bool neon_vmexec_indexsetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx, NeonValue setval)
 {
     long nidx;
-    if(!IS_NUMBER(vidx))
+    if(!neon_value_isnumber(vidx))
     {
-        lox_state_raiseerror(state, "cannot index arrays with non-number type <%s>", lox_writer_valuetypename(vidx));
+        neon_state_raiseerror(state, "cannot index arrays with non-number type <%s>", neon_writer_valuetypename(vidx));
         return false;
     }
-    nidx = AS_NUMBER(vidx);
-    lox_writer_writeformat(state->stderrwriter, "indexsetarray: nidx=%d, setval=", nidx);
-    lox_writer_printvalue(state->stderrwriter, setval, true);
-    lox_writer_writeformat(state->stderrwriter, "\n");
-    lox_valarray_insert(&oa->vala, nidx, setval);
-    //lox_vmbits_stackpush(state, NIL_VAL);
+    nidx = neon_value_asnumber(vidx);
+    neon_writer_writeformat(state->stderrwriter, "indexsetarray: nidx=%d, setval=", nidx);
+    neon_writer_printvalue(state->stderrwriter, setval, true);
+    neon_writer_writeformat(state->stderrwriter, "\n");
+    neon_valarray_insert(&oa->vala, nidx, setval);
+    //neon_vmbits_stackpush(state, neon_value_makenil());
     return true;
 }
 
-static inline bool lox_vmexec_indexset(LoxState* state)
+static inline bool neon_vmexec_indexsetmap(NeonState* state, NeonObjMap* om, NeonValue vidx, NeonValue setval)
 {
-    Value vidx;
-    Value peeked;
-    Value setval;
-    setval = lox_vmbits_stackpeek(state, 0);
-    vidx = lox_vmbits_stackpeek(state, 1);
-    peeked = lox_vmbits_stackpeek(state, 2);
+    NeonObjString* key;
+    if(!IS_STRING(vidx))
+    {
+        neon_state_raiseerror(state, "cannot index maps with non-string type <%s>", neon_writer_valuetypename(vidx));
+        return false;
+    }
+    key = AS_STRING(vidx);
+    neon_writer_writeformat(state->stderrwriter, "setting key...\n");
+    neon_map_set(om, key, setval);
+    return true;
+}
+
+static inline bool neon_vmexec_indexset(NeonState* state)
+{
+    NeonValue vidx;
+    NeonValue peeked;
+    NeonValue setval;
+    setval = neon_vmbits_stackpeek(state, 0);
+    vidx = neon_vmbits_stackpeek(state, 1);
+    peeked = neon_vmbits_stackpeek(state, 2);
     if(IS_ARRAY(peeked))
     {
-        if(lox_vmexec_indexsetarray(state, AS_ARRAY(peeked), vidx, setval))
+        if(neon_vmexec_indexsetarray(state, AS_ARRAY(peeked), vidx, setval))
+        {
+            return true;
+        }
+    }
+    else if(IS_MAP(peeked))
+    {
+        if(neon_vmexec_indexsetmap(state, AS_MAP(peeked), vidx, setval))
         {
             return true;
         }
     }
     else
     {
-        lox_state_raiseerror(state, "cannot set index object type <%s>", lox_writer_valuetypename(peeked));
+        neon_state_raiseerror(state, "cannot set index object type <%s>", neon_writer_valuetypename(peeked));
     }
-    //lox_vmbits_stackpush(state, NIL_VAL);
+    //neon_vmbits_stackpush(state, neon_value_makenil());
     return false;
 }
 
-static inline bool lox_vmexec_propertyget(LoxState* state)
+static inline bool neon_vmexec_propertyget(NeonState* state)
 {
-    Value value;
-    Value peeked;
-    Value vidx;
-    ObjString* name;
-    ObjInstance* instance;
-    peeked = lox_vmbits_stackpeek(state, 0);
+    NeonValue value;
+    NeonValue peeked;
+    NeonValue vidx;
+    NeonObjString* name;
+    NeonObjInstance* instance;
+    peeked = neon_vmbits_stackpeek(state, 0);
     if(!IS_INSTANCE(peeked))
     {
-        lox_state_raiseerror(state, "only instances have properties.");
+        neon_state_raiseerror(state, "only instances have properties.");
         return false;
     }
-    vidx = lox_vmbits_readconst(state);
-    lox_vmbits_stackpop(state);// Instance.
+    vidx = neon_vmbits_readconst(state);
+    neon_vmbits_stackpop(state);// Instance.
     instance = AS_INSTANCE(peeked);
     name = AS_STRING(vidx);
-    if(lox_hashtable_get(state, &instance->fields, name, &value))
+    if(neon_hashtable_get(state, &instance->fields, name, &value))
     {
-        lox_vmbits_stackpush(state, value);
+        neon_vmbits_stackpush(state, value);
         return true;
     }
-    if(!lox_vmbits_bindmethod(state, instance->klass, name))
+    if(!neon_vmbits_bindmethod(state, instance->klass, name))
     {
         return false;
     }
     return true;
 }
 
-static inline bool lox_vmexec_makearray(LoxState* state)
+static inline bool neon_vmexec_makearray(NeonState* state)
 {
     int i;
     int count;
-    Value val;
-    ObjArray* array;
-    count = lox_vmbits_readbyte(state);
-    array = lox_array_make(state);
+    NeonValue val;
+    NeonObjArray* array;
+    count = neon_vmbits_readbyte(state);
+    array = neon_array_make(state);
     fprintf(stderr, "makearray: count=%d\n", count);
-    //lox_vmbits_stackpush(state, NIL_VAL);
-    state->vmvars.stackvalues[state->vmvars.stacktop + (-count - 1)] = OBJ_VAL(array);
+    //neon_vmbits_stackpush(state, neon_value_makenil());
+    state->vmvars.stackvalues[state->vmvars.stacktop + (-count - 1)] = neon_value_makeobject(array);
     for(i = count - 1; i >= 0; i--)
     {
-        val = lox_vmbits_stackpeek(state, i);
-        lox_array_push(array, val);
+        val = neon_vmbits_stackpeek(state, i);
+        neon_array_push(array, val);
     }
     #if 0
-        lox_vmbits_stackpopn(state, count - 0);
+        neon_vmbits_stackpopn(state, count - 0);
     #else
         if(count > 0)
         {
             for(i=0; i<(count-0); i++)
             {
-                lox_vmbits_stackpop(state);
+                neon_vmbits_stackpop(state);
             }
         }
-        lox_vmbits_stackpop(state);
+        neon_vmbits_stackpop(state);
     #endif
-    lox_vmbits_stackpush(state, OBJ_VAL(array));
+    neon_vmbits_stackpush(state, neon_value_makeobject(array));
     return true;
 }
 
-StatusCode lox_vm_runvm(LoxState* state)
+NeonStatusCode neon_vm_runvm(NeonState* state)
 {
     size_t icnt;
     int64_t nowpos;
     int64_t spos;
     int64_t stacktop;
     int32_t instruc;
-    Value* pslot;
-    Writer* owr;
+    NeonValue* pslot;
+    NeonWriter* owr;
     (void)icnt;
     (void)pslot;
     owr = state->stderrwriter;
     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
     for(;;)
     {
-        instruc = lox_vmbits_readbyte(state);
+        instruc = neon_vmbits_readbyte(state);
         if(state->conf.shouldprintruntime)
         {
             pslot = &state->vmvars.stackvalues[0];
-            lox_writer_writeformat(owr, " at %p (instruc=%d):", pslot, instruc);
-            lox_dbg_dumpdisasm(state, owr, &state->vmvars.currframe->closure->innerfn->chunk, (int)(state->vmvars.currframe->ip - state->vmvars.currframe->closure->innerfn->chunk.code));
-            lox_writer_writestring(owr, " ... stack: [\n");
+            neon_writer_writeformat(owr, " at %p (instruc=%d):", pslot, instruc);
+            neon_dbg_dumpdisasm(state, owr, &state->vmvars.currframe->closure->innerfn->chunk, (int)(state->vmvars.currframe->ip - state->vmvars.currframe->closure->innerfn->chunk.code));
+            neon_writer_writestring(owr, " ... stack: [\n");
             icnt = state->vmvars.currframe->frstackindex;
             stacktop = state->vmvars.stacktop;
             icnt = 0;
@@ -4919,346 +5136,346 @@ StatusCode lox_vm_runvm(LoxState* state)
             {
                 nowpos = spos;
                 spos++;
-                lox_writer_writeformat(owr, "  (%ld) ", nowpos);
-                lox_writer_printvalue(owr, *pslot, true);
-                lox_writer_writeformat(owr, "\n");
+                neon_writer_writeformat(owr, "  (%ld) ", nowpos);
+                neon_writer_printvalue(owr, *pslot, true);
+                neon_writer_writeformat(owr, "\n");
             }
-            lox_writer_writeformat(owr, "]\n");
+            neon_writer_writeformat(owr, "]\n");
         }
         switch(instruc)
         {
-            case OP_PUSHCONST:
+            case NEON_OP_PUSHCONST:
                 {
-                    Value constant = lox_vmbits_readconst(state);
+                    NeonValue constant = neon_vmbits_readconst(state);
                     /* A Virtual Machine op-constant < A Virtual Machine push-constant */
                     /*
-                    lox_writer_writeformat(state->stderrwriter, "pushconst: ");
-                    lox_writer_printvalue(state->stderrwriter, constant, true);
-                    lox_writer_writeformat(state->stderrwriter, "\n");
+                    neon_writer_writeformat(state->stderrwriter, "pushconst: ");
+                    neon_writer_printvalue(state->stderrwriter, constant, true);
+                    neon_writer_writeformat(state->stderrwriter, "\n");
                     */
-                    lox_vmbits_stackpush(state, constant);
+                    neon_vmbits_stackpush(state, constant);
                 }
                 break;
-            case OP_PUSHONE:
+            case NEON_OP_PUSHONE:
                 {
-                    lox_vmbits_stackpush(state, NUMBER_VAL((double)1));
+                    neon_vmbits_stackpush(state, neon_value_makenumber((double)1));
                 }
                 break;
-            case OP_PUSHNIL:
+            case NEON_OP_PUSHNIL:
                 {
-                    lox_vmbits_stackpush(state, NIL_VAL);
+                    neon_vmbits_stackpush(state, neon_value_makenil());
                 }
                 break;
-            case OP_PUSHTRUE:
+            case NEON_OP_PUSHTRUE:
                 {
-                    lox_vmbits_stackpush(state, BOOL_VAL(true));
+                    neon_vmbits_stackpush(state, neon_value_makebool(true));
                 }
                 break;
-            case OP_PUSHFALSE:
+            case NEON_OP_PUSHFALSE:
                 {
-                    lox_vmbits_stackpush(state, BOOL_VAL(false));
+                    neon_vmbits_stackpush(state, neon_value_makebool(false));
                 }
                 break;
-            case OP_MAKEARRAY:
+            case NEON_OP_MAKEARRAY:
                 {
-                    if(!lox_vmexec_makearray(state))
+                    if(!neon_vmexec_makearray(state))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
-            case OP_POP:
+            case NEON_OP_POP:
                 {
-                    lox_vmbits_stackpop(state);
+                    neon_vmbits_stackpop(state);
                 }
                 break;
-            case OP_POPN:
+            case NEON_OP_POPN:
                 {
                     int32_t n;
-                    n = lox_vmbits_readbyte(state);
-                    lox_vmbits_stackpopn(state, n);
+                    n = neon_vmbits_readbyte(state);
+                    neon_vmbits_stackpopn(state, n);
                 }
                 break;
-            case OP_DUP:
+            case NEON_OP_DUP:
                 {
-                    lox_vmbits_stackpush(state, lox_vmbits_stackpeek(state, 0));
+                    neon_vmbits_stackpush(state, neon_vmbits_stackpeek(state, 0));
                 }
                 break;
-            case OP_LOCALGET:
+            case NEON_OP_LOCALGET:
                 {
                     int32_t islot;
-                    Value val;
-                    islot = lox_vmbits_readbyte(state);
+                    NeonValue val;
+                    islot = neon_vmbits_readbyte(state);
                     val = state->vmvars.stackvalues[state->vmvars.currframe->frstackindex + (islot + 0)];
-                    lox_vmbits_stackpush(state, val);
+                    neon_vmbits_stackpush(state, val);
                 }
                 break;
-            case OP_LOCALSET:
+            case NEON_OP_LOCALSET:
                 {
                     int32_t islot;
-                    Value val;
-                    islot = lox_vmbits_readbyte(state);
-                    val = lox_vmbits_stackpeek(state, 0);
+                    NeonValue val;
+                    islot = neon_vmbits_readbyte(state);
+                    val = neon_vmbits_stackpeek(state, 0);
                     state->vmvars.stackvalues[state->vmvars.currframe->frstackindex + (islot + 0)] = val;
                 }
                 break;
-            case OP_GLOBALGET:
+            case NEON_OP_GLOBALGET:
                 {
-                    Value value;
-                    ObjString* name;
-                    name = lox_vmbits_readstring(state);
-                    if(!lox_hashtable_get(state, &state->globals, name, &value))
+                    NeonValue value;
+                    NeonObjString* name;
+                    name = neon_vmbits_readstring(state);
+                    if(!neon_hashtable_get(state, &state->globals, name, &value))
                     {
-                        lox_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
-                    lox_vmbits_stackpush(state, value);
+                    neon_vmbits_stackpush(state, value);
                 }
                 break;
-            case OP_GLOBALDEFINE:
+            case NEON_OP_GLOBALDEFINE:
                 {
-                    ObjString* name;
-                    name = lox_vmbits_readstring(state);
-                    lox_hashtable_set(state, &state->globals, name, lox_vmbits_stackpeek(state, 0));
-                    lox_vmbits_stackpop(state);
+                    NeonObjString* name;
+                    name = neon_vmbits_readstring(state);
+                    neon_hashtable_set(state, &state->globals, name, neon_vmbits_stackpeek(state, 0));
+                    neon_vmbits_stackpop(state);
                 }
                 break;            
-            case OP_GLOBALSET:
+            case NEON_OP_GLOBALSET:
                 {
-                    ObjString* name;
-                    name = lox_vmbits_readstring(state);
-                    if(lox_hashtable_set(state, &state->globals, name, lox_vmbits_stackpeek(state, 0)))
+                    NeonObjString* name;
+                    name = neon_vmbits_readstring(state);
+                    if(neon_hashtable_set(state, &state->globals, name, neon_vmbits_stackpeek(state, 0)))
                     {
-                        //lox_hashtable_delete(state, &state->globals, name);// [delete]
-                        //lox_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
-                        //return STATUS_RUNTIMEERROR;
+                        //neon_hashtable_delete(state, &state->globals, name);// [delete]
+                        //neon_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
+                        //return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
-            case OP_UPVALGET:
+            case NEON_OP_UPVALGET:
                 {
-                    int32_t islot = lox_vmbits_readbyte(state);
-                    lox_vmbits_stackpush(state, *state->vmvars.currframe->closure->upvalues[islot]->location);
+                    int32_t islot = neon_vmbits_readbyte(state);
+                    neon_vmbits_stackpush(state, *state->vmvars.currframe->closure->upvalues[islot]->location);
                 }
                 break;
-            case OP_UPVALSET:
+            case NEON_OP_UPVALSET:
                 {
-                    int32_t islot = lox_vmbits_readbyte(state);
-                    *state->vmvars.currframe->closure->upvalues[islot]->location = lox_vmbits_stackpeek(state, 0);
+                    int32_t islot = neon_vmbits_readbyte(state);
+                    *state->vmvars.currframe->closure->upvalues[islot]->location = neon_vmbits_stackpeek(state, 0);
                 }
                 break;
 
-            case OP_INDEXGET:
+            case NEON_OP_INDEXGET:
                 {
-                    if(!lox_vmexec_indexget(state))
+                    if(!neon_vmexec_indexget(state))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
 
-            case OP_INDEXSET:
+            case NEON_OP_INDEXSET:
                 {
-                    if(!lox_vmexec_indexset(state))
+                    if(!neon_vmexec_indexset(state))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
 
             
-            case OP_PROPERTYGET:
+            case NEON_OP_PROPERTYGET:
                 {
-                    if(!lox_vmexec_propertyget(state))
+                    if(!neon_vmexec_propertyget(state))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
 
-            case OP_PROPERTYSET:
+            case NEON_OP_PROPERTYSET:
                 {
-                    Value value;
-                    ObjInstance* instance;
-                    if(!IS_INSTANCE(lox_vmbits_stackpeek(state, 1)))
+                    NeonValue value;
+                    NeonObjInstance* instance;
+                    if(!IS_INSTANCE(neon_vmbits_stackpeek(state, 1)))
                     {
-                        lox_state_raiseerror(state, "only instances have fields.");
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "only instances have fields.");
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
-                    instance = AS_INSTANCE(lox_vmbits_stackpeek(state, 1));
-                    lox_hashtable_set(state, &instance->fields, lox_vmbits_readstring(state), lox_vmbits_stackpeek(state, 0));
-                    value = lox_vmbits_stackpop(state);
-                    lox_vmbits_stackpop(state);
-                    lox_vmbits_stackpush(state, value);
+                    instance = AS_INSTANCE(neon_vmbits_stackpeek(state, 1));
+                    neon_hashtable_set(state, &instance->fields, neon_vmbits_readstring(state), neon_vmbits_stackpeek(state, 0));
+                    value = neon_vmbits_stackpop(state);
+                    neon_vmbits_stackpop(state);
+                    neon_vmbits_stackpush(state, value);
                 }
                 break;
-            case OP_INSTGETSUPER:
+            case NEON_OP_INSTGETSUPER:
                 {
-                    ObjString* name;
-                    ObjClass* superclass;
-                    name = lox_vmbits_readstring(state);
-                    superclass = AS_CLASS(lox_vmbits_stackpop(state));
-                    if(!lox_vmbits_bindmethod(state, superclass, name))
+                    NeonObjString* name;
+                    NeonObjClass* superclass;
+                    name = neon_vmbits_readstring(state);
+                    superclass = AS_CLASS(neon_vmbits_stackpop(state));
+                    if(!neon_vmbits_bindmethod(state, superclass, name))
                     {
-                        return STATUS_RUNTIMEERROR;
-                    }
-                }
-                break;
-            case OP_EQUAL:
-                {
-                    Value b = lox_vmbits_stackpop(state);
-                    Value a = lox_vmbits_stackpop(state);
-                    lox_vmbits_stackpush(state, BOOL_VAL(lox_value_equal(a, b)));
-                }
-                break;
-            case OP_PRIMGREATER:
-            case OP_PRIMLESS:
-                {
-                    if(!lox_vmexec_dobinary(state, true, instruc))
-                    {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
-            case OP_PRIMADD:
+            case NEON_OP_EQUAL:
                 {
-                    if(IS_STRING(lox_vmbits_stackpeek(state, 0)) && IS_STRING(lox_vmbits_stackpeek(state, 1)))
+                    NeonValue b = neon_vmbits_stackpop(state);
+                    NeonValue a = neon_vmbits_stackpop(state);
+                    neon_vmbits_stackpush(state, neon_value_makebool(neon_value_equal(a, b)));
+                }
+                break;
+            case NEON_OP_PRIMGREATER:
+            case NEON_OP_PRIMLESS:
+                {
+                    if(!neon_vmexec_dobinary(state, true, instruc))
                     {
-                        lox_vmexec_concat(state);
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
-                    else if(IS_NUMBER(lox_vmbits_stackpeek(state, 0)) && IS_NUMBER(lox_vmbits_stackpeek(state, 1)))
+                }
+                break;
+            case NEON_OP_PRIMADD:
+                {
+                    if(IS_STRING(neon_vmbits_stackpeek(state, 0)) && IS_STRING(neon_vmbits_stackpeek(state, 1)))
                     {
-                        if(!lox_vmexec_dobinary(state, false, instruc))
+                        neon_vmexec_concat(state);
+                    }
+                    else if(neon_value_isnumber(neon_vmbits_stackpeek(state, 0)) && neon_value_isnumber(neon_vmbits_stackpeek(state, 1)))
+                    {
+                        if(!neon_vmexec_dobinary(state, false, instruc))
                         {
-                            return STATUS_RUNTIMEERROR;
+                            return NEON_STATUS_RUNTIMEERROR;
                         }
                     }
                     else
                     {
-                        lox_state_raiseerror(state, "operands must be two numbers or two strings.");
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "operands must be two numbers or two strings.");
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
-            case OP_PRIMSUBTRACT:
-            case OP_PRIMMULTIPLY:
-            case OP_PRIMDIVIDE:
-            case OP_PRIMMODULO:
-            case OP_PRIMSHIFTLEFT:
-            case OP_PRIMSHIFTRIGHT:
-            case OP_PRIMBINAND:
-            case OP_PRIMBINOR:
-            case OP_PRIMBINXOR:
+            case NEON_OP_PRIMSUBTRACT:
+            case NEON_OP_PRIMMULTIPLY:
+            case NEON_OP_PRIMDIVIDE:
+            case NEON_OP_PRIMMODULO:
+            case NEON_OP_PRIMSHIFTLEFT:
+            case NEON_OP_PRIMSHIFTRIGHT:
+            case NEON_OP_PRIMBINAND:
+            case NEON_OP_PRIMBINOR:
+            case NEON_OP_PRIMBINXOR:
                 {
-                    if(!lox_vmexec_dobinary(state, false, instruc))
+                    if(!neon_vmexec_dobinary(state, false, instruc))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
-            case OP_PRIMNOT:
+            case NEON_OP_PRIMNOT:
                 {
-                    lox_vmbits_stackpush(state, BOOL_VAL(lox_value_isfalsey(lox_vmbits_stackpop(state))));
+                    neon_vmbits_stackpush(state, neon_value_makebool(neon_value_isfalsey(neon_vmbits_stackpop(state))));
                 }
                 break;
-            case OP_PRIMNEGATE:
+            case NEON_OP_PRIMNEGATE:
                 {
-                    if(!IS_NUMBER(lox_vmbits_stackpeek(state, 0)))
+                    if(!neon_value_isnumber(neon_vmbits_stackpeek(state, 0)))
                     {
-                        lox_state_raiseerror(state, "operand must be a number.");
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "operand must be a number.");
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
-                    lox_vmbits_stackpush(state, NUMBER_VAL(-AS_NUMBER(lox_vmbits_stackpop(state))));
+                    neon_vmbits_stackpush(state, neon_value_makenumber(-neon_value_asnumber(neon_vmbits_stackpop(state))));
                 }
                 break;
-            case OP_DEBUGPRINT:
+            case NEON_OP_DEBUGPRINT:
                 {
-                    lox_writer_printvalue(state->stderrwriter, lox_vmbits_stackpop(state), true);
+                    neon_writer_printvalue(state->stderrwriter, neon_vmbits_stackpop(state), true);
                 }
                 break;
-            case OP_JUMPNOW:
+            case NEON_OP_JUMPNOW:
                 {
                     uint16_t offset;
-                    offset = lox_vmbits_readshort(state);
+                    offset = neon_vmbits_readshort(state);
                     state->vmvars.currframe->ip += offset;
                 }
                 break;
 
-            case OP_JUMPIFFALSE:
+            case NEON_OP_JUMPIFFALSE:
                 {
                     uint16_t offset;
-                    offset = lox_vmbits_readshort(state);
-                    if(lox_value_isfalsey(lox_vmbits_stackpeek(state, 0)))
+                    offset = neon_vmbits_readshort(state);
+                    if(neon_value_isfalsey(neon_vmbits_stackpeek(state, 0)))
                     {
                         state->vmvars.currframe->ip += offset;
                     }
                 }
                 break;
-            case OP_LOOP:
+            case NEON_OP_LOOP:
                 {
                     uint16_t offset;
-                    offset = lox_vmbits_readshort(state);
+                    offset = neon_vmbits_readshort(state);
                     state->vmvars.currframe->ip -= offset;
                 }
                 break;
-            case OP_CALL:
+            case NEON_OP_CALL:
                 {
                     int argc;
-                    argc = lox_vmbits_readbyte(state);
-                    if(!lox_vmbits_callvalue(state, lox_vmbits_stackpeek(state, argc), argc))
+                    argc = neon_vmbits_readbyte(state);
+                    if(!neon_vmbits_callvalue(state, neon_vmbits_stackpeek(state, argc), argc))
                     {
                         fprintf(stderr, "returning error\n");
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
                 }
                 break;
 
-            case OP_INSTTHISINVOKE:
+            case NEON_OP_INSTTHISINVOKE:
                 {
                     int argc;
-                    ObjString* method;
-                    method = lox_vmbits_readstring(state);
-                    argc = lox_vmbits_readbyte(state);
-                    if(!lox_vmbits_invoke(state, method, argc))
+                    NeonObjString* method;
+                    method = neon_vmbits_readstring(state);
+                    argc = neon_vmbits_readbyte(state);
+                    if(!neon_vmbits_invoke(state, method, argc))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
                 }
                 break;
-            case OP_INSTSUPERINVOKE:
+            case NEON_OP_INSTSUPERINVOKE:
                 {
                     int argc;
-                    ObjString* method;
-                    ObjClass* superclass;
-                    method = lox_vmbits_readstring(state);
-                    argc = lox_vmbits_readbyte(state);
-                    superclass = AS_CLASS(lox_vmbits_stackpop(state));
-                    if(!lox_vmbits_invokefromclass(state, superclass, method, argc))
+                    NeonObjString* method;
+                    NeonObjClass* superclass;
+                    method = neon_vmbits_readstring(state);
+                    argc = neon_vmbits_readbyte(state);
+                    superclass = AS_CLASS(neon_vmbits_stackpop(state));
+                    if(!neon_vmbits_invokefromclass(state, superclass, method, argc))
                     {
-                        return STATUS_RUNTIMEERROR;
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
                 }
                 break;
-            case OP_CLOSURE:
+            case NEON_OP_CLOSURE:
                 {
                     int i;
                     int32_t index;
                     int32_t islocal;
-                    ObjFunction* fn;
-                    ObjClosure* closure;
-                    fn = AS_FUNCTION(lox_vmbits_readconst(state));
-                    closure = lox_object_makeclosure(state, fn);
-                    lox_vmbits_stackpush(state, OBJ_VAL(closure));
+                    NeonObjScriptFunction* fn;
+                    NeonObjClosure* closure;
+                    fn = AS_FUNCTION(neon_vmbits_readconst(state));
+                    closure = neon_object_makeclosure(state, fn);
+                    neon_vmbits_stackpush(state, neon_value_makeobject(closure));
                     for(i = 0; i < closure->upvaluecount; i++)
                     {
-                        islocal = lox_vmbits_readbyte(state);
-                        index = lox_vmbits_readbyte(state);
+                        islocal = neon_vmbits_readbyte(state);
+                        index = neon_vmbits_readbyte(state);
                         if(islocal)
                         {
-                            closure->upvalues[i] = lox_vmbits_captureupval(state, &state->vmvars.stackvalues[state->vmvars.currframe->frstackindex + index]);
+                            closure->upvalues[i] = neon_vmbits_captureupval(state, &state->vmvars.stackvalues[state->vmvars.currframe->frstackindex + index]);
                         }
                         else
                         {
@@ -5267,74 +5484,74 @@ StatusCode lox_vm_runvm(LoxState* state)
                     }
                 }
                 break;
-            case OP_UPVALCLOSE:
+            case NEON_OP_UPVALCLOSE:
                 {
-                    Value* vargs;
+                    NeonValue* vargs;
                     vargs = (&state->vmvars.stackvalues[0] + state->vmvars.stacktop) - 1;
-                    lox_vmbits_closeupvals(state, vargs);
-                    lox_vmbits_stackpop(state);
+                    neon_vmbits_closeupvals(state, vargs);
+                    neon_vmbits_stackpop(state);
                 }
                 break;
-            case OP_RETURN:
+            case NEON_OP_RETURN:
                 {
                     int64_t usable;
-                    Value result;
-                    result = lox_vmbits_stackpop(state);
+                    NeonValue result;
+                    result = neon_vmbits_stackpop(state);
                     if(state->vmvars.currframe->frstackindex >= 0)
                     {
-                        lox_vmbits_closeupvals(state, &state->vmvars.stackvalues[state->vmvars.currframe->frstackindex]);
+                        neon_vmbits_closeupvals(state, &state->vmvars.stackvalues[state->vmvars.currframe->frstackindex]);
                     }
                     state->vmvars.framecount--;
                     if(state->vmvars.framecount == 0)
                     {
-                        lox_vmbits_stackpop(state);
-                        fprintf(stderr, "returning due to OP_RETURN\n");
-                        return STATUS_OK;
+                        neon_vmbits_stackpop(state);
+                        fprintf(stderr, "returning due to NEON_OP_RETURN\n");
+                        return NEON_STATUS_OK;
                     }
                     usable = (state->vmvars.currframe->frstackindex - 0);
                     state->vmvars.stacktop = usable;
-                    lox_vmbits_stackpush(state, result);
+                    neon_vmbits_stackpush(state, result);
                     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
 
                 }
                 break;
-            case OP_CLASS:
+            case NEON_OP_CLASS:
                 {
-                    lox_vmbits_stackpush(state, OBJ_VAL(lox_object_makeclass(state, lox_vmbits_readstring(state))));
+                    neon_vmbits_stackpush(state, neon_value_makeobject(neon_object_makeclass(state, neon_vmbits_readstring(state))));
                 }
                 break;
-            case OP_INHERIT:
+            case NEON_OP_INHERIT:
                 {
-                    Value superclass;
-                    ObjClass* subclass;
-                    superclass = lox_vmbits_stackpeek(state, 1);
+                    NeonValue superclass;
+                    NeonObjClass* subclass;
+                    superclass = neon_vmbits_stackpeek(state, 1);
                     if(!IS_CLASS(superclass))
                     {
-                        lox_state_raiseerror(state, "superclass must be a class.");
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "superclass must be a class.");
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
-                    subclass = AS_CLASS(lox_vmbits_stackpeek(state, 0));
-                    lox_hashtable_addall(state, &AS_CLASS(superclass)->methods, &subclass->methods);
-                    lox_vmbits_stackpop(state);// Subclass.
+                    subclass = AS_CLASS(neon_vmbits_stackpeek(state, 0));
+                    neon_hashtable_addall(state, &AS_CLASS(superclass)->methods, &subclass->methods);
+                    neon_vmbits_stackpop(state);// Subclass.
                 }
                 break;
 
-            case OP_METHOD:
+            case NEON_OP_METHOD:
                 {
-                    lox_vmbits_defmethod(state, lox_vmbits_readstring(state));
+                    neon_vmbits_defmethod(state, neon_vmbits_readstring(state));
                 }
                 break;
-            case OP_HALTVM:
+            case NEON_OP_HALTVM:
                 {
-                    return STATUS_OK;
+                    return NEON_STATUS_OK;
                 }
                 break;
             default:
                 {
                     if(instruc != -1)
                     {
-                        lox_state_raiseerror(state, "internal error: invalid opcode %d!", instruc);
-                        return STATUS_RUNTIMEERROR;
+                        neon_state_raiseerror(state, "internal error: invalid opcode %d!", instruc);
+                        return NEON_STATUS_RUNTIMEERROR;
                     }
                 }
                 break;
@@ -5343,24 +5560,24 @@ StatusCode lox_vm_runvm(LoxState* state)
 }
 
 
-StatusCode lox_state_runsource(LoxState* state, const char* source)
+NeonStatusCode neon_state_runsource(NeonState* state, const char* source)
 {
-    ObjFunction* fn;
-    ObjClosure* closure;
-    fn = lox_prs_compilesource(state, source);
+    NeonObjScriptFunction* fn;
+    NeonObjClosure* closure;
+    fn = neon_prs_compilesource(state, source);
     if(fn == NULL)
     {
-        return STATUS_SYNTAXERROR;
+        return NEON_STATUS_SYNTAXERROR;
     }
-    lox_vm_stackpush(state, OBJ_VAL(fn));
-    closure = lox_object_makeclosure(state, fn);
-    lox_vm_stackpop(state);
-    lox_vm_stackpush(state, OBJ_VAL(closure));
-    lox_vmbits_callclosure(state, closure, 0);
-    return lox_vm_runvm(state);
+    neon_vm_stackpush(state, neon_value_makeobject(fn));
+    closure = neon_object_makeclosure(state, fn);
+    neon_vm_stackpop(state);
+    neon_vm_stackpush(state, neon_value_makeobject(closure));
+    neon_vmbits_callclosure(state, closure, 0);
+    return neon_vm_runvm(state);
 }
 
-static char* lox_util_readhandle(FILE* hnd, size_t* dlen)
+static char* neon_util_readhandle(FILE* hnd, size_t* dlen)
 {
     long rawtold;
     /*
@@ -5410,7 +5627,7 @@ static char* lox_util_readhandle(FILE* hnd, size_t* dlen)
     return NULL;
 }
 
-static char* lox_util_readfile(const char* filename, size_t* dlen)
+static char* neon_util_readfile(const char* filename, size_t* dlen)
 {
     char* b;
     FILE* fh;
@@ -5418,37 +5635,37 @@ static char* lox_util_readfile(const char* filename, size_t* dlen)
     {
         return NULL;
     }
-    b = lox_util_readhandle(fh, dlen);
+    b = neon_util_readhandle(fh, dlen);
     fclose(fh);
     return b;
 }
 
 
-bool lox_state_runfile(LoxState* state, const char* path)
+bool neon_state_runfile(NeonState* state, const char* path)
 {
     size_t fsz;
     char* source;
-    StatusCode result;
-    source = lox_util_readfile(path, &fsz);
+    NeonStatusCode result;
+    source = neon_util_readfile(path, &fsz);
     if(source == NULL)
     {
         fprintf(stderr, "failed to read from '%s'\n", path);
         return false;
     }
-    result = lox_state_runsource(state, source);
+    result = neon_state_runsource(state, source);
     free(source);
-    if(result == STATUS_SYNTAXERROR)
+    if(result == NEON_STATUS_SYNTAXERROR)
     {
         return false;
     }
-    if(result == STATUS_RUNTIMEERROR)
+    if(result == NEON_STATUS_RUNTIMEERROR)
     {
         return false;
     }
     return true;
 }
 
-static void repl(LoxState* state)
+static void repl(NeonState* state)
 {
     char line[1024];
     for(;;)
@@ -5459,99 +5676,99 @@ static void repl(LoxState* state)
             printf("\n");
             break;
         }
-        lox_state_runsource(state, line);
+        neon_state_runsource(state, line);
     }
 }
 
-static Value cfn_clock(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_clock(NeonState* state, int argc, NeonValue* argv)
 {
     (void)state;
     (void)argc;
     (void)argv;
-    return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
+    return neon_value_makenumber((double)clock() / CLOCKS_PER_SEC);
 }
 
-static Value cfn_chr(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_chr(NeonState* state, int argc, NeonValue* argv)
 {
     double dw;
     char ch;
-    ObjString* os;
+    NeonObjString* os;
     (void)state;
     (void)argc;
     (void)argv;
     dw = argv[0].as.number;
     ch = (char)dw;
-    os = lox_string_copy(state, &ch, 1);
-    return OBJ_VAL(os);
+    os = neon_string_copy(state, &ch, 1);
+    return neon_value_makeobject(os);
 }
 
-static Value cfn_print(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_print(NeonState* state, int argc, NeonValue* argv)
 {
     int i;
     (void)state;
     for(i=0; i<argc; i++)
     {
-        lox_writer_printvalue(state->stdoutwriter, argv[i], false);
+        neon_writer_printvalue(state->stdoutwriter, argv[i], false);
     }
-    return NUMBER_VAL(0);
+    return neon_value_makenumber(0);
 }
 
-static Value cfn_println(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_println(NeonState* state, int argc, NeonValue* argv)
 {
     cfn_print(state, argc, argv);
     printf("\n");
-    return NUMBER_VAL(0);
+    return neon_value_makenumber(0);
 }
 
-static Value cfn_arraypush(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_arraypush(NeonState* state, int argc, NeonValue* argv)
 {
     int i;
     (void)state;
-    Value selfval;
-    ObjArray* oa;
+    NeonValue selfval;
+    NeonObjArray* oa;
     selfval = argv[0];
     if(!IS_ARRAY(selfval))
     {
-        lox_state_raiseerror(state, "first argument must be array");
+        neon_state_raiseerror(state, "first argument must be array");
     }
     else
     {
         oa = AS_ARRAY(selfval);
         for(i=1; i<argc; i++)
         {
-            lox_array_push(oa, argv[i]);
+            neon_array_push(oa, argv[i]);
         }
     }
-    return NUMBER_VAL(0);
+    return neon_value_makenumber(0);
 }
 
-static Value cfn_arraycount(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_arraycount(NeonState* state, int argc, NeonValue* argv)
 {
     (void)state;
-    Value selfval;
-    ObjArray* oa;
+    NeonValue selfval;
+    NeonObjArray* oa;
     (void)argc;
     selfval = argv[0];
     if(!IS_ARRAY(selfval))
     {
-        lox_state_raiseerror(state, "first argument must be array");
-        return NIL_VAL;
+        neon_state_raiseerror(state, "first argument must be array");
+        return neon_value_makenil();
     }
     else
     {
         oa = AS_ARRAY(selfval);
-        return NUMBER_VAL(oa->vala.size);
+        return neon_value_makenumber(oa->vala.size);
     }
-    return NUMBER_VAL(0);
+    return neon_value_makenumber(0);
 }
 
-static Value cfn_arrayset(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_arrayset(NeonState* state, int argc, NeonValue* argv)
 {
     long idx;
-    Value putval;
-    Value idxval;
-    Value selfval;
-    ObjArray* oa;
+    NeonValue putval;
+    NeonValue idxval;
+    NeonValue selfval;
+    NeonObjArray* oa;
     (void)state;
     (void)argc;
     selfval = argv[0];
@@ -5559,50 +5776,57 @@ static Value cfn_arrayset(LoxState* state, int argc, Value* argv)
     putval = argv[2];
     if(!IS_ARRAY(selfval))
     {
-        lox_state_raiseerror(state, "first argument must be array");
-        return NIL_VAL;
+        neon_state_raiseerror(state, "first argument must be array");
+        return neon_value_makenil();
     }
     else
     {
-        if(!IS_NUMBER(idxval))
+        if(!neon_value_isnumber(idxval))
         {
-            lox_state_raiseerror(state, "second argument must be number");
-            return NIL_VAL;
+            neon_state_raiseerror(state, "second argument must be number");
+            return neon_value_makenil();
         }
         oa = AS_ARRAY(selfval);
-        idx = AS_NUMBER(idxval);
-        lox_valarray_insert(&oa->vala, idx, putval);
+        idx = neon_value_asnumber(idxval);
+        neon_valarray_insert(&oa->vala, idx, putval);
     }
-    return NUMBER_VAL(0);
+    return neon_value_makenumber(0);
 }
 
-static Value cfn_arrayerase(LoxState* state, int argc, Value* argv)
+static NeonValue cfn_arrayerase(NeonState* state, int argc, NeonValue* argv)
 {
     long idx;
-    Value idxval;
-    Value selfval;
-    ObjArray* oa;
+    NeonValue idxval;
+    NeonValue selfval;
+    NeonObjArray* oa;
     (void)state;
     (void)argc;
     selfval = argv[0];
     idxval = argv[1];
     if(!IS_ARRAY(selfval))
     {
-        lox_state_raiseerror(state, "first argument must be array");
-        return NIL_VAL;
+        neon_state_raiseerror(state, "first argument must be array");
+        return neon_value_makenil();
     }
     else
     {
-        if(!IS_NUMBER(idxval))
+        if(!neon_value_isnumber(idxval))
         {
-            lox_state_raiseerror(state, "second argument must be number");
-            return NIL_VAL;
+            neon_state_raiseerror(state, "second argument must be number");
+            return neon_value_makenil();
         }
         oa = AS_ARRAY(selfval);
-        idx = AS_NUMBER(idxval);
-        return BOOL_VAL(lox_valarray_erase(&oa->vala, idx));
+        idx = neon_value_asnumber(idxval);
+        return neon_value_makebool(neon_valarray_erase(&oa->vala, idx));
     }
-    return BOOL_VAL(false);
+    return neon_value_makebool(false);
+}
+
+static NeonValue cfn_mapmake(NeonState* state, int argc, NeonValue* argv)
+{
+    NeonObjMap* om;
+    om = neon_object_makemap(state);
+    return neon_value_makeobject(om);
 }
 
 int main(int argc, char** argv)
@@ -5615,20 +5839,21 @@ int main(int argc, char** argv)
     char** nargv;
     char* codeline;
     const char* filename;
-    LoxState* state;
+    NeonState* state;
     exitcode = 0;
     nargv = argv;
     nargc = argc;
     codeline = NULL;
-    state = lox_state_init();
-    lox_state_defnative(state, "clock", cfn_clock);
-    lox_state_defnative(state, "chr", cfn_chr);
-    lox_state_defnative(state, "print", cfn_print);
-    lox_state_defnative(state, "println", cfn_println);
-    lox_state_defnative(state, "array_count", cfn_arraycount);
-    lox_state_defnative(state, "array_push", cfn_arraypush);
-    lox_state_defnative(state, "array_erase", cfn_arrayerase);
-    lox_state_defnative(state, "array_set", cfn_arrayset);
+    state = neon_state_init();
+    neon_state_defnative(state, "clock", cfn_clock);
+    neon_state_defnative(state, "chr", cfn_chr);
+    neon_state_defnative(state, "print", cfn_print);
+    neon_state_defnative(state, "println", cfn_println);
+    neon_state_defnative(state, "array_count", cfn_arraycount);
+    neon_state_defnative(state, "array_push", cfn_arraypush);
+    neon_state_defnative(state, "array_erase", cfn_arrayerase);
+    neon_state_defnative(state, "array_set", cfn_arrayset);
+    neon_state_defnative(state, "map_make", cfn_mapmake);
     for(i=1; i<argc; i++)
     {
         if(argv[i][0] == '-')
@@ -5674,7 +5899,7 @@ int main(int argc, char** argv)
     if(codeline != NULL)
     {
         fprintf(stderr, "codeline=%s\n", codeline);
-        lox_state_runsource(state, codeline);
+        neon_state_runsource(state, codeline);
     }
     else
     {
@@ -5682,7 +5907,7 @@ int main(int argc, char** argv)
         {
             filename = nargv[1];
             fprintf(stderr, "filename=%s\n", filename);
-            if(!lox_state_runfile(state, filename))
+            if(!neon_state_runfile(state, filename))
             {
                 exitcode = 1;
             }
@@ -5692,6 +5917,6 @@ int main(int argc, char** argv)
             repl(state);
         }
     }
-    lox_state_free(state);
+    neon_state_free(state);
     return exitcode;
 }
