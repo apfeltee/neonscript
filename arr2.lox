@@ -1,0 +1,8 @@
+a=["red", "green", "blue"]
+println("orig:", a)
+array_push(a, "foo")
+println("after push:", a)
+array_erase(a, 1)
+println("after erase:", a);
+
+
