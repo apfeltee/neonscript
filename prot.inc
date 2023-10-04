@@ -176,6 +176,8 @@ void neon_prs_rulethis(NeonAstParser *prs, bool canassign);
 void neon_prs_ruleunary(NeonAstParser *prs, bool canassign);
 void neon_prs_rulearray(NeonAstParser *prs, bool canassign);
 void neon_prs_ruleindex(NeonAstParser *prs, bool canassign);
+void neon_prs_rulemap(NeonAstParser *prs, bool canassign);
+NeonAstRule *neon_prs_setrule(NeonAstRule *rule, NeonAstParseFN prefix, NeonAstParseFN infix, NeonAstPrecedence precedence);
 NeonAstRule *neon_prs_getrule(NeonAstTokType type);
 void neon_prs_parseprec(NeonAstParser *prs, NeonAstPrecedence precedence);
 void neon_prs_parseexpr(NeonAstParser *prs);
@@ -238,6 +240,7 @@ static inline bool neon_vmexec_indexsetmap(NeonState *state, NeonObjMap *om, Neo
 static inline bool neon_vmexec_indexset(NeonState *state);
 static inline bool neon_vmexec_propertyget(NeonState *state);
 static inline bool neon_vmexec_makearray(NeonState *state);
+static inline bool neon_vmexec_makemap(NeonState *state);
 NeonStatusCode neon_vm_runvm(NeonState *state);
 NeonStatusCode neon_state_runsource(NeonState *state, const char *source);
 static char *neon_util_readhandle(FILE *hnd, size_t *dlen);

@@ -97,6 +97,7 @@ enum NeonOpCode
     NEON_OP_INHERIT,
     NEON_OP_METHOD,
     NEON_OP_MAKEARRAY,
+    NEON_OP_MAKEMAP,
     NEON_OP_INDEXGET,
     NEON_OP_INDEXSET,
     NEON_OP_HALTVM,
@@ -417,13 +418,6 @@ struct NeonObjBoundFunction
     NeonObjClosure* method;
 };
 
-struct NeonCallFrame
-{
-    int32_t* ip;
-    int64_t frstackindex;
-    NeonObjClosure* closure;
-};
-
 struct NeonAstToken
 {
     int length;
@@ -450,15 +444,15 @@ struct NeonAstLoop
 
 struct NeonAstLocal
 {
-    int depth;
     bool iscaptured;
+    int depth;
     NeonAstToken name;
 };
 
 struct NeonAstUpvalue
 {
-    int32_t index;
     bool islocal;
+    int32_t index;
 };
 
 struct NeonAstCompiler
@@ -471,7 +465,6 @@ struct NeonAstCompiler
     NeonAstLoop* loop;
     NeonAstUpvalue upvalues[UINT8_COUNT];
     NeonAstLocal locals[UINT8_COUNT];
-
 };
 
 struct NeonAstClassCompiler
@@ -498,6 +491,13 @@ struct NeonAstParser
     NeonAstScanner* pscn;
     NeonAstCompiler* currcompiler;
     NeonAstClassCompiler* currclass;
+};
+
+struct NeonCallFrame
+{
+    int32_t* ip;
+    int64_t frstackindex;
+    NeonObjClosure* closure;
 };
 
 struct NeonVMVars
@@ -1614,7 +1614,7 @@ bool neon_valarray_grow(NeonValArray* arr, size_t count)
     {
         return false;
     }
-    arr->values = newbuf;
+    arr->values = (NeonValue*)newbuf;
     arr->capacity = count;
     return true;
 }
@@ -2258,6 +2258,8 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
             return neon_dbg_dumpsimpleinstr(state, wr, "NEON_OP_PUSHFALSE", offset);
         case NEON_OP_MAKEARRAY:
             return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_MAKEARRAY", chunk, offset);
+        case NEON_OP_MAKEMAP:
+            return neon_dbg_dumpconstinstr(state, wr, "NEON_OP_MAKEMAP", chunk, offset);
         case NEON_OP_INDEXGET:
             return neon_dbg_dumpbyteinstr(state, wr, "NEON_OP_INDEXGET", chunk, offset);
         case NEON_OP_POP:
@@ -2957,6 +2959,7 @@ int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
         case NEON_OP_METHOD:
             return 1;
         case NEON_OP_MAKEARRAY:
+        case NEON_OP_MAKEMAP:
         case NEON_OP_JUMPNOW:
         case NEON_OP_JUMPIFFALSE:
         case NEON_OP_PSEUDOBREAK:
@@ -3786,104 +3789,331 @@ void neon_prs_ruleindex(NeonAstParser* prs, bool canassign)
     }
 }
 
-/* clang-format off */
-static const NeonAstRule parserules[] = {
-    /* Compiling Expressions rules < Calls and Functions infix-left-paren */
-    // [NEON_TOK_PARENOPEN]    = {grouping, NULL,   NEON_PREC_NONE},
-    [NEON_TOK_PARENOPEN] = { neon_prs_rulegrouping, neon_prs_rulecall, NEON_PREC_CALL },
-    [NEON_TOK_PARENCLOSE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_BRACEOPEN] = { NULL, NULL, NEON_PREC_NONE },// [big]
-    [NEON_TOK_BRACECLOSE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_BRACKETOPEN] = { neon_prs_rulearray, neon_prs_ruleindex, NEON_PREC_CALL },
-    [NEON_TOK_BRACKETCLOSE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_COMMA] = { NULL, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Classes and Instances table-dot */
-    // [NEON_TOK_DOT]           = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_DOT] = { NULL, neon_prs_ruledot, NEON_PREC_CALL },
-    [NEON_TOK_MINUS] = { neon_prs_ruleunary, neon_prs_rulebinary, NEON_PREC_TERM },
-    [NEON_TOK_PLUS] = { NULL, neon_prs_rulebinary, NEON_PREC_TERM },
-    [NEON_TOK_SEMICOLON] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_NEWLINE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_SLASH] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_STAR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_MODULO] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_BINAND] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_BINOR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_BINXOR] = { NULL, neon_prs_rulebinary, NEON_PREC_FACTOR },
-    [NEON_TOK_SHIFTLEFT] = {NULL, neon_prs_rulebinary, NEON_PREC_SHIFT},
-    [NEON_TOK_SHIFTRIGHT] = {NULL, neon_prs_rulebinary, NEON_PREC_SHIFT},
-    [NEON_TOK_INCREMENT] = {NULL, NULL, NEON_PREC_NONE},
-    [NEON_TOK_DECREMENT] = {NULL, NULL, NEON_PREC_NONE},
-    /* Compiling Expressions rules < Types of Values table-not */
-    // [NEON_TOK_EXCLAM]          = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_EXCLAM] = { neon_prs_ruleunary, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Types of Values table-equal */
-    // [NEON_TOK_COMPNOTEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_COMPNOTEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY },
-    [NEON_TOK_ASSIGN] = { NULL, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Types of Values table-comparisons */
-    // [NEON_TOK_COMPEQUAL]   = {NULL,     NULL,   NEON_PREC_NONE},
-    // [NEON_TOK_COMPGREATERTHAN]       = {NULL,     NULL,   NEON_PREC_NONE},
-    // [NEON_TOK_COMPGREATEREQUAL] = {NULL,     NULL,   NEON_PREC_NONE},
-    // [NEON_TOK_COMPLESSTHAN]          = {NULL,     NULL,   NEON_PREC_NONE},
-    // [NEON_TOK_COMPLESSEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_COMPEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY },
-    [NEON_TOK_COMPGREATERTHAN] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
-    [NEON_TOK_COMPGREATEREQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
-    [NEON_TOK_COMPLESSTHAN] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
-    [NEON_TOK_COMPLESSEQUAL] = { NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON },
-    /* Compiling Expressions rules < Global Variables table-identifier */
-    // [NEON_TOK_IDENTIFIER]    = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_IDENTIFIER] = { neon_prs_rulevariable, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Strings table-string */
-    // [NEON_TOK_STRING]        = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_STRING] = { neon_prs_rulestring, NULL, NEON_PREC_NONE },
-    [NEON_TOK_NUMBER] = { neon_prs_rulenumber, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Jumping Back and Forth table-and */
-    // [NEON_TOK_KWAND]           = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_KWBREAK] = {NULL, NULL, NEON_PREC_NONE},
-    [NEON_TOK_KWCONTINUE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWAND] = { NULL, neon_prs_ruleand, NEON_PREC_AND },
-    [NEON_TOK_KWCLASS] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWELSE] = { NULL, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Types of Values table-false */
-    // [NEON_TOK_KWFALSE]         = {NULL,     NULL,   NEON_PREC_NONE},
-    [NEON_TOK_KWFALSE] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWFOR] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWFUNCTION] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWIF] = { NULL, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Types of Values table-nil
-    * [NEON_TOK_KWNIL]           = {NULL,     NULL,   NEON_PREC_NONE},
-    */
-    [NEON_TOK_KWNIL] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Jumping Back and Forth table-or
-    * [NEON_TOK_KWOR]            = {NULL,     NULL,   NEON_PREC_NONE},
-    */
-    [NEON_TOK_KWOR] = { NULL, neon_prs_ruleor, NEON_PREC_OR },
-    [NEON_TOK_KWDEBUGPRINT] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWRETURN] = { NULL, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Superclasses table-super
-    * [NEON_TOK_KWSUPER]         = {NULL,     NULL,   NEON_PREC_NONE},
-    */
-    [NEON_TOK_KWSUPER] = { neon_prs_rulesuper, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Methods and Initializers table-this
-    * [NEON_TOK_KWTHIS]          = {NULL,     NULL,   NEON_PREC_NONE},
-    */
-    [NEON_TOK_KWTHIS] = { neon_prs_rulethis, NULL, NEON_PREC_NONE },
-    /* Compiling Expressions rules < Types of Values table-true
-    * [NEON_TOK_KWTRUE]          = {NULL,     NULL,   NEON_PREC_NONE},
-    */
-    [NEON_TOK_KWTRUE] = { neon_prs_ruleliteral, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWVAR] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_KWWHILE] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_ERROR] = { NULL, NULL, NEON_PREC_NONE },
-    [NEON_TOK_EOF] = { NULL, NULL, NEON_PREC_NONE },
-};
-/* clang-format on */
+void neon_prs_rulemap(NeonAstParser* prs, bool canassign)
+{
+    int count;
+    count = 0;
+    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expect closing brace for map");
+    neon_prs_emit2byte(prs, NEON_OP_MAKEMAP, count);
+}
+
+NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParseFN prefix, NeonAstParseFN infix, NeonAstPrecedence precedence)
+{
+    rule->prefix = prefix;
+    rule->infix = infix;
+    rule->precedence = precedence;
+    return rule;
+}
 
 NeonAstRule* neon_prs_getrule(NeonAstTokType type)
 {
-    return (NeonAstRule*)&parserules[type];
+    static NeonAstRule dest;
+    switch(type)
+    {
+        /* Compiling Expressions rules < Calls and Functions infix-left-paren */
+        // [NEON_TOK_PARENOPEN]    = {grouping, NULL,   NEON_PREC_NONE},
+        case NEON_TOK_PARENOPEN:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulegrouping, neon_prs_rulecall, NEON_PREC_CALL );
+            }
+            break;
+        case NEON_TOK_PARENCLOSE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_BRACEOPEN:
+            {
+                return neon_prs_setrule(&dest, neon_prs_rulemap, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_BRACECLOSE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_BRACKETOPEN:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulearray, neon_prs_ruleindex, NEON_PREC_CALL );
+            }
+            break;
+        case NEON_TOK_BRACKETCLOSE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_COMMA:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Classes and Instances table-dot */
+        // [NEON_TOK_DOT]           = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_DOT:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_ruledot, NEON_PREC_CALL );
+            }
+            break;
+        case NEON_TOK_MINUS:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_ruleunary, neon_prs_rulebinary, NEON_PREC_TERM );
+            }
+            break;
+        case NEON_TOK_PLUS:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_TERM );
+            }
+            break;
+        case NEON_TOK_SEMICOLON:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_NEWLINE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_SLASH:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_STAR:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_MODULO:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_BINAND:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_BINOR:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_BINXOR:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+            }
+            break;
+        case NEON_TOK_SHIFTLEFT:
+            {
+                return neon_prs_setrule(&dest, NULL, neon_prs_rulebinary, NEON_PREC_SHIFT);
+            }
+            break;
+        case NEON_TOK_SHIFTRIGHT:
+            {
+                return neon_prs_setrule(&dest, NULL, neon_prs_rulebinary, NEON_PREC_SHIFT);
+            }
+            break;
+        case NEON_TOK_INCREMENT:
+            {
+                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+            }
+            break;
+        case NEON_TOK_DECREMENT:
+            {
+                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-not */
+        // [NEON_TOK_EXCLAM]          = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_EXCLAM:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_ruleunary, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-equal */
+        // [NEON_TOK_COMPNOTEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_COMPNOTEQUAL:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY );
+            }
+            break;
+        case NEON_TOK_ASSIGN:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-comparisons */
+        // [NEON_TOK_COMPEQUAL]   = {NULL,     NULL,   NEON_PREC_NONE},
+        // [NEON_TOK_COMPGREATERTHAN]       = {NULL,     NULL,   NEON_PREC_NONE},
+        // [NEON_TOK_COMPGREATEREQUAL] = {NULL,     NULL,   NEON_PREC_NONE},
+        // [NEON_TOK_COMPLESSTHAN]          = {NULL,     NULL,   NEON_PREC_NONE},
+        // [NEON_TOK_COMPLESSEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_COMPEQUAL:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY );
+            }
+            break;
+        case NEON_TOK_COMPGREATERTHAN:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+            }
+            break;
+        case NEON_TOK_COMPGREATEREQUAL:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+            }
+            break;
+        case NEON_TOK_COMPLESSTHAN:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+            }
+            break;
+        case NEON_TOK_COMPLESSEQUAL:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+            }
+            break;
+        /* Compiling Expressions rules < Global Variables table-identifier */
+        // [NEON_TOK_IDENTIFIER]    = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_IDENTIFIER:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulevariable, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Strings table-string */
+        // [NEON_TOK_STRING]        = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_STRING:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulestring, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_NUMBER:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulenumber, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Jumping Back and Forth table-and */
+        // [NEON_TOK_KWAND]           = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_KWBREAK:
+            {
+                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+            }
+            break;
+        case NEON_TOK_KWCONTINUE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWAND:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_ruleand, NEON_PREC_AND );
+            }
+            break;
+        case NEON_TOK_KWCLASS:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWELSE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-false */
+        // [NEON_TOK_KWFALSE]         = {NULL,     NULL,   NEON_PREC_NONE},
+        case NEON_TOK_KWFALSE:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWFOR:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWFUNCTION:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWIF:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-nil
+        * [NEON_TOK_KWNIL]           = {NULL,     NULL,   NEON_PREC_NONE},
+        */
+        case NEON_TOK_KWNIL:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Jumping Back and Forth table-or
+        * [NEON_TOK_KWOR]            = {NULL,     NULL,   NEON_PREC_NONE},
+        */
+        case NEON_TOK_KWOR:
+            {
+                return neon_prs_setrule(&dest,  NULL, neon_prs_ruleor, NEON_PREC_OR );
+            }
+            break;
+        case NEON_TOK_KWDEBUGPRINT:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWRETURN:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Superclasses table-super
+        * [NEON_TOK_KWSUPER]         = {NULL,     NULL,   NEON_PREC_NONE},
+        */
+        case NEON_TOK_KWSUPER:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulesuper, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Methods and Initializers table-this
+        * [NEON_TOK_KWTHIS]          = {NULL,     NULL,   NEON_PREC_NONE},
+        */
+        case NEON_TOK_KWTHIS:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_rulethis, NULL, NEON_PREC_NONE );
+            }
+            break;
+        /* Compiling Expressions rules < Types of Values table-true
+        * [NEON_TOK_KWTRUE]          = {NULL,     NULL,   NEON_PREC_NONE},
+        */
+        case NEON_TOK_KWTRUE:
+            {
+                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWVAR:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_KWWHILE:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_ERROR:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+        case NEON_TOK_EOF:
+            {
+                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+            }
+            break;
+    }
+    return NULL;
 }
 
 void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
@@ -5106,6 +5336,17 @@ static inline bool neon_vmexec_makearray(NeonState* state)
     return true;
 }
 
+static inline bool neon_vmexec_makemap(NeonState* state)
+{
+    int count;
+    NeonObjMap* map;
+    (void)count;
+    count = neon_vmbits_readbyte(state);
+    map = neon_object_makemap(state);
+    neon_vmbits_stackpush(state, neon_value_makeobject(map));
+    return true;
+}
+
 NeonStatusCode neon_vm_runvm(NeonState* state)
 {
     size_t icnt;
@@ -5179,6 +5420,14 @@ NeonStatusCode neon_vm_runvm(NeonState* state)
             case NEON_OP_MAKEARRAY:
                 {
                     if(!neon_vmexec_makearray(state))
+                    {
+                        return NEON_STATUS_RUNTIMEERROR;
+                    }
+                }
+                break;
+            case NEON_OP_MAKEMAP:
+                {
+                    if(!neon_vmexec_makemap(state))
                     {
                         return NEON_STATUS_RUNTIMEERROR;
                     }
