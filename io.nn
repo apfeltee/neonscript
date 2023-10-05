@@ -1,0 +1,20 @@
+
+data = io_readfile("Makefile")
+len = string_length(data)
+
+lineno = 1
+for(i=0; i<len; i++)
+{
+    ch = data[i]
+    if(ch == "\n")
+    {
+        print("\n")
+        print(lineno, ": ")
+        lineno++
+    }
+    else
+    {
+        print("|", ch)
+    }
+}
+
