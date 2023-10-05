@@ -1,7 +1,9 @@
 
-a = ["red", "green", "blue"]
-println("a:count=", array_count(a))
-println("a      =", a)
-array_push(a, "yellow", "pruple")
-println("a now  =", a)
-println("a[1]   =", a[1])
+var a = ["red", "green", "blue"];
+println("a:count=", array_count(a));
+println("a      =", a);
+array_push(a, "yellow", "purple", 42, 889);
+println("a now  =", a);
+println("a[1]   =", a[1]);
+a[5]++
+println("a inc  =", a);

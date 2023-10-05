@@ -1,8 +1,7 @@
-a=["red", "green", "blue"]
-println("orig:", a)
-array_push(a, "foo")
-println("after push:", a)
-array_erase(a, 1)
-println("after erase:", a);
-
-
+a={}
+//vn = 5555
+a["jim"] = ["red", 889, "blue"]
+println("before: ", a)
+a["jim"][1]++
+println("after index: ", a["jim"])
+println("after: ", a)
