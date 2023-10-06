@@ -1,0 +1,34 @@
+
+function a(k, x1, x2, x3, x4, x5)
+{
+    function b()
+    {
+        k = k - 1;
+        return a(k, b, x1, x2, x3, x4);
+    }
+    if(k > 0)
+    {
+        return b();
+    }
+    return x4() + x5();
+}
+
+// this uses lambda wrappers around the numeric arguments
+function x(n)
+{
+    function inner()
+    {
+        return n;
+    }
+    return inner;
+}
+
+function fna1() { return  1; }
+function fna2() { return -1; }
+function fna3() { return -1; }
+function fna4() { return  1; }
+function fna5() { return  0; }
+
+//console.log(a(10, x(1), x(-1), x(-1), x(1), x(0)));
+println(a(10, fna1, fna2, fna3, fna4, fna5))
+

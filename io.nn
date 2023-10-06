@@ -1,5 +1,5 @@
 
-data = io_readfile("Makefile")
+data = io_readfile("Makefile", 120)
 len = string_length(data)
 
 lineno = 1
