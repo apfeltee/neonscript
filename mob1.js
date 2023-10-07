@@ -29,6 +29,6 @@ function fna3() { return -1; }
 function fna4() { return  1; }
 function fna5() { return  0; }
 
-//console.log(a(10, x(1), x(-1), x(-1), x(1), x(0)));
+//console.log(a(10, fna1, fna2, fna3, fna4, fna5));
 println(a(10, fna1, fna2, fna3, fna4, fna5))
 

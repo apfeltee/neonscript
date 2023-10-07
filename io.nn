@@ -1,6 +1,6 @@
 
 data = io_readfile("Makefile", 120)
-len = string_length(data)
+len = String.length(data)
 
 lineno = 1
 for(i=0; i<len; i++)

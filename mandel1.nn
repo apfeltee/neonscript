@@ -36,7 +36,7 @@ for(i=0; i < h; i++)
             }
             ic++;
         }
-        print(string_chr(pch));
+        print(String.chr(pch));
     }
     println();
 }

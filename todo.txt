@@ -1,0 +1,6 @@
+
+module namespaces:
+    string::chr
+    string::length
+    ...
+
