@@ -1,0 +1,105 @@
+
+function bf(src, input)
+{
+    var i
+    var memory = []
+    for(i=0; i<300; i++)
+    {
+        memory.push(0)
+    }
+    var memptr  = 0
+    var inptr = 0
+    var instr    = 0
+    var stack = []
+    while(instr < String.length(src))
+    {
+        if(instr < 0)
+        {
+            throw Exception("Invalid instruction pointer (instr=" + instr + ")")
+        }
+        var c = src[instr]
+        if(c == "+")
+        {
+            memory[memptr] = memory[memptr] + 1
+            if(memptr >= memory.count())
+            {
+                throw Exception("Heap overrun memptr=${memptr}")
+            }
+        }
+        else if(c == "-")
+        {
+            memory[memptr] = memory[memptr] - 1
+            if(memptr < 0)
+            {
+                throw Exception("Heap underrun")
+            }
+        }
+        else if(c == ".")
+        {
+            print(String.chr(memory[memptr]))
+        }
+        else if(c == "x")
+        {
+           memory[memptr] = input[inptr]
+           inptr = inptr + 1
+        }
+        else if(c == ">")
+        {
+            memptr = memptr + 1
+            if(memptr > memory.count())
+            {
+                throw Exception("data pointer out of bounds")
+            }
+        }
+        else if(c == "<")
+        {
+            memptr = memptr - 1
+            if(memptr < 0)
+            {
+                throw Exception("data pointer cannot go below 0 (memptr=${memptr})")
+            }
+        }
+        else if(c == "[")
+        {
+            if (memory[memptr] != 0)
+                stack.push(instr)
+            else
+            {
+                var bcount = 0
+                var cont = true
+                while(cont)
+                {
+                    instr = instr + 1
+                    if(instr > String.length(src))
+                    {
+                        throw Exception("Missing matching ']'")
+                    }
+                    if(src[instr] == "]")
+                    {
+                        if(bcount != 0)
+                        {
+                            bcount = bcount - 1;
+                        }
+                        else
+                        {
+                            cont = false;
+                        }
+                    }
+                    else if(src[instr] == "[")
+                    {
+                        bcount = bcount + 1;
+                    }
+               }
+           }
+        }
+        else if(c == "]")
+        {
+            instr = stack.pop();
+            instr = instr - 1
+        }
+        instr = instr + 1
+    }
+}
+
+var bfsource = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
+bf(bfsource, "")
