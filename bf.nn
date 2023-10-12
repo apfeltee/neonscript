@@ -11,7 +11,7 @@ function bf(src, input)
     var inptr = 0
     var instr    = 0
     var stack = []
-    while(instr < String.length(src))
+    while(instr < src.length())
     {
         if(instr < 0)
         {
@@ -36,7 +36,7 @@ function bf(src, input)
         }
         else if(c == ".")
         {
-            print(String.chr(memory[memptr]))
+            print(memory[memptr].chr())
         }
         else if(c == "x")
         {
@@ -70,7 +70,7 @@ function bf(src, input)
                 while(cont)
                 {
                     instr = instr + 1
-                    if(instr > String.length(src))
+                    if(instr > src.length())
                     {
                         throw Exception("Missing matching ']'")
                     }

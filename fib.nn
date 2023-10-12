@@ -7,6 +7,6 @@ fun fib(n)
     return fib(n - 2) + fib(n - 1)
 }
 
-var start = clock()
+var start = Time.unixclock()
 var n = 12
-println("fib(", n, "): ", fib(n),"; elapsed: ", clock() - start)
+println("fib(", n, "): ", fib(n),"; elapsed: ", Time.unixclock() - start)

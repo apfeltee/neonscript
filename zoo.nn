@@ -17,7 +17,7 @@ class Zoo {
 
 var zoo = Zoo();
 var sum = 0;
-var start = clock();
+var start = Time.unixclock();
 while (sum < 100) {
   sum = sum + zoo.ant()
             + zoo.banana()
@@ -27,4 +27,4 @@ while (sum < 100) {
             + zoo.mouse();
 }
 
-println("sum: ", sum, "; elapsed: ", clock() - start);
+println("sum: ", sum, "; elapsed: ", Time.unixclock() - start);

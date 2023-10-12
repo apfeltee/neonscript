@@ -1,0 +1,8 @@
+
+f=File.open("Makefile", "rb")
+println("f = ", f)
+b = f.read(100)
+println("b=", b)
+f.close()
+
+

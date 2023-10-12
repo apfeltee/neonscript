@@ -35,7 +35,7 @@ var mindepth = 4
 var maxdepth = 8
 var stretchdepth = maxdepth + 1
 
-var start = clock()
+var start = Time.unixclock()
 
 println("stretch tree of depth: ", stretchdepth, "; check: ", Tree(0, stretchdepth).check());
 
@@ -64,5 +64,5 @@ while (depth < stretchdepth) {
   depth = depth + 2
 }
 
-println("long lived tree of depth:", maxdepth, "; check:", longlivedtree.check(), "; elapsed:", clock() - start)
+println("long lived tree of depth:", maxdepth, "; check:", longlivedtree.check(), "; elapsed:", Time.unixclock() - start)
 println("created ", g_totaltrees, " trees")
