@@ -1,7 +1,30 @@
 
 f=File.open("Makefile", "rb")
 println("f = ", f)
-b = f.read(100)
+
+cnt = 1
+print(cnt, ": ")
+while(true)
+{
+    b = f.read(1)
+    if(b == nil)
+    {
+        break;
+    }
+    else
+    {
+        if(b == "\n")
+        {
+            print("\n", cnt, ":");
+            cnt++
+        }
+        else
+        {
+            print(b)
+        }
+    }
+
+}
 println("b=", b)
 f.close()
 
