@@ -11,6 +11,10 @@ srcfiles_all = \
 	$(wildcard *.c) \
 	$(wildcard modules/*.c)
 
+headerfiles_all = \
+	vm.h \
+	parse.h
+
 objfiles_all = $(srcfiles_all:.c=.o)
 depfiles_all = $(objfiles_all:.o=.d)
 protofile = prot.inc
@@ -25,9 +29,9 @@ all: $(protofile) $(target)
 
 ## dear god what a kludge
 ifeq (1, $(havecproto))
-$(protofile): $(srcfiles_all)
+$(protofile): $(srcfiles_all) $(headerfiles_all)
 	echo > $(protofile)
-	cproto -si $(srcfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' | grep -vP __inline > $(protofile)_tmp
+	cproto -si $(srcfiles_all) $(headerfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' | grep -vP __inline > $(protofile)_tmp
 	mv $(protofile)_tmp $(protofile)
 else
 $(protofile): $(srcfiles_all)
