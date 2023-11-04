@@ -1,7 +1,7 @@
 
 
 
-static inline int32_t neon_vmbits_readinstruction(NeonState* state, bool asinstruc)
+static inline int32_t neon_vmbits_readinstruction(NeonState* state)
 {
     int idx;
     int32_t r;
@@ -12,10 +12,7 @@ static inline int32_t neon_vmbits_readinstruction(NeonState* state, bool asinstr
     idx = state->vmvars.currframe->instrucidx;
     if(idx >= cls->innerfn->chunk->count)
     {
-        if(asinstruc)
-        {
-            r = NEON_OP_HALTVM;
-        }
+        r = NEON_OP_HALTVM;
     }
     else
     {
@@ -24,7 +21,7 @@ static inline int32_t neon_vmbits_readinstruction(NeonState* state, bool asinstr
     state->vmvars.currframe->instrucidx++;
     return r;
 }
-static inline int32_t neon_vmbits_readbyte(NeonState* state, bool asinstruc)
+static inline int32_t neon_vmbits_readbyte(NeonState* state)
 {
     int idx;
     int32_t r;
@@ -74,7 +71,7 @@ static inline NeonValue neon_vmbits_readconstbyindex(NeonState* state, int32_t i
 static inline NeonValue neon_vmbits_readconst(NeonState* state)
 {
     int32_t b;
-    b = neon_vmbits_readbyte(state, false);
+    b = neon_vmbits_readbyte(state);
     return neon_vmbits_readconstbyindex(state, b);
 }
 
@@ -615,7 +612,7 @@ static inline bool neon_vmexec_indexget(NeonState* state)
     ok = false;
     vidx = neon_vmbits_stackpeek(state, 0);
     targetobj = neon_vmbits_stackpeek(state, 1);
-    waint = neon_vmbits_readbyte(state, false);
+    waint = neon_vmbits_readbyte(state);
     willassign = (waint == 1);
     if(!willassign)
     {
@@ -695,7 +692,7 @@ static inline bool neon_vmexec_indexset(NeonState* state)
     setval = neon_vmbits_stackpeek(state, 0);
     vidx = neon_vmbits_stackpeek(state, 1);
     targetobj = neon_vmbits_stackpeek(state, 2);
-    waint = neon_vmbits_readbyte(state, false);
+    waint = neon_vmbits_readbyte(state);
     willassign = (waint == 1);
     if(!willassign)
     {
@@ -830,7 +827,7 @@ static inline bool neon_vmexec_makearray(NeonState* state)
     int count;
     NeonValue val;
     NeonObjArray* array;
-    count = neon_vmbits_readbyte(state, false);
+    count = neon_vmbits_readbyte(state);
     array = neon_array_make(state);
     //fprintf(stderr, "makearray: count=%d\n", count);
     for(i = count - 1; i >= 0; i--)
@@ -854,7 +851,7 @@ static inline bool neon_vmexec_makemap(NeonState* state)
     int count;
     NeonObjMap* map;
     (void)count;
-    count = neon_vmbits_readbyte(state, false);
+    count = neon_vmbits_readbyte(state);
     map = neon_object_makemap(state);
     neon_vmbits_stackpush(state, neon_value_fromobject(map));
     return true;
@@ -868,7 +865,7 @@ static inline bool neon_vmexec_globalstmt(NeonState* state)
     NeonValue cval;
     NeonObjString* cname;
     NeonObjMap* map;
-    cnidx = neon_vmbits_readbyte(state, false);
+    cnidx = neon_vmbits_readbyte(state);
     if(cnidx == -1)
     {
         map = neon_object_makemapfromtable(state, state->globals, false);
@@ -956,7 +953,7 @@ NeonStatusCode neon_vm_runvm(NeonState* state, NeonValue* evdest, bool fromneste
     state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
     for(;;)
     {
-        instruc = neon_vmbits_readinstruction(state, true);
+        instruc = neon_vmbits_readinstruction(state);
         if(state->conf.shouldprintruntime)
         {
             neon_vm_debugprintinstruction(state, owr, state->vmvars.currframe);
@@ -1031,7 +1028,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
     op_case(NEON_OP_POPN)
         {
             int32_t n;
-            n = neon_vmbits_readbyte(state, false);
+            n = neon_vmbits_readbyte(state);
             neon_vmbits_stackpopn(state, n);
         }
         vm_breakouter();
@@ -1045,7 +1042,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             int32_t islot;
             int32_t actualpos;
             NeonValue val;
-            islot = neon_vmbits_readbyte(state, false);
+            islot = neon_vmbits_readbyte(state);
             actualpos = state->vmvars.currframe->frstackindex + (islot + 0);
             neon_vm_stackmaybegrow(state, actualpos);
             val = state->vmvars.stackvalues[actualpos];
@@ -1057,7 +1054,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             int32_t islot;
             int32_t actualpos;
             NeonValue val;
-            islot = neon_vmbits_readbyte(state, false);
+            islot = neon_vmbits_readbyte(state);
             val = neon_vmbits_stackpeek(state, 0);
             actualpos = state->vmvars.currframe->frstackindex + (islot + 0);
             neon_vm_stackmaybegrow(state, actualpos);
@@ -1116,8 +1113,8 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             neon_vmbits_stackpush(state, neon_value_fromobject(closure));
             for(i = 0; i < closure->upvaluecount; i++)
             {
-                islocal = neon_vmbits_readbyte(state, false);
-                index = neon_vmbits_readbyte(state, false);
+                islocal = neon_vmbits_readbyte(state);
+                index = neon_vmbits_readbyte(state);
                 if(islocal)
                 {
                     upidx = state->vmvars.currframe->frstackindex + index;
@@ -1143,7 +1140,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             int32_t islot;
             NeonValue val;
             NeonObjClosure* cls;
-            islot = neon_vmbits_readbyte(state, false);
+            islot = neon_vmbits_readbyte(state);
             cls = state->vmvars.currframe->closure;
             val = cls->upvalues[islot]->location;
             neon_vmbits_stackpush(state, val);
@@ -1154,7 +1151,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             int32_t idx;
             int32_t islot;
             NeonValue peeked;
-            islot = neon_vmbits_readbyte(state, false);
+            islot = neon_vmbits_readbyte(state);
             peeked = neon_vmbits_stackpeek(state, 0);
             idx = 0;
             state->vmvars.currframe->closure->upvalues[islot]->upindex = (idx);
@@ -1339,7 +1336,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
         {
             int argc;
             NeonValue peeked;
-            argc = neon_vmbits_readbyte(state, false);
+            argc = neon_vmbits_readbyte(state);
             peeked = neon_vmbits_stackpeek(state, argc);
             if(!neon_vmbits_callvalue(state, neon_value_makenil(), peeked, argc))
             {
@@ -1354,7 +1351,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             int argc;
             NeonObjString* method;
             method = neon_vmbits_readstring(state);
-            argc = neon_vmbits_readbyte(state, false);
+            argc = neon_vmbits_readbyte(state);
             if(!neon_vmbits_invoke(state, method, argc))
             {
                 return NEON_STATUS_RUNTIMEERROR;
@@ -1369,7 +1366,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             NeonObjString* method;
             NeonObjClass* superclass;
             method = neon_vmbits_readstring(state);
-            argc = neon_vmbits_readbyte(state, false);
+            argc = neon_vmbits_readbyte(state);
             popped = neon_vmbits_stackpop(state);
             superclass = neon_value_asclass(popped);
             if(!neon_vmbits_invokefromclass(state, popped, superclass, method, argc))

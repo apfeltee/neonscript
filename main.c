@@ -3559,49 +3559,55 @@ struct NeonVMStateVars
 
 struct NeonNestCall
 {
+    NeonState* pvm;
     int frameidx;
     NeonCallFrame* frame;
-    NeonObjClosure* closure;
-    NeonChunk* chunk;
-    int32_t* bcode;
     int instrucidx;
     int stacktop;
 };
 
 void neon_nestcall_begin(NeonState* state, NeonNestCall* nnc)
 {
+    nnc->pvm = state;
     nnc->stacktop = state->vmvars.stacktop;
     nnc->frameidx = state->vmvars.framecount;
     nnc->frame = state->vmvars.currframe;
-    nnc->closure = state->vmvars.currframe->closure;
-    nnc->chunk = state->vmvars.currframe->closure->innerfn->chunk;
-    nnc->bcode = state->vmvars.currframe->closure->innerfn->chunk->bincode;
     nnc->instrucidx = state->vmvars.currframe->instrucidx;
-    //fprintf(stderr, "nestcall_begin:instrucidx=%d\n", nnc->instrucidx);
 }
 
-void neon_nestcall_end(NeonState* state, NeonNestCall* nnc)
+void neon_nestcall_end(NeonNestCall* nnc)
 {
-    //fprintf(stderr, "nestcall_end:instrucidx=%d\n", nnc->instrucidx);
-
+    NeonState* state;
+    state = nnc->pvm;
     state->vmvars.stacktop = nnc->stacktop;
     state->vmvars.framecount = nnc->frameidx + 0;
     state->vmvars.currframe = nnc->frame;
-    //state->vmvars.currframe = &state->vmvars.framevalues[nnc->frameidx + 0];
-    
-
-    //state->vmvars.currframe->closure = nnc->closure;
-    //state->vmvars.currframe->closure->innerfn->chunk = nnc->chunk;
-    //state->vmvars.currframe->closure->innerfn->chunk->bincode = nnc->bcode;
     state->vmvars.currframe->instrucidx = nnc->instrucidx + 0;
+}
+
+bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee, int argc, NeonValue* rv)
+{
+    bool b;
+    NeonState* state;
+    state = nnc->pvm;
+    b = neon_vmbits_callvalue(state, instance, callee, argc);
+    if(b)
+    {
+        neon_vm_runvm(state, rv, true);
+    }
+    else
+    {
+        fprintf(stderr, "+++ some error occured in neon_vmbits_callvalue(). cannot continue :(\n");
+        return false;
+    }
+    return true;
 }
 
 static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     int i;
-    bool b;
-    bool cancontinue;
     size_t cnt;
+    bool b;
     NeonValue callee;
     NeonValue val;
     NeonValue nval;
@@ -3623,25 +3629,11 @@ static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, 
     {
         val = neon_array_get(oa, i);
         {
-            cancontinue = true;
             nval = neon_value_makenil();
             neon_vm_stackpush(state, val);
-            b = neon_vmbits_callvalue(state, neon_value_makenull(), callee, 1);
-            if(b)
-            {
-                //fprintf(stderr, "+++++++ doing runvm +++++++++\n");
-                //NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonValue* evdest, bool fromnested)
-                neon_vm_runvm(state, &nval, true);
-                //neon_vm_runexecinstruc(state, NEON_OP_CALL, &nval, true);
-                //neon_vm_runexecinstruc(state, NEON_OP_RETURN, &nval, true);
-            }
-            else
-            {
-                fprintf(stderr, "+++ some error occured in neon_vmbits_callvalue(). cannot continue :(\n");
-                cancontinue = false;
-            }
-            neon_nestcall_end(state, &nnc);
-            if(!cancontinue)
+            b = neon_nestcall_call(&nnc, neon_value_makenil(), callee, 1, &nval);
+            neon_nestcall_end(&nnc);
+            if(!b)
             {
                 //fprintf(stderr, "+++ breaking because of errors\n");
                 break;
