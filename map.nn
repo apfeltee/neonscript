@@ -1,13 +1,20 @@
 
-function add(n, howmuch)
+var outerone = 1
+
+function otherthing(n)
 {
-    return n + howmuch
+    return n + outerone
+}
+
+function add(n)
+{
+    return n + [111, 222, 333].map(otherthing)[0]
 }
 
 function dothing(i)
 {
     var newv
-    newv = add(i, 1);
+    newv = add(i);
     //newv = i + 1;
     //println("??call to dothing?? i=", i, ", newv=", newv)
     return newv
@@ -17,7 +24,7 @@ function dothing(i)
 a = [44, 55, 66, 77]
 println("before: ", a)
 
-na = a.map(dothing)
+na = a.map(dothing).map(dothing)
 
 println("after: ", na)
 

@@ -307,6 +307,7 @@ struct NeonWriter
 {
     bool isstring;
     bool shouldclose;
+    bool stringtaken;
     NeonState* pvm;
     NeonStringBuffer* strbuf;
     FILE* handle;
@@ -1252,6 +1253,7 @@ NeonWriter* neon_writer_make(NeonState* state)
     wr->pvm = state;
     wr->isstring = false;
     wr->shouldclose = false;
+    wr->stringtaken = false;
     wr->strbuf = NULL;
     wr->handle = NULL;
     return wr;
@@ -1264,7 +1266,10 @@ void neon_writer_release(NeonWriter* wr)
     state = wr->pvm;
     if(wr->isstring)
     {
-        neon_strbuf_release(wr->strbuf);
+        if(!wr->stringtaken)
+        {
+            neon_strbuf_release(wr->strbuf);
+        }
     }
     else
     {
@@ -1274,6 +1279,19 @@ void neon_writer_release(NeonWriter* wr)
         }
     }
     free(wr);
+}
+
+NeonObjString* neon_writer_takestring(NeonWriter* wr)
+{
+    uint32_t hash;
+    NeonState* state;
+    NeonObjString* os;
+    state = wr->pvm;
+    hash = neon_util_hashstring(wr->strbuf->data, wr->strbuf->length);
+    os = neon_string_allocfromstrbuf(state, wr->strbuf, hash);
+    wr->stringtaken = true;
+    return os;
+
 }
 
 NeonWriter* neon_writer_makeio(NeonState* state, FILE* fh, bool shouldclose)
@@ -2996,7 +3014,7 @@ void neon_vm_stackresize(NeonState* state, size_t needed)
     * needed size for $stackvalues is length($framevalues)*2
     */
     nforvals = (needed * 2);
-    fprintf(stderr, "*** resizing the stack ***\n");
+    //fprintf(stderr, "*** resizing the stack ***\n");
     /*
     * keep closure address. though this might be incorrect...
     */
@@ -3559,25 +3577,39 @@ struct NeonVMStateVars
 
 struct NeonNestCall
 {
-    NeonState* pvm;
+    /*
+    * tracks calls to _init, _call, _restore respectively.
+    * attempts to prevent to restore frames to junk values, if _restore is called
+    * more than once after _call.
+    */
+    int restorecnt;
     int frameidx;
-    NeonCallFrame* frame;
     int instrucidx;
     int stacktop;
+    NeonState* pvm;
+    NeonCallFrame* frame;
 };
 
-void neon_nestcall_begin(NeonState* state, NeonNestCall* nnc)
+/* initializes a nested call by copying relevant pre-frame values */
+void neon_nestcall_init(NeonState* state, NeonNestCall* nnc)
 {
     nnc->pvm = state;
+    nnc->restorecnt = 0;
     nnc->stacktop = state->vmvars.stacktop;
     nnc->frameidx = state->vmvars.framecount;
     nnc->frame = state->vmvars.currframe;
     nnc->instrucidx = state->vmvars.currframe->instrucidx;
 }
 
-void neon_nestcall_end(NeonNestCall* nnc)
+/* after neon_nestcall_call(), restores the frame values to pre-frame values */
+void neon_nestcall_restore(NeonNestCall* nnc)
 {
     NeonState* state;
+    if(nnc->restorecnt > 0)
+    {
+        return;
+    }
+    nnc->restorecnt++;
     state = nnc->pvm;
     state->vmvars.stacktop = nnc->stacktop;
     state->vmvars.framecount = nnc->frameidx + 0;
@@ -3593,10 +3625,13 @@ bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee,
     b = neon_vmbits_callvalue(state, instance, callee, argc);
     if(b)
     {
+        /* restore is only needed when neon_vm_runvm() was called */
+        nnc->restorecnt--;
         neon_vm_runvm(state, rv, true);
     }
     else
     {
+        // TODO: figure out if stack must be popped
         fprintf(stderr, "+++ some error occured in neon_vmbits_callvalue(). cannot continue :(\n");
         return false;
     }
@@ -3605,7 +3640,7 @@ bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee,
 
 static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
-    int i;
+    size_t i;
     size_t cnt;
     bool b;
     NeonValue callee;
@@ -3614,16 +3649,26 @@ static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, 
     NeonNestCall nnc;
     NeonObjArray* oa;
     NeonObjArray* na;
+    /*
+    NeonCheck check;
+    neon_check_init(state, &check, selfval, argc, argv);
+    if(!neon_check_requireinstance(&check, ))
+    */
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "first argument must be array");
+        neon_state_raiseerror(state, "expected receiver to be array, but got %s", neon_value_typename(selfval));
+        return neon_value_makenil();
+    }
+    if(argc == 0)
+    {
+        neon_state_raiseerror(state, "need function argument");
         return neon_value_makenil();
     }
     callee = argv[0];
     oa = neon_value_asarray(selfval);
     na = neon_array_make(state);
     cnt = neon_array_count(oa);
-    neon_nestcall_begin(state, &nnc);
+    neon_nestcall_init(state, &nnc);
     //fprintf(stderr, "cnt=%d\n", (int)cnt);
     for(i=0; i<cnt; i++)
     {
@@ -3632,10 +3677,10 @@ static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, 
             nval = neon_value_makenil();
             neon_vm_stackpush(state, val);
             b = neon_nestcall_call(&nnc, neon_value_makenil(), callee, 1, &nval);
-            neon_nestcall_end(&nnc);
+            neon_nestcall_restore(&nnc);
             if(!b)
             {
-                //fprintf(stderr, "+++ breaking because of errors\n");
+                fprintf(stderr, "+++ breaking because of errors\n");
                 break;
             }
         }
@@ -3741,6 +3786,47 @@ static NeonValue objfn_array_erase(NeonState* state, NeonValue selfval, int argc
         return neon_value_makebool(neon_valarray_erase(oa->vala, idx));
     }
     return neon_value_makebool(false);
+}
+
+
+static NeonValue objfn_array_join(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    size_t i;
+    size_t cnt;
+    bool hasjoinee;
+    NeonValue val;
+    NeonValue vjoinee;
+    NeonWriter* wr;
+    NeonObjArray* oa;
+    NeonObjString* os;
+    hasjoinee = false;
+    if(!neon_value_isarray(selfval))
+    {
+        neon_state_raiseerror(state, "first argument must be array");
+        return neon_value_makenil();
+    }
+    if(argc > 0)
+    {
+        vjoinee = argv[0];
+        if(!neon_value_isnil(vjoinee))
+        {
+            hasjoinee = true;
+        }
+    }
+    oa = neon_value_asarray(selfval);
+    cnt = neon_array_count(oa);
+    wr = neon_writer_makestring(state);
+    for(i=0; i<cnt; i++)
+    {
+        val = neon_array_get(oa, i);
+        neon_writer_printvalue(wr, val, false);
+        if(((i+1) != cnt) && hasjoinee)
+        {
+            neon_writer_printvalue(wr, vjoinee, false);
+        }
+    }
+    os = neon_writer_takestring(wr);
+    return neon_value_fromobject(os);
 }
 
 static NeonValue cfn_mapmake(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
@@ -4071,6 +4157,7 @@ int main(int argc, char** argv)
     }
     {
         tab = state->objvars.mtharray;
+        neon_hashtable_setstrfunction(tab, "join", objfn_array_join);
         neon_hashtable_setstrfunction(tab, "map", objfn_array_map);
         neon_hashtable_setstrfunction(tab, "count", objfn_array_count);
         neon_hashtable_setstrfunction(tab, "length", objfn_array_count);

@@ -146,8 +146,36 @@ bool neon_vmbits_callclassconstructor(NeonState* state, NeonValue receiver, Neon
     return true;
 }
 
+void neon_vmbits_debugcall(NeonState* state, NeonValue receiver, NeonValue callee, int argc)
+{
+    size_t i;
+    NeonValue* vargs;
+    vargs = (&state->vmvars.stackvalues[0] + state->vmvars.stacktop) - argc;
+    if(state->conf.shouldprintruntime)
+    {
+        neon_writer_writeformat(state->stderrwriter, "*debug* neon_vmbits_callvalue [\n");
+        neon_writer_writeformat(state->stderrwriter, "    callee: [<%s>]", neon_value_typename(callee));
+        neon_writer_printvalue(state->stderrwriter, callee, true);
+        neon_writer_writeformat(state->stderrwriter, "\n");
+        neon_writer_writeformat(state->stderrwriter, "    argc: %d\n", argc);
+        neon_writer_writeformat(state->stderrwriter, "    receiver: [<%s>]", neon_value_typename(receiver));
+        neon_writer_printvalue(state->stderrwriter, receiver, true);
+        neon_writer_writeformat(state->stderrwriter, "\n");
+        neon_writer_writeformat(state->stderrwriter, "    argv: [\n", argc);
+        for(i=0; i<(size_t)argc; i++)
+        {
+            neon_writer_writeformat(state->stderrwriter, "        [%d] [<%s>]", (int)i, neon_value_typename(vargs[i]));
+            neon_writer_printvalue(state->stderrwriter, vargs[i], true);
+            neon_writer_writeformat(state->stderrwriter, "\n");
+        }
+        neon_writer_writeformat(state->stderrwriter, "    ]\n");
+    }
+
+}
+
 bool neon_vmbits_callnativefunction(NeonState* state, NeonValue receiver, NeonValue callee, int argc)
 {
+    size_t i;
     NeonValue result;
     NeonValue* vargs;
     NeonNativeFN cfunc;
@@ -169,6 +197,7 @@ bool neon_vmbits_callvalue(NeonState* state, NeonValue receiver, NeonValue calle
 {
     if(neon_value_isobject(callee))
     {
+        neon_vmbits_debugcall(state, receiver, callee, argc);
         switch(neon_value_objtype(callee))
         {
             case NEON_OBJ_BOUNDMETHOD:
@@ -821,6 +850,16 @@ static inline bool neon_vmexec_propertyset(NeonState* state)
     return true;
 }
 
+/*
+    int count = bl_vmbits_readshort(state);
+    ObjArray* list = bl_object_makearray(state);
+    state->vmstate.stacktop[-count - 1] = bl_value_fromobject(list);
+    for(int fromtop = count - 1; fromtop >= 0; fromtop--)
+    {
+        bl_array_push(list, bl_vm_stackpeek(state, fromtop));
+    }
+    bl_vm_stackpopn(state, count);
+*/
 static inline bool neon_vmexec_makearray(NeonState* state)
 {
     int i;
@@ -829,19 +868,14 @@ static inline bool neon_vmexec_makearray(NeonState* state)
     NeonObjArray* array;
     count = neon_vmbits_readbyte(state);
     array = neon_array_make(state);
+    //state->vmvars.stackvalues[-count - 1] = neon_value_fromobject(array);
     //fprintf(stderr, "makearray: count=%d\n", count);
     for(i = count - 1; i >= 0; i--)
     {
         val = neon_vmbits_stackpeek(state, i);
         neon_array_push(array, val);
     }
-    if(count > 0)
-    {
-        for(i=0; i<(count-0); i++)
-        {
-            neon_vmbits_stackpop(state);
-        }
-    }
+    neon_vmbits_stackpopn(state, count);
     neon_vmbits_stackpush(state, neon_value_fromobject(array));
     return true;
 }
