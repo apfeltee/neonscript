@@ -1,1 +1,1 @@
-main.o: main.c cvector.h prot.inc parse.h vm.h
+main.o: main.c prot.inc parse.h vm.h

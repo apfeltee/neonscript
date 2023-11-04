@@ -1,0 +1,26 @@
+
+function add(n, howmuch)
+{
+    return n + howmuch
+}
+
+function dothing(i)
+{
+    var newv
+    newv = add(i, 1);
+    //newv = i + 1;
+    //println("??call to dothing?? i=", i, ", newv=", newv)
+    return newv
+
+}
+
+a = [44, 55, 66, 77]
+println("before: ", a)
+
+na = a.map(dothing)
+
+println("after: ", na)
+
+
+
+println("--- all done ----")

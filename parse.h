@@ -2202,8 +2202,6 @@ void neon_prs_parseifstmt(NeonAstParser* prs)
     neon_prs_emitpatchjump(prs, elsejump);
 }
 
-
-
 void neon_prs_parsedebugprintstmt(NeonAstParser* prs)
 {
     neon_prs_parseexpr(prs);
