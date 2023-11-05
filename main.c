@@ -470,6 +470,7 @@ struct NeonObjClass
     NeonState* pvm;
     NeonObjString* name;
     NeonHashTable* methods;
+    NeonHashTable* properties;
     NeonObjClass* parent;
 };
 
@@ -1830,6 +1831,8 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
 
 void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
 {
+    int64_t iv;
+    double dw;
     switch(value.type)
     {
         case NEON_VAL_BOOL:
@@ -1839,7 +1842,18 @@ void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
             neon_writer_writestring(wr, "nil");
             break;
         case NEON_VAL_NUMBER:
-            neon_writer_writeformat(wr, "%g", neon_value_asnumber(value));
+            {
+                dw = neon_value_asnumber(value);
+                if((dw <= LONG_MIN) || (dw >= LONG_MAX) || (dw == (long)dw))
+                {
+                    iv = (int64_t)dw;
+                    neon_writer_writeformat(wr, "%ld", iv);
+                }
+                else
+                {
+                    neon_writer_writeformat(wr, "%g", dw);
+                }
+            }
             break;
         case NEON_VAL_OBJ:
             neon_writer_printobject(wr, value, fixstring);
@@ -2206,6 +2220,7 @@ NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name, NeonO
     obj->pvm = state;
     obj->name = name;
     obj->methods = neon_hashtable_make(state);
+    obj->properties = neon_hashtable_make(state);
     obj->parent = parent;
     return obj;
 }
@@ -4501,6 +4516,7 @@ int main(int argc, char** argv)
     {
         klass = state->objvars.classprimstring;
         neon_class_setfunctioncstr(klass, "length", objfn_string_length);
+        neon_class_setfunctioncstr(klass, "size", objfn_string_length);
         neon_class_setfunctioncstr(klass, "split", objfn_string_split);
         neon_class_setfunctioncstr(klass, "chars", objfn_string_chars);
         neon_class_setfunctioncstr(klass, "ord", objfn_string_ord);
@@ -4520,6 +4536,7 @@ int main(int argc, char** argv)
         neon_class_setfunctioncstr(klass, "map", objfn_array_map);
         neon_class_setfunctioncstr(klass, "count", objfn_array_count);
         neon_class_setfunctioncstr(klass, "length", objfn_array_count);
+        neon_class_setfunctioncstr(klass, "size", objfn_array_count);
         neon_class_setfunctioncstr(klass, "push", objfn_array_push);
         neon_class_setfunctioncstr(klass, "append", objfn_array_push);
         neon_class_setfunctioncstr(klass, "erase", objfn_array_erase);

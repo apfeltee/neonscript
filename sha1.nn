@@ -104,13 +104,13 @@ function core_sha1(x, l)
     // append padding
     x = x
     aidx = (l >> 5);
-    while(aidx >= x.length())
+    while(aidx >= x.size())
     {
         x.push(0);
     }
     x[aidx] = x[aidx] | 0x80 << (24 - l % 32);
     aidx = ((l + 64 >> 9) << 4) + 15;
-    while(aidx >= x.length())
+    while(aidx >= x.size())
     {
         x.push(0);
     }
@@ -124,7 +124,7 @@ function core_sha1(x, l)
     var e = -1009589776;
     //println("consts: ", [a, b, c, d, e]);
     var i = 0;
-    for(i = 0; i < x.length(); i = i + 16)
+    for(i = 0; i < x.size(); i = i + 16)
     {
         var olda = a;
         var oldb = b;
@@ -135,7 +135,7 @@ function core_sha1(x, l)
         {
             if(j < 16)
             {
-                while(j >= w.length())
+                while(j >= w.size())
                 {
                     w.push(0);
                 }
@@ -163,14 +163,14 @@ function core_sha1(x, l)
                 {
                     wv4 = 0;
                 }
-                while(j >= w.length())
+                while(j >= w.size())
                 {
                     w.push(0);
                 }
                 w[j] = rol(((wv1 ^ wv2) ^ wv3) ^ wv4, 1);
             }
             var ktemp = sha1_kt(j);
-            //println("sha1_kt(", j, ")=", ktemp)
+            println("sha1_kt(", j, ")=", ktemp)
             var t = safe_add(safe_add(rol(a, 5), sha1_ft(j, b, c, d)), safe_add(safe_add(e, w[j]), ktemp));
             e = d;
             d = c;
@@ -196,7 +196,7 @@ function str2binb(str)
     var aidx;
     var bin = [];
     var mask = (1 << K_CHARSIZE) - 1;
-    var len = str.length();
+    var len = str.size();
     
     for(var i = 0; i < len * K_CHARSIZE; i = i + K_CHARSIZE)
     {
@@ -211,7 +211,7 @@ function str2binb(str)
         //bin[aidx] |= right;
 
         //bin[aidx] |= (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
-        if(aidx >= bin.length())
+        if(aidx >= bin.size())
         {
             bin.push(0);
         }
@@ -226,9 +226,9 @@ function str2binb(str)
 function core_hmac_sha1(key, data)
 {
     var bkey = str2binb(key);
-    if(bkey.length() > 16)
+    if(bkey.size() > 16)
     {
-        bkey = core_sha1(bkey, key.length() * K_CHARSIZE);
+        bkey = core_sha1(bkey, key.size() * K_CHARSIZE);
     }
     var ipad = [];
     var opad = [];
@@ -237,7 +237,7 @@ function core_hmac_sha1(key, data)
         ipad[i] = bkey[i] ^ 0x36363636;
         opad[i] = bkey[i] ^ 0x5C5C5C5C;
     }
-    var hash = core_sha1(ipad + str2binb(data), 512 + data.length() * K_CHARSIZE);
+    var hash = core_sha1(ipad + str2binb(data), 512 + data.size() * K_CHARSIZE);
     return core_sha1(opad + hash, 512 + 160);
 }
 
@@ -246,7 +246,7 @@ function binb2hex(binarray)
 {
     var hex_tab = "0123456789abcdef";
     var str = "";
-    for(var i = 0; i < binarray.length() * 4; i++)
+    for(var i = 0; i < binarray.size() * 4; i++)
     {
         var c1 = hex_tab[(binarray[i>>2] >> ((3 - i%4)*8+4)) & 0xF];
         var c2 = hex_tab[(binarray[i>>2] >> ((3 - i%4)*8  )) & 0xF];
@@ -260,7 +260,7 @@ function binb2hex(binarray)
 // They take string arguments and return either hex or base-64 encoded strings
 function hex_sha1(s)
 {
-    return binb2hex(core_sha1(str2binb(s),s.length() * K_CHARSIZE));
+    return binb2hex(core_sha1(str2binb(s),s.size() * K_CHARSIZE));
 }
 
 var demo = [
@@ -271,7 +271,7 @@ var demo = [
     ["long text, some spaces, blah blah", "fc0aa2379ecce86eac0dc50d921ab2cef7030d12"]
 ];
 
-for(var idx=0; idx<demo.length(); idx++)
+for(var idx=0; idx<demo.size(); idx++)
 {
     var itm = demo[idx];
     var k = itm[0];

@@ -6,12 +6,23 @@ function len(thing) {
     return thing.length;
 }
 
-String.ord = function(s) {
-    return s.charCodeAt(0);
+String.prototype.ord = function()
+{
+    return this.charCodeAt(0);
 }
 
 String.chr = function(n) {
     return String.fromCharCode(n);
+}
+
+String.prototype.size = function()
+{
+    return this.length;
+}
+
+Array.prototype.size = function()
+{
+    return this.length;
 }
 
 Array.prototype.clone = function() {
