@@ -27,3 +27,21 @@ var a = "no";
         break;
     }
 }
+
+var i
+var j
+for(i=0; i<100; i++)
+{
+    if(i == 56)
+    {
+        break
+    }
+    for(j=0; j<100; j++)
+    {
+        if(j == 48)
+        {
+            break
+        }
+    }
+}
+println("i=", i, ", j=", j)

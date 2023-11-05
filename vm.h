@@ -161,7 +161,7 @@ void neon_vmbits_debugcall(NeonState* state, NeonValue receiver, NeonValue calle
         neon_writer_writeformat(state->stderrwriter, "    receiver: [<%s>]", neon_value_typename(receiver));
         neon_writer_printvalue(state->stderrwriter, receiver, true);
         neon_writer_writeformat(state->stderrwriter, "\n");
-        neon_writer_writeformat(state->stderrwriter, "    argv: [\n", argc);
+        neon_writer_writeformat(state->stderrwriter, "    argv: [\n");
         for(i=0; i<(size_t)argc; i++)
         {
             neon_writer_writeformat(state->stderrwriter, "        [%d] [<%s>]", (int)i, neon_value_typename(vargs[i]));
@@ -170,12 +170,10 @@ void neon_vmbits_debugcall(NeonState* state, NeonValue receiver, NeonValue calle
         }
         neon_writer_writeformat(state->stderrwriter, "    ]\n");
     }
-
 }
 
 bool neon_vmbits_callnativefunction(NeonState* state, NeonValue receiver, NeonValue callee, int argc)
 {
-    size_t i;
     NeonValue result;
     NeonValue* vargs;
     NeonNativeFN cfunc;
@@ -248,19 +246,19 @@ bool neon_vmbits_invokefromclass(NeonState* state, NeonValue receiver, NeonObjCl
     return neon_vmbits_callclosure(state, receiver, neon_value_asclosure(method), argc);
 }
 
-NeonHashTable* neon_value_getmethodtable(NeonState* state, NeonValue val)
+NeonObjClass* neon_value_getvalueclass(NeonState* state, NeonValue val)
 {
     if(neon_value_isnumber(val))
     {
-        return state->objvars.mthnumber;
+        return state->objvars.classprimnumber;
     }
     else if(neon_value_isarray(val))
     {
-        return state->objvars.mtharray;
+        return state->objvars.classprimarray;
     }
     else if(neon_value_isstring(val))
     {
-        return state->objvars.mthstring;
+        return state->objvars.classprimstring;
     }
     return NULL;
 }
@@ -269,7 +267,7 @@ bool neon_value_getcallable(NeonState* state, NeonValue receiver, NeonObjString*
 {
     NeonObject* obj;
     NeonObjMap* map;
-    NeonHashTable* htab;
+    NeonObjClass* klass;
     if(neon_value_ismap(receiver))
     {
         map = neon_value_asmap(receiver);
@@ -283,10 +281,10 @@ bool neon_value_getcallable(NeonState* state, NeonValue receiver, NeonObjString*
     else
     {
         /* first, check method table specific to that type ... */
-        htab = neon_value_getmethodtable(state, receiver);
-        if(htab != NULL)
+        klass = neon_value_getvalueclass(state, receiver);
+        if(klass != NULL)
         {
-            if(neon_hashtable_get(htab, name, dest))
+            if(neon_class_getmethod(klass, name, dest))
             {
                 return true;
             }
@@ -304,7 +302,7 @@ bool neon_value_getcallable(NeonState* state, NeonValue receiver, NeonObjString*
             }
         }
         /* if that is also not the case, see if $mthobject has a matching method */
-        if(neon_hashtable_get(state->objvars.mthobject, name, dest))
+        if(neon_class_getmethod(state->objvars.classprimobject, name, dest))
         {
             return true;
         }
@@ -465,7 +463,43 @@ static inline bool neon_vmexec_concat(NeonState* state)
     return true;
 }
 
-/* A Virtual Machine binary-op < Types of Values binary-op */
+static inline int neon_vmutil_numtoint32(NeonValue val)
+{
+    if(neon_value_isbool(val))
+    {
+        return (neon_value_asbool(val) ? 1 : 0);
+    }
+    return neon_util_numbertoint32(neon_value_asnumber(val));
+}
+
+static inline unsigned int neon_vmutil_numtouint32(NeonValue val)
+{
+    if(neon_value_isbool(val))
+    {
+        return (neon_value_asbool(val) ? 1 : 0);
+    }
+    return neon_util_numbertouint32(neon_value_asnumber(val));
+}
+
+static inline double neon_vmutil_tonum(NeonValue val)
+{
+    if(neon_value_isbool(val))
+    {
+        return (neon_value_asbool(val) ? 1 : 0);
+    }
+    return neon_value_asnumber(val);
+}
+
+static inline long neon_vmutil_toint(NeonValue val)
+{
+    if(neon_value_isbool(val))
+    {
+        return (neon_value_asbool(val) ? 1 : 0);
+    }
+    return neon_value_asnumber(val);
+}
+
+/*
 static inline bool neon_vmexec_dobinary(NeonState* state, bool isbool, int32_t op)
 {
     double b;
@@ -531,6 +565,7 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool isbool, int32_t o
                 dw = (int)a | (int)b;
             }
             break;
+            
         case NEON_OP_PRIMBINXOR:
             {
                 dw = (int)a ^ (int)b;
@@ -538,12 +573,31 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool isbool, int32_t o
             break;
         case NEON_OP_PRIMSHIFTLEFT:
             {
-                dw = (int)a << (int)b;
+                int leftsigned;
+                unsigned int rightusigned;
+                //dw = (int)a << (int)b;
+                leftsigned = neon_vmutil_numtoint32(peekb);
+                rightusigned = neon_vmutil_numtouint32(peeka);
+                dw = leftsigned << (rightusigned & 0x1F);
             }
             break;
+
+        case NEON_OP_PRIMSHIFTLEFT:
+                {
+                    leftsigned = vmutil_numtoint32(leftinval);
+                    rightusigned = vmutil_numtouint32(rightinval);
+                    numres = leftsigned << (rightusigned & 0x1F);
+                }
+                break;
+
         case NEON_OP_PRIMSHIFTRIGHT:
             {
-                dw = (int)a >> (int)b;
+                int leftsigned;
+                unsigned int rightusigned;
+                //dw = (int)a >> (int)b;
+                leftsigned = neon_vmutil_numtoint32(peekb);
+                rightusigned = neon_vmutil_numtouint32(peeka);
+                dw = leftsigned >> (rightusigned & 0x1F);
             }
             break;
         default:
@@ -562,6 +616,133 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool isbool, int32_t o
         res = neon_value_makenumber(dw);
     }
     neon_vmbits_stackpush(state, res);
+    return true;
+}
+*/
+
+static inline bool neon_vmexec_dobinary(NeonState* state, bool asbool, NeonOpCode op, NeonVMBinaryCallbackFN fn)
+{
+    long leftint;
+    long rightint;
+    double numres;
+    double leftflt;
+    double rightflt;
+    int leftsigned;
+    unsigned int rightusigned;
+    NeonValue resval;
+    NeonValue leftinval;
+    NeonValue rightinval;
+    rightinval = neon_vm_stackpop(state);
+    leftinval = neon_vm_stackpop(state);
+    //fprintf(stderr, "neon_vmexec_dobinary(asbool=%d, op=%s)\n", asbool, neon_dbg_op2str(op));
+    if((!neon_value_isnumber(leftinval) && !neon_value_isbool(leftinval)) || (!neon_value_isnumber(rightinval) && !neon_value_isbool(rightinval)))
+    {
+        neon_state_raiseerror(state, "unsupported operand %d for %s and %s", neon_dbg_op2str(op), neon_value_typename(leftinval), neon_value_typename(rightinval));
+    }
+    if(fn != NULL)
+    {
+        leftflt = neon_vmutil_tonum(leftinval);
+        rightflt = neon_vmutil_tonum(rightinval);
+        numres = fn(leftflt, rightflt);
+    }
+    else
+    {
+        switch(op)
+        {
+            case NEON_OP_PRIMADD:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt + rightflt);
+                }
+                break;
+            case NEON_OP_PRIMSUBTRACT:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt - rightflt);
+                }
+                break;
+            case NEON_OP_PRIMMULTIPLY:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt * rightflt);
+                }
+                break;
+            case NEON_OP_PRIMDIVIDE:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt / rightflt);
+                }
+                break;
+            case NEON_OP_PRIMSHIFTRIGHT:
+                {
+                    leftsigned = neon_vmutil_numtoint32(leftinval);
+                    rightusigned = neon_vmutil_numtouint32(rightinval);
+                    numres = leftsigned >> (rightusigned & 0x1F);
+                }
+                break;
+            case NEON_OP_PRIMSHIFTLEFT:
+                {
+                    leftsigned = neon_vmutil_numtoint32(leftinval);
+                    rightusigned = neon_vmutil_numtouint32(rightinval);
+                    numres = leftsigned << (rightusigned & 0x1F);
+                }
+                break;
+            case NEON_OP_PRIMBINXOR:
+                {
+                    leftint = neon_vmutil_toint(leftinval);
+                    rightint = neon_vmutil_toint(rightinval);
+                    numres = (leftint ^ rightint);
+                }
+                break;
+            case NEON_OP_PRIMBINOR:
+                {
+                    leftint = neon_vmutil_toint(leftinval);
+                    rightint = neon_vmutil_toint(rightinval);
+                    numres = (leftint | rightint);
+                }
+                break;
+            case NEON_OP_PRIMBINAND:
+                {
+                    leftint = neon_vmutil_toint(leftinval);
+                    rightint = neon_vmutil_toint(rightinval);
+                    numres = (leftint & rightint);
+                }
+                break;
+            case NEON_OP_PRIMGREATER:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt > rightflt);
+                }
+                break;
+            case NEON_OP_PRIMLESS:
+                {
+                    leftflt = neon_vmutil_tonum(leftinval);
+                    rightflt = neon_vmutil_tonum(rightinval);
+                    numres = (leftflt < rightflt);
+                }
+                break;
+            default:
+                {
+                    fprintf(stderr, "missed an opcode here?\n");
+                    assert(false);
+                }
+                break;
+        }
+    }
+    if(asbool)
+    {
+        resval = neon_value_makebool(numres);
+    }
+    else
+    {
+        resval = neon_value_makenumber(numres);
+    }
+    neon_vm_stackpush(state, resval);
     return true;
 }
 
@@ -850,16 +1031,6 @@ static inline bool neon_vmexec_propertyset(NeonState* state)
     return true;
 }
 
-/*
-    int count = bl_vmbits_readshort(state);
-    ObjArray* list = bl_object_makearray(state);
-    state->vmstate.stacktop[-count - 1] = bl_value_fromobject(list);
-    for(int fromtop = count - 1; fromtop >= 0; fromtop--)
-    {
-        bl_array_push(list, bl_vm_stackpeek(state, fromtop));
-    }
-    bl_vm_stackpopn(state, count);
-*/
 static inline bool neon_vmexec_makearray(NeonState* state)
 {
     int i;
@@ -1249,7 +1420,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
     op_case(NEON_OP_PRIMGREATER)
     op_case(NEON_OP_PRIMLESS)
         {
-            if(!neon_vmexec_dobinary(state, true, instruc))
+            if(!neon_vmexec_dobinary(state, true, instruc, NULL))
             {
                 abort();
                 return NEON_STATUS_RUNTIMEERROR;
@@ -1264,7 +1435,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             peek2 = neon_vmbits_stackpeek(state, 1);
             if(neon_value_isnumber(peek1) && neon_value_isnumber(peek2))
             {
-                if(!neon_vmexec_dobinary(state, false, instruc))
+                if(!neon_vmexec_dobinary(state, false, instruc, NULL))
                 {
                     return NEON_STATUS_RUNTIMEERROR;
                 }
@@ -1278,17 +1449,38 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
     op_case(NEON_OP_PRIMSUBTRACT)
     op_case(NEON_OP_PRIMMULTIPLY)
     op_case(NEON_OP_PRIMDIVIDE)
-    op_case(NEON_OP_PRIMMODULO)
     op_case(NEON_OP_PRIMSHIFTLEFT)
     op_case(NEON_OP_PRIMSHIFTRIGHT)
     op_case(NEON_OP_PRIMBINAND)
     op_case(NEON_OP_PRIMBINOR)
     op_case(NEON_OP_PRIMBINXOR)
         {
-            if(!neon_vmexec_dobinary(state, false, instruc))
+            if(!neon_vmexec_dobinary(state, false, instruc, NULL))
             {
                 return NEON_STATUS_RUNTIMEERROR;
             }
+        }
+        vm_breakouter();
+    op_case(NEON_OP_PRIMMODULO)
+        {
+            if(!neon_vmexec_dobinary(state, false, NEON_OP_PRIMMODULO, (NeonVMBinaryCallbackFN)neon_util_modulo))
+            {
+                return NEON_STATUS_RUNTIMEERROR;
+            }
+        }
+        vm_breakouter();
+    op_case(NEON_OP_PRIMBINNOT)
+        {
+            NeonValue peeked;
+            NeonValue popped;
+            peeked = neon_vm_stackpeek(state, 0);
+            if(!neon_value_isnumber(peeked))
+            {
+                neon_state_raiseerror(state, "operator ~ not defined for object of type %s", neon_value_typename(peeked));
+                break;
+            }
+            popped = neon_vm_stackpop(state);
+            neon_vm_stackpush(state, neon_value_makenumber(~((int)neon_value_asnumber(popped))));
         }
         vm_breakouter();
     op_case(NEON_OP_PRIMNOT)
@@ -1447,7 +1639,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             NeonObjClass* klass;
             NeonObjString* clname;
             clname = neon_vmbits_readstring(state);
-            klass = neon_object_makeclass(state, clname);
+            klass = neon_object_makeclass(state, clname, state->objvars.classprimobject);
             neon_vmbits_stackpush(state, neon_value_fromobject(klass));
         }
         vm_breakouter();

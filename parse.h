@@ -1,4 +1,30 @@
 
+
+static bool neon_lexutil_isdigit(char c)
+{
+    return c >= '0' && c <= '9';
+}
+
+static bool neon_lexutil_isbinary(char c)
+{
+    return c == '0' || c == '1';
+}
+
+static bool neon_lexutil_isalpha(char c)
+{
+    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+}
+
+static bool neon_lexutil_isoctal(char c)
+{
+    return c >= '0' && c <= '7';
+}
+
+static bool neon_lexutil_ishexadecimal(char c)
+{
+    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+}
+
 NeonAstScanner* neon_lex_make(NeonState* state, const char* source, size_t len)
 {
     NeonAstScanner* scn;
@@ -16,15 +42,6 @@ void neon_lex_release(NeonAstScanner* scn)
     free(scn);
 }
 
-bool neon_lex_isalpha(char c)
-{
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-}
-
-bool neon_lex_isdigit(char c)
-{
-    return c >= '0' && c <= '9';
-}
 
 bool neon_lex_isatend(NeonAstScanner* scn)
 {
@@ -41,6 +58,12 @@ char neon_lex_peekcurrent(NeonAstScanner* scn)
 {
     return *scn->current;
 }
+
+char neon_lex_peekprevious(NeonAstScanner* scn)
+{
+    return scn->current[-1];
+}
+
 
 char neon_lex_peeknext(NeonAstScanner* scn)
 {
@@ -141,6 +164,7 @@ NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
         {"fun", NEON_TOK_KWFUNCTION},
         {"if", NEON_TOK_KWIF},
         {"nil", NEON_TOK_KWNIL},
+        {"null", NEON_TOK_KWNIL},
         {"or", NEON_TOK_KWOR},
         {"debugprint", NEON_TOK_KWDEBUGPRINT},
         {"typeof", NEON_TOK_KWTYPEOF},
@@ -172,13 +196,14 @@ NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
 
 NeonAstToken neon_lex_scanident(NeonAstScanner* scn)
 {
-    while(neon_lex_isalpha(neon_lex_peekcurrent(scn)) || neon_lex_isdigit(neon_lex_peekcurrent(scn)))
+    while(neon_lexutil_isalpha(neon_lex_peekcurrent(scn)) || neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
     {
         neon_lex_advance(scn);
     }
     return neon_lex_maketoken(scn, neon_lex_scankeyword(scn));
 }
 
+/*
 NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
 {
     while(neon_lex_isdigit(neon_lex_peekcurrent(scn)))
@@ -197,36 +222,68 @@ NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
     }
     return neon_lex_maketoken(scn, NEON_TOK_NUMBER);
 }
+*/
+
+NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
+{
+    // handle binary, octal and hexadecimals
+    if(neon_lex_peekprevious(scn) == '0')
+    {
+        if(neon_lex_match(scn, 'b'))
+        {// binary number
+            while(neon_lexutil_isbinary(neon_lex_peekcurrent(scn)))
+            {
+                neon_lex_advance(scn);
+            }
+            return neon_lex_maketoken(scn, NEON_TOK_BINNUMBER);
+        }
+        else if(neon_lex_match(scn, 'c'))
+        {
+            while(neon_lexutil_isoctal(neon_lex_peekcurrent(scn)))
+            {
+                neon_lex_advance(scn);
+            }
+            return neon_lex_maketoken(scn, NEON_TOK_OCTNUMBER);
+        }
+        else if(neon_lex_match(scn, 'x'))
+        {
+            while(neon_lexutil_ishexadecimal(neon_lex_peekcurrent(scn)))
+            {
+                neon_lex_advance(scn);
+            }
+            return neon_lex_maketoken(scn, NEON_TOK_HEXNUMBER);
+        }
+    }
+    while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+    {
+        neon_lex_advance(scn);
+    }
+    // dots(.) are only valid here when followed by a digit
+    if(neon_lex_peekcurrent(scn) == '.' && neon_lexutil_isdigit(neon_lex_peeknext(scn)))
+    {
+        neon_lex_advance(scn);
+        while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+        {
+            neon_lex_advance(scn);
+        }
+        // E or e are only valid here when followed by a digit and occurring after a
+        // dot
+        if((neon_lex_peekcurrent(scn) == 'e' || neon_lex_peekcurrent(scn) == 'E') && (neon_lex_peeknext(scn) == '+' || neon_lex_peeknext(scn) == '-'))
+        {
+            neon_lex_advance(scn);
+            neon_lex_advance(scn);
+            while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+            {
+                neon_lex_advance(scn);
+            }
+        }
+    }
+    return neon_lex_maketoken(scn, NEON_TOK_NUMBER);
+}
+
 
 NeonAstToken neon_lex_scanstring(NeonAstScanner* scn, char quote)
 {
-    /*
-    char peek;
-    while(true)
-    {
-        peek = neon_lex_peekcurrent(scn);
-        if((peek == '"') || !neon_lex_isatend(scn))
-        {
-            break;
-        }
-        if(neon_lex_peekcurrent(scn) == '\n')
-        {
-            scn->line++;
-        }
-        neon_lex_advance(scn);
-    }
-    if(neon_lex_isatend(scn))
-    {
-        return neon_lex_makeerrortoken(scn, "unterminated string");
-    }
-    // The closing quote.
-    neon_lex_advance(scn);
-    return neon_lex_maketoken(scn, NEON_TOK_STRING);
-    */
-
-
-
-
     while(neon_lex_peekcurrent(scn) != quote && !neon_lex_isatend(scn))
     {
         if(neon_lex_peekcurrent(scn) == '\\' && (neon_lex_peeknext(scn) == quote || neon_lex_peeknext(scn) == '\\'))
@@ -253,11 +310,11 @@ NeonAstToken neon_lex_scantoken(NeonAstScanner* scn)
         return neon_lex_maketoken(scn, NEON_TOK_EOF);
     }
     c = neon_lex_advance(scn);
-    if(neon_lex_isalpha(c))
+    if(neon_lexutil_isalpha(c))
     {
         return neon_lex_scanident(scn);
     }
-    if(neon_lex_isdigit(c))
+    if(neon_lexutil_isdigit(c))
     {
         return neon_lex_scannumber(scn);
     }
@@ -377,7 +434,7 @@ NeonAstToken neon_lex_scantoken(NeonAstScanner* scn)
                 {
                     return neon_lex_maketoken(scn, NEON_TOK_ASSIGNDIV);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_SLASH);
+                return neon_lex_maketoken(scn, NEON_TOK_DIVIDE);
             }
             break;
         case '*':
@@ -386,7 +443,12 @@ NeonAstToken neon_lex_scantoken(NeonAstScanner* scn)
                 {
                     return neon_lex_maketoken(scn, NEON_TOK_ASSIGNMULT);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_STAR);
+                return neon_lex_maketoken(scn, NEON_TOK_MULTIPLY);
+            }
+            break;
+        case '~':
+            {
+                return neon_lex_maketoken(scn, NEON_TOK_TILDE);
             }
             break;
         case '!':
@@ -510,55 +572,6 @@ void neon_prs_raiseatcurrent(NeonAstParser* prs, const char* message, ...)
     va_end(va);
 }
 
-const char* neon_prs_op2str(int32_t opcode)
-{
-    switch(opcode)
-    {
-        case NEON_OP_PUSHCONST: return "NEON_OP_PUSHCONST";
-        case NEON_OP_PUSHNIL: return "NEON_OP_PUSHNIL";
-        case NEON_OP_PUSHTRUE: return "NEON_OP_PUSHTRUE";
-        case NEON_OP_PUSHFALSE: return "NEON_OP_PUSHFALSE";
-        case NEON_OP_PUSHONE: return "NEON_OP_PUSHONE";
-        case NEON_OP_POP: return "NEON_OP_POP";
-        case NEON_OP_DUP: return "NEON_OP_DUP";
-        case NEON_OP_LOCALGET: return "NEON_OP_LOCALGET";
-        case NEON_OP_LOCALSET: return "NEON_OP_LOCALSET";
-        case NEON_OP_GLOBALGET: return "NEON_OP_GLOBALGET";
-        case NEON_OP_GLOBALDEFINE: return "NEON_OP_GLOBALDEFINE";
-        case NEON_OP_GLOBALSET: return "NEON_OP_GLOBALSET";
-        case NEON_OP_UPVALGET: return "NEON_OP_UPVALGET";
-        case NEON_OP_UPVALSET: return "NEON_OP_UPVALSET";
-        case NEON_OP_PROPERTYGET: return "NEON_OP_PROPERTYGET";
-        case NEON_OP_PROPERTYSET: return "NEON_OP_PROPERTYSET";
-        case NEON_OP_INSTGETSUPER: return "NEON_OP_INSTGETSUPER";
-        case NEON_OP_EQUAL: return "NEON_OP_EQUAL";
-        case NEON_OP_PRIMGREATER: return "NEON_OP_PRIMGREATER";
-        case NEON_OP_PRIMLESS: return "NEON_OP_PRIMLESS";
-        case NEON_OP_PRIMADD: return "NEON_OP_PRIMADD";
-        case NEON_OP_PRIMSUBTRACT: return "NEON_OP_PRIMSUBTRACT";
-        case NEON_OP_PRIMMULTIPLY: return "NEON_OP_PRIMMULTIPLY";
-        case NEON_OP_PRIMDIVIDE: return "NEON_OP_PRIMDIVIDE";
-        case NEON_OP_PRIMNOT: return "NEON_OP_PRIMNOT";
-        case NEON_OP_PRIMNEGATE: return "NEON_OP_PRIMNEGATE";
-        case NEON_OP_DEBUGPRINT: return "NEON_OP_DEBUGPRINT";
-        case NEON_OP_GLOBALSTMT: return "NEON_OP_GLOBALSTMT";
-        case NEON_OP_JUMPNOW: return "NEON_OP_JUMPNOW";
-        case NEON_OP_JUMPIFFALSE: return "NEON_OP_JUMPIFFALSE";
-        case NEON_OP_LOOP: return "NEON_OP_LOOP";
-        case NEON_OP_CALL: return "NEON_OP_CALL";
-        case NEON_OP_INSTTHISINVOKE: return "NEON_OP_INSTTHISINVOKE";
-        case NEON_OP_INSTSUPERINVOKE: return "NEON_OP_INSTSUPERINVOKE";
-        case NEON_OP_CLOSURE: return "NEON_OP_CLOSURE";
-        case NEON_OP_UPVALCLOSE: return "NEON_OP_UPVALCLOSE";
-        case NEON_OP_RETURN: return "NEON_OP_RETURN";
-        case NEON_OP_CLASS: return "NEON_OP_CLASS";
-        case NEON_OP_INHERIT: return "NEON_OP_INHERIT";
-        case NEON_OP_METHOD: return "NEON_OP_METHOD";
-        case NEON_OP_PSEUDOBREAK: return "NEON_OP_PSEUDOBREAK";
-
-    }
-    return "?unknown?";
-}
 
 void neon_prs_skipsemicolon(NeonAstParser* prs)
 {
@@ -705,7 +718,7 @@ int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
         case NEON_OP_INSTSUPERINVOKE:
             return 2;
     }
-    fprintf(stderr, "internal error: failed to compute operand argument size of %d (%s)\n", op, neon_prs_op2str(op));
+    fprintf(stderr, "internal error: failed to compute operand argument size of %d (%s)\n", op, neon_dbg_op2str(op));
     return -1;
 }
 
@@ -714,7 +727,7 @@ int neon_prs_getcodeargscount(const int32_t* bytecode, int ip)
     int rc;
     //const char* os;
     rc = neon_prs_realgetcodeargscount(bytecode, ip);
-    //os = neon_prs_op2str(bytecode[ip]);
+    //os = neon_dbg_op2str(bytecode[ip]);
     //fprintf(stderr, "getcodeargscount(..., code=%s) = %d\n", os, rc);
     return rc;
 }
@@ -1006,20 +1019,22 @@ int32_t neon_prs_parsearglist(NeonAstParser* prs)
     return argc;
 }
 
-void neon_prs_ruleand(NeonAstParser* prs, bool canassign)
+void neon_prs_ruleand(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
-    (void)canassign;
     int endjump;
+    (void)previous;
+    (void)canassign;
     endjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
     neon_prs_emit1byte(prs, NEON_OP_POP);
     neon_prs_parseprec(prs, NEON_PREC_AND);
     neon_prs_emitpatchjump(prs, endjump);
 }
 
-void neon_prs_rulebinary(NeonAstParser* prs, bool canassign)
+void neon_prs_rulebinary(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     NeonAstRule* rule;
     NeonAstTokType ot;
+    (void)previous;
     (void)canassign;
     ot = prs->previous.type;
     rule = neon_prs_getrule(ot);
@@ -1050,10 +1065,10 @@ void neon_prs_rulebinary(NeonAstParser* prs, bool canassign)
         case NEON_TOK_MINUS:
             neon_prs_emit1byte(prs, NEON_OP_PRIMSUBTRACT);
             break;
-        case NEON_TOK_STAR:
+        case NEON_TOK_MULTIPLY:
             neon_prs_emit1byte(prs, NEON_OP_PRIMMULTIPLY);
             break;
-        case NEON_TOK_SLASH:
+        case NEON_TOK_DIVIDE:
             neon_prs_emit1byte(prs, NEON_OP_PRIMDIVIDE);
             break;
         case NEON_TOK_MODULO:
@@ -1079,18 +1094,20 @@ void neon_prs_rulebinary(NeonAstParser* prs, bool canassign)
     }
 }
 
-void neon_prs_rulecall(NeonAstParser* prs, bool canassign)
+void neon_prs_rulecall(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int32_t argc;
+    (void)previous;
     (void)canassign;
     argc = neon_prs_parsearglist(prs);
     neon_prs_emit2byte(prs, NEON_OP_CALL, argc);
 }
 
-void neon_prs_ruledot(NeonAstParser* prs, bool canassign)
+void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int32_t name;
     int32_t argc;
+    (void)previous;
     (void)canassign;
     neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect property name after '.'.");
     name = neon_prs_makeidentconstant(prs, &prs->previous);
@@ -1133,22 +1150,48 @@ void neon_prs_ruleliteral(NeonAstParser* prs, bool canassign)
 void neon_prs_rulegrouping(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
+    neon_prs_ignorespace(prs);
     neon_prs_parseexpr(prs);
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after expression");
+    neon_prs_ignorespace(prs);
+    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after grouped expression");
+}
+
+NeonValue neon_prs_parsenumber(NeonAstParser* prs)
+{
+    double vdoub;
+    long long vbin;
+    long voct;
+    long vhex;
+    if(prs->previous.type == NEON_TOK_BINNUMBER)
+    {
+        vbin = strtoll(prs->previous.start + 2, NULL, 2);
+        return neon_value_makenumber(vbin);
+    }
+    else if(prs->previous.type == NEON_TOK_OCTNUMBER)
+    {
+        voct = strtol(prs->previous.start + 2, NULL, 8);
+        return neon_value_makenumber(voct);
+    }
+    else if(prs->previous.type == NEON_TOK_HEXNUMBER)
+    {
+        vhex = strtol(prs->previous.start, NULL, 16);
+        return neon_value_makenumber(vhex);
+    }
+    vdoub = strtod(prs->previous.start, NULL);
+    return neon_value_makenumber(vdoub);
 }
 
 void neon_prs_rulenumber(NeonAstParser* prs, bool canassign)
 {
-    double value;
     (void)canassign;
-    value = strtod(prs->previous.start, NULL);
-    neon_prs_emitconstant(prs, neon_value_makenumber(value));
+    neon_prs_emitconstant(prs, neon_prs_parsenumber(prs));
 }
 
-void neon_prs_ruleor(NeonAstParser* prs, bool canassign)
+void neon_prs_ruleor(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int endjump;
     int elsejump;
+    (void)previous;
     (void)canassign;
     elsejump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
     endjump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
@@ -1439,6 +1482,8 @@ void neon_prs_ruleunary(NeonAstParser* prs, bool canassign)
         case NEON_TOK_MINUS:
             neon_prs_emit1byte(prs, NEON_OP_PRIMNEGATE);
             break;
+        case NEON_TOK_TILDE:
+            neon_prs_emit1byte(prs, NEON_OP_PRIMBINNOT);
         default:
             return;// Unreachable.
     }
@@ -1520,9 +1565,10 @@ void neon_prs_rulearray(NeonAstParser* prs, bool canassign)
     neon_prs_emit2byte(prs, NEON_OP_MAKEARRAY, count);
 }
 
-void neon_prs_ruleindex(NeonAstParser* prs, bool canassign)
+void neon_prs_ruleindex(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     bool willassign;
+    (void)previous;
     (void)willassign;
     willassign = false;
     neon_prs_parseexpr(prs);
@@ -1559,7 +1605,7 @@ void neon_prs_ruleglobalstmt(NeonAstParser* prs, bool canassign)
         neon_prs_emit2byte(prs, NEON_OP_GLOBALSTMT, -1);
         if(neon_prs_match(prs, NEON_TOK_BRACKETOPEN))
         {
-            neon_prs_ruleindex(prs, true);
+            neon_prs_ruleindex(prs, prs->previous, true);
             //neon_prs_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, true);
         }
     }
@@ -1574,7 +1620,7 @@ void neon_prs_ruletypeof(NeonAstParser* prs, bool canassign)
     neon_prs_skipsemicolon(prs);
 }
 
-NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParseFN prefix, NeonAstParseFN infix, NeonAstPrecedence precedence)
+NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParsePrefixFN prefix, NeonAstParseInfixFN infix, NeonAstPrecedence precedence)
 {
     rule->prefix = prefix;
     rule->infix = infix;
@@ -1587,8 +1633,11 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
     static NeonAstRule dest;
     switch(type)
     {
-        /* Compiling Expressions rules < Calls and Functions infix-left-paren */
-        // [NEON_TOK_PARENOPEN]    = {grouping, NULL,   NEON_PREC_NONE},
+        case NEON_TOK_NEWLINE:
+            {
+                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+            }
+            break;
         case NEON_TOK_PARENOPEN:
             {
                 return neon_prs_setrule(&dest,  neon_prs_rulegrouping, neon_prs_rulecall, NEON_PREC_CALL );
@@ -1646,17 +1695,12 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
                 return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
-        case NEON_TOK_NEWLINE:
-            {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
-            }
-            break;
-        case NEON_TOK_SLASH:
+        case NEON_TOK_DIVIDE:
             {
                 return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
             }
             break;
-        case NEON_TOK_STAR:
+        case NEON_TOK_MULTIPLY:
             {
                 return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
             }
@@ -1708,6 +1752,11 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
                 return neon_prs_setrule(&dest,  neon_prs_ruleunary, NULL, NEON_PREC_NONE );
             }
             break;
+        case NEON_TOK_TILDE:
+            {
+                return neon_prs_setrule(&dest, neon_prs_ruleunary, NULL, NEON_PREC_UNARY);
+            }
+            break;
         /* Compiling Expressions rules < Types of Values table-equal */
         // [NEON_TOK_COMPNOTEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_COMPNOTEQUAL:
@@ -1716,6 +1765,11 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
             }
             break;
         case NEON_TOK_ASSIGN:
+        case NEON_TOK_ASSIGNPLUS:
+        case NEON_TOK_ASSIGNMINUS:
+        case NEON_TOK_ASSIGNMULT:
+        case NEON_TOK_ASSIGNMODULO:
+        case NEON_TOK_ASSIGNDIV:
             {
                 return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
@@ -1766,6 +1820,9 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
             }
             break;
         case NEON_TOK_NUMBER:
+        case NEON_TOK_OCTNUMBER:
+        case NEON_TOK_HEXNUMBER:
+        case NEON_TOK_BINNUMBER:
             {
                 return neon_prs_setrule(&dest,  neon_prs_rulenumber, NULL, NEON_PREC_NONE );
             }
@@ -1903,33 +1960,101 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
     return NULL;
 }
 
-void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
+void neon_prs_ignorespace(NeonAstParser* prs)
 {
-    bool canassign;
-    NeonAstParseFN infixrule;
-    NeonAstParseFN prefixrule;
-    neon_prs_advance(prs);
-    prefixrule = neon_prs_getrule(prs->previous.type)->prefix;
-    if(prefixrule == NULL)
+    while(neon_prs_match(prs, NEON_TOK_NEWLINE))
     {
-        neon_prs_raiseerror(prs, "expected expression");
-        return;
-    }
-    canassign = precedence <= NEON_PREC_ASSIGNMENT;
-    prefixrule(prs, canassign);
-    while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
-    {
-        neon_prs_advance(prs);
-        infixrule = neon_prs_getrule(prs->previous.type)->infix;
-        /* Compiling Expressions infix < Global Variables infix-rule */
-        //infixrule();
-        infixrule(prs, canassign);
-    }
-    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
-    {
-        neon_prs_raiseerror(prs, "invalid assignment target");
     }
 }
+
+
+#if 1
+
+    void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
+    {
+        bool canassign;
+        NeonAstRule* rule;
+        NeonAstToken previous;
+        NeonAstParseInfixFN infixrule;
+        NeonAstParsePrefixFN prefixrule;
+        neon_prs_advance(prs);
+        prefixrule = neon_prs_getrule(prs->previous.type)->prefix;
+        if(prefixrule == NULL)
+        {
+            neon_prs_raiseerror(prs, "expected expression");
+            return;
+        }
+        canassign = precedence <= NEON_PREC_ASSIGNMENT;
+        prefixrule(prs, canassign);
+        /*
+        while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
+        {
+            previous = prs->previous;
+            neon_prs_advance(prs);
+            infixrule = neon_prs_getrule(prs->previous.type)->infix;
+            infixrule(prs, previous, canassign);
+        }
+        */
+
+
+        while(true)
+        {
+            rule = neon_prs_getrule(prs->current.type);
+            if(rule == NULL)
+            {
+                break;
+            }
+            if(precedence <= rule->precedence)
+            {
+                previous = prs->previous;
+                neon_prs_advance(prs);
+                infixrule = neon_prs_getrule(prs->previous.type)->infix;
+                infixrule(prs, previous, canassign);
+            }
+            else
+            {
+                break;
+            }
+        }
+
+
+        if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+        {
+            neon_prs_raiseerror(prs, "invalid assignment target");
+        }
+    }
+
+#else
+
+    void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
+    {
+        bool canassign;
+        NeonAstToken previous;
+        NeonAstParseInfixFN infn;
+        NeonAstParsePrefixFN prefn;
+        prefn = neon_prs_getrule(prs->previous.type)->prefix;
+        if(prefn == NULL)
+        {
+            neon_prs_raiseerror(prs, "expected expression");
+            return;
+        }
+        canassign = precedence <= NEON_PREC_ASSIGNMENT;
+        prefn(prs, canassign);
+        while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
+        {
+            previous = prs->previous;
+            neon_prs_ignorespace(prs);
+            neon_prs_advance(prs);
+            infn = neon_prs_getrule(prs->previous.type)->infix;
+            infn(prs, previous, canassign);
+        }
+        if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+        {
+            neon_prs_raiseerror(prs, "invalid assignment target");
+        }
+    }
+
+#endif
 
 void neon_prs_parseexpr(NeonAstParser* prs)
 {

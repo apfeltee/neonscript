@@ -12,6 +12,8 @@
 #include <signal.h>
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
+#include <assert.h>
 
 // In the book, we show them defined, but for working on them locally,
 // we don't want them to be.
@@ -34,6 +36,12 @@
 #define NEON_MAX_TABLELOAD 0.75
 
 #define NEON_NEXTCAPACITY(capacity) ((capacity) < 8 ? 8 : (capacity)*2)
+
+#if defined(__GNUC__)
+    #define NEON_ATTR_PRINTFLIKE(fmtarg, firstvararg) __attribute__((__format__(__printf__, fmtarg, firstvararg)))
+#else
+    #define NEON_ATTR_PRINTFLIKE(a, b)
+#endif
 
 // NEON_OP_FUNCARG - explicitly for function arguments (and default values)?
 
@@ -71,6 +79,7 @@ enum NeonOpCode
     NEON_OP_PRIMBINAND,
     NEON_OP_PRIMBINOR,
     NEON_OP_PRIMBINXOR,
+    NEON_OP_PRIMBINNOT,
     NEON_OP_PRIMNOT,
     NEON_OP_PRIMNEGATE,
     NEON_OP_DEBUGPRINT,
@@ -145,12 +154,13 @@ enum NeonAstTokType
     NEON_TOK_PLUS,
     NEON_TOK_SEMICOLON,
     NEON_TOK_NEWLINE,
-    NEON_TOK_SLASH,
-    NEON_TOK_STAR,
+    NEON_TOK_DIVIDE,
+    NEON_TOK_MULTIPLY,
     NEON_TOK_MODULO,
     NEON_TOK_BINAND,
     NEON_TOK_BINOR,
     NEON_TOK_BINXOR,
+    NEON_TOK_TILDE,
     // One or two character tokens.
     NEON_TOK_SHIFTLEFT,
     NEON_TOK_SHIFTRIGHT,
@@ -174,6 +184,9 @@ enum NeonAstTokType
     NEON_TOK_IDENTIFIER,
     NEON_TOK_STRING,
     NEON_TOK_NUMBER,
+    NEON_TOK_OCTNUMBER,
+    NEON_TOK_BINNUMBER,
+    NEON_TOK_HEXNUMBER,
     // Keywords.
     NEON_TOK_KWBREAK,
     NEON_TOK_KWCONTINUE,
@@ -199,8 +212,30 @@ enum NeonAstTokType
     NEON_TOK_EOF
 };
 
+
 enum NeonAstPrecedence
 {
+    #if 0
+    NEON_PREC_NONE,
+    NEON_PREC_ASSIGNMENT,// =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //=
+    // ~=
+    NEON_PREC_CONDITIONAL,// ?:
+    NEON_PREC_OR,// or
+    NEON_PREC_AND,// and
+    NEON_PREC_EQUALITY,// ==, !=
+    NEON_PREC_COMPARISON,// <, >, <=, >=
+    NEON_PREC_BIT_OR,// |
+    NEON_PREC_BIT_XOR,// ^
+    NEON_PREC_BIT_AND,// &
+    NEON_PREC_SHIFT,// <<, >>
+    NEON_PREC_RANGE,// ..
+    NEON_PREC_TERM,// +, -
+    NEON_PREC_FACTOR,// *, /, %, **, //
+    NEON_PREC_UNARY,// !, -, ~, (++, -- this two will now be treated as statements)
+    NEON_PREC_CALL,// ., ()
+    NEON_PREC_PRIMARY
+    #endif
+
     NEON_PREC_NONE,
     NEON_PREC_ASSIGNMENT,// =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //=
     // ~=
@@ -220,6 +255,8 @@ enum NeonAstPrecedence
     NEON_PREC_CALL,// ., ()
     NEON_PREC_PRIMARY
 };
+
+
 
 
 enum NeonAstFuncType
@@ -277,10 +314,13 @@ typedef struct /**/NeonConfig NeonConfig;
 typedef struct /**/NeonNestCall NeonNestCall;
 
 
-typedef void (*NeonAstParseFN)(NeonAstParser*, bool);
+typedef void (*NeonAstParsePrefixFN)(NeonAstParser*, bool);
+typedef void (*NeonAstParseInfixFN)(NeonAstParser*, NeonAstToken, bool);
+
 typedef NeonValue (*NeonNativeFN)(NeonState*, NeonValue, int, NeonValue*);
 typedef bool (*NeonValDestroyFN)(NeonState*, void*, NeonValue);
 typedef void (*NeonUserFinalizeFN)(NeonState*, NeonObjUserdata*);
+typedef double(*NeonVMBinaryCallbackFN)(double, double);
 
 struct NeonValue
 {
@@ -299,6 +339,7 @@ struct NeonObject
     bool ismarked;
     bool keep;
     NeonObjType type;
+    NeonState* pvm;
     NeonObject* next;
     NeonHashTable* objmethods;
 };
@@ -429,6 +470,7 @@ struct NeonObjClass
     NeonState* pvm;
     NeonObjString* name;
     NeonHashTable* methods;
+    NeonObjClass* parent;
 };
 
 struct NeonObjInstance
@@ -457,8 +499,8 @@ struct NeonAstToken
 
 struct NeonAstRule
 {
-    NeonAstParseFN prefix;
-    NeonAstParseFN infix;
+    NeonAstParsePrefixFN prefix;
+    NeonAstParseInfixFN infix;
     NeonAstPrecedence precedence;
 };
 
@@ -526,17 +568,10 @@ struct NeonAstParser
 
 struct NeonVMObjVars
 {
-    /* methods for number value type */
-    NeonHashTable* mthnumber;
-
-    /* methods for array type */
-    NeonHashTable* mtharray;
-
-    /* methods for string type */
-    NeonHashTable* mthstring;
-
-    /* methods for any object (including nil!)*/
-    NeonHashTable* mthobject;
+    NeonObjClass* classprimobject;
+    NeonObjClass* classprimnumber;
+    NeonObjClass* classprimstring;
+    NeonObjClass* classprimarray;
 };
 
 struct NeonConfig
@@ -594,11 +629,195 @@ struct NeonState
     NeonObjUpvalue* openupvalues;
     NeonWriter* stdoutwriter;
     NeonWriter* stderrwriter;
+
+
+
+
 };
 
 #include "prot.inc"
 
 extern char **environ;
+
+#define pack754_64(f) (pack754((f), 64, 11))
+#define unpack754_64(i) (unpack754((i), 64, 11))
+
+uint64_t pack754(long double f, unsigned bits, unsigned expbits)
+{
+    long double fnorm;
+    int shift;
+    long long sign;
+    long long exp;
+    long long significand;
+    unsigned significandbits;
+    /* -1 for sign bit */
+    significandbits = bits - expbits - 1;
+    /* get this special case out of the way */
+    if(f == 0.0)
+    {
+        return 0;
+    }
+    /* check sign and begin normalization */
+    if(f < 0)
+    {
+        sign = 1;
+        fnorm = -f;
+    }
+    else
+    {
+        sign = 0;
+        fnorm = f;
+    }
+    /* get the normalized form of f and track the exponent */
+    shift = 0;
+    while(fnorm >= 2.0)
+    {
+        fnorm /= 2.0;
+        shift++;
+    }
+    while(fnorm < 1.0)
+    {
+        fnorm *= 2.0;
+        shift--;
+    }
+    fnorm = fnorm - 1.0;
+    /* calculate the binary form (non-float) of the significand data */
+    significand = fnorm * ((1LL << significandbits) + 0.5f);
+    /* get the biased exponent */
+    /* shift + bias */
+    exp = shift + ((1<<(expbits-1)) - 1);
+    /* return the final answer */
+    return (
+        (sign << (bits - 1)) | (exp << (bits - expbits - 1)) | significand
+    );
+}
+
+long double unpack754(uint64_t i, unsigned bits, unsigned expbits)
+{
+    long double result;
+    long long shift;
+    unsigned bias;
+    unsigned significandbits;
+    /* -1 for sign bit */
+    significandbits = bits - expbits - 1;
+    if(i == 0)
+    {
+        return 0.0;
+    }
+    /* pull the significand */
+    /* mask */
+    result = (i&((1LL<<significandbits)-1));
+    /* convert back to float */
+    result /= (1LL<<significandbits);
+    /* add the one back on */
+    result += 1.0f;
+    /* deal with the exponent */
+    bias = ((1 << (expbits - 1)) - 1);
+    shift = (((i >> significandbits) & ((1LL << expbits) - 1)) - bias);
+    while(shift > 0)
+    {
+        result *= 2.0;
+        shift--;
+    }
+    while(shift < 0)
+    {
+        result /= 2.0;
+        shift++;
+    }
+    /* sign it */
+    if(((i>>(bits-1)) & 1) == 1)
+    {
+        result = result * -1.0;
+    }
+    else
+    {
+        result = result * 1.0;
+    }
+    return result;
+}
+
+/* this used to be done via type punning, which may not be portable */
+double neon_util_uinttofloat(unsigned int val)
+{
+    return unpack754_64(val);
+}
+
+unsigned int neon_util_floattouint(double val)
+{
+    return pack754_64(val);
+}
+
+int neon_util_doubletoint(double n)
+{
+    if(n == 0)
+    {
+        return 0;
+    }
+    if(isnan(n))
+    {
+        return 0;
+    }
+    if(n < 0)
+    {
+        n = -floor(-n);
+    }
+    else
+    {
+        n = floor(n);
+    }
+    if(n < INT_MIN)
+    {
+        return INT_MIN;
+    }
+    if(n > INT_MAX)
+    {
+        return INT_MAX;
+    }
+    return (int)n;
+}
+
+int neon_util_numbertoint32(double n)
+{
+    /* magic. no idea. */
+    bool isf;
+    double two32 = 4294967296.0;
+    double two31 = 2147483648.0;
+    isf = isfinite(n);
+    if(!isf || (n == 0))
+    {
+        return 0;
+    }
+    n = fmod(n, two32);
+    if(n >= 0)
+    {
+        n = floor(n);
+    }
+    else
+    {
+        n = ceil(n) + two32;
+    }
+    if(n >= two31)
+    {
+        return n - two32;
+    }
+    return n;
+}
+
+unsigned int neon_util_numbertouint32(double n)
+{
+    return (unsigned int)neon_util_numbertoint32(n);
+}
+
+static double neon_util_modulo(double a, double b)
+{
+    double r;
+    r = fmod(a, b);
+    if(r != 0 && ((r < 0) != (b < 0)))
+    {
+        r += b;
+    }
+    return r;
+}
 
 static inline NeonValue neon_value_makevalue(NeonValType vt)
 {
@@ -1458,6 +1677,9 @@ void neon_writer_vwriteformat(NeonWriter* wr, const char* fmt, va_list va)
     }
 }
 
+void neon_writer_writeformat(NeonWriter* wr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
+
+
 void neon_writer_writeformat(NeonWriter* wr, const char* fmt, ...)
 {
     va_list va;
@@ -1929,6 +2151,7 @@ NeonObject* neon_object_allocobj(NeonState* state, size_t size, NeonObjType type
     baseobj->type = type;
     baseobj->ismarked = false;
     baseobj->keep = false;
+    baseobj->pvm = state;
     baseobj->next = state->gcstate.linkedobjects;
     baseobj->objmethods = NULL;
     state->gcstate.linkedobjects = baseobj;
@@ -1976,14 +2199,58 @@ NeonObjBoundFunction* neon_object_makeboundmethod(NeonState* state, NeonValue re
     return obj;
 }
 
-NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name)
+NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name, NeonObjClass* parent)
 {
     NeonObjClass* obj;
     obj = (NeonObjClass*)neon_object_allocobj(state, sizeof(NeonObjClass), NEON_OBJ_CLASS);
     obj->pvm = state;
     obj->name = name;
     obj->methods = neon_hashtable_make(state);
+    obj->parent = parent;
     return obj;
+}
+
+NeonObjClass* neon_state_makeclass(NeonState* state, const char* name, NeonObjClass* parent)
+{
+    NeonObjString* objstr;
+    NeonObjClass* oclass;
+    objstr = neon_string_copycstr(state, name);
+    oclass = neon_object_makeclass(state, objstr, parent);
+    neon_state_defineglobal(state, oclass->name, neon_value_fromobject(oclass));
+    return oclass;
+}
+
+bool neon_class_setnativemethod(NeonObjClass* klass, NeonObjString* name, NeonNativeFN fn)
+{
+    bool b;
+    NeonState* state;
+    NeonObjNativeFunction* natfn;
+    state = ((NeonObject*)klass)->pvm;
+    natfn = neon_object_makenative(state, fn, name->sbuf->data);
+    b = neon_hashtable_set(klass->methods, name, neon_value_fromobject(natfn));
+    return b;
+}
+
+bool neon_class_setfunctioncstr(NeonObjClass* klass, const char* name, NeonNativeFN fn)
+{
+    NeonState* state;
+    NeonObjString* os;
+    state = ((NeonObject*)klass)->pvm;
+    os = neon_string_copycstr(state, name);
+    return neon_class_setnativemethod(klass, os, fn);
+}
+
+bool neon_class_getmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* dest)
+{
+    if(neon_hashtable_get(klass->methods, name, dest))
+    {
+        return true;
+    }
+    if(klass->parent != NULL)
+    {
+        return neon_class_getmethod(klass->parent, name, dest);
+    }
+    return false;
 }
 
 void neon_class_release(NeonObjClass* klass)
@@ -2119,6 +2386,11 @@ NeonObjString* neon_string_copy(NeonState* state, const char* estr, int elen)
     }
     rs = neon_string_allocate(state, estr, elen, hash);
     return rs;
+}
+
+NeonObjString* neon_string_copycstr(NeonState* state, const char* estr)
+{
+    return neon_string_copy(state, estr, strlen(estr));
 }
 
 void neon_string_release(NeonObjString* os)
@@ -2670,6 +2942,71 @@ void neon_chunk_disasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, const
     }
 }
 
+const char* neon_dbg_op2str(int32_t opcode)
+{
+    switch(opcode)
+    {
+        case NEON_OP_PUSHCONST: return "NEON_OP_PUSHCONST";
+        case NEON_OP_PUSHNIL: return "NEON_OP_PUSHNIL";
+        case NEON_OP_PUSHTRUE: return "NEON_OP_PUSHTRUE";
+        case NEON_OP_PUSHFALSE: return "NEON_OP_PUSHFALSE";
+        case NEON_OP_PUSHONE: return "NEON_OP_PUSHONE";
+        case NEON_OP_POP: return "NEON_OP_POP";
+        case NEON_OP_POPN: return "NEON_OP_POPN";
+        case NEON_OP_DUP: return "NEON_OP_DUP";
+        case NEON_OP_TYPEOF: return "NEON_OP_TYPEOF";
+        case NEON_OP_LOCALGET: return "NEON_OP_LOCALGET";
+        case NEON_OP_LOCALSET: return "NEON_OP_LOCALSET";
+        case NEON_OP_GLOBALGET: return "NEON_OP_GLOBALGET";
+        case NEON_OP_GLOBALDEFINE: return "NEON_OP_GLOBALDEFINE";
+        case NEON_OP_GLOBALSET: return "NEON_OP_GLOBALSET";
+        case NEON_OP_UPVALGET: return "NEON_OP_UPVALGET";
+        case NEON_OP_UPVALSET: return "NEON_OP_UPVALSET";
+        case NEON_OP_PROPERTYGET: return "NEON_OP_PROPERTYGET";
+        case NEON_OP_PROPERTYSET: return "NEON_OP_PROPERTYSET";
+        case NEON_OP_INSTGETSUPER: return "NEON_OP_INSTGETSUPER";
+        case NEON_OP_EQUAL: return "NEON_OP_EQUAL";
+        case NEON_OP_PRIMGREATER: return "NEON_OP_PRIMGREATER";
+        case NEON_OP_PRIMLESS: return "NEON_OP_PRIMLESS";
+        case NEON_OP_PRIMADD: return "NEON_OP_PRIMADD";
+        case NEON_OP_PRIMSUBTRACT: return "NEON_OP_PRIMSUBTRACT";
+        case NEON_OP_PRIMMULTIPLY: return "NEON_OP_PRIMMULTIPLY";
+        case NEON_OP_PRIMDIVIDE: return "NEON_OP_PRIMDIVIDE";
+        case NEON_OP_PRIMMODULO: return "NEON_OP_PRIMMODULO";
+        case NEON_OP_PRIMSHIFTLEFT: return "NEON_OP_PRIMSHIFTLEFT";
+        case NEON_OP_PRIMSHIFTRIGHT: return "NEON_OP_PRIMSHIFTRIGHT";
+        case NEON_OP_PRIMBINAND: return "NEON_OP_PRIMBINAND";
+        case NEON_OP_PRIMBINOR: return "NEON_OP_PRIMBINOR";
+        case NEON_OP_PRIMBINXOR: return "NEON_OP_PRIMBINXOR";
+        case NEON_OP_PRIMBINNOT: return "NEON_OP_PRIMBINNOT";
+        case NEON_OP_PRIMNOT: return "NEON_OP_PRIMNOT";
+        case NEON_OP_PRIMNEGATE: return "NEON_OP_PRIMNEGATE";
+        case NEON_OP_DEBUGPRINT: return "NEON_OP_DEBUGPRINT";
+        case NEON_OP_GLOBALSTMT: return "NEON_OP_GLOBALSTMT";
+        case NEON_OP_JUMPNOW: return "NEON_OP_JUMPNOW";
+        case NEON_OP_JUMPIFFALSE: return "NEON_OP_JUMPIFFALSE";
+        case NEON_OP_LOOP: return "NEON_OP_LOOP";
+        case NEON_OP_CALL: return "NEON_OP_CALL";
+        case NEON_OP_INSTTHISINVOKE: return "NEON_OP_INSTTHISINVOKE";
+        case NEON_OP_INSTSUPERINVOKE: return "NEON_OP_INSTSUPERINVOKE";
+        case NEON_OP_CLOSURE: return "NEON_OP_CLOSURE";
+        case NEON_OP_UPVALCLOSE: return "NEON_OP_UPVALCLOSE";
+        case NEON_OP_RETURN: return "NEON_OP_RETURN";
+        case NEON_OP_CLASS: return "NEON_OP_CLASS";
+        case NEON_OP_INHERIT: return "NEON_OP_INHERIT";
+        case NEON_OP_METHOD: return "NEON_OP_METHOD";
+        case NEON_OP_MAKEARRAY: return "NEON_OP_MAKEARRAY";
+        case NEON_OP_MAKEMAP: return "NEON_OP_MAKEMAP";
+        case NEON_OP_INDEXGET: return "NEON_OP_INDEXGET";
+        case NEON_OP_INDEXSET: return "NEON_OP_INDEXSET";
+        case NEON_OP_RESTOREFRAME: return "NEON_OP_RESTOREFRAME";
+        case NEON_OP_HALTVM: return "NEON_OP_HALTVM";
+        case NEON_OP_PSEUDOBREAK: return "NEON_OP_PSEUDOBREAK";
+    }
+    return "?unknown?";
+}
+
+
 int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
 {
     NeonValue val;
@@ -2764,7 +3101,7 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
         neon_writer_writeformat(wr, "%4d ", chunk->srclinenos[offset]);
     }
     instruction = chunk->bincode[offset];
-    instrname = neon_prs_op2str(instruction);
+    instrname = neon_dbg_op2str(instruction);
     switch(instruction)
     {
         case NEON_OP_PUSHCONST:
@@ -2908,6 +3245,11 @@ void neon_prs_markcompilerroots(NeonState* state)
             compiler = compiler->enclosing;
         }
     }
+}
+
+void neon_state_defineglobal(NeonState* state, NeonObjString* name, NeonValue val)
+{
+    neon_hashtable_set(state->globals, name, val);
 }
 
 
@@ -3146,18 +3488,22 @@ NeonValue neon_vm_stackpeek(NeonState* state, int distance)
 
 void neon_state_initobjvars(NeonState* state)
 {
-    state->objvars.mthnumber = neon_hashtable_make(state);
-    state->objvars.mtharray = neon_hashtable_make(state);
-    state->objvars.mthstring = neon_hashtable_make(state);
-    state->objvars.mthobject = neon_hashtable_make(state);
+    NeonObjClass* objclass;
+    state->objvars.classprimobject = neon_state_makeclass(state, "Object", NULL);
+    objclass = state->objvars.classprimobject;
+    state->objvars.classprimnumber = neon_state_makeclass(state, "Number", objclass);
+    state->objvars.classprimstring = neon_state_makeclass(state, "String", objclass);
+    state->objvars.classprimarray = neon_state_makeclass(state, "Array", objclass);
 }
 
 void neon_state_releaseobjvars(NeonState* state)
 {
+    /*
     neon_hashtable_release(state->objvars.mthnumber);
     neon_hashtable_release(state->objvars.mtharray);
     neon_hashtable_release(state->objvars.mthstring);
     neon_hashtable_release(state->objvars.mthobject);
+    */
 }
 
 void neon_state_makeenvmap(NeonState* state)
@@ -3214,7 +3560,6 @@ NeonState* neon_state_make()
     state->gcstate.graystack = NULL;
     neon_vm_stackinit(state);
     neon_vm_stackreset(state);
-    neon_state_initobjvars(state);
     state->vmvars.topclosure = NULL;
     state->vmvars.iseval = false;
     state->vmvars.havekeeper = false;
@@ -3225,7 +3570,10 @@ NeonState* neon_state_make()
     state->strings = neon_hashtable_make(state);
     state->initstring = NULL;
     state->initstring = neon_string_copy(state, "init", 4);
+    neon_state_initobjvars(state);
     neon_state_makeenvmap(state);
+    {
+    }
     return state;
 }
 
@@ -3423,6 +3771,18 @@ static NeonValue objfn_string_length(NeonState* state, NeonValue selfval, int ar
     return neon_value_makenumber(os->sbuf->length);
 }
 
+static NeonValue objfn_string_ord(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    char ch;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    selfstr = neon_value_asstring(selfval);
+    ch = selfstr->sbuf->data[0];
+    return neon_value_makenumber(ch);
+}
+
 
 static NeonValue objfn_string_chars(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
@@ -3614,7 +3974,7 @@ void neon_nestcall_restore(NeonNestCall* nnc)
     state->vmvars.stacktop = nnc->stacktop;
     state->vmvars.framecount = nnc->frameidx + 0;
     state->vmvars.currframe = nnc->frame;
-    state->vmvars.currframe->instrucidx = nnc->instrucidx + 0;
+    state->vmvars.currframe->instrucidx = nnc->instrucidx - 0;
 }
 
 bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee, int argc, NeonValue* rv)
@@ -4119,7 +4479,7 @@ int main(int argc, char** argv)
     const char* filename;
     NeonValue unused;
     NeonObjMap* map;
-    NeonHashTable* tab;
+    NeonObjClass* klass;
     NeonState* state;
     exitcode = 0;
     nargv = argv;
@@ -4131,41 +4491,40 @@ int main(int argc, char** argv)
     neon_state_defnative(state, "println", cfn_println);
     neon_state_defnative(state, "eval", cfn_eval);
     {
-        tab = state->objvars.mthobject;
-        map = neon_object_makemapfromtable(state, tab, false);
-        neon_hashtable_setstrfunction(tab, "dump", objfn_object_dump);
-        neon_state_defvalue(state, "Object", neon_value_fromobject(map));        
+        klass = state->objvars.classprimobject;
+        neon_class_setfunctioncstr(klass, "dump", objfn_object_dump);
     }
     {
-        tab = state->objvars.mthnumber;
-        neon_hashtable_setstrfunction(tab, "chr", objfn_number_chr);
+        klass = state->objvars.classprimnumber;
+        neon_class_setfunctioncstr(klass, "chr", objfn_number_chr);
     }
     {
-        tab = state->objvars.mthstring;
-        neon_hashtable_setstrfunction(tab, "length", objfn_string_length);
-        neon_hashtable_setstrfunction(tab, "split", objfn_string_split);
-        neon_hashtable_setstrfunction(tab, "chars", objfn_string_chars);
+        klass = state->objvars.classprimstring;
+        neon_class_setfunctioncstr(klass, "length", objfn_string_length);
+        neon_class_setfunctioncstr(klass, "split", objfn_string_split);
+        neon_class_setfunctioncstr(klass, "chars", objfn_string_chars);
+        neon_class_setfunctioncstr(klass, "ord", objfn_string_ord);
         #if 0
-        neon_hashtable_setstrfunction(tab, "lstrip", objfn_string_leftstrip);
-        neon_hashtable_setstrfunction(tab, "rstrip", objfn_string_rightstrip);
-        neon_hashtable_setstrfunction(tab, "strip", objfn_string_strip);
-        neon_hashtable_setstrfunction(tab, "toUpper", objfn_string_toupper);
-        neon_hashtable_setstrfunction(tab, "tolower", objfn_string_tolower);
+        neon_class_setfunctioncstr(klass, "lstrip", objfn_string_leftstrip);
+        neon_class_setfunctioncstr(klass, "rstrip", objfn_string_rightstrip);
+        neon_class_setfunctioncstr(klass, "strip", objfn_string_strip);
+        neon_class_setfunctioncstr(klass, "toUpper", objfn_string_toupper);
+        neon_class_setfunctioncstr(klass, "tolower", objfn_string_tolower);
         
 
         #endif
     }
     {
-        tab = state->objvars.mtharray;
-        neon_hashtable_setstrfunction(tab, "join", objfn_array_join);
-        neon_hashtable_setstrfunction(tab, "map", objfn_array_map);
-        neon_hashtable_setstrfunction(tab, "count", objfn_array_count);
-        neon_hashtable_setstrfunction(tab, "length", objfn_array_count);
-        neon_hashtable_setstrfunction(tab, "push", objfn_array_push);
-        neon_hashtable_setstrfunction(tab, "append", objfn_array_push);
-        neon_hashtable_setstrfunction(tab, "erase", objfn_array_erase);
-        neon_hashtable_setstrfunction(tab, "set", objfn_array_set);
-        neon_hashtable_setstrfunction(tab, "pop", objfn_array_pop);
+        klass = state->objvars.classprimarray;
+        neon_class_setfunctioncstr(klass, "join", objfn_array_join);
+        neon_class_setfunctioncstr(klass, "map", objfn_array_map);
+        neon_class_setfunctioncstr(klass, "count", objfn_array_count);
+        neon_class_setfunctioncstr(klass, "length", objfn_array_count);
+        neon_class_setfunctioncstr(klass, "push", objfn_array_push);
+        neon_class_setfunctioncstr(klass, "append", objfn_array_push);
+        neon_class_setfunctioncstr(klass, "erase", objfn_array_erase);
+        neon_class_setfunctioncstr(klass, "set", objfn_array_set);
+        neon_class_setfunctioncstr(klass, "pop", objfn_array_pop);
     }
     {
         map = neon_object_makemap(state);
