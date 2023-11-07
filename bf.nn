@@ -11,7 +11,7 @@ function bf(src, input)
     var inptr = 0
     var instr    = 0
     var stack = []
-    while(instr < src.length())
+    while(instr < src.size())
     {
         if(instr < 0)
         {
@@ -70,7 +70,7 @@ function bf(src, input)
                 while(cont)
                 {
                     instr = instr + 1
-                    if(instr > src.length())
+                    if(instr > src.size())
                     {
                         throw Exception("Missing matching ']'")
                     }

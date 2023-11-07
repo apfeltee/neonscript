@@ -1,0 +1,130 @@
+
+
+function htmlquote(val)
+{
+    return val;
+}
+
+class Element
+{
+    constructor(tagname, text)
+    {
+        this.tagname = tagname;
+        this.data = [0];
+        this.innertext = text;
+        this.attributes = {};
+        this.children = [];
+    }
+
+    createChild(tagname, text)
+    {
+        var elem = Element(tagname, text);
+        this.children.push(elem);
+        return elem;
+    }
+
+    setAttribute(name, target)
+    {
+        this.attributes[name] = target;
+        return this;
+    }
+
+    appendChild(elem)
+    {
+        this.children.push(elem);
+        return this;
+    }
+
+    hasText()
+    {
+        if(this.children.size() > 0)
+        {
+            return true;
+        }
+        if(this.innertext != null)
+        {
+            return true;
+        }
+        return false;
+    }
+
+
+    toXML()
+    {
+        var pretty = true;
+        var obuf = [];
+        var withtext = this.hasText();
+        obuf.push("<", this.tagname);
+        if(this.attributes != null)
+        {
+            var keys = Object.keys(this.attributes);
+            //println("keys = ", keys)
+            var cnt = keys.size();
+            if(cnt > 0)
+            {
+                obuf.push(" ");
+                for(var i=0; i<cnt; i++)
+                {
+                    var key = keys[i];
+                    var val = htmlquote(this.attributes[key]);
+                    obuf.push(key, "=\"", val, "\"")
+                    if((i+1) != cnt)
+                    {
+                        obuf.push(" ")
+                    }
+                }
+            }
+            //println("obuf=", obuf, ", cnt=", cnt)
+        }
+        if(withtext)
+        {
+            obuf.push(">");
+            if(this.innertext != null)
+            {
+                obuf.push(this.innertext);
+            }
+        }
+        else
+        {
+            obuf.push(" />");
+        }
+        if(pretty)
+        {
+            obuf.push("\n");
+        }
+        for(var i=0; i<this.children.size(); i++)
+        {
+            var elem = this.children[i];
+            //indpad(indent);
+            var joined = elem.toXML();
+            //println("elem=", elem)
+            obuf.push(joined)
+        }
+        if(withtext)
+        {
+            obuf.push("</", this.tagname, ">");
+            if(pretty)
+            {
+                obuf.push("\n");
+            }
+        }
+        return obuf.join("");
+    }
+}
+
+
+var doc = Element("html", null);
+//println("doc = ", doc)
+
+var head = doc.createChild("head", null);
+var body = doc.createChild("body", null);
+print("body = ", body)
+var form = body.createChild("form", null);
+var input = form.createChild("input", null);
+var submit = form.createChild("input", null);
+form.setAttribute("action", "/bin/submit.cgi");
+input.setAttribute("name", "fr_uname").setAttribute("type", "text");
+submit.setAttribute("type", "submit").setAttribute("value", "Go!");
+form.appendChild(input).appendChild(submit);
+head.createChild("title", "Example Document");
+println(doc.toXML());

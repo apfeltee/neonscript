@@ -170,7 +170,7 @@ function core_sha1(x, l)
                 w[j] = rol(((wv1 ^ wv2) ^ wv3) ^ wv4, 1);
             }
             var ktemp = sha1_kt(j);
-            println("sha1_kt(", j, ")=", ktemp)
+            //println("sha1_kt(", j, ")=", ktemp)
             var t = safe_add(safe_add(rol(a, 5), sha1_ft(j, b, c, d)), safe_add(safe_add(e, w[j]), ktemp));
             e = d;
             d = c;
@@ -271,7 +271,9 @@ var demo = [
     ["long text, some spaces, blah blah", "fc0aa2379ecce86eac0dc50d921ab2cef7030d12"]
 ];
 
-for(var idx=0; idx<demo.size(); idx++)
+println(demo)
+var len = demo.size()
+for(var idx=0; idx<len; idx++)
 {
     var itm = demo[idx];
     var k = itm[0];
@@ -284,6 +286,6 @@ for(var idx=0; idx<demo.size(); idx++)
     {
         okstr = "OK  ";
     }
-    print(okstr, ": \"",k, "\" => ", m, "\n");
+    print(okstr, ": \"",k, "\" => ", m, "(should be: ", v, ")", "\n");
 
 }

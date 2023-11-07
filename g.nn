@@ -1,0 +1,18 @@
+
+class Foo
+{
+    constructor()
+    {
+        this.durp = 43
+    }
+
+
+    dothing()
+    {
+        println("durp=", this.durp)
+    }
+}
+
+f = Foo()
+f.dothing();
+

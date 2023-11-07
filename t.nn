@@ -1,7 +1,7 @@
 
 class Poop
 {
-    init()
+    constructor()
     {
         this.stuff = 10;
     }

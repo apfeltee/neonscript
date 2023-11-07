@@ -1,6 +1,6 @@
 
 data = File.readfile("Makefile", 120)
-len = data.length()
+len = data.length
 
 lineno = 1
 for(i=0; i<len; i++)

@@ -420,6 +420,7 @@ struct NeonObjMap
 struct NeonObjScriptFunction
 {
     NeonObject obj;
+    bool isvariadic;
     NeonState* pvm;
     int arity;
     int upvaluecount;
@@ -459,7 +460,7 @@ struct NeonObjClosure
 {
     NeonObject objectheader;
     NeonState* pvm;
-    NeonObjScriptFunction* innerfn;
+    NeonObjScriptFunction* fnptr;
     NeonObjUpvalue** upvalues;
     int upvaluecount;
 };
@@ -470,6 +471,7 @@ struct NeonObjClass
     NeonState* pvm;
     NeonObjString* name;
     NeonHashTable* methods;
+    NeonHashTable* staticmethods;
     NeonHashTable* properties;
     NeonObjClass* parent;
 };
@@ -590,6 +592,7 @@ struct NeonCallFrame
 
 struct NeonVMGCVars
 {
+    bool allowed;
     int graycount;
     int graycap;
     size_t bytesallocd;
@@ -608,7 +611,7 @@ struct NeonVMStateVars
     size_t stackcapacity;
     size_t framecapacity;
     NeonCallFrame keepframe;
-    NeonCallFrame* currframe;
+    NeonCallFrame* activeframe;
     NeonCallFrame* framevalues;
     NeonValue* stackvalues;
     NeonObjClosure* topclosure;
@@ -621,7 +624,7 @@ struct NeonState
     NeonObjMap* envvars;
     /* instance of the parser. this is */
     NeonAstParser* parser;
-    NeonVMStateVars vmvars;
+    NeonVMStateVars vmstate;
     NeonVMGCVars gcstate;
     NeonVMObjVars objvars;
     NeonHashTable* globals;
@@ -1071,13 +1074,13 @@ void neon_gcmem_markroots(NeonState* state)
     int i;
     NeonValue* pslot;
     NeonObjUpvalue* upvalue;
-    for(pslot=&state->vmvars.stackvalues[0]; pslot < &state->vmvars.stackvalues[state->vmvars.stacktop]; pslot++)
+    for(pslot=&state->vmstate.stackvalues[0]; pslot < &state->vmstate.stackvalues[state->vmstate.stacktop]; pslot++)
     {
         neon_gcmem_markvalue(state, *pslot);
     }
-    for(i = 0; i < state->vmvars.framecount; i++)
+    for(i = 0; i < state->vmstate.framecount; i++)
     {
-        neon_gcmem_markobject(state, (NeonObject*)state->vmvars.framevalues[i].closure);
+        neon_gcmem_markobject(state, (NeonObject*)state->vmstate.framevalues[i].closure);
     }
     for(upvalue = state->openupvalues; upvalue != NULL; upvalue = upvalue->next)
     {
@@ -1177,7 +1180,7 @@ void neon_gcmem_markobject(NeonState* state, NeonObject* object)
         return;
     }
 #if 0
-    neon_writer_writeformat(state->stderrwriter, "markobject: (graycap=%d graycount=%d) at %p: ", state->gcstate.graycap, state->gcstate.graycount, (void*)object);
+    neon_writer_writefmt(state->stderrwriter, "markobject: (graycap=%d graycount=%d) at %p: ", state->gcstate.graycap, state->gcstate.graycount, (void*)object);
     neon_writer_printvalue(state->stderrwriter, neon_value_fromobject(object), true);
     neon_writer_writestring(state->stderrwriter, "\n");
 #endif
@@ -1216,7 +1219,7 @@ void neon_gcmem_markvalarray(NeonState* state, NeonValArray* array)
 void neon_gcmem_blackenobj(NeonState* state, NeonObject* object)
 {
 #ifdef DEBUG_LOG_GC
-    neon_writer_writeformat(state->stderrwriter, "blackenobj: at %p: ", (void*)object);
+    neon_writer_writefmt(state->stderrwriter, "blackenobj: at %p: ", (void*)object);
     neon_writer_printvalue(state->stderrwriter, neon_value_fromobject(object), true);
     neon_writer_writestring(state->stderrwriter, "\n");
 #endif
@@ -1241,6 +1244,8 @@ void neon_gcmem_blackenobj(NeonState* state, NeonObject* object)
                 klass = (NeonObjClass*)object;
                 neon_gcmem_markobject(state, (NeonObject*)klass->name);
                 neon_hashtable_mark(state, klass->methods);
+                neon_hashtable_mark(state, klass->staticmethods);
+
             }
             break;
 
@@ -1616,7 +1621,7 @@ void neon_writer_writeescapedchar(NeonWriter* wr, int ch)
             break;
         default:
             {
-                neon_writer_writeformat(wr, "\\x%02x", (unsigned char)ch);
+                neon_writer_writefmt(wr, "\\x%02x", (unsigned char)ch);
             }
             break;
     }
@@ -1665,7 +1670,7 @@ void neon_writer_vwritefmttostring(NeonWriter* wr, const char* fmt, va_list va)
     free(buf);
 }
 
-void neon_writer_vwriteformat(NeonWriter* wr, const char* fmt, va_list va)
+void neon_writer_vwritefmt(NeonWriter* wr, const char* fmt, va_list va)
 {
     if(wr->isstring)
     {
@@ -1678,15 +1683,80 @@ void neon_writer_vwriteformat(NeonWriter* wr, const char* fmt, va_list va)
     }
 }
 
-void neon_writer_writeformat(NeonWriter* wr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
+void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
 
 
-void neon_writer_writeformat(NeonWriter* wr, const char* fmt, ...)
+void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...)
 {
     va_list va;
     va_start(va, fmt);
-    neon_writer_vwriteformat(wr, fmt, va);
+    neon_writer_vwritefmt(wr, fmt, va);
     va_end(va);
+}
+
+bool neon_writer_vvalfmt(NeonWriter* wr, const char* format, va_list arglist)
+{
+    char ch;
+    size_t length;
+    bool wasallowed;
+    const char* c;
+    const char* cstr;
+    NeonValue val;
+    NeonState* state;
+    state = wr->pvm;
+    wasallowed = state->gcstate.allowed;
+    state->gcstate.allowed = false;
+    for(c = format; *c != '\0'; c++)
+    {
+        switch(*c)
+        {
+            case '$':
+                {
+                    cstr = va_arg(arglist, const char*);
+                    if(cstr != NULL)
+                    {
+                        length = strlen(cstr);
+                        neon_writer_writestringl(wr, cstr, length);
+                    }
+                    else
+                    {
+                        goto defaultendingcopying;
+                    }
+                }
+                break;
+            case '@':
+                {
+                    val = va_arg(arglist, NeonValue);
+                    neon_writer_printvalue(wr, val, false);
+                }
+                break;
+            case '#':
+                {
+                    double d = va_arg(arglist, double);
+                    neon_writer_writefmt(wr, "%g", d);
+                }
+                break;
+            default:
+                {
+                    defaultendingcopying:
+                    ch = *c;
+                    neon_writer_writechar(wr, ch);
+                }
+                break;
+        }
+    }
+    state->gcstate.allowed = wasallowed;
+    return true;
+}
+
+bool neon_writer_valfmt(NeonWriter* wr, const char* format, ...)
+{
+    bool b;
+    va_list va;
+    va_start(va, format);
+    b = neon_writer_vvalfmt(wr, format, va);
+    va_end(va);
+    return b;
 }
 
 void neon_writer_printfunction(NeonWriter* wr, NeonObjScriptFunction* ofn)
@@ -1697,7 +1767,7 @@ void neon_writer_printfunction(NeonWriter* wr, NeonObjScriptFunction* ofn)
     }
     else
     {
-        neon_writer_writeformat(wr, "<function '%s'>", ofn->name->sbuf->data);
+        neon_writer_writefmt(wr, "<function '%s'>", ofn->name->sbuf->data);
     }
 }
 
@@ -1733,7 +1803,7 @@ void neon_writer_printmap(NeonWriter* wr, NeonObjMap* map)
             if(entry->key != NULL)
             {
                 neon_writer_printstring(wr, entry->key, true);
-                neon_writer_writeformat(wr, ": ");
+                neon_writer_writefmt(wr, ": ");
                 neon_writer_printvalue(wr, entry->value, true);
                 if((i+1) < cap)
                 {
@@ -1767,22 +1837,22 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
     {
         case NEON_OBJ_USERDATA:
             {
-                neon_writer_writeformat(wr, "<userdata %p>", neon_value_asuserdata(value));
+                neon_writer_writefmt(wr, "<userdata %p>", neon_value_asuserdata(value));
             }
             break;
         case NEON_OBJ_BOUNDMETHOD:
             {
-                neon_writer_printfunction(wr, neon_value_asboundfunction(value)->method->innerfn);
+                neon_writer_printfunction(wr, neon_value_asboundfunction(value)->method->fnptr);
             }
             break;
         case NEON_OBJ_CLASS:
             {
-                neon_writer_writeformat(wr, "<class '%s'>", neon_value_asclass(value)->name->sbuf->data);
+                neon_writer_writefmt(wr, "<class '%s'>", neon_value_asclass(value)->name->sbuf->data);
             }
             break;
         case NEON_OBJ_CLOSURE:
             {
-                neon_writer_printfunction(wr, neon_value_asclosure(value)->innerfn);
+                neon_writer_printfunction(wr, neon_value_asclosure(value)->fnptr);
             }
             break;
         case NEON_OBJ_FUNCTION:
@@ -1792,14 +1862,14 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
             break;
         case NEON_OBJ_INSTANCE:
             {
-                neon_writer_writeformat(wr, "<instance '%s'>", neon_value_asinstance(value)->klass->name->sbuf->data);
+                neon_writer_writefmt(wr, "<instance '%s'>", neon_value_asinstance(value)->klass->name->sbuf->data);
             }
             break;
         case NEON_OBJ_NATIVE:
             {
                 NeonObjNativeFunction* onat;
                 onat = neon_value_asnativefunction(value);
-                neon_writer_writeformat(wr, "<nativefn '%s'@%p>", onat->name, onat);
+                neon_writer_writefmt(wr, "<nativefn '%s'@%p>", onat->name, onat);
             }
             break;
         case NEON_OBJ_STRING:
@@ -1809,7 +1879,7 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
             break;
         case NEON_OBJ_UPVALUE:
             {
-                neon_writer_writeformat(wr, "<upvalue>");
+                neon_writer_writefmt(wr, "<upvalue>");
             }
             break;
         case NEON_OBJ_ARRAY:
@@ -1824,7 +1894,7 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
             break;
         default:
             {
-                neon_writer_writeformat(wr, "?unknownobject?");
+                neon_writer_writefmt(wr, "?unknownobject?");
             }
     }
 }
@@ -1847,11 +1917,11 @@ void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
                 if((dw <= LONG_MIN) || (dw >= LONG_MAX) || (dw == (long)dw))
                 {
                     iv = (int64_t)dw;
-                    neon_writer_writeformat(wr, "%ld", iv);
+                    neon_writer_writefmt(wr, "%ld", iv);
                 }
                 else
                 {
-                    neon_writer_writeformat(wr, "%g", dw);
+                    neon_writer_writefmt(wr, "%g", dw);
                 }
             }
             break;
@@ -1859,7 +1929,7 @@ void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
             neon_writer_printobject(wr, value, fixstring);
             break;
         default:
-            neon_writer_writeformat(wr, "?unknownvalue?");
+            neon_writer_writefmt(wr, "?unknownvalue?");
             break;
     }
 }
@@ -2220,6 +2290,7 @@ NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name, NeonO
     obj->pvm = state;
     obj->name = name;
     obj->methods = neon_hashtable_make(state);
+    obj->staticmethods = neon_hashtable_make(state);
     obj->properties = neon_hashtable_make(state);
     obj->parent = parent;
     return obj;
@@ -2235,6 +2306,15 @@ NeonObjClass* neon_state_makeclass(NeonState* state, const char* name, NeonObjCl
     return oclass;
 }
 
+bool neon_class_putvalintable(NeonState* state, NeonObjClass* klass, NeonHashTable* htab, NeonObjString* name, NeonValue val)
+{
+    bool b;
+    (void)state;
+    (void)klass;
+    b = neon_hashtable_set(htab, name, val);
+    return b;
+}
+
 bool neon_class_setnativemethod(NeonObjClass* klass, NeonObjString* name, NeonNativeFN fn)
 {
     bool b;
@@ -2242,7 +2322,18 @@ bool neon_class_setnativemethod(NeonObjClass* klass, NeonObjString* name, NeonNa
     NeonObjNativeFunction* natfn;
     state = ((NeonObject*)klass)->pvm;
     natfn = neon_object_makenative(state, fn, name->sbuf->data);
-    b = neon_hashtable_set(klass->methods, name, neon_value_fromobject(natfn));
+    b = neon_class_putvalintable(state, klass, klass->methods, name, neon_value_fromobject(natfn));
+    return b;
+}
+
+bool neon_class_setnativestaticmethod(NeonObjClass* klass, NeonObjString* name, NeonNativeFN fn)
+{
+    bool b;
+    NeonState* state;
+    NeonObjNativeFunction* natfn;
+    state = ((NeonObject*)klass)->pvm;
+    natfn = neon_object_makenative(state, fn, name->sbuf->data);
+    b = neon_class_putvalintable(state, klass, klass->staticmethods, name, neon_value_fromobject(natfn));
     return b;
 }
 
@@ -2255,6 +2346,15 @@ bool neon_class_setfunctioncstr(NeonObjClass* klass, const char* name, NeonNativ
     return neon_class_setnativemethod(klass, os, fn);
 }
 
+bool neon_class_setstaticfunctioncstr(NeonObjClass* klass, const char* name, NeonNativeFN fn)
+{
+    NeonState* state;
+    NeonObjString* os;
+    state = ((NeonObject*)klass)->pvm;
+    os = neon_string_copycstr(state, name);
+    return neon_class_setnativestaticmethod(klass, os, fn);
+}
+
 bool neon_class_getmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* dest)
 {
     if(neon_hashtable_get(klass->methods, name, dest))
@@ -2265,6 +2365,23 @@ bool neon_class_getmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* d
     {
         return neon_class_getmethod(klass->parent, name, dest);
     }
+    return false;
+}
+
+
+bool neon_class_getstaticmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* dest)
+{
+    if(neon_hashtable_get(klass->staticmethods, name, dest))
+    {
+        return true;
+    }
+    // should we follow the chain for static functions...?
+    /*
+    if(klass->parent != NULL)
+    {
+        return neon_class_getstaticmethod(klass->parent, name, dest);
+    }
+    */
     return false;
 }
 
@@ -2288,7 +2405,7 @@ NeonObjClosure* neon_object_makeclosure(NeonState* state, NeonObjScriptFunction*
     }
     closure = (NeonObjClosure*)neon_object_allocobj(state, sizeof(NeonObjClosure), NEON_OBJ_CLOSURE);
     closure->pvm = state;
-    closure->innerfn = ofn;
+    closure->fnptr = ofn;
     closure->upvalues = upvals;
     closure->upvaluecount = ofn->upvaluecount;
     return closure;
@@ -2299,7 +2416,7 @@ void neon_closure_mark(NeonObjClosure* closure)
     size_t i;
     NeonState* state;
     state = closure->pvm;
-    neon_gcmem_markobject(state, (NeonObject*)closure->innerfn);
+    neon_gcmem_markobject(state, (NeonObject*)closure->fnptr);
     for(i = 0; i < (size_t)closure->upvaluecount; i++)
     {
         neon_gcmem_markobject(state, (NeonObject*)closure->upvalues[i]);
@@ -2322,6 +2439,7 @@ NeonObjScriptFunction* neon_object_makefunction(NeonState* state)
     obj->arity = 0;
     obj->upvaluecount = 0;
     obj->name = NULL;
+    obj->isvariadic = false;
     obj->chunk = neon_chunk_make(state);
     return obj;
 }
@@ -2578,6 +2696,12 @@ NeonObjMap* neon_object_makemap(NeonState* state)
 {
     return neon_object_makemapfromtable(state, NULL, true);
 }
+
+NeonObjArray* neon_object_makearray(NeonState* state)
+{
+    return neon_array_make(state);
+}
+
 
 bool neon_map_set(NeonObjMap* map, NeonObjString* name, NeonValue val)
 {
@@ -2950,7 +3074,7 @@ int neon_chunk_pushconst(NeonState* state, NeonChunk* chunk, NeonValue value)
 void neon_chunk_disasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, const char* name)
 {
     int offset;
-    neon_writer_writeformat(wr, "== %s ==\n", name);
+    neon_writer_writefmt(wr, "== %s ==\n", name);
     for(offset = 0; offset < chunk->count;)
     {
         offset = neon_dbg_dumpdisasm(state, wr, chunk, offset);
@@ -3033,7 +3157,7 @@ int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, 
     {
         val = chunk->constants->values[constant];
     }
-    neon_writer_writeformat(wr, "%-16s %4d '", name, constant);
+    neon_writer_writefmt(wr, "%-16s %4d '", name, constant);
     neon_writer_printvalue(wr, val, true);
     neon_writer_writestring(wr, "'\n");
     return offset + 2;
@@ -3046,7 +3170,7 @@ int neon_dbg_dumpinvokeinstr(NeonState* state, NeonWriter* wr, const char* name,
     (void)state;
     constant = chunk->bincode[offset + 1];
     argc = chunk->bincode[offset + 2];
-    neon_writer_writeformat(wr, "%-16s (%d args) %4d {", name, argc, constant);
+    neon_writer_writefmt(wr, "%-16s (%d args) %4d {", name, argc, constant);
     neon_writer_printvalue(wr, chunk->constants->values[constant], true);
     neon_writer_writestring(wr, "}\n");
     return offset + 3;
@@ -3055,7 +3179,7 @@ int neon_dbg_dumpinvokeinstr(NeonState* state, NeonWriter* wr, const char* name,
 int neon_dbg_dumpsimpleinstr(NeonState* state, NeonWriter* wr, const char* name, int offset)
 {
     (void)state;
-    neon_writer_writeformat(wr, "%s\n", name);
+    neon_writer_writefmt(wr, "%s\n", name);
     return offset + 1;
 }
 
@@ -3064,7 +3188,7 @@ int neon_dbg_dumpbyteinstr(NeonState* state, NeonWriter* wr, const char* name, N
     int32_t islot;
     (void)state;
     islot = chunk->bincode[offset + 1];
-    neon_writer_writeformat(wr, "%-16s %4d\n", name, islot);
+    neon_writer_writefmt(wr, "%-16s %4d\n", name, islot);
     return offset + 2;// [debug]
 }
 
@@ -3074,7 +3198,7 @@ int neon_dbg_dumpjumpinstr(NeonState* state, NeonWriter* wr, const char* name, i
     (void)state;
     jump= (uint16_t)(chunk->bincode[offset + 1] << 8);
     jump |= chunk->bincode[offset + 2];
-    neon_writer_writeformat(wr, "%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
+    neon_writer_writefmt(wr, "%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
     return offset + 3;
 }
 
@@ -3088,7 +3212,7 @@ int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int
     (void)state;
     offset++;
     constant = chunk->bincode[offset++];
-    neon_writer_writeformat(wr, "%-16s %4d ", "NEON_OP_CLOSURE", constant);
+    neon_writer_writefmt(wr, "%-16s %4d ", "NEON_OP_CLOSURE", constant);
     neon_writer_printvalue(wr, chunk->constants->values[constant], true);
     neon_writer_writestring(wr, "\n");
     fn = neon_value_asscriptfunction(chunk->constants->values[constant]);
@@ -3096,7 +3220,7 @@ int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int
     {
         islocal = chunk->bincode[offset++];
         index = chunk->bincode[offset++];
-        neon_writer_writeformat(wr, "%04d      |                     %s %d\n", offset - 2, islocal ? "local" : "upvalue", index);
+        neon_writer_writefmt(wr, "%04d      |                     %s %d\n", offset - 2, islocal ? "local" : "upvalue", index);
     }
     return offset;
 }
@@ -3106,14 +3230,14 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
     int32_t instruction;
     const char* instrname;
     (void)state;
-    neon_writer_writeformat(wr, "%04d ", offset);
+    neon_writer_writefmt(wr, "%04d ", offset);
     if((offset > 0) && (chunk->srclinenos[offset] == chunk->srclinenos[offset - 1]))
     {
-        neon_writer_writeformat(wr, "   | ");
+        neon_writer_writefmt(wr, "   | ");
     }
     else
     {
-        neon_writer_writeformat(wr, "%4d ", chunk->srclinenos[offset]);
+        neon_writer_writefmt(wr, "%4d ", chunk->srclinenos[offset]);
     }
     instruction = chunk->bincode[offset];
     instrname = neon_dbg_op2str(instruction);
@@ -3212,7 +3336,7 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         /*
         default:
-            neon_writer_writeformat(wr, "!!!!unknown opcode %d!!!!\n", instruction);
+            neon_writer_writefmt(wr, "!!!!unknown opcode %d!!!!\n", instruction);
             return offset + 1;
             */
     }
@@ -3276,17 +3400,17 @@ void neon_state_vraiseerror(NeonState* state, const char* format, va_list va)
     size_t instruction;
     NeonCallFrame* frame;
     NeonObjScriptFunction* fn;
-    state->vmvars.hasraised = true;
+    state->vmstate.hasraised = true;
     vfprintf(stderr, format, va);
     fputs("\n", stderr);
     count = 0;
-    frmcnt = state->vmvars.framecount;
+    frmcnt = state->vmstate.framecount;
     for(itd = frmcnt - 1; itd >= 0; itd--)
     {
-        frame = &state->vmvars.framevalues[itd];
+        frame = &state->vmstate.framevalues[itd];
         /* Calls and Functions runtime-error-stack < Closures runtime-error-function */
-        // NeonObjScriptFunction* function = frame->innerfn;
-        fn = frame->closure->innerfn;
+        // NeonObjScriptFunction* function = frame->fnptr;
+        fn = frame->closure->fnptr;
         //instruction = frame->instrucptr - fn->chunk->bincode - 1;
         instruction = frame->instrucidx;
         fprintf(stderr, "[line %d] in ", fn->chunk->srclinenos[instruction]);
@@ -3320,12 +3444,12 @@ void neon_state_defvalue(NeonState* state, const char* name, NeonValue val)
 {
     NeonObjString* os;
     os = neon_string_copy(state, name, (int)strlen(name));
-    #if 0
+    #if 1
         neon_vm_stackpush(state, neon_value_fromobject(os));
         {
             neon_vm_stackpush(state, val);
             {
-                neon_hashtable_set(state->globals, neon_value_asstring(state->vmvars.stackvalues[0]), state->vmvars.stackvalues[1]);
+                neon_hashtable_set(state->globals, neon_value_asstring(state->vmstate.stackvalues[0]), state->vmstate.stackvalues[1]);
             }
             neon_vm_stackpop(state);
         }
@@ -3346,7 +3470,7 @@ void neon_state_defnative(NeonState* state, const char* name, NeonNativeFN nat)
 void neon_vm_stackinit(NeonState* state)
 {
     NeonVMStateVars* vm;
-    vm = &state->vmvars;
+    vm = &state->vmstate;
     vm->framevalues = (NeonCallFrame*)malloc((NEON_MAX_VMFRAMES + 1) * sizeof(NeonCallFrame));
     vm->stackvalues = (NeonValue*)malloc((NEON_MAX_VMSTACK + 1) * sizeof(NeonValue));
     vm->stackcapacity = NEON_MAX_VMSTACK;
@@ -3354,7 +3478,7 @@ void neon_vm_stackinit(NeonState* state)
 }
 
 /*
-* grows vmvars.(stack|frame)values, respectively.
+* grows vmstate.(stack|frame)values, respectively.
 * currently it works fine with mob.js (man-or-boy test), although
 * there are still some invalid reads regarding the closure;
 * almost definitely because the pointer address changes.
@@ -3376,11 +3500,11 @@ void neon_vm_stackresize(NeonState* state, size_t needed)
     * keep closure address. though this might be incorrect...
     */
     {
-        oldsz = state->vmvars.stackcapacity;
+        oldsz = state->vmstate.stackcapacity;
         newsz = oldsz + nforvals;
         allocsz = ((newsz + 1) * sizeof(NeonValue));
         #if 1
-            oldbuf = state->vmvars.stackvalues;
+            oldbuf = state->vmstate.stackvalues;
             newbuf = realloc(oldbuf, allocsz);
             if(newbuf == NULL)
             {
@@ -3388,15 +3512,15 @@ void neon_vm_stackresize(NeonState* state, size_t needed)
                 abort();
             }
         #endif
-        state->vmvars.stackvalues = (NeonValue*)newbuf;
-        state->vmvars.stackcapacity = newsz;
+        state->vmstate.stackvalues = (NeonValue*)newbuf;
+        state->vmstate.stackcapacity = newsz;
     }
     {
-        oldsz = state->vmvars.framecapacity;
+        oldsz = state->vmstate.framecapacity;
         newsz = oldsz + needed;
         allocsz = ((newsz + 1) * sizeof(NeonCallFrame));
         #if 1
-            oldbuf = state->vmvars.framevalues;
+            oldbuf = state->vmstate.framevalues;
             newbuf = realloc(oldbuf, allocsz);
             if(newbuf == NULL)
             {
@@ -3404,14 +3528,14 @@ void neon_vm_stackresize(NeonState* state, size_t needed)
                 abort();
             }
         #endif
-        state->vmvars.framevalues = (NeonCallFrame*)newbuf;
-        state->vmvars.framecapacity = newsz;
+        state->vmstate.framevalues = (NeonCallFrame*)newbuf;
+        state->vmstate.framecapacity = newsz;
     }
     /*
     * this bit is crucial: realloc changes pointer addresses, and to keep the
     * current frame, re-read it from the new address.
     */
-    state->vmvars.currframe = &state->vmvars.framevalues[state->vmvars.framecount - 1];
+    state->vmstate.activeframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
 }
 
 void neon_vm_stackgrow(NeonState* state)
@@ -3427,7 +3551,7 @@ void neon_vm_stackgrow(NeonState* state)
 
 void neon_vm_stackmaybegrow(NeonState* state, size_t pos)
 {
-    if(state->vmvars.stackcapacity < (pos + 1))
+    if(state->vmstate.stackcapacity < (pos + 1))
     {
         neon_vm_stackgrow(state);
     }
@@ -3435,7 +3559,7 @@ void neon_vm_stackmaybegrow(NeonState* state, size_t pos)
 
 void neon_vm_framesmaybegrow(NeonState* state, size_t pos)
 {
-    if(state->vmvars.framecapacity < (pos + 1))
+    if(state->vmstate.framecapacity < (pos + 1))
     {
         neon_vm_stackgrow(state);
     }
@@ -3443,42 +3567,43 @@ void neon_vm_framesmaybegrow(NeonState* state, size_t pos)
 
 void neon_vm_stackreset(NeonState* state)
 {
-    state->vmvars.hasraised = false;
-    state->vmvars.stacktop = 0;
-    state->vmvars.framecount = 0;
+    state->vmstate.hasraised = false;
+    state->vmstate.stacktop = 0;
+    state->vmstate.framecount = 0;
     state->openupvalues = NULL;
 }
 
 static inline NeonValue neon_vmbits_stackpeek(NeonState* state, int distance)
 {
-    return state->vmvars.stackvalues[state->vmvars.stacktop + (-1 - distance)];
+    return state->vmstate.stackvalues[state->vmstate.stacktop + (-1 - distance)];
 }
 
 static inline void neon_vmbits_stackpush(NeonState* state, NeonValue value)
 {
-    neon_vm_stackmaybegrow(state, state->vmvars.stacktop + 0);
-    state->vmvars.stackvalues[state->vmvars.stacktop] = value;
-    state->vmvars.stacktop++;
+    neon_vm_stackmaybegrow(state, state->vmstate.stacktop + 0);
+    state->vmstate.stackvalues[state->vmstate.stacktop] = value;
+    state->vmstate.stacktop++;
 }
 
 static inline NeonValue neon_vmbits_stackpop(NeonState* state)
 {
-    int64_t stop;
     NeonValue v;
-    stop = state->vmvars.stacktop;
-    state->vmvars.stacktop--;
-    v = state->vmvars.stackvalues[stop - 1];
+
+    /*
+        vm.stackTop--;
+        return *vm.stackTop;
+    */
+
+
+    state->vmstate.stacktop--;
+    v = state->vmstate.stackvalues[state->vmstate.stacktop + 0];
+
     return v;
 }
 
-static inline NeonValue neon_vmbits_stackpopn(NeonState* state, int32_t n)
+static inline void neon_vmbits_stackpopn(NeonState* state, int32_t n)
 {
-    int64_t stop;
-    NeonValue v;
-    stop = state->vmvars.stacktop;
-    state->vmvars.stacktop -= n;
-    v = state->vmvars.stackvalues[stop - n];
-    return v;
+    state->vmstate.stacktop -= n;
 }
 
 void neon_vm_stackpush(NeonState* state, NeonValue value)
@@ -3491,7 +3616,7 @@ NeonValue neon_vm_stackpop(NeonState* state)
     return neon_vmbits_stackpop(state);
 }
 
-NeonValue neon_vm_stackpopn(NeonState* state, int32_t n)
+void neon_vm_stackpopn(NeonState* state, int32_t n)
 {
     return neon_vmbits_stackpopn(state, n);
 }
@@ -3513,6 +3638,7 @@ void neon_state_initobjvars(NeonState* state)
 
 void neon_state_releaseobjvars(NeonState* state)
 {
+    (void)state;
     /*
     neon_hashtable_release(state->objvars.mthnumber);
     neon_hashtable_release(state->objvars.mtharray);
@@ -3565,8 +3691,8 @@ NeonState* neon_state_make()
         return NULL;
     }
     memset(state, 0, sizeof(NeonState));
-
     state->conf.shouldprintruntime = false;
+    state->gcstate.allowed = true;
     state->gcstate.linkedobjects = NULL;
     state->gcstate.bytesallocd = 0;
     state->gcstate.nextgc = 1024 * 1024;
@@ -3575,16 +3701,16 @@ NeonState* neon_state_make()
     state->gcstate.graystack = NULL;
     neon_vm_stackinit(state);
     neon_vm_stackreset(state);
-    state->vmvars.topclosure = NULL;
-    state->vmvars.iseval = false;
-    state->vmvars.havekeeper = false;
+    state->vmstate.topclosure = NULL;
+    state->vmstate.iseval = false;
+    state->vmstate.havekeeper = false;
     state->parser = NULL;
     state->stdoutwriter = neon_writer_makeio(state, stdout, false);
     state->stderrwriter = neon_writer_makeio(state, stderr, false);
     state->globals = neon_hashtable_make(state);
     state->strings = neon_hashtable_make(state);
     state->initstring = NULL;
-    state->initstring = neon_string_copy(state, "init", 4);
+    state->initstring = neon_string_copy(state, "constructor", 11);
     neon_state_initobjvars(state);
     neon_state_makeenvmap(state);
     {
@@ -3605,8 +3731,8 @@ void neon_state_release(NeonState* state)
         neon_prs_release(state->parser);
     }
     neon_state_releaseobjvars(state);
-    free(state->vmvars.framevalues);
-    free(state->vmvars.stackvalues);
+    free(state->vmstate.framevalues);
+    free(state->vmstate.stackvalues);
     free(state);
 }
 
@@ -3848,7 +3974,7 @@ static NeonValue objfn_string_split(NeonState* state, NeonValue selfval, int arg
     return neon_value_fromobject(oa);
 }
 
-static NeonValue objfn_object_dump(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_object_func_dump(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     NeonObjString* res;
     NeonWriter* wr;
@@ -3863,6 +3989,67 @@ static NeonValue objfn_object_dump(NeonState* state, NeonValue selfval, int argc
     res = neon_string_copy(state, wr->strbuf->data, wr->strbuf->length);
     neon_writer_release(wr);
     return neon_value_fromobject(res);
+}
+
+/*
+struct NeonHashEntry
+{
+    NeonObjString* key;
+    NeonValue value;
+};
+
+struct NeonHashTable
+{
+    int count;
+    int capacity;
+    NeonState* pvm;
+    NeonHashEntry* entries;
+};
+*/
+void fillarrayfromtable(NeonState* state, NeonObjArray* dest, NeonHashTable* from, bool wantkeys, bool wantvalues)
+{
+    size_t i;
+    NeonHashEntry* ent;
+    (void)state;
+    for(i=0; i<(size_t)from->capacity; i++)
+    {
+        ent = &from->entries[i];
+        if(ent != NULL)
+        {
+            if(ent->key != NULL)
+            {
+                if(wantkeys)
+                {
+                    neon_array_push(dest, neon_value_fromobject(ent->key));
+                }
+                if(wantvalues)
+                {
+                    neon_array_push(dest, ent->value);
+                }
+            }
+        }
+    }
+}
+
+static NeonValue objfn_object_staticfunc_keys(NeonState* state, NeonValue unused, int argc, NeonValue* argv)
+{
+    size_t i;
+    NeonValue selfval;
+    NeonObjString* tmp;
+    NeonObjArray* oa;
+    NeonObjMap* map;
+    (void)unused;
+    (void)argc;
+    (void)argv;
+    selfval = argv[0];
+    if(neon_value_ismap(selfval))
+    {
+        map = neon_value_asmap(selfval);
+        oa = neon_array_make(state);
+        fillarrayfromtable(state, oa, map->mapping, true, false);
+        return neon_value_fromobject(oa);
+    }
+    return neon_value_makenil();
 }
 
 
@@ -3897,7 +4084,7 @@ static NeonValue cfn_eval(NeonState* state, NeonValue rec, int argc, NeonValue* 
     (void)rec;
     (void)argc;
     (void)oldcnt;
-    oldcnt = state->vmvars.framecount;
+    oldcnt = state->vmstate.framecount;
     val = argv[0];
     os = neon_value_asstring(val);
     copy = neon_strbuf_make(state);
@@ -3943,7 +4130,7 @@ struct NeonVMStateVars
     size_t stackcapacity;
     size_t framecapacity;
     NeonCallFrame keepframe;
-    NeonCallFrame* currframe;
+    NeonCallFrame* activeframe;
     NeonCallFrame* framevalues;
     NeonValue* stackvalues;
     NeonObjClosure* topclosure;    
@@ -3970,10 +4157,10 @@ void neon_nestcall_init(NeonState* state, NeonNestCall* nnc)
 {
     nnc->pvm = state;
     nnc->restorecnt = 0;
-    nnc->stacktop = state->vmvars.stacktop;
-    nnc->frameidx = state->vmvars.framecount;
-    nnc->frame = state->vmvars.currframe;
-    nnc->instrucidx = state->vmvars.currframe->instrucidx;
+    nnc->stacktop = state->vmstate.stacktop;
+    nnc->frameidx = state->vmstate.framecount;
+    nnc->frame = state->vmstate.activeframe;
+    nnc->instrucidx = state->vmstate.activeframe->instrucidx;
 }
 
 /* after neon_nestcall_call(), restores the frame values to pre-frame values */
@@ -3986,10 +4173,10 @@ void neon_nestcall_restore(NeonNestCall* nnc)
     }
     nnc->restorecnt++;
     state = nnc->pvm;
-    state->vmvars.stacktop = nnc->stacktop;
-    state->vmvars.framecount = nnc->frameidx + 0;
-    state->vmvars.currframe = nnc->frame;
-    state->vmvars.currframe->instrucidx = nnc->instrucidx - 0;
+    state->vmstate.stacktop = nnc->stacktop;
+    state->vmstate.framecount = nnc->frameidx + 0;
+    state->vmstate.activeframe = nnc->frame;
+    state->vmstate.activeframe->instrucidx = nnc->instrucidx - 0;
 }
 
 bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee, int argc, NeonValue* rv)
@@ -4507,7 +4694,8 @@ int main(int argc, char** argv)
     neon_state_defnative(state, "eval", cfn_eval);
     {
         klass = state->objvars.classprimobject;
-        neon_class_setfunctioncstr(klass, "dump", objfn_object_dump);
+        neon_class_setfunctioncstr(klass, "dump", objfn_object_func_dump);
+        neon_class_setstaticfunctioncstr(klass, "keys", objfn_object_staticfunc_keys);
     }
     {
         klass = state->objvars.classprimnumber;

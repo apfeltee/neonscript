@@ -575,19 +575,11 @@ void neon_prs_raiseatcurrent(NeonAstParser* prs, const char* message, ...)
 
 void neon_prs_skipsemicolon(NeonAstParser* prs)
 {
-    while(true)
+    while(neon_prs_match(prs, NEON_TOK_NEWLINE))
     {
-        if(!neon_prs_match(prs, NEON_TOK_NEWLINE))
-        {
-            break;
-        }
     }
-    while(true)
+    while(neon_prs_match(prs, NEON_TOK_SEMICOLON))
     {
-        if(!neon_prs_match(prs, NEON_TOK_SEMICOLON))
-        {
-            break;
-        }
     }
 }
 
@@ -2119,10 +2111,7 @@ void neon_prs_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
 
 void neon_prs_parsemethod(NeonAstParser* prs)
 {
-    size_t sn;
-    size_t prevlen;
     int32_t constant;
-    const char* sc;
     NeonAstFuncType type;
     neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect method name.");
     constant = neon_prs_makeidentconstant(prs, &prs->previous);
@@ -2130,10 +2119,7 @@ void neon_prs_parsemethod(NeonAstParser* prs)
     /* Methods and Initializers method-body < Methods and Initializers method-type */
     //type = NEON_TYPE_FUNCTION;
     type = NEON_TYPE_METHOD;
-    sc = "constructor";
-    sn = strlen(sc);
-    prevlen = prs->previous.length;
-    if((prevlen == sn) && memcmp(prs->previous.start, sc, sn) == 0)
+    if(prs->previous.length == 4 && memcmp(prs->previous.start, "init", 4) == 0)
     {
         type = NEON_TYPE_INITIALIZER;
     }

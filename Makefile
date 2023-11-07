@@ -3,6 +3,7 @@ INCFLAGS = -I.
 
 #EXTRAWARNFLAGS = -Wconversion
 WARNFLAGS = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(EXTRAWARNFLAGS)
+#WARNFLAGS = -w
 
 CC = gcc $(WARNFLAGS)
 
@@ -15,9 +16,7 @@ srcfiles_all = \
 	$(wildcard *.c) \
 	$(wildcard modules/*.c)
 
-headerfiles_all = \
-	vm.h \
-	parse.h
+headerfiles_all = parse.h vm.h
 
 objfiles_all = $(srcfiles_all:.c=.o)
 depfiles_all = $(objfiles_all:.o=.d)

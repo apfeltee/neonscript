@@ -1,0 +1,24 @@
+
+class Blah
+{
+    constructor()
+    {
+        println("constructor called")
+    }
+
+    shit()
+    {
+        var stuff = []
+        for(var i=0; i<10; i++)
+        {
+            stuff.push(i, i+1, i+2)
+        }
+        stuff.push("<")
+        println(stuff)
+        stuff.push("eof'd")
+        println(stuff)
+    }
+}
+
+b = Blah()
+b.shit()
