@@ -1626,52 +1626,71 @@ void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...)
 bool neon_writer_vvalfmt(NeonWriter* wr, const char* format, va_list arglist)
 {
     char ch;
+    char nch;
+    size_t i;
+    size_t fmtlen;
     size_t length;
     bool wasallowed;
-    const char* c;
     const char* cstr;
     NeonValue val;
     NeonState* state;
     state = wr->pvm;
+    fmtlen = strlen(format);
     wasallowed = state->gcstate.allowed;
     state->gcstate.allowed = false;
-    for(c = format; *c != '\0'; c++)
+    for(i=0; i<fmtlen; i++)
     {
-        switch(*c)
+        ch = format[i];
+        if(ch == '%')
         {
-            case '$':
+            nch = format[i + 1];
+            if(nch == '%')
+            {
+                neon_writer_writechar(wr, ch);
+                neon_writer_writechar(wr, nch);
+            }
+            else
+            {
+                switch(nch)
                 {
-                    cstr = va_arg(arglist, const char*);
-                    if(cstr != NULL)
-                    {
-                        length = strlen(cstr);
-                        neon_writer_writestringl(wr, cstr, length);
-                    }
-                    else
-                    {
-                        goto defaultendingcopying;
-                    }
+                    case 's':
+                        {
+                            cstr = va_arg(arglist, const char*);
+                            if(cstr != NULL)
+                            {
+                                length = strlen(cstr);
+                                neon_writer_writestringl(wr, cstr, length);
+                            }
+                            else
+                            {
+                                goto defaultendingcopying;
+                            }
+                        }
+                        break;
+                    case 'v':
+                        {
+                            val = va_arg(arglist, NeonValue);
+                            neon_writer_printvalue(wr, val, false);
+                        }
+                        break;
+                    case 'd':
+                        {
+                            double d = va_arg(arglist, double);
+                            neon_writer_writefmt(wr, "%g", d);
+                        }
+                        break;
+                    default:
+                        {
+                            defaultendingcopying:
+                            neon_writer_writechar(wr, ch);
+                        }
+                        break;
                 }
-                break;
-            case '@':
-                {
-                    val = va_arg(arglist, NeonValue);
-                    neon_writer_printvalue(wr, val, false);
-                }
-                break;
-            case '#':
-                {
-                    double d = va_arg(arglist, double);
-                    neon_writer_writefmt(wr, "%g", d);
-                }
-                break;
-            default:
-                {
-                    defaultendingcopying:
-                    ch = *c;
-                    neon_writer_writechar(wr, ch);
-                }
-                break;
+            }
+        }
+        else
+        {
+            neon_writer_writechar(wr, ch);
         }
     }
     state->gcstate.allowed = wasallowed;
@@ -1863,8 +1882,24 @@ void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
     }
 }
 
-const char* neon_object_typename(NeonObject* obj)
+const char* neon_object_typename(NeonObject* obj, bool detailed)
 {
+    if(!detailed)
+    {
+        switch(obj->type)
+        {
+            case NEON_OBJ_CLOSURE:
+            case NEON_OBJ_FUNCTION:
+            case NEON_OBJ_BOUNDMETHOD:
+            case NEON_OBJ_NATIVE:
+                {
+                    return "function";
+                }
+                break;
+            default:
+                break;
+        }
+    }
     switch(obj->type)
     {
         case NEON_OBJ_USERDATA:
@@ -1926,7 +1961,7 @@ const char* neon_object_typename(NeonObject* obj)
     return "?unknownobject?";
 }
 
-const char* neon_value_typename(NeonValue value)
+const char* neon_value_typename(NeonValue value, bool detailed)
 {
     switch(value.type)
     {
@@ -1940,7 +1975,7 @@ const char* neon_value_typename(NeonValue value)
             return "number";
             break;
         case NEON_VAL_OBJ:
-            return neon_object_typename(neon_value_asobject(value));
+            return neon_object_typename(neon_value_asobject(value), detailed);
             break;
     }
     return "?unknownvalue?";
@@ -3285,7 +3320,7 @@ NeonObjScriptFunction* neon_astparser_compilesource(NeonState* state, const char
     state->parser = neon_astparser_make(state);
     state->parser->iseval = iseval;
     state->parser->pscn = neon_astlex_make(state, source, len);
-    neon_astparser_compilerinit(state->parser, &compiler, NEON_TYPE_SCRIPT);
+    neon_astparser_compilerinit(state->parser, &compiler, NEON_TYPE_SCRIPT, NULL);
     neon_astparser_advance(state->parser);
     while(!neon_astparser_match(state->parser, NEON_TOK_EOF))
     {
@@ -4215,7 +4250,7 @@ static NeonValue objfn_array_func_map(NeonState* state, NeonValue selfval, int a
     */
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "expected receiver to be array, but got %s", neon_value_typename(selfval));
+        neon_state_raiseerror(state, "expected receiver to be array, but got %s", neon_value_typename(selfval, true));
         return neon_value_makenil();
     }
     if(argc == 0)
@@ -4258,7 +4293,7 @@ static NeonValue objfn_array_func_count(NeonState* state, NeonValue selfval, int
     (void)argv;
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "Array.count: first argument must be array, but got <%s>", neon_value_typename(selfval));
+        neon_state_raiseerror(state, "Array.count: first argument must be array, but got <%s>", neon_value_typename(selfval, true));
         return neon_value_makenil();
     }
     else
@@ -4278,7 +4313,7 @@ static NeonValue objfn_array_func_pop(NeonState* state, NeonValue selfval, int a
     (void)argv;
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "Array.pop: first argument must be array, but got <%s>", neon_value_typename(selfval));
+        neon_state_raiseerror(state, "Array.pop: first argument must be array, but got <%s>", neon_value_typename(selfval, true));
         return neon_value_makenil();
     }
     else
@@ -4389,7 +4424,7 @@ static NeonValue objfn_array_func_join(NeonState* state, NeonValue selfval, int 
     return neon_value_fromobject(os);
 }
 
-static NeonValue cfn_mapmake(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_map_func_make(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     NeonObjMap* om;
     (void)rec;
@@ -4397,6 +4432,18 @@ static NeonValue cfn_mapmake(NeonState* state, NeonValue rec, int argc, NeonValu
     (void)argv;
     om = neon_object_makemap(state);
     return neon_value_fromobject(om);
+}
+
+static NeonValue objfn_map_func_size(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+{
+    size_t sz;
+    NeonObjMap* om;
+    (void)rec;
+    (void)argc;
+    (void)argv;
+    om = neon_value_asmap(argv[0]);
+    sz = om->mapping->count;
+    return neon_value_makenumber(sz);
 }
 
 static NeonValue objfn_file_func_readfile(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
@@ -4739,7 +4786,8 @@ int main(int argc, char** argv)
     }
     {
         map = neon_object_makemap(state);
-        neon_map_setstrfunction(map, "make", cfn_mapmake);
+        neon_map_setstrfunction(map, "make", objfn_map_func_make);
+        neon_map_setstrfunction(map, "size", objfn_map_func_size);
         neon_state_defvalue(state, "Map", neon_value_fromobject(map));
     }
     {

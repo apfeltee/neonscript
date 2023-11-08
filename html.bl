@@ -1,0 +1,86 @@
+
+class HTMLGen
+{
+    constructor()
+    {
+    }
+
+    put(s)
+    {
+        print(s)
+    }
+
+    tag(name, attribs, fn)
+    {
+        var tattr = typeof(attribs);
+        var tfn = typeof(fn);
+        if(tattr == "map" && Map.size(attribs) == 0)
+        {
+            this.put("<" + name + ">")
+        }
+        else
+        {
+            var vi = 0;
+            this.put("<" + name + " ")
+            var keys = Object.keys(attribs)
+            var klen = keys.size()
+            for(var i=0; i<klen; i++)
+            {
+                var k = keys[i];
+                var val = attribs[k];
+                vi++;
+                this.put("" + k + "=\"" + val + "\"")
+                if((vi+1) < klen)
+                {
+                    this.put(" ")
+                }
+            }
+            this.put(">")
+        }
+        if(tfn == "function")
+        {
+            fn()
+        }
+        else
+        {
+            this.put(fn)
+        }
+        this.put("</" + name + ">")
+    }
+    
+}
+
+function doit()
+{
+    gh = new HTMLGen()
+    gh.tag("html", {}, function()
+    {
+        gh.tag("head", {}, function(){})
+        gh.tag("body", {}, function()
+        {
+            gh.tag("h1", {}, "files: ")
+            gh.tag("ul", {}, function()
+            {
+                var items = ["foo.txt", "durk.mp4", "notavirus.exe", "notporn.rar"]
+                var len = items.size();
+                for(var i=0; i<items.size(); i++)
+                {
+                    var itm = items[i];
+                    if((itm != ".") && (itm != ".."))
+                    {
+                        url = ("web.cgi/v?f=" + itm);
+                        gh.tag("li", {}, function()
+                        {
+                            var attr = {}
+                            attr["href"] = url
+                            gh.tag("a", attr, itm)
+                        });
+                        gh.put("\n");
+                    }
+                }
+            })
+        })
+    })
+}
+
+doit()

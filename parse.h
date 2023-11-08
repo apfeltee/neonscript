@@ -827,8 +827,10 @@ void neon_astparser_emitpatchjump(NeonAstParser* prs, int offset)
     neon_astparser_currentchunk(prs)->bincode[offset + 1] = jump & 0xff;
 }
 
-void neon_astparser_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstFuncType type)
+void neon_astparser_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstFuncType type, const char* name)
 {
+    size_t nlen;
+    const char* nstr;
     NeonAstLocal* local;
     compiler->enclosing = prs->currcompiler;
     compiler->compiledfn = NULL;
@@ -839,7 +841,17 @@ void neon_astparser_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, 
     prs->currcompiler = compiler;
     if(type != NEON_TYPE_SCRIPT)
     {
-        prs->currcompiler->compiledfn->name = neon_string_copy(prs->pvm, prs->previous.start, prs->previous.length);
+        if(name != NULL)
+        {
+            nstr = name;
+            nlen = strlen(name);
+        }
+        else
+        {
+            nstr = prs->previous.start;
+            nlen = prs->previous.length;
+        }
+        prs->currcompiler->compiledfn->name = neon_string_copy(prs->pvm, nstr, nlen);
     }
     local = &prs->currcompiler->locals[prs->currcompiler->localcount++];
     local->depth = 0;
@@ -1641,6 +1653,19 @@ void neon_astparser_ruletypeof(NeonAstParser* prs, bool canassign)
     neon_astparser_skipsemicolon(prs);
 }
 
+static void neon_astparser_rulefunction(NeonAstParser* prs, bool canassign)
+{
+    char namebuf[128];
+    NeonAstCompiler compiler;
+    (void)canassign;
+    neon_astparser_advance(prs);
+    sprintf(namebuf, "lambda@%d", prs->current.line);
+    neon_astparser_compilerinit(prs, &compiler, NEON_TYPE_FUNCTION, namebuf);
+    neon_astparser_scopebegin(prs);
+    neon_astparser_parsefunctionbody(prs, &compiler, true);
+    //neon_astparser_emit1byte(prs, NEON_OP_POPONE);
+}
+
 void neon_astparser_rulenew(NeonAstParser* prs, bool canassign)
 {
     neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "class name after 'new'");
@@ -1901,7 +1926,7 @@ NeonAstRule* neon_astparser_getrule(NeonAstTokType type)
             break;
         case NEON_TOK_KWFUNCTION:
             {
-                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest, neon_astparser_rulefunction, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWIF:
@@ -2107,15 +2132,13 @@ void neon_astparser_parseblock(NeonAstParser* prs)
     neon_astparser_skipsemicolon(prs);
 }
 
-void neon_astparser_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
+void neon_astparser_parsefunctionargs(NeonAstParser* prs, bool anon)
 {
-    int i;
     int32_t constant;
-    NeonObjScriptFunction* fn;
-    NeonAstCompiler compiler;
-    neon_astparser_compilerinit(prs, &compiler, type);
-    neon_astparser_scopebegin(prs);// [no-end-scope]
-    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after function name");
+    if(!anon)
+    {
+        neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after function name");
+    }
     if(!neon_astparser_checkcurrent(prs, NEON_TOK_PARENCLOSE))
     {
         do
@@ -2130,6 +2153,14 @@ void neon_astparser_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
         } while(neon_astparser_match(prs, NEON_TOK_COMMA));
     }
     neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after parameters");
+}
+
+void neon_astparser_parsefunctionbody(NeonAstParser* prs, NeonAstCompiler* compiler, bool anon)
+{
+    int i;
+    NeonObjScriptFunction* fn;
+    neon_astparser_scopebegin(prs);// [no-end-scope]
+    neon_astparser_parsefunctionargs(prs, anon);
     neon_astparser_consume(prs, NEON_TOK_BRACEOPEN, "expected '{' before function body");
     neon_astparser_parseblock(prs);
     fn = neon_astparser_compilerfinish(prs, false);
@@ -2138,8 +2169,8 @@ void neon_astparser_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
     neon_astparser_emit2byte(prs, NEON_OP_CLOSURE, neon_astparser_makeconstant(prs, neon_value_fromobject(fn)));
     for(i = 0; i < fn->upvaluecount; i++)
     {
-        neon_astparser_emit1byte(prs, compiler.compupvals[i].islocal ? 1 : 0);
-        neon_astparser_emit1byte(prs, compiler.compupvals[i].index);
+        neon_astparser_emit1byte(prs, compiler->compupvals[i].islocal ? 1 : 0);
+        neon_astparser_emit1byte(prs, compiler->compupvals[i].index);
     }
 }
 
@@ -2150,6 +2181,7 @@ void neon_astparser_parsemethod(NeonAstParser* prs)
     int32_t constant;
     const char* sc;
     NeonAstFuncType type;
+    NeonAstCompiler compiler;
     neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect method name.");
     constant = neon_astparser_makeidentconstant(prs, &prs->previous);
 
@@ -2163,7 +2195,8 @@ void neon_astparser_parsemethod(NeonAstParser* prs)
     {
         type = NEON_TYPE_INITIALIZER;
     }
-    neon_astparser_parsefunction(prs, type);
+    neon_astparser_compilerinit(prs, &compiler, type, NULL);
+    neon_astparser_parsefunctionbody(prs, &compiler, false);
     neon_astparser_emit2byte(prs, NEON_OP_METHOD, constant);
 }
 
@@ -2214,9 +2247,11 @@ void neon_astparser_parseclassdecl(NeonAstParser* prs)
 void neon_astparser_parsefuncdecl(NeonAstParser* prs)
 {
     int32_t global;
+    NeonAstCompiler compiler;
     global = neon_astparser_parsevarname(prs, "expected function name");
     neon_astparser_markinit(prs);
-    neon_astparser_parsefunction(prs, NEON_TYPE_FUNCTION);
+    neon_astparser_compilerinit(prs, &compiler, NEON_TYPE_FUNCTION, NULL);
+    neon_astparser_parsefunctionbody(prs, &compiler, false);
     neon_astparser_emitdefvar(prs, global);
 }
 
