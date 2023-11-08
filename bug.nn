@@ -3,20 +3,14 @@ class Blah
 {
     constructor()
     {
-        println("constructor called")
+        this.counter = 0
     }
 
     shit()
     {
-        var stuff = []
-        for(var i=0; i<10; i++)
-        {
-            stuff.push(i, i+1, i+2)
-        }
-        stuff.push("<")
-        println(stuff)
-        stuff.push("eof'd")
-        println(stuff)
+        this.counter = this.counter + 1
+        this.counter++
+        println("this.counter=", this.counter)
     }
 }
 

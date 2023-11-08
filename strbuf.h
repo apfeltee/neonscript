@@ -24,15 +24,15 @@
 #define STRBUF_MAX(x, y) ((x) > (y) ? (x) : (y))
 
 #if defined(GNUC)
-    #define BL_STRBUF_ATTRIBUTE(x) __attribute__(x)
+    #define DYN_STRBUF_ATTRIBUTE(x) __attribute__(x)
 #else
-    #define BL_STRBUF_ATTRIBUTE(x)
+    #define DYN_STRBUF_ATTRIBUTE(x)
 #endif
 
-#define bl_strbuf_dupnulstr(sb) strdup((sb)->data)
-#define bl_strbuf_char(sb, idx) (sb)->data[idx]
+#define dyn_strbuf_dupnulstr(sb) strdup((sb)->data)
+#define dyn_strbuf_char(sb, idx) (sb)->data[idx]
 
-#define bl_strbuf_exitonerror()     \
+#define dyn_strbuf_exitonerror()     \
     do                      \
     {                       \
         abort();            \
@@ -44,15 +44,24 @@
 /*********************/
 
 // Bounds check when inserting (pos <= len are valid)
-#define bl_strbuf_boundscheckinsert(sbuf, pos) bl_strutil_callboundscheckinsert(sbuf, pos, __FILE__, __LINE__, __func__)
-#define bl_strbuf_boundscheckreadrange(sbuf, start, len) bl_strutil_callboundscheckreadrange(sbuf, start, len, __FILE__, __LINE__, __func__)
+#define dyn_strbuf_boundscheckinsert(sbuf, pos) dyn_strutil_callboundscheckinsert(sbuf, pos, __FILE__, __LINE__, __func__)
+#define dyn_strbuf_boundscheckreadrange(sbuf, start, len) dyn_strutil_callboundscheckreadrange(sbuf, start, len, __FILE__, __LINE__, __func__)
 
 
+
+typedef struct StringBuffer StringBuffer;
+
+struct StringBuffer
+{
+    char* data;
+    size_t length;// end is index of \0
+    size_t capacity;// capacity should be >= end+1 to allow for \0
+};
 
 #ifndef ROUNDUP2POW
-    #define ROUNDUP2POW(x) bl_strutil_rndup2pow64(x)
+    #define ROUNDUP2POW(x) dyn_strutil_rndup2pow64(x)
 
-static size_t bl_strutil_rndup2pow64(unsigned long long x)
+static size_t dyn_strutil_rndup2pow64(unsigned long long x)
 {
     // long long >=64 bits guaranteed in C99
     --x;
@@ -67,23 +76,15 @@ static size_t bl_strutil_rndup2pow64(unsigned long long x)
 }
 #endif
 
-typedef struct StringBuffer StringBuffer;
-
-struct StringBuffer
-{
-    char* data;
-    size_t length;// end is index of \0
-    size_t capacity;// capacity should be >= end+1 to allow for \0
-};
 
 //
 // Creation, reset, free and memory expansion
 //
 
 // Constructors / Destructors
-StringBuffer* bl_strbuf_makeempty(size_t len);
+StringBuffer* dyn_strbuf_makeempty(size_t len);
 
-static inline bool bl_strbuf_destroy(StringBuffer* sb)
+static inline bool dyn_strbuf_destroy(StringBuffer* sb)
 {
     free(sb->data);
     free(sb);
@@ -92,12 +93,12 @@ static inline bool bl_strbuf_destroy(StringBuffer* sb)
 
 // Place a string buffer into existing memory. Example:
 //   StringBuffer buf;
-//   bl_strbuf_makefromptr(&buf, 100);
+//   dyn_strbuf_makefromptr(&buf, 100);
 //   ...
-//   bl_strbuf_destroyfromptr(&buf);
-StringBuffer* bl_strbuf_makefromptr(StringBuffer* sb, size_t len);
+//   dyn_strbuf_destroyfromptr(&buf);
+StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sb, size_t len);
 
-static inline bool bl_strbuf_destroyfromptr(StringBuffer* sb)
+static inline bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 {
     free(sb->data);
     memset(sb, 0, sizeof(*sb));
@@ -105,11 +106,11 @@ static inline bool bl_strbuf_destroyfromptr(StringBuffer* sb)
 }
 
 // Copy a string or existing string buffer
-StringBuffer* bl_strbuf_makefromstring(const char* str);
-StringBuffer* bl_strbuf_makeclone(const StringBuffer* sb);
+StringBuffer* dyn_strbuf_makefromstring(const char* str);
+StringBuffer* dyn_strbuf_makeclone(const StringBuffer* sb);
 
 // Clear the content of an existing StringBuffer (sets size to 0)
-static inline void bl_strbuf_reset(StringBuffer* sb)
+static inline void dyn_strbuf_reset(StringBuffer* sb)
 {
     if(sb->data)
     {
@@ -120,7 +121,7 @@ static inline void bl_strbuf_reset(StringBuffer* sb)
 //
 // Resizing
 //
-static inline void bl_strutil_cbufcapacity(char** buf, size_t* sizeptr, size_t len)
+static inline void dyn_strutil_cbufcapacity(char** buf, size_t* sizeptr, size_t len)
 {
     len++;// for nul byte
     if(*sizeptr < len)
@@ -135,26 +136,26 @@ static inline void bl_strutil_cbufcapacity(char** buf, size_t* sizeptr, size_t l
     }
 }
 
-static inline void bl_strutil_cbufappendchar(char** buf, size_t* lenptr, size_t* sizeptr, char c)
+static inline void dyn_strutil_cbufappendchar(char** buf, size_t* lenptr, size_t* sizeptr, char c)
 {
-    bl_strutil_cbufcapacity(buf, sizeptr, *lenptr + 1);
+    dyn_strutil_cbufcapacity(buf, sizeptr, *lenptr + 1);
     (*buf)[(*lenptr)++] = c;
     (*buf)[*lenptr] = '\0';
 }
 
 // Ensure capacity for len characters plus '\0' character - exits on FAILURE
-static inline void bl_strbuf_ensurecapacity(StringBuffer* sb, size_t len)
+static inline void dyn_strbuf_ensurecapacity(StringBuffer* sb, size_t len)
 {
-    bl_strutil_cbufcapacity(&sb->data, &sb->capacity, len);
+    dyn_strutil_cbufcapacity(&sb->data, &sb->capacity, len);
 }
 
 // Same as above, but update pointer if it pointed to resized array
-void bl_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const char** ptr);
+void dyn_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const char** ptr);
 
 // Resize the buffer to have capacity to hold a string of length newlen
 // (+ a null terminating character).  Can also be used to downsize the buffer's
 // memory usage.  Returns 1 on success, 0 on failure.
-char bl_strbuf_resize(StringBuffer* sb, size_t newlen);
+char dyn_strbuf_resize(StringBuffer* sb, size_t newlen);
 
 //
 // Useful String functions
@@ -163,28 +164,28 @@ char bl_strbuf_resize(StringBuffer* sb, size_t newlen);
 // Note: in MACROs we use local variables to avoid multiple evaluation of param
 
 // Set string buffer to contain a given string
-static inline void bl_strbuf_set(StringBuffer* sb, const char* str)
+static inline void dyn_strbuf_set(StringBuffer* sb, const char* str)
 {
     size_t len;
     len = strlen(str);
-    bl_strbuf_ensurecapacity(sb, len);
+    dyn_strbuf_ensurecapacity(sb, len);
     memcpy(sb->data, str, len);
     sb->data[sb->length = len] = '\0';
 }
 
 
 // Set string buffer to match existing string buffer
-static inline void bl_strbuf_setbuff(StringBuffer* dest, StringBuffer* from)
+static inline void dyn_strbuf_setbuff(StringBuffer* dest, StringBuffer* from)
 {
-    bl_strbuf_ensurecapacity(dest, from->length);
+    dyn_strbuf_ensurecapacity(dest, from->length);
     memmove(dest->data, from->data, from->length);
     dest->data[dest->length = from->length] = '\0';
 }
 
 // Add a character to the end of this StringBuffer
-static inline bool bl_strbuf_appendchar(StringBuffer* sb, int c)
+static inline bool dyn_strbuf_appendchar(StringBuffer* sb, int c)
 {
-    bl_strbuf_ensurecapacity(sb, sb->length + 1);
+    dyn_strbuf_ensurecapacity(sb, sb->length + 1);
     sb->data[sb->length] = c;
     sb->data[++sb->length] = '\0';
     return true;
@@ -192,97 +193,97 @@ static inline bool bl_strbuf_appendchar(StringBuffer* sb, int c)
 
 // Copy N characters from a character array to the end of this StringBuffer
 // strlen(str) must be >= len
-static inline bool bl_strbuf_appendstrn(StringBuffer* sb, const char* str, size_t len)
+static inline bool dyn_strbuf_appendstrn(StringBuffer* sb, const char* str, size_t len)
 {
-    bl_strbuf_ensurecapacityupdateptr(sb, sb->length + len, &str);
+    dyn_strbuf_ensurecapacityupdateptr(sb, sb->length + len, &str);
     memcpy(sb->data + sb->length, str, len);
     sb->data[sb->length = sb->length + len] = '\0';
     return true;
 }
 
 // Copy a character array to the end of this StringBuffer
-static inline bool bl_strbuf_appendstr(StringBuffer* sb, const char* str)
+static inline bool dyn_strbuf_appendstr(StringBuffer* sb, const char* str)
 {
-    return bl_strbuf_appendstrn(sb, str, strlen(str));
+    return dyn_strbuf_appendstrn(sb, str, strlen(str));
 }
 
-static inline bool bl_strbuf_appendbuff(StringBuffer* sb1, const StringBuffer* sb2)
+static inline bool dyn_strbuf_appendbuff(StringBuffer* sb1, const StringBuffer* sb2)
 {
-    return bl_strbuf_appendstrn(sb1, sb2->data, sb2->length);
+    return dyn_strbuf_appendstrn(sb1, sb2->data, sb2->length);
 }
 
 // Convert integers to string to append
-bool bl_strbuf_appendnumint(StringBuffer* buf, int value);
-bool bl_strbuf_appendnumlong(StringBuffer* buf, long value);
-bool bl_strbuf_appendnumulong(StringBuffer* buf, unsigned long value);
+bool dyn_strbuf_appendnumint(StringBuffer* buf, int value);
+bool dyn_strbuf_appendnumlong(StringBuffer* buf, long value);
+bool dyn_strbuf_appendnumulong(StringBuffer* buf, unsigned long value);
 
 // Append a given string in lower or uppercase
-bool bl_strbuf_appendstrnlowercase(StringBuffer* buf, const char* str, size_t len);
-bool bl_strbuf_appendstrnuppercase(StringBuffer* buf, const char* str, size_t len);
+bool dyn_strbuf_appendstrnlowercase(StringBuffer* buf, const char* str, size_t len);
+bool dyn_strbuf_appendstrnuppercase(StringBuffer* buf, const char* str, size_t len);
 
 // Append char `c` `n` times
-bool bl_strbuf_appendcharn(StringBuffer* buf, char c, size_t n);
+bool dyn_strbuf_appendcharn(StringBuffer* buf, char c, size_t n);
 
-static inline void bl_strbuf_shrink(StringBuffer* sb, size_t len)
+static inline void dyn_strbuf_shrink(StringBuffer* sb, size_t len)
 {
     sb->data[sb->length = (len)] = 0;
 }
 
 // Remove \r and \n characters from the end of this StringBuffer
 // Returns the number of characters removed
-size_t bl_strbuf_chomp(StringBuffer* sb);
+size_t dyn_strbuf_chomp(StringBuffer* sb);
 
 // Reverse a string
-void bl_strbuf_reverse(StringBuffer* sb);
+void dyn_strbuf_reverse(StringBuffer* sb);
 
 // Get a substring as a new null terminated char array
 // (remember to free the returned char* after you're done with it!)
-char* bl_strbuf_substr(const StringBuffer* sb, size_t start, size_t len);
+char* dyn_strbuf_substr(const StringBuffer* sb, size_t start, size_t len);
 
 // Change to upper or lower case
-void bl_strbuf_touppercase(StringBuffer* sb);
-void bl_strbuf_tolowercase(StringBuffer* sb);
+void dyn_strbuf_touppercase(StringBuffer* sb);
+void dyn_strbuf_tolowercase(StringBuffer* sb);
 
 // Copy a string to this StringBuffer, overwriting any existing characters
 // Note: dstpos + len can be longer the the current dst StringBuffer
-void bl_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size_t len);
+void dyn_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size_t len);
 
 // Insert: copy to a StringBuffer, shifting any existing characters along
-void bl_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t len);
+void dyn_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t len);
 
 // Overwrite dstpos..(dstpos+dstlen-1) with srclen chars from src
 // if dstlen != srclen, content to the right of dstlen is shifted
 // Example:
-//   bl_strbuf_set(sb, "aaabbccc");
+//   dyn_strbuf_set(sb, "aaabbccc");
 //   char *data = "xxx";
-//   bl_strbuf_overwrite(sb,3,2,data,strlen(data));
+//   dyn_strbuf_overwrite(sb,3,2,data,strlen(data));
 //   // sb is now "aaaxxxccc"
-//   bl_strbuf_overwrite(sb,3,2,"_",1);
+//   dyn_strbuf_overwrite(sb,3,2,"_",1);
 //   // sb is now "aaa_ccc"
-void bl_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const char* src, size_t srclen);
+void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const char* src, size_t srclen);
 
 // Remove characters from the buffer
-//   bl_strbuf_set(sb, "aaaBBccc");
-//   bl_strbuf_erase(sb, 3, 2);
+//   dyn_strbuf_set(sb, "aaaBBccc");
+//   dyn_strbuf_erase(sb, 3, 2);
 //   // sb is now "aaaccc"
-void bl_strbuf_erase(StringBuffer* sb, size_t pos, size_t len);
+void dyn_strbuf_erase(StringBuffer* sb, size_t pos, size_t len);
 
 //
 // sprintf
 //
 
 // sprintf to the end of a StringBuffer (adds string terminator after sprint)
-int bl_strbuf_appendformat(StringBuffer* sb, const char* fmt, ...) BL_STRBUF_ATTRIBUTE((format(printf, 2, 3)));
+int dyn_strbuf_appendformat(StringBuffer* sb, const char* fmt, ...) DYN_STRBUF_ATTRIBUTE((format(printf, 2, 3)));
 
 // Print at a given position (overwrite chars at positions >= pos)
-int bl_strbuf_appendformatat(StringBuffer* sb, size_t pos, const char* fmt, ...) BL_STRBUF_ATTRIBUTE((format(printf, 3, 4)));
+int dyn_strbuf_appendformatat(StringBuffer* sb, size_t pos, const char* fmt, ...) DYN_STRBUF_ATTRIBUTE((format(printf, 3, 4)));
 
-int bl_strbuf_appendformatv(StringBuffer* sb, size_t pos, const char* fmt, va_list argptr) BL_STRBUF_ATTRIBUTE((format(printf, 3, 0)));
+int dyn_strbuf_appendformatv(StringBuffer* sb, size_t pos, const char* fmt, va_list argptr) DYN_STRBUF_ATTRIBUTE((format(printf, 3, 0)));
 
 // sprintf without terminating character
 // Does not prematurely end the string if you sprintf within the string
 // (terminates string if sprintf to the end)
-int bl_strbuf_appendformatnoterm(StringBuffer* sb, size_t pos, const char* fmt, ...) BL_STRBUF_ATTRIBUTE((format(printf, 3, 4)));
+int dyn_strbuf_appendformatnoterm(StringBuffer* sb, size_t pos, const char* fmt, ...) DYN_STRBUF_ATTRIBUTE((format(printf, 3, 4)));
 
 //
 // Reading files
@@ -294,15 +295,15 @@ int bl_strbuf_appendformatnoterm(StringBuffer* sb, size_t pos, const char* fmt, 
 //
 
 // Trim whitespace characters from the start and end of a string
-void bl_strbuf_triminplace(StringBuffer* sb);
+void dyn_strbuf_triminplace(StringBuffer* sb);
 
 // Trim the characters listed in `list` from the left of `sb`
 // `list` is a null-terminated string of characters
-void bl_strbuf_trimleftinplace(StringBuffer* sb, const char* list);
+void dyn_strbuf_trimleftinplace(StringBuffer* sb, const char* list);
 
 // Trim the characters listed in `list` from the right of `sb`
 // `list` is a null-terminated string of characters
-void bl_strbuf_trimrightinplace(StringBuffer* sb, const char* list);
+void dyn_strbuf_trimrightinplace(StringBuffer* sb, const char* list);
 
 /**************************/
 /* Other String functions */
@@ -312,45 +313,45 @@ void bl_strbuf_trimrightinplace(StringBuffer* sb, const char* list);
 // copies at most n bytes from `src` to `dst`
 // Always appends a NULL terminating byte, unless n is zero.
 // Returns a pointer to dst
-char* bl_strutil_safencpy(char* dst, const char* src, size_t n);
+char* dyn_strutil_safencpy(char* dst, const char* src, size_t n);
 
 // Replaces `sep` with \0 in str
 // Returns number of occurances of `sep` character in `str`
 // Stores `nptrs` pointers in `ptrs`
-size_t bl_strutil_splitstr(char* str, char sep, char** ptrs, size_t nptrs);
+size_t dyn_strutil_splitstr(char* str, char sep, char** ptrs, size_t nptrs);
 
 // Replace one char with another in a string. Return number of replacements made
-size_t bl_strutil_charreplace(char* str, char from, char to);
+size_t dyn_strutil_charreplace(char* str, char from, char to);
 
-void bl_strutil_reverseregion(char* str, size_t length);
-bool bl_strutil_isallspace(const char* s);
-char* bl_strutil_nextspace(char* s);
-char* bl_strutil_trim(char* str);
+void dyn_strutil_reverseregion(char* str, size_t length);
+bool dyn_strutil_isallspace(const char* s);
+char* dyn_strutil_nextspace(char* s);
+char* dyn_strutil_trim(char* str);
 // Chomp a string, returns new length
-size_t bl_strutil_chomp(char* str, size_t len);
-size_t bl_strutil_countchar(const char* str, char c);
-size_t bl_strutil_split(const char* splitat, const char* sourcetxt, char*** result);
+size_t dyn_strutil_chomp(char* str, size_t len);
+size_t dyn_strutil_countchar(const char* str, char c);
+size_t dyn_strutil_split(const char* splitat, const char* sourcetxt, char*** result);
 
-static inline void bl_strutil_callboundscheckinsert(const StringBuffer* sbuf, size_t pos, const char* file, int line, const char* func)
+static inline void dyn_strutil_callboundscheckinsert(const StringBuffer* sbuf, size_t pos, const char* file, int line, const char* func)
 {
     if(pos > sbuf->length)
     {
         fprintf(stderr, "%s:%i:%s() - out of bounds error [index: %zu, num_of_bits: %zu]\n",
                 file, line, func, pos, sbuf->length);
         errno = EDOM;
-        bl_strbuf_exitonerror();
+        dyn_strbuf_exitonerror();
     }
 }
 
 // Bounds check when reading a range (start+len < strlen is valid)
-static inline void bl_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start, size_t len, const char* file, int line, const char* func)
+static inline void dyn_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start, size_t len, const char* file, int line, const char* func)
 {
     if(start + len > sbuf->length)
     {
         fprintf(stderr,"%s:%i:%s() - out of bounds error [start: %zu; length: %zu; strlen: %zu; buf:%.*s%s]\n",
                 file, line, func, start, len, sbuf->length, (int)STRBUF_MIN(5, sbuf->length), sbuf->data, sbuf->length > 5 ? "..." : "");
         errno = EDOM;
-        bl_strbuf_exitonerror();
+        dyn_strbuf_exitonerror();
     }
 }
 
@@ -358,7 +359,7 @@ static inline void bl_strutil_callboundscheckreadrange(const StringBuffer* sbuf,
 /*  Constructors/Destructors  */
 /******************************/
 
-StringBuffer* bl_strbuf_makeempty(size_t len)
+StringBuffer* dyn_strbuf_makeempty(size_t len)
 {
     StringBuffer* sbuf;
     sbuf = (StringBuffer*)calloc(1, sizeof(StringBuffer));
@@ -369,7 +370,7 @@ StringBuffer* bl_strbuf_makeempty(size_t len)
     sbuf->length = 0;
     sbuf->capacity = 0;
     sbuf->data = NULL;
-    if(!bl_strbuf_makefromptr(sbuf, len))
+    if(!dyn_strbuf_makefromptr(sbuf, len))
     {
         free(sbuf);
         return NULL;
@@ -377,7 +378,7 @@ StringBuffer* bl_strbuf_makeempty(size_t len)
     return sbuf;
 }
 
-StringBuffer* bl_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
+StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
 {
     sbuf->length = 0;
     sbuf->capacity = ROUNDUP2POW(len + 1);
@@ -390,11 +391,11 @@ StringBuffer* bl_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
     return sbuf;
 }
 
-StringBuffer* bl_strbuf_makefromstring(const char* str)
+StringBuffer* dyn_strbuf_makefromstring(const char* str)
 {
     size_t slen;
     slen = strlen(str);
-    StringBuffer* sbuf = bl_strbuf_makeempty(slen + 1);
+    StringBuffer* sbuf = dyn_strbuf_makeempty(slen + 1);
     if(!sbuf)
     {
         return NULL;
@@ -404,11 +405,11 @@ StringBuffer* bl_strbuf_makefromstring(const char* str)
     return sbuf;
 }
 
-StringBuffer* bl_strbuf_makeclone(const StringBuffer* sbuf)
+StringBuffer* dyn_strbuf_makeclone(const StringBuffer* sbuf)
 {
     // One byte for the string end / null char \0
     StringBuffer* cpy;
-    cpy = bl_strbuf_makeempty(sbuf->length + 1);
+    cpy = dyn_strbuf_makeempty(sbuf->length + 1);
     if(!cpy)
     {
         return NULL;
@@ -425,12 +426,12 @@ StringBuffer* bl_strbuf_makeclone(const StringBuffer* sbuf)
 // Resize the buffer to have capacity to hold a string of length newlen
 // (+ a null terminating character).  Can also be used to downsize the buffer's
 // memory usage.  Returns 1 on success, 0 on failure.
-char bl_strbuf_resize(StringBuffer* sbuf, size_t newlen)
+char dyn_strbuf_resize(StringBuffer* sbuf, size_t newlen)
 {
     size_t capacity;
     char* newbuf;
     capacity = ROUNDUP2POW(newlen + 1);
-    //fprintf(stderr, "bl_strbuf_resize: capacity=%d\n", capacity);
+    //fprintf(stderr, "dyn_strbuf_resize: capacity=%d\n", capacity);
     newbuf = (char*)realloc(sbuf->data, capacity * sizeof(char));
     if(newbuf == NULL)
     {
@@ -447,7 +448,7 @@ char bl_strbuf_resize(StringBuffer* sbuf, size_t newlen)
     return 1;
 }
 
-void bl_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const char** ptr)
+void dyn_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const char** ptr)
 {
     size_t oldcap;
     char* oldbuf;
@@ -455,13 +456,13 @@ void bl_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const ch
     {
         oldcap = sbuf->capacity;
         oldbuf = sbuf->data;
-        if(!bl_strbuf_resize(sbuf, size))
+        if(!dyn_strbuf_resize(sbuf, size))
         {
             fprintf(stderr,
                     "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
                     "buffer. [requested %zu bytes; capacity: %zu bytes]\n",
                     __FILE__, __LINE__, size, sbuf->capacity);
-            bl_strbuf_exitonerror();
+            dyn_strbuf_exitonerror();
         }
         // ptr may have pointed to sbuf, which has now moved
         if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
@@ -480,66 +481,66 @@ void bl_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const ch
  *   https://www.facebook.com/notes/facebook-engineering/three-optimization-tips-for-c/10151361643253920
  */
 
-#define BL_STRCONST_P01 10
-#define BL_STRCONST_P02 100
-#define BL_STRCONST_P03 1000
-#define BL_STRCONST_P04 10000
-#define BL_STRCONST_P05 100000
-#define BL_STRCONST_P06 1000000
-#define BL_STRCONST_P07 10000000
-#define BL_STRCONST_P08 100000000
-#define BL_STRCONST_P09 1000000000
-#define BL_STRCONST_P10 10000000000
-#define BL_STRCONST_P11 100000000000
-#define BL_STRCONST_P12 1000000000000
+#define DYN_STRCONST_P01 10
+#define DYN_STRCONST_P02 100
+#define DYN_STRCONST_P03 1000
+#define DYN_STRCONST_P04 10000
+#define DYN_STRCONST_P05 100000
+#define DYN_STRCONST_P06 1000000
+#define DYN_STRCONST_P07 10000000
+#define DYN_STRCONST_P08 100000000
+#define DYN_STRCONST_P09 1000000000
+#define DYN_STRCONST_P10 10000000000
+#define DYN_STRCONST_P11 100000000000
+#define DYN_STRCONST_P12 1000000000000
 
 /**
  * Return number of digits required to represent `num` in base 10.
  * Uses binary search to find number.
  * Examples:
- *   bl_strutil_numofdigits(0)   = 1
- *   bl_strutil_numofdigits(1)   = 1
- *   bl_strutil_numofdigits(10)  = 2
- *   bl_strutil_numofdigits(123) = 3
+ *   dyn_strutil_numofdigits(0)   = 1
+ *   dyn_strutil_numofdigits(1)   = 1
+ *   dyn_strutil_numofdigits(10)  = 2
+ *   dyn_strutil_numofdigits(123) = 3
  */
-static inline size_t bl_strutil_numofdigits(unsigned long v)
+static inline size_t dyn_strutil_numofdigits(unsigned long v)
 {
-    if(v < BL_STRCONST_P01)
+    if(v < DYN_STRCONST_P01)
     {
         return 1;
     }
-    if(v < BL_STRCONST_P02)
+    if(v < DYN_STRCONST_P02)
     {
         return 2;
     }
-    if(v < BL_STRCONST_P03)
+    if(v < DYN_STRCONST_P03)
     {
         return 3;
     }
-    if(v < BL_STRCONST_P12)
+    if(v < DYN_STRCONST_P12)
     {
-        if(v < BL_STRCONST_P08)
+        if(v < DYN_STRCONST_P08)
         {
-            if(v < BL_STRCONST_P06)
+            if(v < DYN_STRCONST_P06)
             {
-                if(v < BL_STRCONST_P04)
+                if(v < DYN_STRCONST_P04)
                 {
                     return 4;
                 }
-                return 5 + (v >= BL_STRCONST_P05);
+                return 5 + (v >= DYN_STRCONST_P05);
             }
-            return 7 + (v >= BL_STRCONST_P07);
+            return 7 + (v >= DYN_STRCONST_P07);
         }
-        if(v < BL_STRCONST_P10)
+        if(v < DYN_STRCONST_P10)
         {
-            return 9 + (v >= BL_STRCONST_P09);
+            return 9 + (v >= DYN_STRCONST_P09);
         }
-        return 11 + (v >= BL_STRCONST_P11);
+        return 11 + (v >= DYN_STRCONST_P11);
     }
-    return 12 + bl_strutil_numofdigits(v / BL_STRCONST_P12);
+    return 12 + dyn_strutil_numofdigits(v / DYN_STRCONST_P12);
 }
 
-bool bl_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
+bool dyn_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
 {
     size_t v;
     size_t pos;
@@ -553,9 +554,9 @@ bool bl_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
         "6061626364656667686970717273747576777879"
         "8081828384858687888990919293949596979899"
     );
-    numdigits = bl_strutil_numofdigits(value);
+    numdigits = dyn_strutil_numofdigits(value);
     pos = numdigits - 1;
-    bl_strbuf_ensurecapacity(buf, buf->length + numdigits);
+    dyn_strbuf_ensurecapacity(buf, buf->length + numdigits);
     dst = buf->data + buf->length;
     while(value >= 100)
     {
@@ -580,25 +581,25 @@ bool bl_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
     return true;
 }
 
-bool bl_strbuf_appendnumint(StringBuffer* buf, int value)
+bool dyn_strbuf_appendnumint(StringBuffer* buf, int value)
 {
-    // bl_strbuf_appendformat(buf, "%i", value);
-    return bl_strbuf_appendnumlong(buf, value);
+    // dyn_strbuf_appendformat(buf, "%i", value);
+    return dyn_strbuf_appendnumlong(buf, value);
 }
 
-bool bl_strbuf_appendnumlong(StringBuffer* buf, long value)
+bool dyn_strbuf_appendnumlong(StringBuffer* buf, long value)
 {
-    // bl_strbuf_appendformat(buf, "%li", value);
+    // dyn_strbuf_appendformat(buf, "%li", value);
     if(value < 0)
     {
-        bl_strbuf_appendchar(buf, '-');
+        dyn_strbuf_appendchar(buf, '-');
         value = -value;
     }
-    return bl_strbuf_appendnumulong(buf, value);
+    return dyn_strbuf_appendnumulong(buf, value);
 }
 
 /*
-size_t bl_strbuf_num_of_digits(unsigned long num)
+size_t dyn_strbuf_num_of_digits(unsigned long num)
 {
     size_t digits = 1;
     while(1)
@@ -620,13 +621,13 @@ size_t bl_strbuf_num_of_digits(unsigned long num)
     return digits;
 }
 
-bool bl_strbuf_appendnumulong(StringBuffer *buf, unsigned long value)
+bool dyn_strbuf_appendnumulong(StringBuffer *buf, unsigned long value)
 {
-    // bl_strbuf_appendformat(buf, "%lu", value);
+    // dyn_strbuf_appendformat(buf, "%lu", value);
     size_t i;
     size_t numdigits;
-    numdigits = bl_strbuf_num_of_digits(value);
-    bl_strbuf_ensurecapacity(buf, buf->length + numdigits);
+    numdigits = dyn_strbuf_num_of_digits(value);
+    dyn_strbuf_ensurecapacity(buf, buf->length + numdigits);
     buf->length += numdigits;
     buf->data[buf->length] = '\0';
     for(i = 1; i <= numdigits; i++)
@@ -643,11 +644,11 @@ bool bl_strbuf_appendnumulong(StringBuffer *buf, unsigned long value)
 /********************/
 
 // Append string converted to lowercase
-bool bl_strbuf_appendstrnlowercase(StringBuffer* buf, const char* str, size_t len)
+bool dyn_strbuf_appendstrnlowercase(StringBuffer* buf, const char* str, size_t len)
 {
     char* to;
     const char* plength;
-    bl_strbuf_ensurecapacity(buf, buf->length + len);
+    dyn_strbuf_ensurecapacity(buf, buf->length + len);
     to = buf->data + buf->length;
     plength = str + len;
     for(; str < plength; str++, to++)
@@ -660,11 +661,11 @@ bool bl_strbuf_appendstrnlowercase(StringBuffer* buf, const char* str, size_t le
 }
 
 // Append string converted to uppercase
-bool bl_strbuf_appendstrnuppercase(StringBuffer* buf, const char* str, size_t len)
+bool dyn_strbuf_appendstrnuppercase(StringBuffer* buf, const char* str, size_t len)
 {
     char* to;
     const char* end;
-    bl_strbuf_ensurecapacity(buf, buf->length + len);
+    dyn_strbuf_ensurecapacity(buf, buf->length + len);
     to = buf->data + buf->length;
     end = str + len;
     for(; str < end; str++, to++)
@@ -677,9 +678,9 @@ bool bl_strbuf_appendstrnuppercase(StringBuffer* buf, const char* str, size_t le
 }
 
 // Append char `c` `n` times
-bool bl_strbuf_appendcharn(StringBuffer* buf, char c, size_t n)
+bool dyn_strbuf_appendcharn(StringBuffer* buf, char c, size_t n)
 {
-    bl_strbuf_ensurecapacity(buf, buf->length + n);
+    dyn_strbuf_ensurecapacity(buf, buf->length + n);
     memset(buf->data + buf->length, c, n);
     buf->length += n;
     buf->data[buf->length] = '\0';
@@ -688,31 +689,31 @@ bool bl_strbuf_appendcharn(StringBuffer* buf, char c, size_t n)
 
 // Remove \r and \n characters from the end of this StringBuffer
 // Returns the number of characters removed
-size_t bl_strbuf_chomp(StringBuffer* sbuf)
+size_t dyn_strbuf_chomp(StringBuffer* sbuf)
 {
     size_t oldlen;
     oldlen = sbuf->length;
-    sbuf->length = bl_strutil_chomp(sbuf->data, sbuf->length);
+    sbuf->length = dyn_strutil_chomp(sbuf->data, sbuf->length);
     return oldlen - sbuf->length;
 }
 
 // Reverse a string
-void bl_strbuf_reverse(StringBuffer* sbuf)
+void dyn_strbuf_reverse(StringBuffer* sbuf)
 {
-    bl_strutil_reverseregion(sbuf->data, sbuf->length);
+    dyn_strutil_reverseregion(sbuf->data, sbuf->length);
 }
 
-char* bl_strbuf_substr(const StringBuffer* sbuf, size_t start, size_t len)
+char* dyn_strbuf_substr(const StringBuffer* sbuf, size_t start, size_t len)
 {
     char* newstr;
-    bl_strbuf_boundscheckreadrange(sbuf, start, len);
+    dyn_strbuf_boundscheckreadrange(sbuf, start, len);
     newstr = (char*)malloc((len + 1) * sizeof(char));
     strncpy(newstr, sbuf->data + start, len);
     newstr[len] = '\0';
     return newstr;
 }
 
-void bl_strbuf_touppercase(StringBuffer* sbuf)
+void dyn_strbuf_touppercase(StringBuffer* sbuf)
 {
     char* pos;
     char* end;
@@ -723,7 +724,7 @@ void bl_strbuf_touppercase(StringBuffer* sbuf)
     }
 }
 
-void bl_strbuf_tolowercase(StringBuffer* sbuf)
+void dyn_strbuf_tolowercase(StringBuffer* sbuf)
 {
     char* pos;
     char* end;
@@ -736,18 +737,18 @@ void bl_strbuf_tolowercase(StringBuffer* sbuf)
 
 // Copy a string to this StringBuffer, overwriting any existing characters
 // Note: dstpos + len can be longer the the current dst StringBuffer
-void bl_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size_t len)
+void dyn_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size_t len)
 {
     size_t newlen;
     if(src == NULL || len == 0)
     {
         return;
     }
-    bl_strbuf_boundscheckinsert(dst, dstpos);
+    dyn_strbuf_boundscheckinsert(dst, dstpos);
     // Check if dst buffer can handle string
     // src may have pointed to dst, which has now moved
     newlen = STRBUF_MAX(dstpos + len, dst->length);
-    bl_strbuf_ensurecapacityupdateptr(dst, newlen, &src);
+    dyn_strbuf_ensurecapacityupdateptr(dst, newlen, &src);
     // memmove instead of strncpy, as it can handle overlapping regions
     memmove(dst->data + dstpos, src, len * sizeof(char));
     if(dstpos + len > dst->length)
@@ -759,18 +760,18 @@ void bl_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size_
 }
 
 // Insert: copy to a StringBuffer, shifting any existing characters along
-void bl_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t len)
+void dyn_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t len)
 {
     char* insert;
     if(src == NULL || len == 0)
     {
         return;
     }
-    bl_strbuf_boundscheckinsert(dst, dstpos);
+    dyn_strbuf_boundscheckinsert(dst, dstpos);
     // Check if dst buffer has capacity for inserted string plus \0
     // src may have pointed to dst, which will be moved in realloc when
     // calling ensure capacity
-    bl_strbuf_ensurecapacityupdateptr(dst, dst->length + len, &src);
+    dyn_strbuf_ensurecapacityupdateptr(dst, dst->length + len, &src);
     insert = dst->data + dstpos;
     // dstpos could be at the end (== dst->length)
     if(dstpos < dst->length)
@@ -806,29 +807,29 @@ void bl_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t 
 // Overwrite dstpos..(dstpos+dstlen-1) with srclen chars from src
 // if dstlen != srclen, content to the right of dstlen is shifted
 // Example:
-//   bl_strbuf_set(sbuf, "aaabbccc");
+//   dyn_strbuf_set(sbuf, "aaabbccc");
 //   char *data = "xxx";
-//   bl_strbuf_overwrite(sbuf,3,2,data,strlen(data));
+//   dyn_strbuf_overwrite(sbuf,3,2,data,strlen(data));
 //   // sbuf is now "aaaxxxccc"
-//   bl_strbuf_overwrite(sbuf,3,2,"_",1);
+//   dyn_strbuf_overwrite(sbuf,3,2,"_",1);
 //   // sbuf is now "aaa_ccc"
-void bl_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const char* src, size_t srclen)
+void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const char* src, size_t srclen)
 {
     size_t len;
     size_t newlen;
     char* tgt;
     char* end;
-    bl_strbuf_boundscheckreadrange(dst, dstpos, dstlen);
+    dyn_strbuf_boundscheckreadrange(dst, dstpos, dstlen);
     if(src == NULL)
     {
         return;
     }
     if(dstlen == srclen)
     {
-        bl_strbuf_copyover(dst, dstpos, src, srclen);
+        dyn_strbuf_copyover(dst, dstpos, src, srclen);
     }
     newlen = dst->length + srclen - dstlen;
-    bl_strbuf_ensurecapacityupdateptr(dst, newlen, &src);
+    dyn_strbuf_ensurecapacityupdateptr(dst, newlen, &src);
     if(src >= dst->data && src < dst->data + dst->capacity)
     {
         if(srclen < dstlen)
@@ -872,9 +873,9 @@ void bl_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const 
     dst->data[dst->length] = '\0';
 }
 
-void bl_strbuf_erase(StringBuffer* sbuf, size_t pos, size_t len)
+void dyn_strbuf_erase(StringBuffer* sbuf, size_t pos, size_t len)
 {
-    bl_strbuf_boundscheckreadrange(sbuf, pos, len);
+    dyn_strbuf_boundscheckreadrange(sbuf, pos, len);
     memmove(sbuf->data + pos, sbuf->data + pos + len, sbuf->length - pos - len);
     sbuf->length -= len;
     sbuf->data[sbuf->length] = '\0';
@@ -884,18 +885,18 @@ void bl_strbuf_erase(StringBuffer* sbuf, size_t pos, size_t len)
 /*         sprintf        */
 /**************************/
 
-int bl_strbuf_appendformatv(StringBuffer* sbuf, size_t pos, const char* fmt, va_list argptr)
+int dyn_strbuf_appendformatv(StringBuffer* sbuf, size_t pos, const char* fmt, va_list argptr)
 {
     size_t buflen;
     int numchars;
     va_list vacpy;
-    bl_strbuf_boundscheckinsert(sbuf, pos);
+    dyn_strbuf_boundscheckinsert(sbuf, pos);
     // Length of remaining buffer
     buflen = sbuf->capacity - pos;
-    if(buflen == 0 && !bl_strbuf_resize(sbuf, sbuf->capacity << 1))
+    if(buflen == 0 && !dyn_strbuf_resize(sbuf, sbuf->capacity << 1))
     {
         fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
-        bl_strbuf_exitonerror();
+        dyn_strbuf_exitonerror();
     }
     // Make a copy of the list of args incase we need to resize buff and try again
     va_copy(vacpy, argptr);
@@ -905,21 +906,21 @@ int bl_strbuf_appendformatv(StringBuffer* sbuf, size_t pos, const char* fmt, va_
     // numchars < 0 => failure
     if(numchars < 0)
     {
-        fprintf(stderr, "Warning: bl_strbuf_appendformatv something went wrong..\n");
-        bl_strbuf_exitonerror();
+        fprintf(stderr, "Warning: dyn_strbuf_appendformatv something went wrong..\n");
+        dyn_strbuf_exitonerror();
     }
     // numchars does not include the null terminating byte
     if((size_t)numchars + 1 > buflen)
     {
-        bl_strbuf_ensurecapacity(sbuf, pos + (size_t)numchars);
+        dyn_strbuf_ensurecapacity(sbuf, pos + (size_t)numchars);
 
         // now use the argptr copy we made earlier
         // Don't need to use vsnprintf now, vsprintf will do since we know it'll fit
         numchars = vsprintf(sbuf->data + pos, fmt, vacpy);
         if(numchars < 0)
         {
-            fprintf(stderr, "Warning: bl_strbuf_appendformatv something went wrong..\n");
-            bl_strbuf_exitonerror();
+            fprintf(stderr, "Warning: dyn_strbuf_appendformatv something went wrong..\n");
+            dyn_strbuf_exitonerror();
         }
     }
     va_end(vacpy);
@@ -930,35 +931,35 @@ int bl_strbuf_appendformatv(StringBuffer* sbuf, size_t pos, const char* fmt, va_
 }
 
 // Appends sprintf
-int bl_strbuf_appendformat(StringBuffer* sbuf, const char* fmt, ...)
+int dyn_strbuf_appendformat(StringBuffer* sbuf, const char* fmt, ...)
 {
     int numchars;
     va_list argptr;
     va_start(argptr, fmt);
-    numchars = bl_strbuf_appendformatv(sbuf, sbuf->length, fmt, argptr);
+    numchars = dyn_strbuf_appendformatv(sbuf, sbuf->length, fmt, argptr);
     va_end(argptr);
     return numchars;
 }
 
-int bl_strbuf_appendformatat(StringBuffer* sbuf, size_t pos, const char* fmt, ...)
+int dyn_strbuf_appendformatat(StringBuffer* sbuf, size_t pos, const char* fmt, ...)
 {
     int numchars;
     va_list argptr;
-    bl_strbuf_boundscheckinsert(sbuf, pos);
+    dyn_strbuf_boundscheckinsert(sbuf, pos);
     va_start(argptr, fmt);
-    numchars = bl_strbuf_appendformatv(sbuf, pos, fmt, argptr);
+    numchars = dyn_strbuf_appendformatv(sbuf, pos, fmt, argptr);
     va_end(argptr);
     return numchars;
 }
 
 // Does not prematurely end the string if you sprintf within the string
 // (vs at the end)
-int bl_strbuf_appendformatnoterm(StringBuffer* sbuf, size_t pos, const char* fmt, ...)
+int dyn_strbuf_appendformatnoterm(StringBuffer* sbuf, size_t pos, const char* fmt, ...)
 {
     size_t len;
     int nchars;
     char lastchar;
-    bl_strbuf_boundscheckinsert(sbuf, pos);
+    dyn_strbuf_boundscheckinsert(sbuf, pos);
     len = sbuf->length;
     // Call vsnprintf with NULL, 0 to get resulting string length without writing
     va_list argptr;
@@ -967,18 +968,18 @@ int bl_strbuf_appendformatnoterm(StringBuffer* sbuf, size_t pos, const char* fmt
     va_end(argptr);
     if(nchars < 0)
     {
-        fprintf(stderr, "Warning: bl_strbuf_appendformatv something went wrong..\n");
-        bl_strbuf_exitonerror();
+        fprintf(stderr, "Warning: dyn_strbuf_appendformatv something went wrong..\n");
+        dyn_strbuf_exitonerror();
     }
     // Save overwritten char
     lastchar = (pos + (size_t)nchars < sbuf->length) ? sbuf->data[pos + (size_t)nchars] : 0;
     va_start(argptr, fmt);
-    nchars = bl_strbuf_appendformatv(sbuf, pos, fmt, argptr);
+    nchars = dyn_strbuf_appendformatv(sbuf, pos, fmt, argptr);
     va_end(argptr);
     if(nchars < 0)
     {
-        fprintf(stderr, "Warning: bl_strbuf_appendformatv something went wrong..\n");
-        bl_strbuf_exitonerror();
+        fprintf(stderr, "Warning: dyn_strbuf_appendformatv something went wrong..\n");
+        dyn_strbuf_exitonerror();
     }
     // Restore length if shrunk, null terminate if extended
     if(sbuf->length < len)
@@ -999,7 +1000,7 @@ int bl_strbuf_appendformatnoterm(StringBuffer* sbuf, size_t pos, const char* fmt
 /**********/
 
 // Trim whitespace characters from the start and end of a string
-void bl_strbuf_triminplace(StringBuffer* sbuf)
+void dyn_strbuf_triminplace(StringBuffer* sbuf)
 {
     size_t start;
     if(sbuf->length == 0)
@@ -1031,7 +1032,7 @@ void bl_strbuf_triminplace(StringBuffer* sbuf)
 
 // Trim the characters listed in `list` from the left of `sbuf`
 // `list` is a null-terminated string of characters
-void bl_strbuf_trimleftinplace(StringBuffer* sbuf, const char* list)
+void dyn_strbuf_trimleftinplace(StringBuffer* sbuf, const char* list)
 {
     size_t start;
     start = 0;
@@ -1050,7 +1051,7 @@ void bl_strbuf_trimleftinplace(StringBuffer* sbuf, const char* list)
 
 // Trim the characters listed in `list` from the right of `sbuf`
 // `list` is a null-terminated string of characters
-void bl_strbuf_trimrightinplace(StringBuffer* sbuf, const char* list)
+void dyn_strbuf_trimrightinplace(StringBuffer* sbuf, const char* list)
 {
     if(sbuf->length == 0)
     {
@@ -1071,7 +1072,7 @@ void bl_strbuf_trimrightinplace(StringBuffer* sbuf, const char* list)
 // copies at most n bytes from `src` to `dst`
 // Always appends a NULL terminating byte, unless n is zero.
 // Returns a pointer to dst
-char* bl_strutil_safencpy(char* dst, const char* src, size_t n)
+char* dyn_strutil_safencpy(char* dst, const char* src, size_t n)
 {
     if(n == 0)
     {
@@ -1093,7 +1094,7 @@ char* bl_strutil_safencpy(char* dst, const char* src, size_t n)
 // Replaces `sep` with \0 in str
 // Returns number of occurances of `sep` character in `str`
 // Stores `nptrs` pointers in `ptrs`
-size_t bl_strutil_splitstr(char* str, char sep, char** ptrs, size_t nptrs)
+size_t dyn_strutil_splitstr(char* str, char sep, char** ptrs, size_t nptrs)
 {
     size_t n;
     n = 1;
@@ -1119,7 +1120,7 @@ size_t bl_strutil_splitstr(char* str, char sep, char** ptrs, size_t nptrs)
 }
 
 // Replace one char with another in a string. Return number of replacements made
-size_t bl_strutil_charreplace(char* str, char from, char to)
+size_t dyn_strutil_charreplace(char* str, char from, char to)
 {
     size_t n;
     n = 0;
@@ -1135,7 +1136,7 @@ size_t bl_strutil_charreplace(char* str, char from, char to)
 }
 
 // Reverse a string region
-void bl_strutil_reverseregion(char* str, size_t length)
+void dyn_strutil_reverseregion(char* str, size_t length)
 {
     char *a;
     char* b;
@@ -1152,7 +1153,7 @@ void bl_strutil_reverseregion(char* str, size_t length)
     }
 }
 
-bool bl_strutil_isallspace(const char* s)
+bool dyn_strutil_isallspace(const char* s)
 {
     int i;
     for(i = 0; s[i] != '\0' && isspace((int)s[i]); i++)
@@ -1161,7 +1162,7 @@ bool bl_strutil_isallspace(const char* s)
     return (s[i] == '\0');
 }
 
-char* bl_strutil_nextspace(char* s)
+char* dyn_strutil_nextspace(char* s)
 {
     while(*s != '\0' && isspace((int)*s))
     {
@@ -1173,7 +1174,7 @@ char* bl_strutil_nextspace(char* s)
 // Strip whitespace the the start and end of a string.
 // Strips whitepace from the end of the string with \0, and returns pointer to
 // first non-whitespace character
-char* bl_strutil_trim(char* str)
+char* dyn_strutil_trim(char* str)
 {
     // Work backwards
     char* end;
@@ -1192,7 +1193,7 @@ char* bl_strutil_trim(char* str)
 }
 
 // Removes \r and \n from the ends of a string and returns the new length
-size_t bl_strutil_chomp(char* str, size_t len)
+size_t dyn_strutil_chomp(char* str, size_t len)
 {
     while(len > 0 && (str[len - 1] == '\r' || str[len - 1] == '\n'))
     {
@@ -1203,7 +1204,7 @@ size_t bl_strutil_chomp(char* str, size_t len)
 }
 
 // Returns count
-size_t bl_strutil_countchar(const char* str, char c)
+size_t dyn_strutil_countchar(const char* str, char c)
 {
     size_t count;
     count = 0;
@@ -1216,7 +1217,7 @@ size_t bl_strutil_countchar(const char* str, char c)
 }
 
 // Returns the number of strings resulting from the split
-size_t bl_strutil_split(const char* splitat, const char* sourcetxt, char*** result)
+size_t dyn_strutil_split(const char* splitat, const char* sourcetxt, char*** result)
 {
     size_t i;
     size_t slen;

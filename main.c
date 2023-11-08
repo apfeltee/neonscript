@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <limits.h>
 #include <assert.h>
+#include "strbuf.h"
 
 // In the book, we show them defined, but for working on them locally,
 // we don't want them to be.
@@ -90,6 +91,8 @@ enum NeonOpCode
     NEON_OP_CALL,
     NEON_OP_INSTTHISINVOKE,
     NEON_OP_INSTSUPERINVOKE,
+    NEON_OP_INSTTHISPROPERTYSET,
+    NEON_OP_INSTTHISPROPERTYGET,
     NEON_OP_CLOSURE,
     NEON_OP_UPVALCLOSE,
     NEON_OP_RETURN,
@@ -188,6 +191,7 @@ enum NeonAstTokType
     NEON_TOK_BINNUMBER,
     NEON_TOK_HEXNUMBER,
     // Keywords.
+    NEON_TOK_KWNEW,
     NEON_TOK_KWBREAK,
     NEON_TOK_KWCONTINUE,
     NEON_TOK_KWAND,
@@ -305,7 +309,6 @@ typedef struct /**/NeonAstCompiler NeonAstCompiler;
 typedef struct /**/NeonAstClassCompiler NeonAstClassCompiler;
 typedef struct /**/NeonAstScanner NeonAstScanner;
 typedef struct /**/NeonAstParser NeonAstParser;
-typedef struct /**/NeonStringBuffer NeonStringBuffer;
 typedef struct /**/NeonWriter NeonWriter;
 typedef struct /**/NeonVMStateVars NeonVMStateVars;
 typedef struct /**/NeonVMGCVars NeonVMGCVars;
@@ -350,7 +353,7 @@ struct NeonWriter
     bool shouldclose;
     bool stringtaken;
     NeonState* pvm;
-    NeonStringBuffer* strbuf;
+    StringBuffer* strbuf;
     FILE* handle;
 };
 
@@ -383,14 +386,6 @@ struct NeonValArray
     size_t size;
     size_t capacity;
     NeonValue* values;
-};
-
-struct NeonStringBuffer
-{
-    NeonState* pvm;
-    size_t length;
-    size_t capacity;
-    char* data;
 };
 
 struct NeonObjUserdata
@@ -441,9 +436,9 @@ struct NeonObjString
     NeonObject objectheader;
     NeonState* pvm;
     uint32_t hash;
-    // actual string handling is handled by NeonStringBuffer.
+    // actual string handling is handled by StringBuffer.
     // this is to avoid to trashing the stack with temporary values
-    NeonStringBuffer* sbuf;
+    StringBuffer* sbuf;
 };
 
 struct NeonObjUpvalue
@@ -1129,7 +1124,7 @@ void neon_gcmem_sweep(NeonState* state)
             {
                 state->gcstate.linkedobjects = obj;
             }
-            neon_object_release(state, unreached);
+            neon_object_destroy(state, unreached);
         }
     }
 }
@@ -1161,7 +1156,7 @@ void neon_vm_gcfreelinkedobjects(NeonState* state)
     while(obj != NULL)
     {
         next = obj->next;
-        neon_object_release(state, obj);
+        neon_object_destroy(state, obj);
         obj = next;
     }
     free(state->gcstate.graystack);
@@ -1296,7 +1291,7 @@ void neon_gcmem_blackenobj(NeonState* state, NeonObject* object)
     }
 }
 
-void neon_object_release(NeonState* state, NeonObject* object)
+void neon_object_destroy(NeonState* state, NeonObject* object)
 {
 #ifdef DEBUG_LOG_GC
     printf("%p free type %d\n", (void*)object, object->type);
@@ -1348,7 +1343,7 @@ void neon_object_release(NeonState* state, NeonObject* object)
             {
                 NeonObjInstance* instance;
                 instance = (NeonObjInstance*)object;
-                neon_hashtable_release(instance->fields);
+                neon_hashtable_destroy(instance->fields);
                 neon_mem_release(state, sizeof(NeonObjInstance), object);
                 instance = NULL;
             }
@@ -1400,72 +1395,6 @@ uint32_t neon_util_hashstring(const char* key, size_t length)
     return hash;
 }
 
-NeonStringBuffer* neon_strbuf_make(NeonState* state)
-{
-    NeonStringBuffer* sbuf;
-    sbuf = (NeonStringBuffer*)malloc(sizeof(NeonStringBuffer));
-    sbuf->pvm = state;
-    sbuf->length = 0;
-    sbuf->data = NULL;
-    sbuf->capacity = 0;
-    return sbuf;
-}
-
-void neon_strbuf_release(NeonStringBuffer* sb)
-{
-    NeonState* state;
-    state = sb->pvm;
-    neon_mem_freearray(state, sizeof(char), sb->data, sb->length + 1);
-    free(sb);
-}
-
-bool neon_strbuf_append(NeonStringBuffer* sb, const char* extstr, size_t extlen)
-{
-    enum {
-        string_chunk_size = 52,
-    };
-    size_t needsz;
-    size_t selfpos;
-    size_t extpos;
-    char* temp;
-    temp = NULL;
-    if((extstr != NULL) && (extlen > 0))
-    {
-        if(extlen > 0)
-        {
-            // + 2 for the '\0' characters
-            if(sb->capacity < sb->length + extlen + 2)
-            {
-                needsz = sb->length + extlen + string_chunk_size;
-                temp = (char*)realloc(sb->data, needsz);
-                if(temp == NULL)
-                {
-                    fprintf(stderr, "neon_strbuf_append: realloc(%ld) failed!\n", needsz);
-                }
-                sb->data = temp;
-                sb->capacity = sb->length + extlen + string_chunk_size;
-            }
-            if(sb->capacity >= sb->length + extlen + 2)
-            {
-                selfpos = sb->length;
-                //for(selfpos = sb->length, extpos = 0; extpos < extlen; selfpos++, extpos++)
-                //while((extpos < extlen) && (extpos < extlen))
-                //while(true)
-                //fprintf(stderr, "strbuf_append: extlen=%d extstr=\"%s\"\n", extlen, extstr);
-                for(extpos=0; extpos<extlen; extpos++)
-                {
-                    sb->data[selfpos] = extstr[extpos];
-                    selfpos++;
-                }
-                sb->length += extlen;
-                sb->data[selfpos] = 0;
-            }
-        }
-        return true;
-    }
-    return false;
-}
-
 NeonWriter* neon_writer_make(NeonState* state)
 {
     NeonWriter* wr;
@@ -1484,7 +1413,7 @@ NeonWriter* neon_writer_make(NeonState* state)
     return wr;
 }
 
-void neon_writer_release(NeonWriter* wr)
+void neon_writer_destroy(NeonWriter* wr)
 {
     NeonState* state;
     (void)state;
@@ -1493,7 +1422,7 @@ void neon_writer_release(NeonWriter* wr)
     {
         if(!wr->stringtaken)
         {
-            neon_strbuf_release(wr->strbuf);
+            dyn_strbuf_destroy(wr->strbuf);
         }
     }
     else
@@ -1533,7 +1462,7 @@ NeonWriter* neon_writer_makestring(NeonState* state)
     NeonWriter* wr;
     wr = neon_writer_make(state);
     wr->isstring = true;
-    wr->strbuf = neon_strbuf_make(state);
+    wr->strbuf = dyn_strbuf_makeempty(0);
     return wr;
 }
 
@@ -1541,7 +1470,7 @@ void neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
 {
     if(wr->isstring)
     {
-        neon_strbuf_append(wr->strbuf, estr, elen);
+        dyn_strbuf_appendstrn(wr->strbuf, estr, elen);
     }
     else
     {
@@ -2264,7 +2193,7 @@ void neon_userdata_release(NeonObjUserdata* ud)
     {
         ud->finalfn(state, ud);
     }
-    neon_hashtable_release(ud->methods);
+    neon_hashtable_destroy(ud->methods);
     neon_mem_release(state, sizeof(NeonObjUserdata), ud);
 }
 
@@ -2389,7 +2318,7 @@ void neon_class_release(NeonObjClass* klass)
 {
     NeonState* state;
     state = klass->pvm;
-    neon_hashtable_release(klass->methods);
+    neon_hashtable_destroy(klass->methods);
     neon_mem_release(state, sizeof(NeonObjClass), klass);
 }
 
@@ -2472,7 +2401,7 @@ NeonObjNativeFunction* neon_object_makenative(NeonState* state, NeonNativeFN nat
     return obj;
 }
 
-NeonObjString* neon_string_allocfromstrbuf(NeonState* state, NeonStringBuffer* sbuf, uint32_t hash)
+NeonObjString* neon_string_allocfromstrbuf(NeonState* state, StringBuffer* sbuf, uint32_t hash)
 {
     NeonObjString* rs;
     rs = (NeonObjString*)neon_object_allocobj(state, sizeof(NeonObjString), NEON_OBJ_STRING);
@@ -2487,9 +2416,9 @@ NeonObjString* neon_string_allocfromstrbuf(NeonState* state, NeonStringBuffer* s
 
 NeonObjString* neon_string_allocate(NeonState* state, const char* estr, size_t elen, uint32_t hash)
 {
-    NeonStringBuffer* sbuf;
-    sbuf = neon_strbuf_make(state);
-    neon_strbuf_append(sbuf, estr, elen);
+    StringBuffer* sbuf;
+    sbuf = dyn_strbuf_makeempty(elen);
+    dyn_strbuf_appendstrn(sbuf, estr, elen);
     return neon_string_allocfromstrbuf(state, sbuf, hash);
 }
 
@@ -2530,16 +2459,16 @@ void neon_string_release(NeonObjString* os)
 {
     NeonState* state;
     state = os->pvm;
-    neon_strbuf_release(os->sbuf);
+    dyn_strbuf_destroy(os->sbuf);
     neon_mem_release(state, sizeof(NeonObjString), os);
 }
 
 bool neon_string_append(NeonObjString* os, const char* extstr, size_t extlen)
 {
-    return neon_strbuf_append(os->sbuf, extstr, extlen);
+    return dyn_strbuf_appendstrn(os->sbuf, extstr, extlen);
 }
 
-int neon_string_find(NeonStringBuffer* str, NeonStringBuffer* substr, size_t startidx, bool icase)
+int neon_string_find(StringBuffer* str, StringBuffer* substr, size_t startidx, bool icase)
 {
     bool found;
     bool matching;
@@ -2583,15 +2512,13 @@ int neon_string_find(NeonStringBuffer* str, NeonStringBuffer* substr, size_t sta
     return index;
 }
 
-bool neon_string_split(NeonStringBuffer* str, NeonStringBuffer* sep, NeonValArray* dest)
+bool neon_string_split(NeonState* state, StringBuffer* str, StringBuffer* sep, NeonValArray* dest)
 {
     int matchidx;
     size_t sublen;
     size_t lastidx;
     NeonObjString* rest;
     NeonObjString *substr;
-    NeonState* state;
-    state = str->pvm;
     lastidx = 0;
     if(sep->length == 0)
     {
@@ -2746,7 +2673,7 @@ void neon_map_release(NeonObjMap* map)
     state = map->pvm;
     if(map->shouldmark)
     {
-        neon_hashtable_release(map->mapping);
+        neon_hashtable_destroy(map->mapping);
     }
     neon_mem_release(state, sizeof(NeonObjMap), map);
 }
@@ -2776,7 +2703,7 @@ void neon_hashtable_mark(NeonState* state, NeonHashTable* table)
     }
 }
 
-void neon_hashtable_release(NeonHashTable* table)
+void neon_hashtable_destroy(NeonHashTable* table)
 {
     NeonState* state;
     state = table->pvm;
@@ -3367,7 +3294,7 @@ NeonObjScriptFunction* neon_prs_compilesource(NeonState* state, const char* sour
     {
         rtv = NULL;
     }
-    neon_prs_release(state->parser);
+    neon_prs_destroy(state->parser);
     state->parser = NULL;
     return rtv;
 }
@@ -3640,10 +3567,10 @@ void neon_state_releaseobjvars(NeonState* state)
 {
     (void)state;
     /*
-    neon_hashtable_release(state->objvars.mthnumber);
-    neon_hashtable_release(state->objvars.mtharray);
-    neon_hashtable_release(state->objvars.mthstring);
-    neon_hashtable_release(state->objvars.mthobject);
+    neon_hashtable_destroy(state->objvars.mthnumber);
+    neon_hashtable_destroy(state->objvars.mtharray);
+    neon_hashtable_destroy(state->objvars.mthstring);
+    neon_hashtable_destroy(state->objvars.mthobject);
     */
 }
 
@@ -3718,17 +3645,17 @@ NeonState* neon_state_make()
     return state;
 }
 
-void neon_state_release(NeonState* state)
+void neon_state_destroy(NeonState* state)
 {
-    neon_writer_release(state->stdoutwriter);
-    neon_writer_release(state->stderrwriter);
-    neon_hashtable_release(state->globals);
-    neon_hashtable_release(state->strings);
+    neon_writer_destroy(state->stdoutwriter);
+    neon_writer_destroy(state->stderrwriter);
+    neon_hashtable_destroy(state->globals);
+    neon_hashtable_destroy(state->strings);
     state->initstring = NULL;
     neon_vm_gcfreelinkedobjects(state);
     if(state->parser != NULL)
     {
-        neon_prs_release(state->parser);
+        neon_prs_destroy(state->parser);
     }
     neon_state_releaseobjvars(state);
     free(state->vmstate.framevalues);
@@ -3902,7 +3829,7 @@ static NeonValue objfn_number_chr(NeonState* state, NeonValue selfval, int argc,
     return neon_value_fromobject(os);
 }
 
-static NeonValue objfn_string_length(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_string_func_length(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     NeonObjString* os;
     (void)state;
@@ -3912,7 +3839,7 @@ static NeonValue objfn_string_length(NeonState* state, NeonValue selfval, int ar
     return neon_value_makenumber(os->sbuf->length);
 }
 
-static NeonValue objfn_string_ord(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_string_func_ord(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     char ch;
     NeonObjString* selfstr;
@@ -3924,8 +3851,75 @@ static NeonValue objfn_string_ord(NeonState* state, NeonValue selfval, int argc,
     return neon_value_makenumber(ch);
 }
 
+static NeonValue objfn_string_func_tonumber(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    char* end;
+    double dw;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    selfstr = neon_value_asstring(selfval);
+    dw = strtod (selfstr->sbuf->data, &end);
+    return neon_value_makenumber(dw);
+}
 
-static NeonValue objfn_string_chars(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_string_func_indexof(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    int i;
+    int pos;
+    int findme;
+    NeonObjString* findstr;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    pos = -1;
+    selfstr = neon_value_asstring(selfval);
+    findstr = neon_value_asstring(argv[0]);
+    findme = findstr->sbuf->data[0];
+    for(i=0; i<(int)selfstr->sbuf->length; i++)
+    {
+        if(selfstr->sbuf->data[i] == findme)
+        {
+            pos = i;
+            break;
+        }
+    }
+    return neon_value_makenumber(pos);
+}
+
+
+static NeonValue objfn_string_func_substr(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    int i;
+    int posend;
+    int posbegin;
+    char ch;
+    NeonObjString* os;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    selfstr = neon_value_asstring(selfval);
+    posbegin = 0;
+    posend = selfstr->sbuf->length;
+    posbegin = neon_value_asnumber(argv[0]);
+    if(argc > 1)
+    {
+        posend = neon_value_asnumber(argv[1]);
+    }
+    os = neon_string_copy(state, "", 0);
+    for(i=posbegin; i<posend; i++)
+    {
+        ch = selfstr->sbuf->data[i];
+        neon_string_append(os, &ch, 1);
+    }
+    return neon_value_fromobject(os);
+}
+
+
+static NeonValue objfn_string_func_chars(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     size_t i;
     NeonObjArray* oa;
@@ -3944,7 +3938,7 @@ static NeonValue objfn_string_chars(NeonState* state, NeonValue selfval, int arg
     return neon_value_fromobject(oa);
 }
 
-static NeonValue objfn_string_split(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_string_func_split(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     NeonValue vsep;
     NeonObjArray* oa;
@@ -3966,11 +3960,11 @@ static NeonValue objfn_string_split(NeonState* state, NeonValue selfval, int arg
     }
     if(sep == NULL)
     {
-        return objfn_string_chars(state, selfval, argc, argv);
+        return objfn_string_func_chars(state, selfval, argc, argv);
     }
     selfstr = neon_value_asstring(selfval);
     oa = neon_array_make(state);
-    neon_string_split(selfstr->sbuf, sep->sbuf, oa->vala);
+    neon_string_split(state, selfstr->sbuf, sep->sbuf, oa->vala);
     return neon_value_fromobject(oa);
 }
 
@@ -3987,7 +3981,7 @@ static NeonValue objfn_object_func_dump(NeonState* state, NeonValue selfval, int
     wr = neon_writer_makestring(state);
     neon_writer_printvalue(wr, selfval, true);
     res = neon_string_copy(state, wr->strbuf->data, wr->strbuf->length);
-    neon_writer_release(wr);
+    neon_writer_destroy(wr);
     return neon_value_fromobject(res);
 }
 
@@ -4079,7 +4073,7 @@ static NeonValue cfn_eval(NeonState* state, NeonValue rec, int argc, NeonValue* 
     NeonValue val;
     NeonValue rtv;
     NeonObjString* os;
-    NeonStringBuffer* copy;
+    StringBuffer* copy;
     (void)state;
     (void)rec;
     (void)argc;
@@ -4087,10 +4081,10 @@ static NeonValue cfn_eval(NeonState* state, NeonValue rec, int argc, NeonValue* 
     oldcnt = state->vmstate.framecount;
     val = argv[0];
     os = neon_value_asstring(val);
-    copy = neon_strbuf_make(state);
-    neon_strbuf_append(copy, os->sbuf->data, os->sbuf->length);
+    copy = dyn_strbuf_makeempty(0);
+    dyn_strbuf_appendstrn(copy, os->sbuf->data, os->sbuf->length);
     rc = neon_state_runsource(state, copy->data, copy->length, true, &rtv);
-    neon_strbuf_release(copy);
+    dyn_strbuf_destroy(copy);
     if(rc == NEON_STATUS_OK)
     {
         neon_vm_stackpop(state);
@@ -4098,7 +4092,7 @@ static NeonValue cfn_eval(NeonState* state, NeonValue rec, int argc, NeonValue* 
     return rtv;
 }
 
-static NeonValue objfn_array_push(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_push(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     int i;
     (void)state;
@@ -4200,7 +4194,7 @@ bool neon_nestcall_call(NeonNestCall* nnc, NeonValue instance, NeonValue callee,
     return true;
 }
 
-static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_map(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     size_t i;
     size_t cnt;
@@ -4253,7 +4247,7 @@ static NeonValue objfn_array_map(NeonState* state, NeonValue selfval, int argc, 
     return neon_value_fromobject(na);
 }
 
-static NeonValue objfn_array_count(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_count(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     (void)state;
     NeonObjArray* oa;
@@ -4272,7 +4266,7 @@ static NeonValue objfn_array_count(NeonState* state, NeonValue selfval, int argc
     return neon_value_makenumber(0);
 }
 
-static NeonValue objfn_array_pop(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_pop(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     (void)state;
     NeonValue val;
@@ -4293,7 +4287,7 @@ static NeonValue objfn_array_pop(NeonState* state, NeonValue selfval, int argc, 
     return neon_value_makenumber(0);
 }
 
-static NeonValue objfn_array_set(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_set(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     long idx;
     NeonValue putval;
@@ -4323,7 +4317,7 @@ static NeonValue objfn_array_set(NeonState* state, NeonValue selfval, int argc, 
 }
 
 
-static NeonValue objfn_array_erase(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_erase(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     long idx;
     NeonValue idxval;
@@ -4351,7 +4345,7 @@ static NeonValue objfn_array_erase(NeonState* state, NeonValue selfval, int argc
 }
 
 
-static NeonValue objfn_array_join(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+static NeonValue objfn_array_func_join(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     size_t i;
     size_t cnt;
@@ -4401,7 +4395,7 @@ static NeonValue cfn_mapmake(NeonState* state, NeonValue rec, int argc, NeonValu
     return neon_value_fromobject(om);
 }
 
-static NeonValue objfn_file_readfile(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_file_func_readfile(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     bool withmin;
     size_t flen;
@@ -4561,7 +4555,7 @@ static NeonValue objfn_udfile_close(NeonState* state, NeonValue rec, int argc, N
     return neon_value_makenil();
 }
 
-static NeonValue objfn_file_open(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_file_func_open(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     FILE* fh;
     NeonValue va;
@@ -4605,7 +4599,7 @@ static NeonValue objfn_file_open(NeonState* state, NeonValue rec, int argc, Neon
     return neon_value_fromobject(ud);
 }
 
-static NeonValue objfn_os_getenv(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_os_func_getenv(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     NeonObjString* osval;
     NeonObjString* varname;
@@ -4636,7 +4630,7 @@ static NeonValue objfn_os_getenv(NeonState* state, NeonValue rec, int argc, Neon
     return neon_value_fromobject(state->envvars);
 }
 
-static NeonValue objfn_os_setenv(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_os_func_setenv(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     int rc;
     NeonObjString* osval;
@@ -4703,33 +4697,36 @@ int main(int argc, char** argv)
     }
     {
         klass = state->objvars.classprimstring;
-        neon_class_setfunctioncstr(klass, "length", objfn_string_length);
-        neon_class_setfunctioncstr(klass, "size", objfn_string_length);
-        neon_class_setfunctioncstr(klass, "split", objfn_string_split);
-        neon_class_setfunctioncstr(klass, "chars", objfn_string_chars);
-        neon_class_setfunctioncstr(klass, "ord", objfn_string_ord);
+        neon_class_setfunctioncstr(klass, "length", objfn_string_func_length);
+        neon_class_setfunctioncstr(klass, "size", objfn_string_func_length);
+        neon_class_setfunctioncstr(klass, "split", objfn_string_func_split);
+        neon_class_setfunctioncstr(klass, "chars", objfn_string_func_chars);
+        neon_class_setfunctioncstr(klass, "ord", objfn_string_func_ord);
+        neon_class_setfunctioncstr(klass, "toNumber", objfn_string_func_tonumber);
+        neon_class_setfunctioncstr(klass, "substr", objfn_string_func_substr);
+        neon_class_setfunctioncstr(klass, "indexOf", objfn_string_func_indexof);        
         #if 0
-        neon_class_setfunctioncstr(klass, "lstrip", objfn_string_leftstrip);
-        neon_class_setfunctioncstr(klass, "rstrip", objfn_string_rightstrip);
-        neon_class_setfunctioncstr(klass, "strip", objfn_string_strip);
-        neon_class_setfunctioncstr(klass, "toUpper", objfn_string_toupper);
-        neon_class_setfunctioncstr(klass, "tolower", objfn_string_tolower);
+        neon_class_setfunctioncstr(klass, "lstrip", objfn_string_func_leftstrip);
+        neon_class_setfunctioncstr(klass, "rstrip", objfn_string_func_rightstrip);
+        neon_class_setfunctioncstr(klass, "strip", objfn_string_func_strip);
+        neon_class_setfunctioncstr(klass, "toUpper", objfn_string_func_toupper);
+        neon_class_setfunctioncstr(klass, "tolower", objfn_string_func_tolower);
         
 
         #endif
     }
     {
         klass = state->objvars.classprimarray;
-        neon_class_setfunctioncstr(klass, "join", objfn_array_join);
-        neon_class_setfunctioncstr(klass, "map", objfn_array_map);
-        neon_class_setfunctioncstr(klass, "count", objfn_array_count);
-        neon_class_setfunctioncstr(klass, "length", objfn_array_count);
-        neon_class_setfunctioncstr(klass, "size", objfn_array_count);
-        neon_class_setfunctioncstr(klass, "push", objfn_array_push);
-        neon_class_setfunctioncstr(klass, "append", objfn_array_push);
-        neon_class_setfunctioncstr(klass, "erase", objfn_array_erase);
-        neon_class_setfunctioncstr(klass, "set", objfn_array_set);
-        neon_class_setfunctioncstr(klass, "pop", objfn_array_pop);
+        neon_class_setfunctioncstr(klass, "join", objfn_array_func_join);
+        neon_class_setfunctioncstr(klass, "map", objfn_array_func_map);
+        neon_class_setfunctioncstr(klass, "count", objfn_array_func_count);
+        neon_class_setfunctioncstr(klass, "length", objfn_array_func_count);
+        neon_class_setfunctioncstr(klass, "size", objfn_array_func_count);
+        neon_class_setfunctioncstr(klass, "push", objfn_array_func_push);
+        neon_class_setfunctioncstr(klass, "append", objfn_array_func_push);
+        neon_class_setfunctioncstr(klass, "erase", objfn_array_func_erase);
+        neon_class_setfunctioncstr(klass, "set", objfn_array_func_set);
+        neon_class_setfunctioncstr(klass, "pop", objfn_array_func_pop);
     }
     {
         map = neon_object_makemap(state);
@@ -4743,19 +4740,19 @@ int main(int argc, char** argv)
     }
     {
         map = neon_object_makemap(state);
-        neon_map_setstrfunction(map, "getenv", objfn_os_getenv);
-        neon_map_setstrfunction(map, "setenv", objfn_os_setenv);
+        neon_map_setstrfunction(map, "getenv", objfn_os_func_getenv);
+        neon_map_setstrfunction(map, "setenv", objfn_os_func_setenv);
         neon_state_defvalue(state, "OS", neon_value_fromobject(map));
         
     }
     {
         map = neon_object_makemap(state);
-        neon_map_setstrfunction(map, "readfile", objfn_file_readfile);
-        neon_map_setstrfunction(map, "open", objfn_file_open);
+        neon_map_setstrfunction(map, "readfile", objfn_file_func_readfile);
+        neon_map_setstrfunction(map, "open", objfn_file_func_open);
         #if 0
-        neon_map_setstrfunction(map, "exists", objfn_file_exists);
-        neon_map_setstrfunction(map, "isFile", objfn_file_isfile);
-        neon_map_setstrfunction(map, "isDirectory", objfn_file_isdirectory);
+        neon_map_setstrfunction(map, "exists", objfn_file_func_exists);
+        neon_map_setstrfunction(map, "isFile", objfn_file_func_isfile);
+        neon_map_setstrfunction(map, "isDirectory", objfn_file_func_isdirectory);
         #endif
         neon_state_defvalue(state, "File", neon_value_fromobject(map));
     }
@@ -4822,6 +4819,6 @@ int main(int argc, char** argv)
             repl(state);
         }
     }
-    neon_state_release(state);
+    neon_state_destroy(state);
     return exitcode;
 }

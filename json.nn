@@ -24,7 +24,7 @@ class JSON
     {
         while(true)
         {
-            if(this.m_index >= this.m_source.length)
+            if(this.m_index >= this.m_source.size())
             {
                 break;
             }
@@ -42,7 +42,7 @@ class JSON
     parseValue()
     {
         this.skipWhiteSpace();
-        if(this.m_index == this.m_source.length)
+        if(this.m_index == this.m_source.size())
         {
             return null;
         }
@@ -79,16 +79,16 @@ class JSON
         {
             return this.parseLiteral("null", null);
         }
-        println("Invalid json (c=<"+c+">, index="+this.m_index+", max=${state['m_source'].length})");
+        println("Invalid json (c=<"+c+">, index="+this.m_index+", max=${state['m_source'].size()})");
     }
 
     parseLiteral(literal, value)
     {
-        if(literal.length > (this.m_source.length - this.m_index))
+        if(literal.size() > (this.m_source.size() - this.m_index))
         {
             error("Expecting ${literal}");
         }
-        for (var i = 0; i < literal.length; i++)
+        for (var i = 0; i < literal.size(); i++)
         {
             if (literal[i] != this.m_source[this.m_index++])
             {
@@ -119,35 +119,35 @@ class JSON
         var s = "";
         while ((c = this.m_source[this.m_index]) != quote)
         {
-            if(c == "\\++"[0])
+            if(c == "\\")
             {
                 this.m_index++;
                 c = this.m_source[this.m_index];
                 if(c == "r")
                 {
-                    s += "\r";
+                    s = s + "\r";
                 }
                 else if (c == "n")
                 {
-                    s += "\n";
+                    s = s + "\n";
                 }
                 else if (c == "t")
                 {
-                    s += "\t";
+                    s = s + "\t";
                 }
                 else if (c == "f")
                 {
-                    s += "\f";
+                    s = s + "\f";
                 }
                 // Note escaped unicode not handled
                 else
                 {
-                    s += c;
+                    s = s + c;
                 }
             }
             else
             {
-                s += c;
+                s = s + c;
             }
             this.m_index++;
         }
@@ -236,7 +236,7 @@ class JSON
         this.m_index++;
         return a;
     }
-};
+}
 
 function parse(str)
 {
@@ -246,11 +246,6 @@ function parse(str)
 };
 
 var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
-if(ARGV.length > 1)
-{
-    //src = File.read(ARGV[0]);
-    src = new File(ARGV[1], "rb").read()
-}
 //src = "[1, 2, 3, 4]"
 println("------------")
 println(parse(src));

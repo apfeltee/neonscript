@@ -545,7 +545,7 @@ static inline bool neon_vmexec_doconcat(NeonState* state)
     concatputval(wr, peeka);
     concatputval(wr, peekb);
     result = neon_string_copy(state, wr->strbuf->data, wr->strbuf->length);
-    neon_writer_release(wr);
+    neon_writer_destroy(wr);
     neon_vmbits_stackpop(state);
     neon_vmbits_stackpop(state);
     neon_vmbits_stackpush(state, neon_value_fromobject(result));
@@ -1186,6 +1186,50 @@ static inline bool neon_vmexec_doglobalstmt(NeonState* state)
     return true;
 }
 
+bool neon_vmdo_classbindmethod(NeonState* state, NeonObjClass* klass, NeonObjString* name)
+{
+    NeonValue method;
+    NeonObjBoundFunction* bound;
+    if(neon_hashtable_get(klass->methods, name, &method))
+    {
+        bound = neon_object_makeboundmethod(state, neon_vm_stackpeek(state, 0), neon_value_asclosure(method));
+        neon_vm_stackpop(state);
+        neon_vm_stackpush(state, neon_value_fromobject(bound));
+        return true;
+    }
+    neon_state_raiseerror(state,  "undefined property '%s'", name->sbuf->data);
+    return false;
+}
+
+bool neon_vmexec_doinstthispropertyget(NeonState* state)
+{
+    NeonValue value;
+    NeonValue peeked;
+    NeonObjString* name;
+    NeonObjClass* klass;
+    NeonObjInstance* instance;
+    name = neon_vmbits_readstring(state);
+    peeked = neon_vm_stackpeek(state, 0);
+    if(neon_value_isinstance(peeked))
+    {
+        instance = neon_value_asinstance(peeked);
+        if(neon_hashtable_get(instance->fields, name, &value))
+        {
+            neon_vm_stackpop(state);
+            neon_vm_stackpush(state, value);
+            return true;
+        }
+        if(neon_vmdo_classbindmethod(state, instance->klass, name))
+        {
+            return true;
+        }
+        neon_state_raiseerror(state, "instance of class %s does not have a property or method named '%s'", neon_value_asinstance(peeked)->klass->name->sbuf->data,
+                      name->sbuf->data);
+    }
+    neon_state_raiseerror(state, "object of type '%s' does not have properties", neon_value_typename(peeked));
+    return false;
+}
+
 static inline void neon_vm_debugprintvalue(NeonState* state, NeonWriter* owr, NeonValue val, const char* fmt, ...)
 {
     va_list va;
@@ -1490,6 +1534,14 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
     op_case(NEON_OP_PROPERTYSET)
         {
             if(!neon_vmexec_dopropertyset(state))
+            {
+                return NEON_STATUS_RUNTIMEERROR;
+            }
+        }
+        vm_breakouter();
+    op_case(NEON_OP_INSTTHISPROPERTYGET)
+        {
+            if(!neon_vmexec_doinstthispropertyget(state))
             {
                 return NEON_STATUS_RUNTIMEERROR;
             }

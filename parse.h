@@ -37,7 +37,7 @@ NeonAstScanner* neon_lex_make(NeonState* state, const char* source, size_t len)
     return scn;
 }
 
-void neon_lex_release(NeonAstScanner* scn)
+void neon_lex_destroy(NeonAstScanner* scn)
 {
     free(scn);
 }
@@ -165,6 +165,7 @@ NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
         {"if", NEON_TOK_KWIF},
         {"nil", NEON_TOK_KWNIL},
         {"null", NEON_TOK_KWNIL},
+        {"new", NEON_TOK_KWNEW},
         {"or", NEON_TOK_KWOR},
         {"debugprint", NEON_TOK_KWDEBUGPRINT},
         {"typeof", NEON_TOK_KWTYPEOF},
@@ -516,11 +517,11 @@ NeonAstParser* neon_prs_make(NeonState* state)
     return prs;
 }
 
-void neon_prs_release(NeonAstParser* prs)
+void neon_prs_destroy(NeonAstParser* prs)
 {
     if(prs->pscn != NULL)
     {
-        neon_lex_release(prs->pscn);
+        neon_lex_destroy(prs->pscn);
     }
     free(prs);
 }
@@ -724,6 +725,7 @@ int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
         case NEON_OP_LOOP:
         case NEON_OP_INSTTHISINVOKE:
         case NEON_OP_INSTSUPERINVOKE:
+        case NEON_OP_INSTTHISPROPERTYGET:
             return 2;
     }
     fprintf(stderr, "internal error: failed to compute operand argument size of %d (%s)\n", op, neon_dbg_op2str(op));
@@ -1113,6 +1115,8 @@ void neon_prs_rulecall(NeonAstParser* prs, NeonAstToken previous, bool canassign
 
 void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
+    int32_t getop;
+    int32_t setop;
     int32_t name;
     int32_t argc;
     (void)previous;
@@ -1132,7 +1136,14 @@ void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
     }
     else
     {
-        neon_prs_emit2byte(prs, NEON_OP_PROPERTYGET, name);
+        getop = NEON_OP_PROPERTYGET;
+        setop = NEON_OP_PROPERTYSET;
+        if((prs->currclass != NULL) && (previous.type == NEON_TOK_KWTHIS))
+        {
+            getop = NEON_OP_INSTTHISPROPERTYGET;
+        }
+        //neon_prs_emit2byte(prs, NEON_OP_PROPERTYGET, name);
+        neon_prs_doassign(prs, getop, setop, name, canassign);
     }
 }
 
@@ -1261,6 +1272,7 @@ void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
             }
             if(currc == '\\')
             {
+                #if 0
                 if(nextc == '\\')
                 {
                     buf[pi+0] = '\\';
@@ -1275,10 +1287,12 @@ void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
                 }
                 */
                 else
+                #endif
                 {
 
                     switch(nextc)
                     {
+                        stringesc1('\\', '\\');
                         stringesc1('0', '\0');
                         stringesc1('1', '\1');
                         stringesc1('2', '\2');
@@ -1286,6 +1300,7 @@ void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
                         stringesc1('t', '\t');
                         stringesc1('r', '\r');
                         stringesc1('e', '\e');
+                        stringesc1('f', '\f');
                         stringesc1('"', '"');
                         default:
                             {
@@ -1497,7 +1512,6 @@ void neon_prs_ruleunary(NeonAstParser* prs, bool canassign)
     }
 }
 
-
 void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
 {
     if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
@@ -1507,7 +1521,7 @@ void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg
     }
     else if(canassign && neon_prs_match(prs, NEON_TOK_INCREMENT))
     {
-        if(getop == NEON_OP_PROPERTYGET /*|| getop == NEON_OP_GETPROPERTYGETTHIS*/)
+        if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_INSTTHISPROPERTYGET)
         {
             neon_prs_emit1byte(prs, NEON_OP_DUP);
         }
@@ -1518,7 +1532,6 @@ void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg
         else
         {
             neon_prs_emit2byte(prs, getop, 1);
-
         }
         neon_prs_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMADD);
         neon_prs_emit2byte(prs, setop, arg);
@@ -1626,6 +1639,12 @@ void neon_prs_ruletypeof(NeonAstParser* prs, bool canassign)
     neon_prs_parseexpr(prs);
     neon_prs_emit1byte(prs, NEON_OP_TYPEOF);
     neon_prs_skipsemicolon(prs);
+}
+
+void neon_prs_rulenew(NeonAstParser* prs, bool canassign)
+{
+    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "class name after 'new'");
+    neon_prs_rulevariable(prs, canassign);
 }
 
 NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParsePrefixFN prefix, NeonAstParseInfixFN infix, NeonAstPrecedence precedence)
@@ -1837,6 +1856,12 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
             break;
         /* Compiling Expressions rules < Jumping Back and Forth table-and */
         // [NEON_TOK_KWAND]           = {NULL,     NULL,   NEON_PREC_NONE},
+
+        case NEON_TOK_KWNEW:
+            {
+                return neon_prs_setrule(&dest, neon_prs_rulenew, NULL, NEON_PREC_NONE);
+            }
+            break;
         case NEON_TOK_KWBREAK:
             {
                 return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
@@ -2079,6 +2104,7 @@ void neon_prs_parseblock(NeonAstParser* prs)
         neon_prs_parsedecl(prs);
     }
     neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' after block");
+    neon_prs_skipsemicolon(prs);
 }
 
 void neon_prs_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
