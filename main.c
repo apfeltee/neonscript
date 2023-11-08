@@ -1082,7 +1082,7 @@ void neon_gcmem_markroots(NeonState* state)
         neon_gcmem_markobject(state, (NeonObject*)upvalue);
     }
     neon_hashtable_mark(state, state->globals);
-    neon_prs_markcompilerroots(state);
+    neon_astparser_markcompilerroots(state);
     neon_gcmem_markobject(state, (NeonObject*)state->initstring);
 }
 
@@ -1306,7 +1306,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjUserdata* ud;
                 ud = (NeonObjUserdata*)object;
-                neon_userdata_release(ud);
+                neon_userdata_destroy(ud);
             }
             break;
         case NEON_OBJ_BOUNDMETHOD:
@@ -1318,7 +1318,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjClass* klass;
                 klass = (NeonObjClass*)object;
-                neon_class_release(klass);
+                neon_class_destroy(klass);
                 klass = NULL;
             }
             break;
@@ -1326,7 +1326,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjClosure* closure;
                 closure = (NeonObjClosure*)object;
-                neon_closure_release(closure);
+                neon_closure_destroy(closure);
                 closure = NULL;
             }
             break;
@@ -1334,7 +1334,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjScriptFunction* ofn;
                 ofn = (NeonObjScriptFunction*)object;
-                neon_chunk_release(state, ofn->chunk);
+                neon_chunk_destroy(state, ofn->chunk);
                 neon_mem_release(state, sizeof(NeonObjScriptFunction), object);
                 ofn = NULL;
             }
@@ -1357,21 +1357,21 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjString* string;
                 string = (NeonObjString*)object;
-                neon_string_release(string);
+                neon_string_destroy(string);
             }
             break;
         case NEON_OBJ_ARRAY:
             {
                 NeonObjArray* arr;
                 arr = (NeonObjArray*)object;
-                neon_array_release(arr);
+                neon_array_destroy(arr);
             }
             break;
         case NEON_OBJ_MAP:
             {
                 NeonObjMap* om;
                 om = (NeonObjMap*)object;
-                neon_map_release(om);
+                neon_map_destroy(om);
             }
             break;
         case NEON_OBJ_UPVALUE:
@@ -2013,7 +2013,7 @@ NeonValArray* neon_valarray_make(NeonState* state)
     return va;
 }
 
-void neon_valarray_release(NeonValArray* arr)
+void neon_valarray_destroy(NeonValArray* arr)
 {
     NeonState* state;
     state = arr->pvm;
@@ -2185,7 +2185,7 @@ NeonObjUserdata* neon_object_makeuserdata(NeonState* state, void* ptr, NeonUserF
     return obj;
 }
 
-void neon_userdata_release(NeonObjUserdata* ud)
+void neon_userdata_destroy(NeonObjUserdata* ud)
 {
     NeonState* state;
     state = ud->pvm;
@@ -2234,6 +2234,17 @@ NeonObjClass* neon_state_makeclass(NeonState* state, const char* name, NeonObjCl
     neon_state_defineglobal(state, oclass->name, neon_value_fromobject(oclass));
     return oclass;
 }
+
+void neon_class_destroy(NeonObjClass* klass)
+{
+    NeonState* state;
+    state = klass->pvm;
+    neon_hashtable_destroy(klass->properties);
+    neon_hashtable_destroy(klass->methods);
+    neon_hashtable_destroy(klass->staticmethods);
+    neon_mem_release(state, sizeof(NeonObjClass), klass);
+}
+
 
 bool neon_class_putvalintable(NeonState* state, NeonObjClass* klass, NeonHashTable* htab, NeonObjString* name, NeonValue val)
 {
@@ -2297,7 +2308,6 @@ bool neon_class_getmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* d
     return false;
 }
 
-
 bool neon_class_getstaticmethod(NeonObjClass* klass, NeonObjString* name, NeonValue* dest)
 {
     if(neon_hashtable_get(klass->staticmethods, name, dest))
@@ -2314,13 +2324,6 @@ bool neon_class_getstaticmethod(NeonObjClass* klass, NeonObjString* name, NeonVa
     return false;
 }
 
-void neon_class_release(NeonObjClass* klass)
-{
-    NeonState* state;
-    state = klass->pvm;
-    neon_hashtable_destroy(klass->methods);
-    neon_mem_release(state, sizeof(NeonObjClass), klass);
-}
 
 NeonObjClosure* neon_object_makeclosure(NeonState* state, NeonObjScriptFunction* ofn)
 {
@@ -2352,7 +2355,7 @@ void neon_closure_mark(NeonObjClosure* closure)
     }
 }
 
-void neon_closure_release(NeonObjClosure* closure)
+void neon_closure_destroy(NeonObjClosure* closure)
 {
     NeonState* state;
     state = closure->pvm;
@@ -2455,7 +2458,7 @@ NeonObjString* neon_string_copycstr(NeonState* state, const char* estr)
     return neon_string_copy(state, estr, strlen(estr));
 }
 
-void neon_string_release(NeonObjString* os)
+void neon_string_destroy(NeonObjString* os)
 {
     NeonState* state;
     state = os->pvm;
@@ -2578,11 +2581,11 @@ void neon_array_mark(NeonObjArray* arr)
     neon_gcmem_markvalarray(state, arr->vala);
 }
 
-void neon_array_release(NeonObjArray* arr)
+void neon_array_destroy(NeonObjArray* arr)
 {
     NeonState* state;
     state = arr->pvm;
-    neon_valarray_release(arr->vala);
+    neon_valarray_destroy(arr->vala);
     neon_mem_release(state, sizeof(NeonObjArray), arr);
 }
 
@@ -2667,7 +2670,7 @@ void neon_map_mark(NeonObjMap* map)
     }
 }
 
-void neon_map_release(NeonObjMap* map)
+void neon_map_destroy(NeonObjMap* map)
 {
     NeonState* state;
     state = map->pvm;
@@ -2966,11 +2969,11 @@ void neon_chunk_copy(NeonState* state, NeonChunk* to, NeonChunk* from)
     }
 }
 
-void neon_chunk_release(NeonState* state, NeonChunk* chunk)
+void neon_chunk_destroy(NeonState* state, NeonChunk* chunk)
 {
     neon_mem_freearray(state, sizeof(int32_t), chunk->bincode, chunk->capacity);
     neon_mem_freearray(state, sizeof(int), chunk->srclinenos, chunk->capacity);
-    neon_valarray_release(chunk->constants);
+    neon_valarray_destroy(chunk->constants);
     free(chunk);
 }
 
@@ -3273,33 +3276,33 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
 
 #include "parse.h"
 
-NeonObjScriptFunction* neon_prs_compilesource(NeonState* state, const char* source, size_t len, bool iseval)
+NeonObjScriptFunction* neon_astparser_compilesource(NeonState* state, const char* source, size_t len, bool iseval)
 {
     
     NeonAstCompiler compiler;
     NeonObjScriptFunction* fn;
     NeonObjScriptFunction* rtv;
-    state->parser = neon_prs_make(state);
+    state->parser = neon_astparser_make(state);
     state->parser->iseval = iseval;
-    state->parser->pscn = neon_lex_make(state, source, len);
-    neon_prs_compilerinit(state->parser, &compiler, NEON_TYPE_SCRIPT);
-    neon_prs_advance(state->parser);
-    while(!neon_prs_match(state->parser, NEON_TOK_EOF))
+    state->parser->pscn = neon_astlex_make(state, source, len);
+    neon_astparser_compilerinit(state->parser, &compiler, NEON_TYPE_SCRIPT);
+    neon_astparser_advance(state->parser);
+    while(!neon_astparser_match(state->parser, NEON_TOK_EOF))
     {
-        neon_prs_parsedecl(state->parser);
+        neon_astparser_parsedecl(state->parser);
     }
-    fn = neon_prs_compilerfinish(state->parser, true);
+    fn = neon_astparser_compilerfinish(state->parser, true);
     rtv = fn;
     if(state->parser->haderror)
     {
         rtv = NULL;
     }
-    neon_prs_destroy(state->parser);
+    neon_astparser_destroy(state->parser);
     state->parser = NULL;
     return rtv;
 }
 
-void neon_prs_markcompilerroots(NeonState* state)
+void neon_astparser_markcompilerroots(NeonState* state)
 {
     NeonAstCompiler* compiler;
     if(state->parser != NULL)
@@ -3655,7 +3658,7 @@ void neon_state_destroy(NeonState* state)
     neon_vm_gcfreelinkedobjects(state);
     if(state->parser != NULL)
     {
-        neon_prs_destroy(state->parser);
+        neon_astparser_destroy(state->parser);
     }
     neon_state_releaseobjvars(state);
     free(state->vmstate.framevalues);
@@ -3670,7 +3673,7 @@ NeonStatusCode neon_state_runsource(NeonState* state, const char* source, size_t
     bool b;
     NeonObjScriptFunction* fn;
     NeonObjClosure* closure;
-    fn = neon_prs_compilesource(state, source, len, iseval);
+    fn = neon_astparser_compilesource(state, source, len, iseval);
     if(fn == NULL)
     {
         return NEON_STATUS_SYNTAXERROR;
@@ -4382,6 +4385,7 @@ static NeonValue objfn_array_func_join(NeonState* state, NeonValue selfval, int 
         }
     }
     os = neon_writer_takestring(wr);
+    neon_writer_destroy(wr);
     return neon_value_fromobject(os);
 }
 

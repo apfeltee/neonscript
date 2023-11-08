@@ -25,7 +25,7 @@ static bool neon_lexutil_ishexadecimal(char c)
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-NeonAstScanner* neon_lex_make(NeonState* state, const char* source, size_t len)
+NeonAstScanner* neon_astlex_make(NeonState* state, const char* source, size_t len)
 {
     NeonAstScanner* scn;
     scn = (NeonAstScanner*)malloc(sizeof(NeonAstScanner));
@@ -37,46 +37,46 @@ NeonAstScanner* neon_lex_make(NeonState* state, const char* source, size_t len)
     return scn;
 }
 
-void neon_lex_destroy(NeonAstScanner* scn)
+void neon_astlex_destroy(NeonAstScanner* scn)
 {
     free(scn);
 }
 
 
-bool neon_lex_isatend(NeonAstScanner* scn)
+bool neon_astlex_isatend(NeonAstScanner* scn)
 {
     return *scn->current == '\0';
 }
 
-char neon_lex_advance(NeonAstScanner* scn)
+char neon_astlex_advance(NeonAstScanner* scn)
 {
     scn->current++;
     return scn->current[-1];
 }
 
-char neon_lex_peekcurrent(NeonAstScanner* scn)
+char neon_astlex_peekcurrent(NeonAstScanner* scn)
 {
     return *scn->current;
 }
 
-char neon_lex_peekprevious(NeonAstScanner* scn)
+char neon_astlex_peekprevious(NeonAstScanner* scn)
 {
     return scn->current[-1];
 }
 
 
-char neon_lex_peeknext(NeonAstScanner* scn)
+char neon_astlex_peeknext(NeonAstScanner* scn)
 {
-    if(neon_lex_isatend(scn))
+    if(neon_astlex_isatend(scn))
     {
         return '\0';
     }
     return scn->current[1];
 }
 
-bool neon_lex_match(NeonAstScanner* scn, char expected)
+bool neon_astlex_match(NeonAstScanner* scn, char expected)
 {
-    if(neon_lex_isatend(scn))
+    if(neon_astlex_isatend(scn))
         return false;
     if(*scn->current != expected)
         return false;
@@ -84,7 +84,7 @@ bool neon_lex_match(NeonAstScanner* scn, char expected)
     return true;
 }
 
-NeonAstToken neon_lex_maketoken(NeonAstScanner* scn, NeonAstTokType type)
+NeonAstToken neon_astlex_maketoken(NeonAstScanner* scn, NeonAstTokType type)
 {
     NeonAstToken token;
     token.type = type;
@@ -94,7 +94,7 @@ NeonAstToken neon_lex_maketoken(NeonAstScanner* scn, NeonAstTokType type)
     return token;
 }
 
-NeonAstToken neon_lex_makeerrortoken(NeonAstScanner* scn, const char* message)
+NeonAstToken neon_astlex_makeerrortoken(NeonAstScanner* scn, const char* message)
 {
     NeonAstToken token;
     token.type = NEON_TOK_ERROR;
@@ -104,34 +104,34 @@ NeonAstToken neon_lex_makeerrortoken(NeonAstScanner* scn, const char* message)
     return token;
 }
 
-void neon_lex_skipspace(NeonAstScanner* scn)
+void neon_astlex_skipspace(NeonAstScanner* scn)
 {
     char c;
     for(;;)
     {
-        c = neon_lex_peekcurrent(scn);
+        c = neon_astlex_peekcurrent(scn);
         switch(c)
         {
             case ' ':
             case '\r':
             case '\t':
                 {
-                    neon_lex_advance(scn);
+                    neon_astlex_advance(scn);
                 }
                 break;
             case '\n':
                 {
                     scn->line++;
-                    neon_lex_advance(scn);
+                    neon_astlex_advance(scn);
                 }
                 break;
             case '/':
                 {
-                    if(neon_lex_peeknext(scn) == '/')
+                    if(neon_astlex_peeknext(scn) == '/')
                     {
                         // A comment goes until the end of the line.
-                        while(neon_lex_peekcurrent(scn) != '\n' && !neon_lex_isatend(scn))
-                            neon_lex_advance(scn);
+                        while(neon_astlex_peekcurrent(scn) != '\n' && !neon_astlex_isatend(scn))
+                            neon_astlex_advance(scn);
                     }
                     else
                     {
@@ -145,7 +145,7 @@ void neon_lex_skipspace(NeonAstScanner* scn)
     }
 }
 
-NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
+NeonAstTokType neon_astlex_scankeyword(NeonAstScanner* scn)
 {
     static const struct
     {
@@ -195,317 +195,317 @@ NeonAstTokType neon_lex_scankeyword(NeonAstScanner* scn)
     return NEON_TOK_IDENTIFIER;
 }
 
-NeonAstToken neon_lex_scanident(NeonAstScanner* scn)
+NeonAstToken neon_astlex_scanident(NeonAstScanner* scn)
 {
-    while(neon_lexutil_isalpha(neon_lex_peekcurrent(scn)) || neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+    while(neon_lexutil_isalpha(neon_astlex_peekcurrent(scn)) || neon_lexutil_isdigit(neon_astlex_peekcurrent(scn)))
     {
-        neon_lex_advance(scn);
+        neon_astlex_advance(scn);
     }
-    return neon_lex_maketoken(scn, neon_lex_scankeyword(scn));
+    return neon_astlex_maketoken(scn, neon_astlex_scankeyword(scn));
 }
 
 /*
-NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
+NeonAstToken neon_astlex_scannumber(NeonAstScanner* scn)
 {
-    while(neon_lex_isdigit(neon_lex_peekcurrent(scn)))
+    while(neon_astlex_isdigit(neon_astlex_peekcurrent(scn)))
     {
-        neon_lex_advance(scn);
+        neon_astlex_advance(scn);
     }
     // Look for a fractional part.
-    if(neon_lex_peekcurrent(scn) == '.' && neon_lex_isdigit(neon_lex_peeknext(scn)))
+    if(neon_astlex_peekcurrent(scn) == '.' && neon_astlex_isdigit(neon_astlex_peeknext(scn)))
     {
         // Consume the ".".
-        neon_lex_advance(scn);
-        while(neon_lex_isdigit(neon_lex_peekcurrent(scn)))
+        neon_astlex_advance(scn);
+        while(neon_astlex_isdigit(neon_astlex_peekcurrent(scn)))
         {
-            neon_lex_advance(scn);
+            neon_astlex_advance(scn);
         }
     }
-    return neon_lex_maketoken(scn, NEON_TOK_NUMBER);
+    return neon_astlex_maketoken(scn, NEON_TOK_NUMBER);
 }
 */
 
-NeonAstToken neon_lex_scannumber(NeonAstScanner* scn)
+NeonAstToken neon_astlex_scannumber(NeonAstScanner* scn)
 {
     // handle binary, octal and hexadecimals
-    if(neon_lex_peekprevious(scn) == '0')
+    if(neon_astlex_peekprevious(scn) == '0')
     {
-        if(neon_lex_match(scn, 'b'))
+        if(neon_astlex_match(scn, 'b'))
         {// binary number
-            while(neon_lexutil_isbinary(neon_lex_peekcurrent(scn)))
+            while(neon_lexutil_isbinary(neon_astlex_peekcurrent(scn)))
             {
-                neon_lex_advance(scn);
+                neon_astlex_advance(scn);
             }
-            return neon_lex_maketoken(scn, NEON_TOK_BINNUMBER);
+            return neon_astlex_maketoken(scn, NEON_TOK_BINNUMBER);
         }
-        else if(neon_lex_match(scn, 'c'))
+        else if(neon_astlex_match(scn, 'c'))
         {
-            while(neon_lexutil_isoctal(neon_lex_peekcurrent(scn)))
+            while(neon_lexutil_isoctal(neon_astlex_peekcurrent(scn)))
             {
-                neon_lex_advance(scn);
+                neon_astlex_advance(scn);
             }
-            return neon_lex_maketoken(scn, NEON_TOK_OCTNUMBER);
+            return neon_astlex_maketoken(scn, NEON_TOK_OCTNUMBER);
         }
-        else if(neon_lex_match(scn, 'x'))
+        else if(neon_astlex_match(scn, 'x'))
         {
-            while(neon_lexutil_ishexadecimal(neon_lex_peekcurrent(scn)))
+            while(neon_lexutil_ishexadecimal(neon_astlex_peekcurrent(scn)))
             {
-                neon_lex_advance(scn);
+                neon_astlex_advance(scn);
             }
-            return neon_lex_maketoken(scn, NEON_TOK_HEXNUMBER);
+            return neon_astlex_maketoken(scn, NEON_TOK_HEXNUMBER);
         }
     }
-    while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+    while(neon_lexutil_isdigit(neon_astlex_peekcurrent(scn)))
     {
-        neon_lex_advance(scn);
+        neon_astlex_advance(scn);
     }
     // dots(.) are only valid here when followed by a digit
-    if(neon_lex_peekcurrent(scn) == '.' && neon_lexutil_isdigit(neon_lex_peeknext(scn)))
+    if(neon_astlex_peekcurrent(scn) == '.' && neon_lexutil_isdigit(neon_astlex_peeknext(scn)))
     {
-        neon_lex_advance(scn);
-        while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+        neon_astlex_advance(scn);
+        while(neon_lexutil_isdigit(neon_astlex_peekcurrent(scn)))
         {
-            neon_lex_advance(scn);
+            neon_astlex_advance(scn);
         }
         // E or e are only valid here when followed by a digit and occurring after a
         // dot
-        if((neon_lex_peekcurrent(scn) == 'e' || neon_lex_peekcurrent(scn) == 'E') && (neon_lex_peeknext(scn) == '+' || neon_lex_peeknext(scn) == '-'))
+        if((neon_astlex_peekcurrent(scn) == 'e' || neon_astlex_peekcurrent(scn) == 'E') && (neon_astlex_peeknext(scn) == '+' || neon_astlex_peeknext(scn) == '-'))
         {
-            neon_lex_advance(scn);
-            neon_lex_advance(scn);
-            while(neon_lexutil_isdigit(neon_lex_peekcurrent(scn)))
+            neon_astlex_advance(scn);
+            neon_astlex_advance(scn);
+            while(neon_lexutil_isdigit(neon_astlex_peekcurrent(scn)))
             {
-                neon_lex_advance(scn);
+                neon_astlex_advance(scn);
             }
         }
     }
-    return neon_lex_maketoken(scn, NEON_TOK_NUMBER);
+    return neon_astlex_maketoken(scn, NEON_TOK_NUMBER);
 }
 
 
-NeonAstToken neon_lex_scanstring(NeonAstScanner* scn, char quote)
+NeonAstToken neon_astlex_scanstring(NeonAstScanner* scn, char quote)
 {
-    while(neon_lex_peekcurrent(scn) != quote && !neon_lex_isatend(scn))
+    while(neon_astlex_peekcurrent(scn) != quote && !neon_astlex_isatend(scn))
     {
-        if(neon_lex_peekcurrent(scn) == '\\' && (neon_lex_peeknext(scn) == quote || neon_lex_peeknext(scn) == '\\'))
+        if(neon_astlex_peekcurrent(scn) == '\\' && (neon_astlex_peeknext(scn) == quote || neon_astlex_peeknext(scn) == '\\'))
         {
-            neon_lex_advance(scn);
+            neon_astlex_advance(scn);
         }
-        neon_lex_advance(scn);
+        neon_astlex_advance(scn);
     }
-    if(neon_lex_isatend(scn))
+    if(neon_astlex_isatend(scn))
     {
-        return neon_lex_makeerrortoken(scn, "unterminated string");
+        return neon_astlex_makeerrortoken(scn, "unterminated string");
     }
-    neon_lex_match(scn, quote);// the closing quote
-    return neon_lex_maketoken(scn, NEON_TOK_STRING);
+    neon_astlex_match(scn, quote);// the closing quote
+    return neon_astlex_maketoken(scn, NEON_TOK_STRING);
 }
 
-NeonAstToken neon_lex_scantoken(NeonAstScanner* scn)
+NeonAstToken neon_astlex_scantoken(NeonAstScanner* scn)
 {
     char c;
-    neon_lex_skipspace(scn);
+    neon_astlex_skipspace(scn);
     scn->start = scn->current;
-    if(neon_lex_isatend(scn))
+    if(neon_astlex_isatend(scn))
     {
-        return neon_lex_maketoken(scn, NEON_TOK_EOF);
+        return neon_astlex_maketoken(scn, NEON_TOK_EOF);
     }
-    c = neon_lex_advance(scn);
+    c = neon_astlex_advance(scn);
     if(neon_lexutil_isalpha(c))
     {
-        return neon_lex_scanident(scn);
+        return neon_astlex_scanident(scn);
     }
     if(neon_lexutil_isdigit(c))
     {
-        return neon_lex_scannumber(scn);
+        return neon_astlex_scannumber(scn);
     }
     switch(c)
     {
         case '\n':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_NEWLINE);
+                return neon_astlex_maketoken(scn, NEON_TOK_NEWLINE);
             }
             break;
         case '(':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_PARENOPEN);
+                return neon_astlex_maketoken(scn, NEON_TOK_PARENOPEN);
             }
             break;
         case ')':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_PARENCLOSE);
+                return neon_astlex_maketoken(scn, NEON_TOK_PARENCLOSE);
             }
             break;
         case '{':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_BRACEOPEN);
+                return neon_astlex_maketoken(scn, NEON_TOK_BRACEOPEN);
             }
             break;
         case '}':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_BRACECLOSE);
+                return neon_astlex_maketoken(scn, NEON_TOK_BRACECLOSE);
             }
             break;
         case '[':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_BRACKETOPEN);
+                return neon_astlex_maketoken(scn, NEON_TOK_BRACKETOPEN);
             }
             break;
         case ']':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_BRACKETCLOSE);
+                return neon_astlex_maketoken(scn, NEON_TOK_BRACKETCLOSE);
             }
             break;
         case ';':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_SEMICOLON);
+                return neon_astlex_maketoken(scn, NEON_TOK_SEMICOLON);
             }
             break;
         case ',':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_COMMA);
+                return neon_astlex_maketoken(scn, NEON_TOK_COMMA);
             }
             break;
         case '.':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_DOT);
+                return neon_astlex_maketoken(scn, NEON_TOK_DOT);
             }
             break;
         case '-':
             {
-                if(neon_lex_match(scn, '-'))
+                if(neon_astlex_match(scn, '-'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_DECREMENT);
+                    return neon_astlex_maketoken(scn, NEON_TOK_DECREMENT);
                 }
-                else if(neon_lex_match(scn, '='))
+                else if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_ASSIGNMINUS);
+                    return neon_astlex_maketoken(scn, NEON_TOK_ASSIGNMINUS);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_MINUS);
+                return neon_astlex_maketoken(scn, NEON_TOK_MINUS);
             }
             break;
         case '+':
             {
-                if(neon_lex_match(scn, '+'))
+                if(neon_astlex_match(scn, '+'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_INCREMENT);
+                    return neon_astlex_maketoken(scn, NEON_TOK_INCREMENT);
                 }
-                else if(neon_lex_match(scn, '='))
+                else if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_ASSIGNPLUS);
+                    return neon_astlex_maketoken(scn, NEON_TOK_ASSIGNPLUS);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_PLUS);
+                return neon_astlex_maketoken(scn, NEON_TOK_PLUS);
             }
             break;
         case '&':
             {
-                if(neon_lex_match(scn, '&'))
+                if(neon_astlex_match(scn, '&'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_KWAND);
+                    return neon_astlex_maketoken(scn, NEON_TOK_KWAND);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_BINAND);
+                return neon_astlex_maketoken(scn, NEON_TOK_BINAND);
             }
             break;
         case '|':
             {
-                if(neon_lex_match(scn, '|'))
+                if(neon_astlex_match(scn, '|'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_KWOR);
+                    return neon_astlex_maketoken(scn, NEON_TOK_KWOR);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_BINOR);
+                return neon_astlex_maketoken(scn, NEON_TOK_BINOR);
             }
             break;
         case '^':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_BINXOR);
+                return neon_astlex_maketoken(scn, NEON_TOK_BINXOR);
             }
             break;
         case '%':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_ASSIGNMODULO);
+                    return neon_astlex_maketoken(scn, NEON_TOK_ASSIGNMODULO);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_MODULO);
+                return neon_astlex_maketoken(scn, NEON_TOK_MODULO);
             }
             break;
         case '/':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_ASSIGNDIV);
+                    return neon_astlex_maketoken(scn, NEON_TOK_ASSIGNDIV);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_DIVIDE);
+                return neon_astlex_maketoken(scn, NEON_TOK_DIVIDE);
             }
             break;
         case '*':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_ASSIGNMULT);
+                    return neon_astlex_maketoken(scn, NEON_TOK_ASSIGNMULT);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_MULTIPLY);
+                return neon_astlex_maketoken(scn, NEON_TOK_MULTIPLY);
             }
             break;
         case '~':
             {
-                return neon_lex_maketoken(scn, NEON_TOK_TILDE);
+                return neon_astlex_maketoken(scn, NEON_TOK_TILDE);
             }
             break;
         case '!':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_COMPNOTEQUAL);
+                    return neon_astlex_maketoken(scn, NEON_TOK_COMPNOTEQUAL);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_EXCLAM);
+                return neon_astlex_maketoken(scn, NEON_TOK_EXCLAM);
             }
             break;
         case '=':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_COMPEQUAL);
+                    return neon_astlex_maketoken(scn, NEON_TOK_COMPEQUAL);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_ASSIGN);
+                return neon_astlex_maketoken(scn, NEON_TOK_ASSIGN);
             }
             break;
         case '<':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_COMPLESSEQUAL);
+                    return neon_astlex_maketoken(scn, NEON_TOK_COMPLESSEQUAL);
                 }
-                else if(neon_lex_match(scn, '<'))
+                else if(neon_astlex_match(scn, '<'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_SHIFTLEFT);
+                    return neon_astlex_maketoken(scn, NEON_TOK_SHIFTLEFT);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_COMPLESSTHAN);
+                return neon_astlex_maketoken(scn, NEON_TOK_COMPLESSTHAN);
             }
             break;
         case '>':
             {
-                if(neon_lex_match(scn, '='))
+                if(neon_astlex_match(scn, '='))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_COMPGREATEREQUAL);
+                    return neon_astlex_maketoken(scn, NEON_TOK_COMPGREATEREQUAL);
                 }
-                else if(neon_lex_match(scn, '>'))
+                else if(neon_astlex_match(scn, '>'))
                 {
-                    return neon_lex_maketoken(scn, NEON_TOK_SHIFTRIGHT);
+                    return neon_astlex_maketoken(scn, NEON_TOK_SHIFTRIGHT);
                 }
-                return neon_lex_maketoken(scn, NEON_TOK_COMPGREATERTHAN);
+                return neon_astlex_maketoken(scn, NEON_TOK_COMPGREATERTHAN);
             }
             break;
         case '"':
             {
-                return neon_lex_scanstring(scn, '"');
+                return neon_astlex_scanstring(scn, '"');
             }
             break;
     }
-    return neon_lex_makeerrortoken(scn, "unexpected character");
+    return neon_astlex_makeerrortoken(scn, "unexpected character");
 }
 
-NeonAstParser* neon_prs_make(NeonState* state)
+NeonAstParser* neon_astparser_make(NeonState* state)
 {
     NeonAstParser* prs;
     prs = (NeonAstParser*)malloc(sizeof(NeonAstParser));
@@ -517,21 +517,21 @@ NeonAstParser* neon_prs_make(NeonState* state)
     return prs;
 }
 
-void neon_prs_destroy(NeonAstParser* prs)
+void neon_astparser_destroy(NeonAstParser* prs)
 {
     if(prs->pscn != NULL)
     {
-        neon_lex_destroy(prs->pscn);
+        neon_astlex_destroy(prs->pscn);
     }
     free(prs);
 }
 
-NeonChunk* neon_prs_currentchunk(NeonAstParser* prs)
+NeonChunk* neon_astparser_currentchunk(NeonAstParser* prs)
 {
     return prs->currcompiler->compiledfn->chunk;
 }
 
-void neon_prs_vraiseattoken(NeonAstParser* prs, NeonAstToken* token, const char* message, va_list va)
+void neon_astparser_vraiseattoken(NeonAstParser* prs, NeonAstToken* token, const char* message, va_list va)
 {
     if(prs->panicmode)
     {
@@ -557,106 +557,106 @@ void neon_prs_vraiseattoken(NeonAstParser* prs, NeonAstToken* token, const char*
     prs->haderror = true;
 }
 
-void neon_prs_raiseerror(NeonAstParser* prs, const char* message, ...)
+void neon_astparser_raiseerror(NeonAstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
-    neon_prs_vraiseattoken(prs, &prs->previous, message, va);
+    neon_astparser_vraiseattoken(prs, &prs->previous, message, va);
     va_end(va);
 }
 
-void neon_prs_raiseatcurrent(NeonAstParser* prs, const char* message, ...)
+void neon_astparser_raiseatcurrent(NeonAstParser* prs, const char* message, ...)
 {
     va_list va;
     va_start(va, message);
-    neon_prs_vraiseattoken(prs, &prs->current, message, va);
+    neon_astparser_vraiseattoken(prs, &prs->current, message, va);
     va_end(va);
 }
 
 
-void neon_prs_skipsemicolon(NeonAstParser* prs)
+void neon_astparser_skipsemicolon(NeonAstParser* prs)
 {
     while(true)
     {
-        if(!neon_prs_match(prs, NEON_TOK_NEWLINE))
+        if(!neon_astparser_match(prs, NEON_TOK_NEWLINE))
         {
             break;
         }
     }
     while(true)
     {
-        if(!neon_prs_match(prs, NEON_TOK_SEMICOLON))
+        if(!neon_astparser_match(prs, NEON_TOK_SEMICOLON))
         {
             break;
         }
     }
 }
 
-void neon_prs_advance(NeonAstParser* prs)
+void neon_astparser_advance(NeonAstParser* prs)
 {
     prs->previous = prs->current;
     for(;;)
     {
-        prs->current = neon_lex_scantoken(prs->pscn);
+        prs->current = neon_astlex_scantoken(prs->pscn);
         if(prs->current.type != NEON_TOK_ERROR)
         {
             break;
         }
-        neon_prs_raiseatcurrent(prs, prs->current.start);
+        neon_astparser_raiseatcurrent(prs, prs->current.start);
     }
 }
 
-void neon_prs_consume(NeonAstParser* prs, NeonAstTokType type, const char* message)
+void neon_astparser_consume(NeonAstParser* prs, NeonAstTokType type, const char* message)
 {
     if(prs->current.type == type)
     {
-        neon_prs_advance(prs);
+        neon_astparser_advance(prs);
         return;
     }
-    neon_prs_raiseatcurrent(prs, message);
+    neon_astparser_raiseatcurrent(prs, message);
 }
 
-bool neon_prs_checkcurrent(NeonAstParser* prs, NeonAstTokType type)
+bool neon_astparser_checkcurrent(NeonAstParser* prs, NeonAstTokType type)
 {
     return prs->current.type == type;
 }
 
-bool neon_prs_match(NeonAstParser* prs, NeonAstTokType type)
+bool neon_astparser_match(NeonAstParser* prs, NeonAstTokType type)
 {
-    if(!neon_prs_checkcurrent(prs, type))
+    if(!neon_astparser_checkcurrent(prs, type))
     {
         return false;
     }
-    neon_prs_advance(prs);
+    neon_astparser_advance(prs);
     return true;
 }
 
-void neon_prs_emit1byte(NeonAstParser* prs, int32_t byte)
+void neon_astparser_emit1byte(NeonAstParser* prs, int32_t byte)
 {
-    neon_chunk_pushbyte(prs->pvm, neon_prs_currentchunk(prs), byte, prs->previous.line);
+    neon_chunk_pushbyte(prs->pvm, neon_astparser_currentchunk(prs), byte, prs->previous.line);
 }
 
-void neon_prs_emit2byte(NeonAstParser* prs, int32_t byte1, int32_t byte2)
+void neon_astparser_emit2byte(NeonAstParser* prs, int32_t byte1, int32_t byte2)
 {
-    neon_prs_emit1byte(prs, byte1);
-    neon_prs_emit1byte(prs, byte2);
+    neon_astparser_emit1byte(prs, byte1);
+    neon_astparser_emit1byte(prs, byte2);
 }
 
-void neon_prs_emitloop(NeonAstParser* prs, int loopstart)
+void neon_astparser_emitloop(NeonAstParser* prs, int loopstart)
 {
     int offset;
-    neon_prs_emit1byte(prs, NEON_OP_LOOP);
-    offset = neon_prs_currentchunk(prs)->count - loopstart + 2;
+    neon_astparser_emit1byte(prs, NEON_OP_LOOP);
+    offset = neon_astparser_currentchunk(prs)->count - loopstart + 2;
     if(offset > UINT16_MAX)
     {
-        neon_prs_raiseerror(prs, "loop body too large");
+        neon_astparser_raiseerror(prs, "loop body too large");
     }
-    neon_prs_emit1byte(prs, (offset >> 8) & 0xff);
-    neon_prs_emit1byte(prs, offset & 0xff);
+    neon_astparser_emit1byte(prs, (offset >> 8) & 0xff);
+    neon_astparser_emit1byte(prs, offset & 0xff);
 }
 
 
-int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
+int neon_astparser_realgetcodeargscount(const int32_t* code, int ip)
 {
     int32_t op = code[ip];
     if(op == -1)
@@ -732,102 +732,102 @@ int neon_prs_realgetcodeargscount(const int32_t* code, int ip)
     return -1;
 }
 
-int neon_prs_getcodeargscount(const int32_t* bytecode, int ip)
+int neon_astparser_getcodeargscount(const int32_t* bytecode, int ip)
 {
     int rc;
     //const char* os;
-    rc = neon_prs_realgetcodeargscount(bytecode, ip);
+    rc = neon_astparser_realgetcodeargscount(bytecode, ip);
     //os = neon_dbg_op2str(bytecode[ip]);
     //fprintf(stderr, "getcodeargscount(..., code=%s) = %d\n", os, rc);
     return rc;
 }
 
-void neon_prs_startloop(NeonAstParser* prs, NeonAstLoop* loop)
+void neon_astparser_startloop(NeonAstParser* prs, NeonAstLoop* loop)
 {
     loop->enclosing = prs->currcompiler->loop;
-    loop->start = neon_prs_currentchunk(prs)->count;
+    loop->start = neon_astparser_currentchunk(prs)->count;
     loop->scopedepth = prs->currcompiler->scopedepth;
     prs->currcompiler->loop = loop;
 }
 
-void neon_prs_endloop(NeonAstParser* prs)
+void neon_astparser_endloop(NeonAstParser* prs)
 {
     int i;
     NeonChunk* chunk;
     i = prs->currcompiler->loop->body;
-    chunk = neon_prs_currentchunk(prs);
+    chunk = neon_astparser_currentchunk(prs);
     while(i < chunk->count)
     {
         if(chunk->bincode[i] == NEON_OP_PSEUDOBREAK)
         {
             chunk->bincode[i] = NEON_OP_JUMPNOW;
-            neon_prs_emitpatchjump(prs, i + 1);
+            neon_astparser_emitpatchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            i += 1 + neon_prs_getcodeargscount(chunk->bincode, i);
+            i += 1 + neon_astparser_getcodeargscount(chunk->bincode, i);
         }
     }
     prs->currcompiler->loop = prs->currcompiler->loop->enclosing;
 }
 
-int neon_prs_emitjump(NeonAstParser* prs, int32_t instruction)
+int neon_astparser_emitjump(NeonAstParser* prs, int32_t instruction)
 {
-    neon_prs_emit1byte(prs, instruction);
-    neon_prs_emit1byte(prs, 0xff);
-    neon_prs_emit1byte(prs, 0xff);
-    return neon_prs_currentchunk(prs)->count - 2;
+    neon_astparser_emit1byte(prs, instruction);
+    neon_astparser_emit1byte(prs, 0xff);
+    neon_astparser_emit1byte(prs, 0xff);
+    return neon_astparser_currentchunk(prs)->count - 2;
 }
 
-void neon_prs_emitreturn(NeonAstParser* prs, bool fromtoplevel)
+void neon_astparser_emitreturn(NeonAstParser* prs, bool fromtoplevel)
 {
     if(prs->currcompiler->type == NEON_TYPE_INITIALIZER)
     {
-        neon_prs_emit2byte(prs, NEON_OP_LOCALGET, 0);
+        neon_astparser_emit2byte(prs, NEON_OP_LOCALGET, 0);
     }
     else
     {
-        //neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
+        //neon_astparser_emit1byte(prs, NEON_OP_PUSHNIL);
     }
     if(fromtoplevel && prs->iseval)
     {
-        neon_prs_emit1byte(prs, NEON_OP_RESTOREFRAME);
+        neon_astparser_emit1byte(prs, NEON_OP_RESTOREFRAME);
     }
-    neon_prs_emit1byte(prs, NEON_OP_RETURN);
+    neon_astparser_emit1byte(prs, NEON_OP_RETURN);
 }
 
-int32_t neon_prs_makeconstant(NeonAstParser* prs, NeonValue value)
+int32_t neon_astparser_makeconstant(NeonAstParser* prs, NeonValue value)
 {
     int constant;
-    constant = neon_chunk_pushconst(prs->pvm, neon_prs_currentchunk(prs), value);
+    constant = neon_chunk_pushconst(prs->pvm, neon_astparser_currentchunk(prs), value);
     if(constant > UINT8_MAX)
     {
-        neon_prs_raiseerror(prs, "too many constants in one chunk");
+        neon_astparser_raiseerror(prs, "too many constants in one chunk");
         return 0;
     }
     return (int32_t)constant;
 }
 
-void neon_prs_emitconstant(NeonAstParser* prs, NeonValue value)
+void neon_astparser_emitconstant(NeonAstParser* prs, NeonValue value)
 {
-    neon_prs_emit2byte(prs, NEON_OP_PUSHCONST, neon_prs_makeconstant(prs, value));
+    neon_astparser_emit2byte(prs, NEON_OP_PUSHCONST, neon_astparser_makeconstant(prs, value));
 }
 
-void neon_prs_emitpatchjump(NeonAstParser* prs, int offset)
+void neon_astparser_emitpatchjump(NeonAstParser* prs, int offset)
 {
     int jump;
     // -2 to adjust for the bytecode for the jump offset itself.
-    jump = neon_prs_currentchunk(prs)->count - offset - 2;
+    jump = neon_astparser_currentchunk(prs)->count - offset - 2;
     if(jump > UINT16_MAX)
     {
-        neon_prs_raiseerror(prs, "too much code to jump over");
+        neon_astparser_raiseerror(prs, "too much code to jump over");
     }
-    neon_prs_currentchunk(prs)->bincode[offset] = (jump >> 8) & 0xff;
-    neon_prs_currentchunk(prs)->bincode[offset + 1] = jump & 0xff;
+    neon_astparser_currentchunk(prs)->bincode[offset] = (jump >> 8) & 0xff;
+    neon_astparser_currentchunk(prs)->bincode[offset + 1] = jump & 0xff;
 }
 
-void neon_prs_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstFuncType type)
+void neon_astparser_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstFuncType type)
 {
     NeonAstLocal* local;
     compiler->enclosing = prs->currcompiler;
@@ -861,31 +861,31 @@ void neon_prs_compilerinit(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAs
     }
 }
 
-NeonObjScriptFunction* neon_prs_compilerfinish(NeonAstParser* prs, bool ismainfn)
+NeonObjScriptFunction* neon_astparser_compilerfinish(NeonAstParser* prs, bool ismainfn)
 {
     NeonObjScriptFunction* fn;
-    neon_prs_emitreturn(prs, true);
+    neon_astparser_emitreturn(prs, true);
     if(ismainfn)
     {
-        //neon_prs_emit1byte(prs, NEON_OP_HALTVM);
+        //neon_astparser_emit1byte(prs, NEON_OP_HALTVM);
     }
     fn = prs->currcompiler->compiledfn;
 #if (DEBUG_PRINT_CODE == 1)
     if(!prs->haderror)
     {
-        neon_chunk_disasm(prs->pvm, prs->pvm->stderrwriter, neon_prs_currentchunk(prs), fn->name != NULL ? fn->name->sbuf->data : "<script>");
+        neon_chunk_disasm(prs->pvm, prs->pvm->stderrwriter, neon_astparser_currentchunk(prs), fn->name != NULL ? fn->name->sbuf->data : "<script>");
     }
 #endif
     prs->currcompiler = prs->currcompiler->enclosing;
     return fn;
 }
 
-void neon_prs_scopebegin(NeonAstParser* prs)
+void neon_astparser_scopebegin(NeonAstParser* prs)
 {
     prs->currcompiler->scopedepth++;
 }
 
-void neon_prs_scopeend(NeonAstParser* prs)
+void neon_astparser_scopeend(NeonAstParser* prs)
 {
     NeonAstCompiler* pc;
     pc = prs->currcompiler;
@@ -894,22 +894,22 @@ void neon_prs_scopeend(NeonAstParser* prs)
     {
         if(pc->locals[pc->localcount - 1].iscaptured)
         {
-            neon_prs_emit1byte(prs, NEON_OP_UPVALCLOSE);
+            neon_astparser_emit1byte(prs, NEON_OP_UPVALCLOSE);
         }
         else
         {
-            neon_prs_emit1byte(prs, NEON_OP_POP);
+            neon_astparser_emit1byte(prs, NEON_OP_POP);
         }
         pc->localcount--;
     }
 }
 
-int32_t neon_prs_makeidentconstant(NeonAstParser* prs, NeonAstToken* name)
+int32_t neon_astparser_makeidentconstant(NeonAstParser* prs, NeonAstToken* name)
 {
-    return neon_prs_makeconstant(prs, neon_value_fromobject(neon_string_copy(prs->pvm, name->start, name->length)));
+    return neon_astparser_makeconstant(prs, neon_value_fromobject(neon_string_copy(prs->pvm, name->start, name->length)));
 }
 
-bool neon_prs_identsequal(NeonAstToken* a, NeonAstToken* b)
+bool neon_astparser_identsequal(NeonAstToken* a, NeonAstToken* b)
 {
     if(a->length != b->length)
     {
@@ -919,12 +919,12 @@ bool neon_prs_identsequal(NeonAstToken* a, NeonAstToken* b)
 }
 
 
-void neon_prs_addlocal(NeonAstParser* prs, NeonAstToken name)
+void neon_astparser_addlocal(NeonAstParser* prs, NeonAstToken name)
 {
     NeonAstLocal* local;
     if(prs->currcompiler->localcount == NEON_MAX_COMPLOCALS)
     {
-        neon_prs_raiseerror(prs, "too many local variables in function");
+        neon_astparser_raiseerror(prs, "too many local variables in function");
         return;
     }
     local = &prs->currcompiler->locals[prs->currcompiler->localcount++];
@@ -933,7 +933,7 @@ void neon_prs_addlocal(NeonAstParser* prs, NeonAstToken name)
     local->iscaptured = false;
 }
 
-int neon_prs_discardlocals(NeonAstParser* prs, NeonAstCompiler* current)
+int neon_astparser_discardlocals(NeonAstParser* prs, NeonAstCompiler* current)
 {
     int n;
     int lc;
@@ -949,12 +949,12 @@ int neon_prs_discardlocals(NeonAstParser* prs, NeonAstCompiler* current)
     }
     if(n != 0)
     {
-        neon_prs_emit2byte(prs, NEON_OP_POPN, (int32_t)n);
+        neon_astparser_emit2byte(prs, NEON_OP_POPN, (int32_t)n);
     }
     return current->localcount - lc - 1;
 }
 
-void neon_prs_parsevarident(NeonAstParser* prs)
+void neon_astparser_parsevarident(NeonAstParser* prs)
 {
     int i;
     NeonAstLocal* local;
@@ -971,26 +971,26 @@ void neon_prs_parsevarident(NeonAstParser* prs)
         {
             break;// [negative]
         }
-        if(neon_prs_identsequal(name, &local->name))
+        if(neon_astparser_identsequal(name, &local->name))
         {
-            neon_prs_raiseerror(prs, "already a variable with this name in this scope");
+            neon_astparser_raiseerror(prs, "already a variable with this name in this scope");
         }
     }
-    neon_prs_addlocal(prs, *name);
+    neon_astparser_addlocal(prs, *name);
 }
 
-int32_t neon_prs_parsevarname(NeonAstParser* prs, const char* errormessage)
+int32_t neon_astparser_parsevarname(NeonAstParser* prs, const char* errormessage)
 {
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, errormessage);
-    neon_prs_parsevarident(prs);
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, errormessage);
+    neon_astparser_parsevarident(prs);
     if(prs->currcompiler->scopedepth > 0)
     {
         return 0;
     }
-    return neon_prs_makeidentconstant(prs, &prs->previous);
+    return neon_astparser_makeidentconstant(prs, &prs->previous);
 }
 
-void neon_prs_markinit(NeonAstParser* prs)
+void neon_astparser_markinit(NeonAstParser* prs)
 {
     if(prs->currcompiler->scopedepth == 0)
     {
@@ -999,121 +999,121 @@ void neon_prs_markinit(NeonAstParser* prs)
     prs->currcompiler->locals[prs->currcompiler->localcount - 1].depth = prs->currcompiler->scopedepth;
 }
 
-void neon_prs_emitdefvar(NeonAstParser* prs, int32_t global)
+void neon_astparser_emitdefvar(NeonAstParser* prs, int32_t global)
 {
     if(prs->currcompiler->scopedepth > 0)
     {
-        neon_prs_markinit(prs);
+        neon_astparser_markinit(prs);
         return;
     }
-    neon_prs_emit2byte(prs, NEON_OP_GLOBALDEFINE, global);
+    neon_astparser_emit2byte(prs, NEON_OP_GLOBALDEFINE, global);
 }
 
-int32_t neon_prs_parsearglist(NeonAstParser* prs)
+int32_t neon_astparser_parsearglist(NeonAstParser* prs)
 {
     int32_t argc;
     argc = 0;
-    if(!neon_prs_checkcurrent(prs, NEON_TOK_PARENCLOSE))
+    if(!neon_astparser_checkcurrent(prs, NEON_TOK_PARENCLOSE))
     {
         do
         {
-            neon_prs_parseexpr(prs);
+            neon_astparser_parseexpr(prs);
             if(argc == 255)
             {
-                neon_prs_raiseerror(prs, "cannot have more than 255 arguments");
+                neon_astparser_raiseerror(prs, "cannot have more than 255 arguments");
             }
             argc++;
-        } while(neon_prs_match(prs, NEON_TOK_COMMA));
+        } while(neon_astparser_match(prs, NEON_TOK_COMMA));
     }
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after arguments");
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after arguments");
     return argc;
 }
 
-void neon_prs_ruleand(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_ruleand(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int endjump;
     (void)previous;
     (void)canassign;
-    endjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    neon_prs_parseprec(prs, NEON_PREC_AND);
-    neon_prs_emitpatchjump(prs, endjump);
+    endjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    neon_astparser_parseprec(prs, NEON_PREC_AND);
+    neon_astparser_emitpatchjump(prs, endjump);
 }
 
-void neon_prs_rulebinary(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_rulebinary(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     NeonAstRule* rule;
     NeonAstTokType ot;
     (void)previous;
     (void)canassign;
     ot = prs->previous.type;
-    rule = neon_prs_getrule(ot);
-    neon_prs_parseprec(prs, (NeonAstPrecedence)(rule->precedence + 1));
+    rule = neon_astparser_getrule(ot);
+    neon_astparser_parseprec(prs, (NeonAstPrecedence)(rule->precedence + 1));
     switch(ot)
     {
         case NEON_TOK_COMPNOTEQUAL:
-            neon_prs_emit2byte(prs, NEON_OP_EQUAL, NEON_OP_PRIMNOT);
+            neon_astparser_emit2byte(prs, NEON_OP_EQUAL, NEON_OP_PRIMNOT);
             break;
         case NEON_TOK_COMPEQUAL:
-            neon_prs_emit1byte(prs, NEON_OP_EQUAL);
+            neon_astparser_emit1byte(prs, NEON_OP_EQUAL);
             break;
         case NEON_TOK_COMPGREATERTHAN:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMGREATER);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMGREATER);
             break;
         case NEON_TOK_COMPGREATEREQUAL:
-            neon_prs_emit2byte(prs, NEON_OP_PRIMLESS, NEON_OP_PRIMNOT);
+            neon_astparser_emit2byte(prs, NEON_OP_PRIMLESS, NEON_OP_PRIMNOT);
             break;
         case NEON_TOK_COMPLESSTHAN:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMLESS);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMLESS);
             break;
         case NEON_TOK_COMPLESSEQUAL:
-            neon_prs_emit2byte(prs, NEON_OP_PRIMGREATER, NEON_OP_PRIMNOT);
+            neon_astparser_emit2byte(prs, NEON_OP_PRIMGREATER, NEON_OP_PRIMNOT);
             break;
         case NEON_TOK_PLUS:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMADD);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMADD);
             break;
         case NEON_TOK_MINUS:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMSUBTRACT);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMSUBTRACT);
             break;
         case NEON_TOK_MULTIPLY:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMMULTIPLY);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMMULTIPLY);
             break;
         case NEON_TOK_DIVIDE:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMDIVIDE);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMDIVIDE);
             break;
         case NEON_TOK_MODULO:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMMODULO);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMMODULO);
             break;
         case NEON_TOK_BINAND:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMBINAND);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMBINAND);
             break;
         case NEON_TOK_BINOR:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMBINOR);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMBINOR);
             break;
         case NEON_TOK_BINXOR:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMBINXOR);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMBINXOR);
             break;
         case NEON_TOK_SHIFTLEFT:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMSHIFTLEFT);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMSHIFTLEFT);
             break;
         case NEON_TOK_SHIFTRIGHT:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMSHIFTRIGHT);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMSHIFTRIGHT);
             break;
         default:
             return;// Unreachable.
     }
 }
 
-void neon_prs_rulecall(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_rulecall(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int32_t argc;
     (void)previous;
     (void)canassign;
-    argc = neon_prs_parsearglist(prs);
-    neon_prs_emit2byte(prs, NEON_OP_CALL, argc);
+    argc = neon_astparser_parsearglist(prs);
+    neon_astparser_emit2byte(prs, NEON_OP_CALL, argc);
 }
 
-void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int32_t getop;
     int32_t setop;
@@ -1121,18 +1121,18 @@ void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
     int32_t argc;
     (void)previous;
     (void)canassign;
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect property name after '.'.");
-    name = neon_prs_makeidentconstant(prs, &prs->previous);
-    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect property name after '.'.");
+    name = neon_astparser_makeidentconstant(prs, &prs->previous);
+    if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGN))
     {
-        neon_prs_parseexpr(prs);
-        neon_prs_emit2byte(prs, NEON_OP_PROPERTYSET, name);
+        neon_astparser_parseexpr(prs);
+        neon_astparser_emit2byte(prs, NEON_OP_PROPERTYSET, name);
     }
-    else if(neon_prs_match(prs, NEON_TOK_PARENOPEN))
+    else if(neon_astparser_match(prs, NEON_TOK_PARENOPEN))
     {
-        argc = neon_prs_parsearglist(prs);
-        neon_prs_emit2byte(prs, NEON_OP_INSTTHISINVOKE, name);
-        neon_prs_emit1byte(prs, argc);
+        argc = neon_astparser_parsearglist(prs);
+        neon_astparser_emit2byte(prs, NEON_OP_INSTTHISINVOKE, name);
+        neon_astparser_emit1byte(prs, argc);
     }
     else
     {
@@ -1142,40 +1142,40 @@ void neon_prs_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
         {
             getop = NEON_OP_INSTTHISPROPERTYGET;
         }
-        //neon_prs_emit2byte(prs, NEON_OP_PROPERTYGET, name);
-        neon_prs_doassign(prs, getop, setop, name, canassign);
+        //neon_astparser_emit2byte(prs, NEON_OP_PROPERTYGET, name);
+        neon_astparser_doassign(prs, getop, setop, name, canassign);
     }
 }
 
-void neon_prs_ruleliteral(NeonAstParser* prs, bool canassign)
+void neon_astparser_ruleliteral(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     switch(prs->previous.type)
     {
         case NEON_TOK_KWFALSE:
-            neon_prs_emit1byte(prs, NEON_OP_PUSHFALSE);
+            neon_astparser_emit1byte(prs, NEON_OP_PUSHFALSE);
             break;
         case NEON_TOK_KWNIL:
-            neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
+            neon_astparser_emit1byte(prs, NEON_OP_PUSHNIL);
             break;
         case NEON_TOK_KWTRUE:
-            neon_prs_emit1byte(prs, NEON_OP_PUSHTRUE);
+            neon_astparser_emit1byte(prs, NEON_OP_PUSHTRUE);
             break;
         default:
             return;// Unreachable.
     }
 }
 
-void neon_prs_rulegrouping(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulegrouping(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
-    neon_prs_ignorespace(prs);
-    neon_prs_parseexpr(prs);
-    neon_prs_ignorespace(prs);
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after grouped expression");
+    neon_astparser_ignorespace(prs);
+    neon_astparser_parseexpr(prs);
+    neon_astparser_ignorespace(prs);
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after grouped expression");
 }
 
-NeonValue neon_prs_parsenumber(NeonAstParser* prs)
+NeonValue neon_astparser_parsenumber(NeonAstParser* prs)
 {
     double vdoub;
     long long vbin;
@@ -1200,24 +1200,24 @@ NeonValue neon_prs_parsenumber(NeonAstParser* prs)
     return neon_value_makenumber(vdoub);
 }
 
-void neon_prs_rulenumber(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulenumber(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
-    neon_prs_emitconstant(prs, neon_prs_parsenumber(prs));
+    neon_astparser_emitconstant(prs, neon_astparser_parsenumber(prs));
 }
 
-void neon_prs_ruleor(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_ruleor(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     int endjump;
     int elsejump;
     (void)previous;
     (void)canassign;
-    elsejump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    endjump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
-    neon_prs_emitpatchjump(prs, elsejump);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    neon_prs_parseprec(prs, NEON_PREC_OR);
-    neon_prs_emitpatchjump(prs, endjump);
+    elsejump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    endjump = neon_astparser_emitjump(prs, NEON_OP_JUMPNOW);
+    neon_astparser_emitpatchjump(prs, elsejump);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    neon_astparser_parseprec(prs, NEON_PREC_OR);
+    neon_astparser_emitpatchjump(prs, endjump);
 }
 
 #define stringesc1(c, rpl1) \
@@ -1229,7 +1229,7 @@ void neon_prs_ruleor(NeonAstParser* prs, NeonAstToken previous, bool canassign)
         } \
         break;
 
-void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulestring(NeonAstParser* prs, bool canassign)
 {
     size_t i;
     size_t pi;
@@ -1304,7 +1304,7 @@ void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
                         stringesc1('"', '"');
                         default:
                             {
-                                neon_prs_raiseerror(prs, "unknown string escape character '%c' (%d)", nextc, nextc);
+                                neon_astparser_raiseerror(prs, "unknown string escape character '%c' (%d)", nextc, nextc);
                             }
                             break;                    
                     }
@@ -1324,22 +1324,22 @@ void neon_prs_rulestring(NeonAstParser* prs, bool canassign)
     {
         os = neon_string_copy(prs->pvm, rawstr, rawlen);
     }
-    neon_prs_emitconstant(prs, neon_value_fromobject(os));
+    neon_astparser_emitconstant(prs, neon_value_fromobject(os));
 
 }
 
-int neon_prs_resolvelocal(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
+int neon_astparser_resolvelocal(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
 {
     int i;
     NeonAstLocal* local;
     for(i = compiler->localcount - 1; i >= 0; i--)
     {
         local = &compiler->locals[i];
-        if(neon_prs_identsequal(name, &local->name))
+        if(neon_astparser_identsequal(name, &local->name))
         {
             if(local->depth == -1)
             {
-                neon_prs_raiseerror(prs, "cannot read local variable in its own initializer");
+                neon_astparser_raiseerror(prs, "cannot read local variable in its own initializer");
             }
             return i;
         }
@@ -1347,7 +1347,7 @@ int neon_prs_resolvelocal(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAst
     return -1;
 }
 
-int neon_prs_addupval(NeonAstParser* prs, NeonAstCompiler* compiler, int32_t index, bool islocal)
+int neon_astparser_addupval(NeonAstParser* prs, NeonAstCompiler* compiler, int32_t index, bool islocal)
 {
     int i;
     int upvaluecount;
@@ -1363,7 +1363,7 @@ int neon_prs_addupval(NeonAstParser* prs, NeonAstCompiler* compiler, int32_t ind
     }
     if(upvaluecount == NEON_MAX_COMPUPVALS)
     {
-        neon_prs_raiseerror(prs, "too many closure variables in function");
+        neon_astparser_raiseerror(prs, "too many closure variables in function");
         return 0;
     }
     compiler->compupvals[upvaluecount].islocal = islocal;
@@ -1372,7 +1372,7 @@ int neon_prs_addupval(NeonAstParser* prs, NeonAstCompiler* compiler, int32_t ind
 }
 
 
-int neon_prs_resolveupval(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
+int neon_astparser_resolveupval(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAstToken* name)
 {
     int localidx;
     int upvalue;
@@ -1380,58 +1380,58 @@ int neon_prs_resolveupval(NeonAstParser* prs, NeonAstCompiler* compiler, NeonAst
     {
         return -1;
     }
-    localidx = neon_prs_resolvelocal(prs, compiler->enclosing, name);
+    localidx = neon_astparser_resolvelocal(prs, compiler->enclosing, name);
     if(localidx != -1)
     {
         compiler->enclosing->locals[localidx].iscaptured = true;
-        return neon_prs_addupval(prs, compiler, (int32_t)localidx, true);
+        return neon_astparser_addupval(prs, compiler, (int32_t)localidx, true);
     }
-    upvalue = neon_prs_resolveupval(prs, compiler->enclosing, name);
+    upvalue = neon_astparser_resolveupval(prs, compiler->enclosing, name);
     if(upvalue != -1)
     {
-        return neon_prs_addupval(prs, compiler, (int32_t)upvalue, false);
+        return neon_astparser_addupval(prs, compiler, (int32_t)upvalue, false);
     }
     return -1;
 }
 
-void neon_prs_parsenamedvar(NeonAstParser* prs, NeonAstToken name, bool canassign)
+void neon_astparser_parsenamedvar(NeonAstParser* prs, NeonAstToken name, bool canassign)
 {
     int32_t getop;
     int32_t setop;
     int arg;
     (void)canassign;
-    arg = neon_prs_resolvelocal(prs, prs->currcompiler, &name);
+    arg = neon_astparser_resolvelocal(prs, prs->currcompiler, &name);
     if(arg != -1)
     {
         getop = NEON_OP_LOCALGET;
         setop = NEON_OP_LOCALSET;
-        return neon_prs_doassign(prs, getop, setop, arg, canassign);
+        return neon_astparser_doassign(prs, getop, setop, arg, canassign);
     }
     else
     {
-        arg = neon_prs_resolveupval(prs, prs->currcompiler, &name);
+        arg = neon_astparser_resolveupval(prs, prs->currcompiler, &name);
         if(arg != -1)
         {
             getop = NEON_OP_UPVALGET;
             setop = NEON_OP_UPVALSET;
-            return neon_prs_doassign(prs, getop, setop, arg, canassign);
+            return neon_astparser_doassign(prs, getop, setop, arg, canassign);
         }
         else
         {
-            arg = neon_prs_makeidentconstant(prs, &name);
+            arg = neon_astparser_makeidentconstant(prs, &name);
             getop = NEON_OP_GLOBALGET;
             setop = NEON_OP_GLOBALSET;
-            return neon_prs_doassign(prs, getop, setop, arg, canassign);
+            return neon_astparser_doassign(prs, getop, setop, arg, canassign);
         }
     }
 }
 
-void neon_prs_rulevariable(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulevariable(NeonAstParser* prs, bool canassign)
 {
-    neon_prs_parsenamedvar(prs, prs->previous, canassign);
+    neon_astparser_parsenamedvar(prs, prs->previous, canassign);
 }
 
-NeonAstToken neon_prs_makesyntoken(NeonAstParser* prs, const char* text)
+NeonAstToken neon_astparser_makesyntoken(NeonAstParser* prs, const char* text)
 {
     NeonAstToken token;
     (void)prs;
@@ -1440,114 +1440,114 @@ NeonAstToken neon_prs_makesyntoken(NeonAstParser* prs, const char* text)
     return token;
 }
 
-void neon_prs_rulesuper(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulesuper(NeonAstParser* prs, bool canassign)
 {
     int32_t name;
     int32_t argc;
     (void)canassign;
     if(prs->currclass == NULL)
     {
-        neon_prs_raiseerror(prs, "cannot use 'super' outside of a class");
+        neon_astparser_raiseerror(prs, "cannot use 'super' outside of a class");
     }
     else if(!prs->currclass->hassuperclass)
     {
-        neon_prs_raiseerror(prs, "cannot use 'super' in a class with no superclass");
+        neon_astparser_raiseerror(prs, "cannot use 'super' in a class with no superclass");
     }
-    neon_prs_consume(prs, NEON_TOK_DOT, "expected '.' after 'super'");
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expected superclass method name");
-    name = neon_prs_makeidentconstant(prs, &prs->previous);
-    neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "this"), false);
+    neon_astparser_consume(prs, NEON_TOK_DOT, "expected '.' after 'super'");
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expected superclass method name");
+    name = neon_astparser_makeidentconstant(prs, &prs->previous);
+    neon_astparser_parsenamedvar(prs, neon_astparser_makesyntoken(prs, "this"), false);
     /* Superclasses super-get < Superclasses super-invoke */
     /*
-    neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
-    neon_prs_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
+    neon_astparser_parsenamedvar(prs, neon_astparser_makesyntoken(prs, "super"), false);
+    neon_astparser_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
     */
-    if(neon_prs_match(prs, NEON_TOK_PARENOPEN))
+    if(neon_astparser_match(prs, NEON_TOK_PARENOPEN))
     {
-        argc = neon_prs_parsearglist(prs);
-        neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
-        neon_prs_emit2byte(prs, NEON_OP_INSTSUPERINVOKE, name);
-        neon_prs_emit1byte(prs, argc);
+        argc = neon_astparser_parsearglist(prs);
+        neon_astparser_parsenamedvar(prs, neon_astparser_makesyntoken(prs, "super"), false);
+        neon_astparser_emit2byte(prs, NEON_OP_INSTSUPERINVOKE, name);
+        neon_astparser_emit1byte(prs, argc);
     }
     else
     {
-        neon_prs_parsenamedvar(prs, neon_prs_makesyntoken(prs, "super"), false);
-        neon_prs_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
+        neon_astparser_parsenamedvar(prs, neon_astparser_makesyntoken(prs, "super"), false);
+        neon_astparser_emit2byte(prs, NEON_OP_INSTGETSUPER, name);
     }
 }
 
-void neon_prs_rulethis(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulethis(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
     if(prs->currclass == NULL)
     {
-        neon_prs_raiseerror(prs, "can't use 'this' outside of a class.");
+        neon_astparser_raiseerror(prs, "can't use 'this' outside of a class.");
         return;
     }
-    neon_prs_rulevariable(prs, false);
+    neon_astparser_rulevariable(prs, false);
 }
 
-void neon_prs_ruleunary(NeonAstParser* prs, bool canassign)
+void neon_astparser_ruleunary(NeonAstParser* prs, bool canassign)
 {
     NeonAstTokType ot;
     (void)canassign;
     ot = prs->previous.type;
     // Compile the operand.
     /* Compiling Expressions unary < Compiling Expressions unary-operand */
-    //neon_prs_parseexpr(prs);
-    neon_prs_parseprec(prs, NEON_PREC_UNARY);
+    //neon_astparser_parseexpr(prs);
+    neon_astparser_parseprec(prs, NEON_PREC_UNARY);
     // Emit the operator instruction.
     switch(ot)
     {
         case NEON_TOK_EXCLAM:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMNOT);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMNOT);
             break;
         case NEON_TOK_MINUS:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMNEGATE);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMNEGATE);
             break;
         case NEON_TOK_TILDE:
-            neon_prs_emit1byte(prs, NEON_OP_PRIMBINNOT);
+            neon_astparser_emit1byte(prs, NEON_OP_PRIMBINNOT);
         default:
             return;// Unreachable.
     }
 }
 
-void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
+void neon_astparser_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
 {
-    if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+    if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGN))
     {
-        neon_prs_parseexpr(prs);
-        neon_prs_emit2byte(prs, setop, (int32_t)arg);
+        neon_astparser_parseexpr(prs);
+        neon_astparser_emit2byte(prs, setop, (int32_t)arg);
     }
-    else if(canassign && neon_prs_match(prs, NEON_TOK_INCREMENT))
+    else if(canassign && neon_astparser_match(prs, NEON_TOK_INCREMENT))
     {
         if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_INSTTHISPROPERTYGET)
         {
-            neon_prs_emit1byte(prs, NEON_OP_DUP);
+            neon_astparser_emit1byte(prs, NEON_OP_DUP);
         }
         if(arg != -1)
         {
-            neon_prs_emit2byte(prs, getop, arg);
+            neon_astparser_emit2byte(prs, getop, arg);
         }
         else
         {
-            neon_prs_emit2byte(prs, getop, 1);
+            neon_astparser_emit2byte(prs, getop, 1);
         }
-        neon_prs_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMADD);
-        neon_prs_emit2byte(prs, setop, arg);
+        neon_astparser_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMADD);
+        neon_astparser_emit2byte(prs, setop, arg);
     }
-    else if(canassign && neon_prs_match(prs, NEON_TOK_DECREMENT))
+    else if(canassign && neon_astparser_match(prs, NEON_TOK_DECREMENT))
     {
         if(arg != -1)
         {
-            neon_prs_emit2byte(prs, getop, arg);
+            neon_astparser_emit2byte(prs, getop, arg);
         }
         else
         {
-            neon_prs_emit2byte(prs, getop, 1);
+            neon_astparser_emit2byte(prs, getop, 1);
         }
-        neon_prs_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMSUBTRACT);
-        neon_prs_emit2byte(prs, setop, arg);
+        neon_astparser_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMSUBTRACT);
+        neon_astparser_emit2byte(prs, setop, arg);
     }
     else
     {
@@ -1555,99 +1555,99 @@ void neon_prs_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg
         {
             if(getop == NEON_OP_INDEXGET)
             {
-                neon_prs_emit2byte(prs, getop, (int32_t)canassign);
+                neon_astparser_emit2byte(prs, getop, (int32_t)canassign);
             }
             else
             {
-                neon_prs_emit2byte(prs, getop, arg);
+                neon_astparser_emit2byte(prs, getop, arg);
             }
         }
         else
         {
-            neon_prs_emit2byte(prs, getop, (int32_t)arg);
+            neon_astparser_emit2byte(prs, getop, (int32_t)arg);
         }
     }
 }
 
-void neon_prs_rulearray(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulearray(NeonAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
     count = 0;
-    if(!neon_prs_checkcurrent(prs, NEON_TOK_BRACKETCLOSE))
+    if(!neon_astparser_checkcurrent(prs, NEON_TOK_BRACKETCLOSE))
     {
         do
         {
-            neon_prs_parseexpr(prs);
+            neon_astparser_parseexpr(prs);
             count++;
-        } while(neon_prs_match(prs, NEON_TOK_COMMA));
+        } while(neon_astparser_match(prs, NEON_TOK_COMMA));
     }
-    neon_prs_consume(prs, NEON_TOK_BRACKETCLOSE, "expecteded ']' at end of list literal");
-    neon_prs_emit2byte(prs, NEON_OP_MAKEARRAY, count);
+    neon_astparser_consume(prs, NEON_TOK_BRACKETCLOSE, "expecteded ']' at end of list literal");
+    neon_astparser_emit2byte(prs, NEON_OP_MAKEARRAY, count);
 }
 
-void neon_prs_ruleindex(NeonAstParser* prs, NeonAstToken previous, bool canassign)
+void neon_astparser_ruleindex(NeonAstParser* prs, NeonAstToken previous, bool canassign)
 {
     bool willassign;
     (void)previous;
     (void)willassign;
     willassign = false;
-    neon_prs_parseexpr(prs);
-    neon_prs_consume(prs, NEON_TOK_BRACKETCLOSE, "expecteded ']' after indexing");
-    if(neon_prs_checkcurrent(prs, NEON_TOK_ASSIGN))
+    neon_astparser_parseexpr(prs);
+    neon_astparser_consume(prs, NEON_TOK_BRACKETCLOSE, "expecteded ']' after indexing");
+    if(neon_astparser_checkcurrent(prs, NEON_TOK_ASSIGN))
     {
         willassign = true;
     }
-    neon_prs_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, canassign);
+    neon_astparser_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, canassign);
 }
 
-void neon_prs_rulemap(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulemap(NeonAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
     count = 0;
-    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' at end of map literal");
-    neon_prs_emit2byte(prs, NEON_OP_MAKEMAP, count);
+    neon_astparser_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' at end of map literal");
+    neon_astparser_emit2byte(prs, NEON_OP_MAKEMAP, count);
 }
 
-void neon_prs_ruleglobalstmt(NeonAstParser* prs, bool canassign)
+void neon_astparser_ruleglobalstmt(NeonAstParser* prs, bool canassign)
 {
     int iv;
     (void)canassign;
     iv = -1;
-    if(neon_prs_match(prs, NEON_TOK_DOT))
+    if(neon_astparser_match(prs, NEON_TOK_DOT))
     {
-        neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect name after '.'");
-        iv = neon_prs_makeidentconstant(prs, &prs->previous);
-        neon_prs_emit2byte(prs, NEON_OP_GLOBALSTMT, iv);
+        neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect name after '.'");
+        iv = neon_astparser_makeidentconstant(prs, &prs->previous);
+        neon_astparser_emit2byte(prs, NEON_OP_GLOBALSTMT, iv);
     }
     else
     {
-        neon_prs_emit2byte(prs, NEON_OP_GLOBALSTMT, -1);
-        if(neon_prs_match(prs, NEON_TOK_BRACKETOPEN))
+        neon_astparser_emit2byte(prs, NEON_OP_GLOBALSTMT, -1);
+        if(neon_astparser_match(prs, NEON_TOK_BRACKETOPEN))
         {
-            neon_prs_ruleindex(prs, prs->previous, true);
-            //neon_prs_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, true);
+            neon_astparser_ruleindex(prs, prs->previous, true);
+            //neon_astparser_doassign(prs, NEON_OP_INDEXGET, NEON_OP_INDEXSET, -1, true);
         }
     }
-    neon_prs_skipsemicolon(prs);
+    neon_astparser_skipsemicolon(prs);
 }
 
-void neon_prs_ruletypeof(NeonAstParser* prs, bool canassign)
+void neon_astparser_ruletypeof(NeonAstParser* prs, bool canassign)
 {
     (void)canassign;
-    neon_prs_parseexpr(prs);
-    neon_prs_emit1byte(prs, NEON_OP_TYPEOF);
-    neon_prs_skipsemicolon(prs);
+    neon_astparser_parseexpr(prs);
+    neon_astparser_emit1byte(prs, NEON_OP_TYPEOF);
+    neon_astparser_skipsemicolon(prs);
 }
 
-void neon_prs_rulenew(NeonAstParser* prs, bool canassign)
+void neon_astparser_rulenew(NeonAstParser* prs, bool canassign)
 {
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "class name after 'new'");
-    neon_prs_rulevariable(prs, canassign);
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "class name after 'new'");
+    neon_astparser_rulevariable(prs, canassign);
 }
 
-NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParsePrefixFN prefix, NeonAstParseInfixFN infix, NeonAstPrecedence precedence)
+NeonAstRule* neon_astparser_setrule(NeonAstRule* rule, NeonAstParsePrefixFN prefix, NeonAstParseInfixFN infix, NeonAstPrecedence precedence)
 {
     rule->prefix = prefix;
     rule->infix = infix;
@@ -1655,140 +1655,140 @@ NeonAstRule* neon_prs_setrule(NeonAstRule* rule, NeonAstParsePrefixFN prefix, Ne
     return rule;
 }
 
-NeonAstRule* neon_prs_getrule(NeonAstTokType type)
+NeonAstRule* neon_astparser_getrule(NeonAstTokType type)
 {
     static NeonAstRule dest;
     switch(type)
     {
         case NEON_TOK_NEWLINE:
             {
-                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
             }
             break;
         case NEON_TOK_PARENOPEN:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulegrouping, neon_prs_rulecall, NEON_PREC_CALL );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulegrouping, neon_astparser_rulecall, NEON_PREC_CALL );
             }
             break;
         case NEON_TOK_PARENCLOSE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_BRACEOPEN:
             {
-                return neon_prs_setrule(&dest, neon_prs_rulemap, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest, neon_astparser_rulemap, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_BRACECLOSE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_BRACKETOPEN:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulearray, neon_prs_ruleindex, NEON_PREC_CALL );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulearray, neon_astparser_ruleindex, NEON_PREC_CALL );
             }
             break;
         case NEON_TOK_BRACKETCLOSE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_COMMA:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Classes and Instances table-dot */
         // [NEON_TOK_DOT]           = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_DOT:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_ruledot, NEON_PREC_CALL );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_ruledot, NEON_PREC_CALL );
             }
             break;
         case NEON_TOK_MINUS:
             {
-                return neon_prs_setrule(&dest,  neon_prs_ruleunary, neon_prs_rulebinary, NEON_PREC_TERM );
+                return neon_astparser_setrule(&dest,  neon_astparser_ruleunary, neon_astparser_rulebinary, NEON_PREC_TERM );
             }
             break;
         case NEON_TOK_PLUS:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_TERM );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_TERM );
             }
             break;
         case NEON_TOK_SEMICOLON:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_DIVIDE:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_MULTIPLY:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_MODULO:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_BINAND:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_BINOR:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_BINXOR:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_FACTOR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_FACTOR );
             }
             break;
         case NEON_TOK_SHIFTLEFT:
             {
-                return neon_prs_setrule(&dest, NULL, neon_prs_rulebinary, NEON_PREC_SHIFT);
+                return neon_astparser_setrule(&dest, NULL, neon_astparser_rulebinary, NEON_PREC_SHIFT);
             }
             break;
         case NEON_TOK_SHIFTRIGHT:
             {
-                return neon_prs_setrule(&dest, NULL, neon_prs_rulebinary, NEON_PREC_SHIFT);
+                return neon_astparser_setrule(&dest, NULL, neon_astparser_rulebinary, NEON_PREC_SHIFT);
             }
             break;
         case NEON_TOK_INCREMENT:
             {
-                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
             }
             break;
         case NEON_TOK_DECREMENT:
             {
-                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
             }
             break;
         /* Compiling Expressions rules < Types of Values table-not */
         // [NEON_TOK_EXCLAM]          = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_EXCLAM:
             {
-                return neon_prs_setrule(&dest,  neon_prs_ruleunary, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_ruleunary, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_TILDE:
             {
-                return neon_prs_setrule(&dest, neon_prs_ruleunary, NULL, NEON_PREC_UNARY);
+                return neon_astparser_setrule(&dest, neon_astparser_ruleunary, NULL, NEON_PREC_UNARY);
             }
             break;
         /* Compiling Expressions rules < Types of Values table-equal */
         // [NEON_TOK_COMPNOTEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_COMPNOTEQUAL:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_EQUALITY );
             }
             break;
         case NEON_TOK_ASSIGN:
@@ -1798,7 +1798,7 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         case NEON_TOK_ASSIGNMODULO:
         case NEON_TOK_ASSIGNDIV:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Types of Values table-comparisons */
@@ -1809,41 +1809,41 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         // [NEON_TOK_COMPLESSEQUAL]    = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_COMPEQUAL:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_EQUALITY );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_EQUALITY );
             }
             break;
         case NEON_TOK_COMPGREATERTHAN:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_COMPARISON );
             }
             break;
         case NEON_TOK_COMPGREATEREQUAL:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_COMPARISON );
             }
             break;
         case NEON_TOK_COMPLESSTHAN:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_COMPARISON );
             }
             break;
         case NEON_TOK_COMPLESSEQUAL:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_rulebinary, NEON_PREC_COMPARISON );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_rulebinary, NEON_PREC_COMPARISON );
             }
             break;
         /* Compiling Expressions rules < Global Variables table-identifier */
         // [NEON_TOK_IDENTIFIER]    = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_IDENTIFIER:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulevariable, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulevariable, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Strings table-string */
         // [NEON_TOK_STRING]        = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_STRING:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulestring, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulestring, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_NUMBER:
@@ -1851,7 +1851,7 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         case NEON_TOK_HEXNUMBER:
         case NEON_TOK_BINNUMBER:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulenumber, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulenumber, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Jumping Back and Forth table-and */
@@ -1859,54 +1859,54 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
 
         case NEON_TOK_KWNEW:
             {
-                return neon_prs_setrule(&dest, neon_prs_rulenew, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, neon_astparser_rulenew, NULL, NEON_PREC_NONE);
             }
             break;
         case NEON_TOK_KWBREAK:
             {
-                return neon_prs_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, NULL, NULL, NEON_PREC_NONE);
             }
             break;
         case NEON_TOK_KWCONTINUE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWAND:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_ruleand, NEON_PREC_AND );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_ruleand, NEON_PREC_AND );
             }
             break;
         case NEON_TOK_KWCLASS:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWELSE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Types of Values table-false */
         // [NEON_TOK_KWFALSE]         = {NULL,     NULL,   NEON_PREC_NONE},
         case NEON_TOK_KWFALSE:
             {
-                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_ruleliteral, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWFOR:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWFUNCTION:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWIF:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Types of Values table-nil
@@ -1914,7 +1914,7 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         */
         case NEON_TOK_KWNIL:
             {
-                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_ruleliteral, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Jumping Back and Forth table-or
@@ -1922,27 +1922,27 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         */
         case NEON_TOK_KWOR:
             {
-                return neon_prs_setrule(&dest,  NULL, neon_prs_ruleor, NEON_PREC_OR );
+                return neon_astparser_setrule(&dest,  NULL, neon_astparser_ruleor, NEON_PREC_OR );
             }
             break;
         case NEON_TOK_KWDEBUGPRINT:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWGLOBAL:
             {
-                return neon_prs_setrule(&dest, neon_prs_ruleglobalstmt, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest, neon_astparser_ruleglobalstmt, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWTYPEOF:
             {
-                return neon_prs_setrule(&dest, neon_prs_ruletypeof, NULL, NEON_PREC_NONE);
+                return neon_astparser_setrule(&dest, neon_astparser_ruletypeof, NULL, NEON_PREC_NONE);
             }
             break;
         case NEON_TOK_KWRETURN:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Superclasses table-super
@@ -1950,7 +1950,7 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         */
         case NEON_TOK_KWSUPER:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulesuper, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulesuper, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Methods and Initializers table-this
@@ -1958,7 +1958,7 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         */
         case NEON_TOK_KWTHIS:
             {
-                return neon_prs_setrule(&dest,  neon_prs_rulethis, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_rulethis, NULL, NEON_PREC_NONE );
             }
             break;
         /* Compiling Expressions rules < Types of Values table-true
@@ -1966,36 +1966,36 @@ NeonAstRule* neon_prs_getrule(NeonAstTokType type)
         */
         case NEON_TOK_KWTRUE:
             {
-                return neon_prs_setrule(&dest,  neon_prs_ruleliteral, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  neon_astparser_ruleliteral, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWVAR:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_KWWHILE:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_ERROR:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
         case NEON_TOK_EOF:
             {
-                return neon_prs_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
+                return neon_astparser_setrule(&dest,  NULL, NULL, NEON_PREC_NONE );
             }
             break;
     }
     return NULL;
 }
 
-void neon_prs_ignorespace(NeonAstParser* prs)
+void neon_astparser_ignorespace(NeonAstParser* prs)
 {
-    while(neon_prs_match(prs, NEON_TOK_NEWLINE))
+    while(neon_astparser_match(prs, NEON_TOK_NEWLINE))
     {
     }
 }
@@ -2003,28 +2003,28 @@ void neon_prs_ignorespace(NeonAstParser* prs)
 
 #if 1
 
-    void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
+    void neon_astparser_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
     {
         bool canassign;
         NeonAstRule* rule;
         NeonAstToken previous;
         NeonAstParseInfixFN infixrule;
         NeonAstParsePrefixFN prefixrule;
-        neon_prs_advance(prs);
-        prefixrule = neon_prs_getrule(prs->previous.type)->prefix;
+        neon_astparser_advance(prs);
+        prefixrule = neon_astparser_getrule(prs->previous.type)->prefix;
         if(prefixrule == NULL)
         {
-            neon_prs_raiseerror(prs, "expected expression");
+            neon_astparser_raiseerror(prs, "expected expression");
             return;
         }
         canassign = precedence <= NEON_PREC_ASSIGNMENT;
         prefixrule(prs, canassign);
         /*
-        while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
+        while(precedence <= neon_astparser_getrule(prs->current.type)->precedence)
         {
             previous = prs->previous;
-            neon_prs_advance(prs);
-            infixrule = neon_prs_getrule(prs->previous.type)->infix;
+            neon_astparser_advance(prs);
+            infixrule = neon_astparser_getrule(prs->previous.type)->infix;
             infixrule(prs, previous, canassign);
         }
         */
@@ -2032,7 +2032,7 @@ void neon_prs_ignorespace(NeonAstParser* prs)
 
         while(true)
         {
-            rule = neon_prs_getrule(prs->current.type);
+            rule = neon_astparser_getrule(prs->current.type);
             if(rule == NULL)
             {
                 break;
@@ -2040,8 +2040,8 @@ void neon_prs_ignorespace(NeonAstParser* prs)
             if(precedence <= rule->precedence)
             {
                 previous = prs->previous;
-                neon_prs_advance(prs);
-                infixrule = neon_prs_getrule(prs->previous.type)->infix;
+                neon_astparser_advance(prs);
+                infixrule = neon_astparser_getrule(prs->previous.type)->infix;
                 infixrule(prs, previous, canassign);
             }
             else
@@ -2051,107 +2051,107 @@ void neon_prs_ignorespace(NeonAstParser* prs)
         }
 
 
-        if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+        if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGN))
         {
-            neon_prs_raiseerror(prs, "invalid assignment target");
+            neon_astparser_raiseerror(prs, "invalid assignment target");
         }
     }
 
 #else
 
-    void neon_prs_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
+    void neon_astparser_parseprec(NeonAstParser* prs, NeonAstPrecedence precedence)
     {
         bool canassign;
         NeonAstToken previous;
         NeonAstParseInfixFN infn;
         NeonAstParsePrefixFN prefn;
-        prefn = neon_prs_getrule(prs->previous.type)->prefix;
+        prefn = neon_astparser_getrule(prs->previous.type)->prefix;
         if(prefn == NULL)
         {
-            neon_prs_raiseerror(prs, "expected expression");
+            neon_astparser_raiseerror(prs, "expected expression");
             return;
         }
         canassign = precedence <= NEON_PREC_ASSIGNMENT;
         prefn(prs, canassign);
-        while(precedence <= neon_prs_getrule(prs->current.type)->precedence)
+        while(precedence <= neon_astparser_getrule(prs->current.type)->precedence)
         {
             previous = prs->previous;
-            neon_prs_ignorespace(prs);
-            neon_prs_advance(prs);
-            infn = neon_prs_getrule(prs->previous.type)->infix;
+            neon_astparser_ignorespace(prs);
+            neon_astparser_advance(prs);
+            infn = neon_astparser_getrule(prs->previous.type)->infix;
             infn(prs, previous, canassign);
         }
-        if(canassign && neon_prs_match(prs, NEON_TOK_ASSIGN))
+        if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGN))
         {
-            neon_prs_raiseerror(prs, "invalid assignment target");
+            neon_astparser_raiseerror(prs, "invalid assignment target");
         }
     }
 
 #endif
 
-void neon_prs_parseexpr(NeonAstParser* prs)
+void neon_astparser_parseexpr(NeonAstParser* prs)
 {
     /* Compiling Expressions expression < Compiling Expressions expression-body
     // What goes here?
     */
-    neon_prs_parseprec(prs, NEON_PREC_ASSIGNMENT);
+    neon_astparser_parseprec(prs, NEON_PREC_ASSIGNMENT);
 }
 
-void neon_prs_parseblock(NeonAstParser* prs)
+void neon_astparser_parseblock(NeonAstParser* prs)
 {
-    while(!neon_prs_checkcurrent(prs, NEON_TOK_BRACECLOSE) && !neon_prs_checkcurrent(prs, NEON_TOK_EOF))
+    while(!neon_astparser_checkcurrent(prs, NEON_TOK_BRACECLOSE) && !neon_astparser_checkcurrent(prs, NEON_TOK_EOF))
     {
-        neon_prs_parsedecl(prs);
+        neon_astparser_parsedecl(prs);
     }
-    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' after block");
-    neon_prs_skipsemicolon(prs);
+    neon_astparser_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' after block");
+    neon_astparser_skipsemicolon(prs);
 }
 
-void neon_prs_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
+void neon_astparser_parsefunction(NeonAstParser* prs, NeonAstFuncType type)
 {
     int i;
     int32_t constant;
     NeonObjScriptFunction* fn;
     NeonAstCompiler compiler;
-    neon_prs_compilerinit(prs, &compiler, type);
-    neon_prs_scopebegin(prs);// [no-end-scope]
-    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after function name");
-    if(!neon_prs_checkcurrent(prs, NEON_TOK_PARENCLOSE))
+    neon_astparser_compilerinit(prs, &compiler, type);
+    neon_astparser_scopebegin(prs);// [no-end-scope]
+    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after function name");
+    if(!neon_astparser_checkcurrent(prs, NEON_TOK_PARENCLOSE))
     {
         do
         {
             prs->currcompiler->compiledfn->arity++;
             if(prs->currcompiler->compiledfn->arity > 255)
             {
-                neon_prs_raiseatcurrent(prs, "function has too many arguments declared");
+                neon_astparser_raiseatcurrent(prs, "function has too many arguments declared");
             }
-            constant = neon_prs_parsevarname(prs, "expected parameter name");
-            neon_prs_emitdefvar(prs, constant);
-        } while(neon_prs_match(prs, NEON_TOK_COMMA));
+            constant = neon_astparser_parsevarname(prs, "expected parameter name");
+            neon_astparser_emitdefvar(prs, constant);
+        } while(neon_astparser_match(prs, NEON_TOK_COMMA));
     }
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after parameters");
-    neon_prs_consume(prs, NEON_TOK_BRACEOPEN, "expected '{' before function body");
-    neon_prs_parseblock(prs);
-    fn = neon_prs_compilerfinish(prs, false);
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after parameters");
+    neon_astparser_consume(prs, NEON_TOK_BRACEOPEN, "expected '{' before function body");
+    neon_astparser_parseblock(prs);
+    fn = neon_astparser_compilerfinish(prs, false);
     /* Calls and Functions compile-function < Closures emit-closure */
-    // neon_prs_emit2byte(prs, NEON_OP_PUSHCONST, neon_prs_makeconstant(prs, neon_value_fromobject(fn)));
-    neon_prs_emit2byte(prs, NEON_OP_CLOSURE, neon_prs_makeconstant(prs, neon_value_fromobject(fn)));
+    // neon_astparser_emit2byte(prs, NEON_OP_PUSHCONST, neon_astparser_makeconstant(prs, neon_value_fromobject(fn)));
+    neon_astparser_emit2byte(prs, NEON_OP_CLOSURE, neon_astparser_makeconstant(prs, neon_value_fromobject(fn)));
     for(i = 0; i < fn->upvaluecount; i++)
     {
-        neon_prs_emit1byte(prs, compiler.compupvals[i].islocal ? 1 : 0);
-        neon_prs_emit1byte(prs, compiler.compupvals[i].index);
+        neon_astparser_emit1byte(prs, compiler.compupvals[i].islocal ? 1 : 0);
+        neon_astparser_emit1byte(prs, compiler.compupvals[i].index);
     }
 }
 
-void neon_prs_parsemethod(NeonAstParser* prs)
+void neon_astparser_parsemethod(NeonAstParser* prs)
 {
     size_t sn;
     size_t prevlen;
     int32_t constant;
     const char* sc;
     NeonAstFuncType type;
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect method name.");
-    constant = neon_prs_makeidentconstant(prs, &prs->previous);
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect method name.");
+    constant = neon_astparser_makeidentconstant(prs, &prs->previous);
 
     /* Methods and Initializers method-body < Methods and Initializers method-type */
     //type = NEON_TYPE_FUNCTION;
@@ -2163,242 +2163,242 @@ void neon_prs_parsemethod(NeonAstParser* prs)
     {
         type = NEON_TYPE_INITIALIZER;
     }
-    neon_prs_parsefunction(prs, type);
-    neon_prs_emit2byte(prs, NEON_OP_METHOD, constant);
+    neon_astparser_parsefunction(prs, type);
+    neon_astparser_emit2byte(prs, NEON_OP_METHOD, constant);
 }
 
-void neon_prs_parseclassdecl(NeonAstParser* prs)
+void neon_astparser_parseclassdecl(NeonAstParser* prs)
 {
     int32_t nameconstant;
     NeonAstToken classname;
     NeonAstClassCompiler classcompiler;
-    neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect class name.");
+    neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect class name.");
     classname = prs->previous;
-    nameconstant = neon_prs_makeidentconstant(prs, &prs->previous);
-    neon_prs_parsevarident(prs);
-    neon_prs_emit2byte(prs, NEON_OP_CLASS, nameconstant);
-    neon_prs_emitdefvar(prs, nameconstant);
+    nameconstant = neon_astparser_makeidentconstant(prs, &prs->previous);
+    neon_astparser_parsevarident(prs);
+    neon_astparser_emit2byte(prs, NEON_OP_CLASS, nameconstant);
+    neon_astparser_emitdefvar(prs, nameconstant);
     classcompiler.hassuperclass = false;
     classcompiler.enclosing = prs->currclass;
     prs->currclass = &classcompiler;
-    if(neon_prs_match(prs, NEON_TOK_COMPLESSTHAN))
+    if(neon_astparser_match(prs, NEON_TOK_COMPLESSTHAN))
     {
-        neon_prs_consume(prs, NEON_TOK_IDENTIFIER, "expect superclass name");
-        neon_prs_rulevariable(prs, false);
-        if(neon_prs_identsequal(&classname, &prs->previous))
+        neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expect superclass name");
+        neon_astparser_rulevariable(prs, false);
+        if(neon_astparser_identsequal(&classname, &prs->previous))
         {
-            neon_prs_raiseerror(prs, "a class cannot inherit from itself");
+            neon_astparser_raiseerror(prs, "a class cannot inherit from itself");
         }
-        neon_prs_scopebegin(prs);
-        neon_prs_addlocal(prs, neon_prs_makesyntoken(prs, "super"));
-        neon_prs_emitdefvar(prs, 0);
-        neon_prs_parsenamedvar(prs, classname, false);
-        neon_prs_emit1byte(prs, NEON_OP_INHERIT);
+        neon_astparser_scopebegin(prs);
+        neon_astparser_addlocal(prs, neon_astparser_makesyntoken(prs, "super"));
+        neon_astparser_emitdefvar(prs, 0);
+        neon_astparser_parsenamedvar(prs, classname, false);
+        neon_astparser_emit1byte(prs, NEON_OP_INHERIT);
         classcompiler.hassuperclass = true;
     }
-    neon_prs_parsenamedvar(prs, classname, false);
-    neon_prs_consume(prs, NEON_TOK_BRACEOPEN, "expected '{' before class body");
-    while(!neon_prs_checkcurrent(prs, NEON_TOK_BRACECLOSE) && !neon_prs_checkcurrent(prs, NEON_TOK_EOF))
+    neon_astparser_parsenamedvar(prs, classname, false);
+    neon_astparser_consume(prs, NEON_TOK_BRACEOPEN, "expected '{' before class body");
+    while(!neon_astparser_checkcurrent(prs, NEON_TOK_BRACECLOSE) && !neon_astparser_checkcurrent(prs, NEON_TOK_EOF))
     {
-        neon_prs_parsemethod(prs);
+        neon_astparser_parsemethod(prs);
     }
-    neon_prs_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' after class body");
-    neon_prs_emit1byte(prs, NEON_OP_POP);
+    neon_astparser_consume(prs, NEON_TOK_BRACECLOSE, "expected '}' after class body");
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
     if(classcompiler.hassuperclass)
     {
-        neon_prs_scopeend(prs);
+        neon_astparser_scopeend(prs);
     }
     prs->currclass = prs->currclass->enclosing;
 }
 
-void neon_prs_parsefuncdecl(NeonAstParser* prs)
+void neon_astparser_parsefuncdecl(NeonAstParser* prs)
 {
     int32_t global;
-    global = neon_prs_parsevarname(prs, "expected function name");
-    neon_prs_markinit(prs);
-    neon_prs_parsefunction(prs, NEON_TYPE_FUNCTION);
-    neon_prs_emitdefvar(prs, global);
+    global = neon_astparser_parsevarname(prs, "expected function name");
+    neon_astparser_markinit(prs);
+    neon_astparser_parsefunction(prs, NEON_TYPE_FUNCTION);
+    neon_astparser_emitdefvar(prs, global);
 }
 
-void neon_prs_parsevardecl(NeonAstParser* prs)
+void neon_astparser_parsevardecl(NeonAstParser* prs)
 {
     int32_t global;
-    global = neon_prs_parsevarname(prs, "expected variable name");
-    if(neon_prs_match(prs, NEON_TOK_ASSIGN))
+    global = neon_astparser_parsevarname(prs, "expected variable name");
+    if(neon_astparser_match(prs, NEON_TOK_ASSIGN))
     {
-        neon_prs_parseexpr(prs);
+        neon_astparser_parseexpr(prs);
     }
     else
     {
-        neon_prs_emit1byte(prs, NEON_OP_PUSHNIL);
+        neon_astparser_emit1byte(prs, NEON_OP_PUSHNIL);
     }
-    neon_prs_skipsemicolon(prs);
-    neon_prs_emitdefvar(prs, global);
+    neon_astparser_skipsemicolon(prs);
+    neon_astparser_emitdefvar(prs, global);
 }
 
-void neon_prs_parseexprstmt(NeonAstParser* prs)
+void neon_astparser_parseexprstmt(NeonAstParser* prs)
 {
-    neon_prs_parseexpr(prs);
-    neon_prs_skipsemicolon(prs);
+    neon_astparser_parseexpr(prs);
+    neon_astparser_skipsemicolon(prs);
     if(!prs->iseval)
     {
-        neon_prs_emit1byte(prs, NEON_OP_POP);
+        neon_astparser_emit1byte(prs, NEON_OP_POP);
     }
 }
 
-void neon_prs_parseforstmt(NeonAstParser* prs)
+void neon_astparser_parseforstmt(NeonAstParser* prs)
 {
     int loopstart;
     int exitjump;
     int bodyjump;
     int incrementstart;
     NeonAstLoop loop;
-    neon_prs_scopebegin(prs);
-    neon_prs_startloop(prs, &loop);
-    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'for'");
-    if(neon_prs_match(prs, NEON_TOK_SEMICOLON))
+    neon_astparser_scopebegin(prs);
+    neon_astparser_startloop(prs, &loop);
+    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'for'");
+    if(neon_astparser_match(prs, NEON_TOK_SEMICOLON))
     {
         // No initializer.
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWVAR))
+    else if(neon_astparser_match(prs, NEON_TOK_KWVAR))
     {
-        neon_prs_parsevardecl(prs);
+        neon_astparser_parsevardecl(prs);
     }
     else
     {
-        neon_prs_parseexprstmt(prs);
+        neon_astparser_parseexprstmt(prs);
     }
-    loopstart = neon_prs_currentchunk(prs)->count;
+    loopstart = neon_astparser_currentchunk(prs)->count;
     exitjump = -1;
-    if(!neon_prs_match(prs, NEON_TOK_SEMICOLON))
+    if(!neon_astparser_match(prs, NEON_TOK_SEMICOLON))
     {
-        neon_prs_parseexpr(prs);
-        neon_prs_consume(prs, NEON_TOK_SEMICOLON, "expected ';' after 'for' loop condition");
+        neon_astparser_parseexpr(prs);
+        neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "expected ';' after 'for' loop condition");
         // Jump out of the loop if the condition is false.
-        exitjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
-        neon_prs_emit1byte(prs, NEON_OP_POP);// Condition
+        exitjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+        neon_astparser_emit1byte(prs, NEON_OP_POP);// Condition
     }
-    if(!neon_prs_match(prs, NEON_TOK_PARENCLOSE))
+    if(!neon_astparser_match(prs, NEON_TOK_PARENCLOSE))
     {
-        bodyjump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
-        incrementstart = neon_prs_currentchunk(prs)->count;
+        bodyjump = neon_astparser_emitjump(prs, NEON_OP_JUMPNOW);
+        incrementstart = neon_astparser_currentchunk(prs)->count;
         // when we 'continue' in for loop, we want to jump here
         prs->currcompiler->loop->start = incrementstart;
-        neon_prs_parseexpr(prs);
-        neon_prs_emit1byte(prs, NEON_OP_POP);
-        neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after 'for' clauses");
-        neon_prs_emitloop(prs, loopstart);
+        neon_astparser_parseexpr(prs);
+        neon_astparser_emit1byte(prs, NEON_OP_POP);
+        neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after 'for' clauses");
+        neon_astparser_emitloop(prs, loopstart);
         loopstart = incrementstart;
-        neon_prs_emitpatchjump(prs, bodyjump);
+        neon_astparser_emitpatchjump(prs, bodyjump);
     }
-    prs->currcompiler->loop->body = neon_prs_currentchunk(prs)->count;
-    neon_prs_parsestmt(prs);
-    neon_prs_emitloop(prs, loopstart);
+    prs->currcompiler->loop->body = neon_astparser_currentchunk(prs)->count;
+    neon_astparser_parsestmt(prs);
+    neon_astparser_emitloop(prs, loopstart);
     if(exitjump != -1)
     {
-        neon_prs_emitpatchjump(prs, exitjump);
-        neon_prs_emit1byte(prs, NEON_OP_POP);
+        neon_astparser_emitpatchjump(prs, exitjump);
+        neon_astparser_emit1byte(prs, NEON_OP_POP);
     }
-    neon_prs_endloop(prs);
-    neon_prs_scopeend(prs);
+    neon_astparser_endloop(prs);
+    neon_astparser_scopeend(prs);
 }
 
-void neon_prs_parsewhilestmt(NeonAstParser* prs)
+void neon_astparser_parsewhilestmt(NeonAstParser* prs)
 {
     int loopstart;
     int exitjump;
     NeonAstLoop loop;
-    neon_prs_startloop(prs, &loop);
-    loopstart = neon_prs_currentchunk(prs)->count;
-    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'while'");
-    neon_prs_parseexpr(prs);
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after condition");
-    exitjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    prs->currcompiler->loop->body = neon_prs_currentchunk(prs)->count;
-    neon_prs_parsestmt(prs);
-    neon_prs_emitloop(prs, loopstart);
-    neon_prs_emitpatchjump(prs, exitjump);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    neon_prs_endloop(prs);
+    neon_astparser_startloop(prs, &loop);
+    loopstart = neon_astparser_currentchunk(prs)->count;
+    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'while'");
+    neon_astparser_parseexpr(prs);
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after condition");
+    exitjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    prs->currcompiler->loop->body = neon_astparser_currentchunk(prs)->count;
+    neon_astparser_parsestmt(prs);
+    neon_astparser_emitloop(prs, loopstart);
+    neon_astparser_emitpatchjump(prs, exitjump);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    neon_astparser_endloop(prs);
 }
 
-void neon_prs_parsebreakstmt(NeonAstParser* prs)
+void neon_astparser_parsebreakstmt(NeonAstParser* prs)
 {
     if(prs->currcompiler->loop == NULL)
     {
-        neon_prs_raiseerror(prs, "cannot use 'break' outside of a loop");
+        neon_astparser_raiseerror(prs, "cannot use 'break' outside of a loop");
         return;
     }
-    neon_prs_skipsemicolon(prs);
-    neon_prs_discardlocals(prs, prs->currcompiler);
-    neon_prs_emitjump(prs, NEON_OP_PSEUDOBREAK);
+    neon_astparser_skipsemicolon(prs);
+    neon_astparser_discardlocals(prs, prs->currcompiler);
+    neon_astparser_emitjump(prs, NEON_OP_PSEUDOBREAK);
 }
 
-void neon_prs_parsecontinuestmt(NeonAstParser* prs)
+void neon_astparser_parsecontinuestmt(NeonAstParser* prs)
 {
     if(prs->currcompiler->loop == NULL)
     {
-        neon_prs_raiseerror(prs, "cannot use 'continue' outside of a loop");
+        neon_astparser_raiseerror(prs, "cannot use 'continue' outside of a loop");
         return;
     }
-    neon_prs_skipsemicolon(prs);
-    neon_prs_discardlocals(prs, prs->currcompiler);
-    neon_prs_emitloop(prs, prs->currcompiler->loop->start);
+    neon_astparser_skipsemicolon(prs);
+    neon_astparser_discardlocals(prs, prs->currcompiler);
+    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
 }
 
-void neon_prs_parseifstmt(NeonAstParser* prs)
+void neon_astparser_parseifstmt(NeonAstParser* prs)
 {
     int thenjump;
     int elsejump;
-    neon_prs_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'if'");
-    neon_prs_parseexpr(prs);
-    neon_prs_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after condition");// [paren]
-    thenjump = neon_prs_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    neon_prs_parsestmt(prs);
-    elsejump = neon_prs_emitjump(prs, NEON_OP_JUMPNOW);
-    neon_prs_emitpatchjump(prs, thenjump);
-    neon_prs_emit1byte(prs, NEON_OP_POP);
-    if(neon_prs_match(prs, NEON_TOK_KWELSE))
+    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'if'");
+    neon_astparser_parseexpr(prs);
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after condition");// [paren]
+    thenjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    neon_astparser_parsestmt(prs);
+    elsejump = neon_astparser_emitjump(prs, NEON_OP_JUMPNOW);
+    neon_astparser_emitpatchjump(prs, thenjump);
+    neon_astparser_emit1byte(prs, NEON_OP_POP);
+    if(neon_astparser_match(prs, NEON_TOK_KWELSE))
     {
-        neon_prs_parsestmt(prs);
+        neon_astparser_parsestmt(prs);
     }
-    neon_prs_emitpatchjump(prs, elsejump);
+    neon_astparser_emitpatchjump(prs, elsejump);
 }
 
-void neon_prs_parsedebugprintstmt(NeonAstParser* prs)
+void neon_astparser_parsedebugprintstmt(NeonAstParser* prs)
 {
-    neon_prs_parseexpr(prs);
-    //neon_prs_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after value.");
-    neon_prs_skipsemicolon(prs);
-    neon_prs_emit1byte(prs, NEON_OP_DEBUGPRINT);
+    neon_astparser_parseexpr(prs);
+    //neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after value.");
+    neon_astparser_skipsemicolon(prs);
+    neon_astparser_emit1byte(prs, NEON_OP_DEBUGPRINT);
 }
 
-void neon_prs_parsereturnstmt(NeonAstParser* prs)
+void neon_astparser_parsereturnstmt(NeonAstParser* prs)
 {
     if(prs->currcompiler->type == NEON_TYPE_SCRIPT)
     {
-        neon_prs_raiseerror(prs, "cannot return from top-level code");
+        neon_astparser_raiseerror(prs, "cannot return from top-level code");
     }
-    if(neon_prs_match(prs, NEON_TOK_SEMICOLON) || neon_prs_match(prs, NEON_TOK_NEWLINE))
+    if(neon_astparser_match(prs, NEON_TOK_SEMICOLON) || neon_astparser_match(prs, NEON_TOK_NEWLINE))
     {
-        neon_prs_emitreturn(prs, false);
+        neon_astparser_emitreturn(prs, false);
     }
     else
     {
         if(prs->currcompiler->type == NEON_TYPE_INITIALIZER)
         {
-            neon_prs_raiseerror(prs, "cannot return a value from an initializer");
+            neon_astparser_raiseerror(prs, "cannot return a value from an initializer");
         }
-        neon_prs_parseexpr(prs);
-        //neon_prs_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after return value.");
-        neon_prs_skipsemicolon(prs);
-        neon_prs_emit1byte(prs, NEON_OP_RETURN);
+        neon_astparser_parseexpr(prs);
+        //neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "expect ';' after return value.");
+        neon_astparser_skipsemicolon(prs);
+        neon_astparser_emit1byte(prs, NEON_OP_RETURN);
     }
 }
 
-void neon_prs_synchronize(NeonAstParser* prs)
+void neon_astparser_synchronize(NeonAstParser* prs)
 {
     prs->panicmode = false;
     while(prs->current.type != NEON_TOK_EOF)
@@ -2425,79 +2425,79 @@ void neon_prs_synchronize(NeonAstParser* prs)
                 // Do nothing.
                 break;
         }
-        neon_prs_advance(prs);
+        neon_astparser_advance(prs);
     }
 }
 
-void neon_prs_parsedecl(NeonAstParser* prs)
+void neon_astparser_parsedecl(NeonAstParser* prs)
 {
-    if(neon_prs_match(prs, NEON_TOK_KWCLASS))
+    if(neon_astparser_match(prs, NEON_TOK_KWCLASS))
     {
-        neon_prs_parseclassdecl(prs);
+        neon_astparser_parseclassdecl(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWFUNCTION))
+    else if(neon_astparser_match(prs, NEON_TOK_KWFUNCTION))
     {
-        neon_prs_parsefuncdecl(prs);
+        neon_astparser_parsefuncdecl(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWVAR))
+    else if(neon_astparser_match(prs, NEON_TOK_KWVAR))
     {
-        neon_prs_parsevardecl(prs);
+        neon_astparser_parsevardecl(prs);
     }
     else
     {
-        neon_prs_parsestmt(prs);
+        neon_astparser_parsestmt(prs);
     }
     /* Global Variables declaration < Global Variables match-var */
-    // neon_prs_parsestmt(prs);
+    // neon_astparser_parsestmt(prs);
     if(prs->panicmode)
     {
-        neon_prs_synchronize(prs);
+        neon_astparser_synchronize(prs);
     }
 }
 
-void neon_prs_parsestmt(NeonAstParser* prs)
+void neon_astparser_parsestmt(NeonAstParser* prs)
 {
-    if(neon_prs_match(prs, NEON_TOK_KWGLOBAL))
+    if(neon_astparser_match(prs, NEON_TOK_KWGLOBAL))
     {
-        neon_prs_ruleglobalstmt(prs, false);
+        neon_astparser_ruleglobalstmt(prs, false);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWDEBUGPRINT))
+    else if(neon_astparser_match(prs, NEON_TOK_KWDEBUGPRINT))
     {
-        neon_prs_parsedebugprintstmt(prs);
+        neon_astparser_parsedebugprintstmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWBREAK))
+    else if(neon_astparser_match(prs, NEON_TOK_KWBREAK))
     {
-        neon_prs_parsebreakstmt(prs);
+        neon_astparser_parsebreakstmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWCONTINUE))
+    else if(neon_astparser_match(prs, NEON_TOK_KWCONTINUE))
     {
-        neon_prs_parsecontinuestmt(prs);
+        neon_astparser_parsecontinuestmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWFOR))
+    else if(neon_astparser_match(prs, NEON_TOK_KWFOR))
     {
-        neon_prs_parseforstmt(prs);
+        neon_astparser_parseforstmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWIF))
+    else if(neon_astparser_match(prs, NEON_TOK_KWIF))
     {
-        neon_prs_parseifstmt(prs);
+        neon_astparser_parseifstmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWRETURN))
+    else if(neon_astparser_match(prs, NEON_TOK_KWRETURN))
     {
-        neon_prs_parsereturnstmt(prs);
+        neon_astparser_parsereturnstmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_KWWHILE))
+    else if(neon_astparser_match(prs, NEON_TOK_KWWHILE))
     {
-        neon_prs_parsewhilestmt(prs);
+        neon_astparser_parsewhilestmt(prs);
     }
-    else if(neon_prs_match(prs, NEON_TOK_BRACEOPEN))
+    else if(neon_astparser_match(prs, NEON_TOK_BRACEOPEN))
     {
-        neon_prs_scopebegin(prs);
-        neon_prs_parseblock(prs);
-        neon_prs_scopeend(prs);
+        neon_astparser_scopebegin(prs);
+        neon_astparser_parseblock(prs);
+        neon_astparser_scopeend(prs);
     }
     else
     {
-        neon_prs_parseexprstmt(prs);
+        neon_astparser_parseexprstmt(prs);
     }
 }
 
