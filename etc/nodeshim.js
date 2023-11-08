@@ -11,6 +11,11 @@ String.prototype.ord = function()
     return this.charCodeAt(0);
 }
 
+String.prototype.toNumber = function()
+{
+    return parseInt(this)
+}
+
 String.chr = function(n) {
     return String.fromCharCode(n);
 }
@@ -45,15 +50,29 @@ Object.append = function(a, b) {
     a.push(b)
 }
 
+Object.prototype.dump = function()
+{
+    return JSON.stringify(this)
+}
+
 Map.keys = Object.keys;
 
-function print(...args) {
+function print(...args)
+{
     //process.stdout.write(...args);
     for (var i = 0; i < args.length; i++) {
         var arg = args[i];
         var sarg = "undefined";
-        if (arg != undefined) {
-            sarg = arg.toString();
+        if (arg != undefined)
+        {
+            if(typeof(arg) != "string")
+            {
+                sarg = JSON.stringify(arg);
+            }
+            else
+            {
+                sarg = arg.toString();
+            }
         }
         process.stdout.write(sarg);
     }

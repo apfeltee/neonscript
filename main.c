@@ -576,6 +576,7 @@ struct NeonConfig
 {
     /* if true, will print instruction and stack during execution */
     bool shouldprintruntime;
+    bool strictmode;
 };
 
 struct NeonCallFrame
@@ -1625,73 +1626,53 @@ void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...)
 
 bool neon_writer_vvalfmt(NeonWriter* wr, const char* format, va_list arglist)
 {
-    char ch;
-    char nch;
-    size_t i;
-    size_t fmtlen;
-    size_t length;
+    size_t cslen;
     bool wasallowed;
     const char* cstr;
     NeonValue val;
     NeonState* state;
     state = wr->pvm;
-    fmtlen = strlen(format);
     wasallowed = state->gcstate.allowed;
     state->gcstate.allowed = false;
-    for(i=0; i<fmtlen; i++)
+    while(*format)
     {
-        ch = format[i];
-        if(ch == '%')
+        if(*format == '%')
         {
-            nch = format[i + 1];
-            if(nch == '%')
+            format++;
+            if(*format == '%')
             {
-                neon_writer_writechar(wr, ch);
-                neon_writer_writechar(wr, nch);
+                neon_writer_writechar(wr, '%');
             }
-            else
+            else if(*format == 'v' || *format == 'q')
             {
-                switch(nch)
+                val = va_arg(arglist, NeonValue);
+                neon_writer_printvalue(wr, val, *format == 'q');
+            }
+            else if(*format == 's')
+            {
+                cstr = va_arg(arglist, char*);
+                if(cstr != NULL)
                 {
-                    case 's':
-                        {
-                            cstr = va_arg(arglist, const char*);
-                            if(cstr != NULL)
-                            {
-                                length = strlen(cstr);
-                                neon_writer_writestringl(wr, cstr, length);
-                            }
-                            else
-                            {
-                                goto defaultendingcopying;
-                            }
-                        }
-                        break;
-                    case 'v':
-                        {
-                            val = va_arg(arglist, NeonValue);
-                            neon_writer_printvalue(wr, val, false);
-                        }
-                        break;
-                    case 'd':
-                        {
-                            double d = va_arg(arglist, double);
-                            neon_writer_writefmt(wr, "%g", d);
-                        }
-                        break;
-                    default:
-                        {
-                            defaultendingcopying:
-                            neon_writer_writechar(wr, ch);
-                        }
-                        break;
+                    cslen = strlen(cstr);
+                    neon_writer_writestringl(wr, cstr, cslen);
                 }
+                else
+                {
+                    neon_writer_writefmt(wr, "(nullstr)");
+                }
+            }
+            else if(*format == 'd' || *format == 'i')// Case: '%d' or '%i' prints an integer
+            {
+                int iw;
+                iw = va_arg(arglist, int);
+                neon_writer_writefmt(wr, "%d", iw);
             }
         }
         else
         {
-            neon_writer_writechar(wr, ch);
+            neon_writer_writechar(wr, *format);
         }
+        format++;
     }
     state->gcstate.allowed = wasallowed;
     return true;
@@ -1981,28 +1962,39 @@ const char* neon_value_typename(NeonValue value, bool detailed)
     return "?unknownvalue?";
 }
 
-bool neon_value_stringequal(NeonObjString* aos, NeonObjString* bos)
+bool neon_value_stringequal(NeonState* state, NeonObjString* aos, NeonObjString* bos)
 {
-    if(aos->sbuf->length == bos->sbuf->length)
+    bool r;
+    size_t alen;
+    size_t blen;
+    const char* astr;
+    const char* bstr;
+    alen = aos->sbuf->length;
+    blen = bos->sbuf->length;
+    astr = aos->sbuf->data;
+    bstr = bos->sbuf->data;
+    r = false;
+    if(alen == blen)
     {
-        if(memcmp(aos->sbuf->data, bos->sbuf->data, aos->sbuf->length) == 0)
+        if(memcmp(astr, bstr, alen) == 0)
         {
-            return true;
+            r = true;
         }
     }
-    return false;
+    //neon_writer_valfmt(state->stderrwriter, "aos(%d)=%q bos(%d)=%q === %d\n", alen, neon_value_fromobject(aos), blen, neon_value_fromobject(bos), r);
+    return r;
 }
 
-bool neon_value_objectequal(NeonValue a, NeonValue b)
+bool neon_value_objectequal(NeonState* state, NeonValue a, NeonValue b)
 {
     if(neon_value_isstring(a) && neon_value_isstring(b))
     {
-        return neon_value_stringequal(neon_value_asstring(a), neon_value_asstring(b));
+        return neon_value_stringequal(state, neon_value_asstring(a), neon_value_asstring(b));
     }
     return neon_value_asobject(a) == neon_value_asobject(b);
 }
 
-bool neon_value_equal(NeonValue a, NeonValue b)
+bool neon_value_equal(NeonState* state, NeonValue a, NeonValue b)
 {
     if(a.type != b.type)
     {
@@ -2028,7 +2020,7 @@ bool neon_value_equal(NeonValue a, NeonValue b)
             /* Strings strings-equal < Hash Tables equal */
         case NEON_VAL_OBJ:
             {
-                return neon_value_objectequal(a, b);
+                return neon_value_objectequal(state, a, b);
             }
             break;
         default:
@@ -3657,6 +3649,7 @@ NeonState* neon_state_make()
     }
     memset(state, 0, sizeof(NeonState));
     state->conf.shouldprintruntime = false;
+    state->conf.strictmode = false;
     state->gcstate.allowed = true;
     state->gcstate.linkedobjects = NULL;
     state->gcstate.bytesallocd = 0;
@@ -3905,14 +3898,12 @@ static NeonValue objfn_string_func_tonumber(NeonState* state, NeonValue selfval,
 static NeonValue objfn_string_func_indexof(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     int i;
-    int pos;
     int findme;
     NeonObjString* findstr;
     NeonObjString* selfstr;
     (void)state;
     (void)argc;
     (void)argv;
-    pos = -1;
     selfstr = neon_value_asstring(selfval);
     findstr = neon_value_asstring(argv[0]);
     findme = findstr->sbuf->data[0];
@@ -3920,42 +3911,50 @@ static NeonValue objfn_string_func_indexof(NeonState* state, NeonValue selfval, 
     {
         if(selfstr->sbuf->data[i] == findme)
         {
-            pos = i;
-            break;
+            return neon_value_makenumber(i);
         }
     }
-    return neon_value_makenumber(pos);
+    return neon_value_makenumber(-1);
 }
-
 
 static NeonValue objfn_string_func_substr(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
-    int i;
-    int posend;
-    int posbegin;
-    char ch;
+    size_t i;
+    size_t len;
+    size_t iend;
+    size_t ibegin;
     NeonObjString* os;
     NeonObjString* selfstr;
-    (void)state;
-    (void)argc;
-    (void)argv;
+    ibegin = 0;
     selfstr = neon_value_asstring(selfval);
-    posbegin = 0;
-    posend = selfstr->sbuf->length;
-    posbegin = neon_value_asnumber(argv[0]);
+    len = selfstr->sbuf->length;
+    iend = len;
+    if(argc == 0)
+    {
+        neon_state_raiseerror(state, "substr() expects at least 1 argument");
+        return neon_value_makenil();
+    }
+    if(!neon_value_isnumber(argv[0]))
+    {
+        neon_state_raiseerror(state, "first argument expected to be a number");
+        return neon_value_makenil();
+    }
+    ibegin = neon_value_asnumber(argv[0]);
     if(argc > 1)
     {
-        posend = neon_value_asnumber(argv[1]);
+        if(!neon_value_isnumber(argv[1]))
+        {
+            neon_state_raiseerror(state, "second argument expected to be a number");
+        }
+        iend = neon_value_asnumber(argv[1]);
     }
     os = neon_string_copy(state, "", 0);
-    for(i=posbegin; i<posend; i++)
+    for(i=ibegin; i<((len - iend) + 1); i++)
     {
-        ch = selfstr->sbuf->data[i];
-        neon_string_append(os, &ch, 1);
+        dyn_strbuf_appendchar(os->sbuf, selfstr->sbuf->data[i]);
     }
     return neon_value_fromobject(os);
 }
-
 
 static NeonValue objfn_string_func_chars(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
@@ -4840,6 +4839,12 @@ int main(int argc, char** argv)
             else if(oc == 'd')
             {
                 state->conf.shouldprintruntime = true;
+                nargc--;
+                nargv++;
+            }
+            else if(oc == 's')
+            {
+                state->conf.strictmode = true;
                 nargc--;
                 nargv++;
             }

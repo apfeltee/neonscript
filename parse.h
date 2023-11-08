@@ -716,6 +716,7 @@ int neon_astparser_realgetcodeargscount(const int32_t* code, int ip)
         case NEON_OP_CLASS:
         case NEON_OP_METHOD:
         case NEON_OP_INDEXGET:
+        case NEON_OP_TYPEOF:
             return 1;
         case NEON_OP_MAKEARRAY:
         case NEON_OP_MAKEMAP:

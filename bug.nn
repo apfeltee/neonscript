@@ -16,3 +16,10 @@ class Blah
 
 b = Blah()
 b.shit()
+
+a = []
+a[5] = "dicks"
+
+println(a)
+
+

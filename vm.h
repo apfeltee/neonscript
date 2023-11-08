@@ -1318,9 +1318,12 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             peeked = neon_vmbits_stackpeek(state, 0);
             if(neon_hashtable_set(state->globals, name, peeked))
             {
-                //neon_hashtable_delete(state, state->globals, name);// [delete]
-                //neon_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
-                //return NEON_STATUS_RUNTIMEERROR;
+                if(state->conf.strictmode)
+                {
+                    neon_hashtable_delete(state, state->globals, name);// [delete]
+                    neon_state_raiseerror(state, "strict mode: undefined variable '%s'.", name->sbuf->data);
+                    return NEON_STATUS_RUNTIMEERROR;
+                }
             }
         }
         vm_breakouter();
@@ -1443,7 +1446,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             NeonValue b;
             b = neon_vmbits_stackpop(state);
             a = neon_vmbits_stackpop(state);
-            neon_vmbits_stackpush(state, neon_value_makebool(neon_value_equal(a, b)));
+            neon_vmbits_stackpush(state, neon_value_makebool(neon_value_equal(state, a, b)));
         }
         vm_breakouter();
     op_case(NEON_OP_PRIMGREATER)

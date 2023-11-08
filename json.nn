@@ -1,4 +1,8 @@
 
+function error(msg)
+{
+    println("ERROR: ", msg)
+}
 
 class JSON
 {
@@ -39,51 +43,9 @@ class JSON
         }
     }
 
-    parseValue()
-    {
-        this.skipWhiteSpace();
-        if(this.m_index == this.m_source.size())
-        {
-            return null;
-        }
-        var c = this.m_source[this.m_index];
-        if (c == "{")
-        {
-            return this.parseObject();
-        }
-        else if (c == "[")
-        {
-            return this.parseArray();
-        }
-        else if (c == "'")
-        {
-            return this.parseString("'");
-        }
-        else if (c == "\"")
-        {
-            return this.parseString("\"");
-        }
-        else if (this.nfirstchars.indexOf(c) != -1)
-        {
-            return this.parseNumber();
-        }
-        else if (c == "t")
-        {
-            return this.parseLiteral("true", true);
-        }
-        else if (c == "f")
-        {
-            return this.parseLiteral("false", false);
-        }
-        else if (c == "n")
-        {
-            return this.parseLiteral("null", null);
-        }
-        println("Invalid json (c=<"+c+">, index="+this.m_index+", max=${state['m_source'].size()})");
-    }
-
     parseLiteral(literal, value)
     {
+        println("in parseLiteral")
         if(literal.size() > (this.m_source.size() - this.m_index))
         {
             error("Expecting ${literal}");
@@ -100,6 +62,7 @@ class JSON
 
     parseNumber()
     {
+        println("in parseNumber")
         var startIndex = this.m_index;
         var c = 0;
         while(this.nchars.indexOf(this.m_source[this.m_index]) != -1)
@@ -113,6 +76,7 @@ class JSON
 
     parseString(quote)
     {
+        println("in parseString")
         var startIndex = this.m_index;
         this.m_index++;
         var c = 0;
@@ -157,6 +121,7 @@ class JSON
 
     parseObject(state)
     {
+        println("in parseObject: m_index=", this.m_index)
         this.m_index++;
         this.skipWhiteSpace();
         if(this.m_source[this.m_index] == "}")
@@ -181,6 +146,7 @@ class JSON
             this.skipWhiteSpace();
             if(name != null)
             {
+                println("name = ", name.dump(), ", value=", value)
                 o[name] = value;
             }
             c = this.m_source[this.m_index];
@@ -204,6 +170,7 @@ class JSON
 
     parseArray(state)
     {
+        println("in parseArray")
         this.m_index++;
         this.skipWhiteSpace();
         if(this.m_source[this.m_index] == "]")
@@ -219,7 +186,7 @@ class JSON
             a.push(value);
             this.skipWhiteSpace();
             c = this.m_source[this.m_index];
-            if (c == ",")
+            if(c == ",")
             {
                 this.m_index++;
                 this.skipWhiteSpace();
@@ -236,16 +203,62 @@ class JSON
         this.m_index++;
         return a;
     }
+
+    parseValue()
+    {
+        println("in parseValue")
+        this.skipWhiteSpace();
+        if(this.m_index == this.m_source.size())
+        {
+            return null;
+        }
+        var c = this.m_source[this.m_index];
+        if (c == "{")
+        {
+            return this.parseObject();
+        }
+        else if (c == "[")
+        {
+            return this.parseArray();
+        }
+        else if (c == "'")
+        {
+            return this.parseString("'");
+        }
+        else if (c == "\"")
+        {
+            return this.parseString("\"");
+        }
+        else if (this.nfirstchars.indexOf(c) != -1)
+        {
+            return this.parseNumber();
+        }
+        else if (c == "t")
+        {
+            return this.parseLiteral("true", true);
+        }
+        else if (c == "f")
+        {
+            return this.parseLiteral("false", false);
+        }
+        else if (c == "n")
+        {
+            return this.parseLiteral("null", null);
+        }
+        println("Invalid json (c=<"+c+">, index="+this.m_index+", max=${state['m_source'].size()})");
+    }
+
 }
 
 function parse(str)
 {
     var json = new JSON(str)
-    r = json.parseValue();
+    var r = json.parseValue();
     return r
 };
 
 var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
 //src = "[1, 2, 3, 4]"
 println("------------")
+println("src: ", src)
 println(parse(src));
