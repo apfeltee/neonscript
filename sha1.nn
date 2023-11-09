@@ -201,21 +201,17 @@ function str2binb(str)
     for(var i = 0; i < len * K_CHARSIZE; i = i + K_CHARSIZE)
     {
         aidx = (i >> 5);
-        //if(bin[aidx] == null)
-        //{
-        //    bin[aidx] = 0
-        //}
-        
-        //var right = (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
-        //bin[aidx] = bin[aidx] | right;
-        //bin[aidx] |= right;
-
-        //bin[aidx] |= (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
         if(aidx >= bin.size())
         {
             bin.push(0);
         }
-        bin[aidx] = bin[aidx] | ((str[i / K_CHARSIZE]).ord() & mask) << (24 - i%32); 
+        //var right = (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
+        //bin[aidx] = bin[aidx] | right;
+        //bin[aidx] |= right;
+        //bin[aidx] |= (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
+        var right = ((str[i / K_CHARSIZE]).ord() & mask) << (24 - i%32);
+        var left = bin[aidx]
+        bin[aidx] = left | right; 
         //println("bin[", aidx, "] = ", bin[aidx])
 
     }
@@ -271,9 +267,8 @@ var demo = [
     ["long text, some spaces, blah blah", "fc0aa2379ecce86eac0dc50d921ab2cef7030d12"]
 ];
 
-println(demo)
-var len = demo.size()
-for(var idx=0; idx<len; idx++)
+
+for(var idx=0; idx<demo.size(); idx++)
 {
     var itm = demo[idx];
     var k = itm[0];
@@ -286,6 +281,6 @@ for(var idx=0; idx<len; idx++)
     {
         okstr = "OK  ";
     }
-    print(okstr, ": \"",k, "\" => ", m, "(should be: ", v, ")", "\n");
+    print(okstr, ": \"",k, "\" => (", m.size(), ") ", m, " (should be: (", v.size(), ") ", v, ")", "\n");
 
 }

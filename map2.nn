@@ -1,0 +1,6 @@
+
+rt = ["red", "green", "blue"].map(function(a)
+{
+    return "fork@"+a
+})
+println("rt = ", rt)

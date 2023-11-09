@@ -63,21 +63,21 @@ class JSON
     parseNumber()
     {
         println("in parseNumber")
-        var startIndex = this.m_index;
+        var startidx = this.m_index;
         var c = 0;
         while(this.nchars.indexOf(this.m_source[this.m_index]) != -1)
         {
             this.m_index++;
         }
-        var str = this.m_source.substr(startIndex, this.m_index);
-        //println("parseNumber: str=${str}");
+        var str = this.m_source.substr(startidx, this.m_index);
+        println("parseNumber: str(startidx=", startidx, ", m_index=", this.m_index, ")=", str);
         return str.toNumber();
     }
 
     parseString(quote)
     {
         println("in parseString")
-        var startIndex = this.m_index;
+        var startidx = this.m_index;
         this.m_index++;
         var c = 0;
         var s = "";
@@ -116,12 +116,15 @@ class JSON
             this.m_index++;
         }
         this.m_index++;
+        println("string => ", s)
         return s;
     }
 
     parseObject(state)
     {
         println("in parseObject: m_index=", this.m_index)
+        var o = {};
+        var c = null;
         this.m_index++;
         this.skipWhiteSpace();
         if(this.m_source[this.m_index] == "}")
@@ -129,9 +132,7 @@ class JSON
             this.m_index++;
             return {};
         }
-        var o = {};
-        var c = null;
-        while (true)
+        while(true)
         {
             var name = this.parseValue();
             this.skipWhiteSpace();
@@ -183,7 +184,8 @@ class JSON
         while(true)
         {
             var value = this.parseValue();
-            a.push(value);
+            a.push(value)
+            println("parseArray: value=", value, ", a=", a)
             this.skipWhiteSpace();
             c = this.m_source[this.m_index];
             if(c == ",")
@@ -246,6 +248,7 @@ class JSON
             return this.parseLiteral("null", null);
         }
         println("Invalid json (c=<"+c+">, index="+this.m_index+", max=${state['m_source'].size()})");
+        return null
     }
 
 }

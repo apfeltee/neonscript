@@ -53,7 +53,7 @@ enum NeonOpCode
     NEON_OP_PUSHTRUE,
     NEON_OP_PUSHFALSE,
     NEON_OP_PUSHONE,
-    NEON_OP_POP,
+    NEON_OP_POPONE,
     NEON_OP_POPN,
     NEON_OP_DUP,
     NEON_OP_TYPEOF,
@@ -91,7 +91,6 @@ enum NeonOpCode
     NEON_OP_CALL,
     NEON_OP_INSTTHISINVOKE,
     NEON_OP_INSTSUPERINVOKE,
-    NEON_OP_INSTTHISPROPERTYSET,
     NEON_OP_INSTTHISPROPERTYGET,
     NEON_OP_CLOSURE,
     NEON_OP_UPVALCLOSE,
@@ -296,7 +295,7 @@ typedef struct /**/NeonObjMap NeonObjMap;
 typedef struct /**/NeonCallFrame NeonCallFrame;
 typedef struct /**/NeonValue NeonValue;
 typedef struct /**/NeonValArray NeonValArray;
-typedef struct /**/NeonChunk NeonChunk;
+typedef struct /**/NeonBinaryBlob NeonBinaryBlob;
 typedef struct /**/NeonHashEntry NeonHashEntry;
 typedef struct /**/NeonHashTable NeonHashTable;
 typedef struct /**/NeonState NeonState;
@@ -357,7 +356,7 @@ struct NeonWriter
     FILE* handle;
 };
 
-struct NeonChunk
+struct NeonBinaryBlob
 {
     int count;
     int capacity;
@@ -419,7 +418,7 @@ struct NeonObjScriptFunction
     NeonState* pvm;
     int arity;
     int upvaluecount;
-    NeonChunk* chunk;
+    NeonBinaryBlob* blob;
     NeonObjString* name;
 };
 
@@ -529,7 +528,7 @@ struct NeonAstCompiler
     int localcount;
     NeonAstFuncType type;
     NeonAstCompiler* enclosing;
-    NeonObjScriptFunction* compiledfn;
+    NeonObjScriptFunction* currfunc;
     NeonAstLoop* loop;
     NeonAstUpvalue compupvals[NEON_MAX_COMPUPVALS];
     NeonAstLocal locals[NEON_MAX_COMPLOCALS];
@@ -555,6 +554,10 @@ struct NeonAstParser
     bool haderror;
     bool panicmode;
     bool iseval;
+    int blockcount;
+    // used for tracking loops for the continue statement...
+    int innermostloopstart;
+    int innermostloopscopedepth;
     NeonAstToken current;
     NeonAstToken previous;
     NeonState* pvm;
@@ -629,9 +632,6 @@ struct NeonState
     NeonObjUpvalue* openupvalues;
     NeonWriter* stdoutwriter;
     NeonWriter* stderrwriter;
-
-
-
 
 };
 
@@ -808,7 +808,7 @@ unsigned int neon_util_numbertouint32(double n)
     return (unsigned int)neon_util_numbertoint32(n);
 }
 
-static double neon_util_modulo(double a, double b)
+double neon_util_modulo(double a, double b)
 {
     double r;
     r = fmod(a, b);
@@ -999,7 +999,7 @@ static inline bool neon_value_ismap(NeonValue v)
     return neon_value_isobjtype(v, NEON_OBJ_MAP);
 }
 
-bool neon_value_isfalsey(NeonValue value)
+static inline bool neon_value_isfalsey(NeonValue value)
 {
     return (
         neon_value_isnil(value) || (
@@ -1257,7 +1257,7 @@ void neon_gcmem_blackenobj(NeonState* state, NeonObject* object)
                 NeonObjScriptFunction* ofn;
                 ofn = (NeonObjScriptFunction*)object;
                 neon_gcmem_markobject(state, (NeonObject*)ofn->name);
-                neon_gcmem_markvalarray(state, ofn->chunk->constants);
+                neon_gcmem_markvalarray(state, ofn->blob->constants);
             }
             break;
         case NEON_OBJ_INSTANCE:
@@ -1335,7 +1335,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjScriptFunction* ofn;
                 ofn = (NeonObjScriptFunction*)object;
-                neon_chunk_destroy(state, ofn->chunk);
+                neon_blob_destroy(state, ofn->blob);
                 neon_mem_release(state, sizeof(NeonObjScriptFunction), object);
                 ofn = NULL;
             }
@@ -1942,7 +1942,7 @@ const char* neon_object_typename(NeonObject* obj, bool detailed)
     return "?unknownobject?";
 }
 
-const char* neon_value_typename(NeonValue value, bool detailed)
+const char* neon_value_gettypename(NeonValue value, bool detailed)
 {
     switch(value.type)
     {
@@ -1962,6 +1962,17 @@ const char* neon_value_typename(NeonValue value, bool detailed)
     return "?unknownvalue?";
 }
 
+const char* neon_value_typename(NeonValue value)
+{
+    return neon_value_gettypename(value, true);
+}
+
+
+const char* neon_value_basicname(NeonValue value)
+{
+    return neon_value_gettypename(value, false);
+}
+
 bool neon_value_stringequal(NeonState* state, NeonObjString* aos, NeonObjString* bos)
 {
     bool r;
@@ -1969,6 +1980,7 @@ bool neon_value_stringequal(NeonState* state, NeonObjString* aos, NeonObjString*
     size_t blen;
     const char* astr;
     const char* bstr;
+    (void)state;
     alen = aos->sbuf->length;
     blen = bos->sbuf->length;
     astr = aos->sbuf->data;
@@ -2399,7 +2411,7 @@ NeonObjScriptFunction* neon_object_makefunction(NeonState* state)
     obj->upvaluecount = 0;
     obj->name = NULL;
     obj->isvariadic = false;
-    obj->chunk = neon_chunk_make(state);
+    obj->blob = neon_blob_make(state);
     return obj;
 }
 
@@ -2879,11 +2891,6 @@ bool neon_hashtable_setstr(NeonHashTable* tab, const char* name, NeonValue val)
     return neon_hashtable_set(tab, os, val);
 }
 
-bool neon_hashtable_setstrobject(NeonHashTable* tab, const char* name, NeonObject* val)
-{
-    return neon_hashtable_setstr(tab, name, neon_value_fromobject(val));
-}
-
 bool neon_hashtable_setstrfunction(NeonHashTable* tab, const char* name, NeonNativeFN nat)
 {
     return neon_hashtable_setstr(tab, name, neon_value_fromobject(neon_object_makenative(tab->pvm, nat, name)));
@@ -2971,70 +2978,57 @@ void neon_hashtable_remwhite(NeonState* state, NeonHashTable* table)
     }
 }
 
-NeonChunk* neon_chunk_make(NeonState* state)
+NeonBinaryBlob* neon_blob_make(NeonState* state)
 {
-    NeonChunk* chunk;
-    chunk = (NeonChunk*)malloc(sizeof(NeonChunk));
-    chunk->count = 0;
-    chunk->capacity = 0;
-    chunk->bincode = NULL;
-    chunk->srclinenos = NULL;
-    chunk->constants = neon_valarray_make(state);
-    return chunk;
+    NeonBinaryBlob* blob;
+    blob = (NeonBinaryBlob*)malloc(sizeof(NeonBinaryBlob));
+    blob->count = 0;
+    blob->capacity = 0;
+    blob->bincode = NULL;
+    blob->srclinenos = NULL;
+    blob->constants = neon_valarray_make(state);
+    return blob;
 }
 
-void neon_chunk_copy(NeonState* state, NeonChunk* to, NeonChunk* from)
+void neon_blob_destroy(NeonState* state, NeonBinaryBlob* blob)
 {
-    size_t i;
-    for(i=0; i<(size_t)from->count; i++)
-    {
-        neon_chunk_pushbyte(state, to, from->bincode[i], from->srclinenos[i]);
-    }
-    for(i=0; i<(size_t)from->constants->size; i++)
-    {
-        neon_valarray_push(to->constants, from->constants->values[i]);
-    }
+    neon_mem_freearray(state, sizeof(int32_t), blob->bincode, blob->capacity);
+    neon_mem_freearray(state, sizeof(int), blob->srclinenos, blob->capacity);
+    neon_valarray_destroy(blob->constants);
+    free(blob);
 }
 
-void neon_chunk_destroy(NeonState* state, NeonChunk* chunk)
-{
-    neon_mem_freearray(state, sizeof(int32_t), chunk->bincode, chunk->capacity);
-    neon_mem_freearray(state, sizeof(int), chunk->srclinenos, chunk->capacity);
-    neon_valarray_destroy(chunk->constants);
-    free(chunk);
-}
-
-void neon_chunk_pushbyte(NeonState* state, NeonChunk* chunk, int32_t byte, int line)
+void neon_blob_pushbyte(NeonState* state, NeonBinaryBlob* blob, int32_t byte, int line)
 {
     int oldcap;
-    if(chunk->capacity < chunk->count + 1)
+    if(blob->capacity < blob->count + 1)
     {
-        oldcap = chunk->capacity;
-        chunk->capacity = NEON_NEXTCAPACITY(oldcap);
-        chunk->bincode = (int32_t*)neon_mem_growarray(state, sizeof(int32_t), chunk->bincode, oldcap, chunk->capacity);
-        chunk->srclinenos = (int*)neon_mem_growarray(state, sizeof(int), chunk->srclinenos, oldcap, chunk->capacity);
+        oldcap = blob->capacity;
+        blob->capacity = NEON_NEXTCAPACITY(oldcap);
+        blob->bincode = (int32_t*)neon_mem_growarray(state, sizeof(int32_t), blob->bincode, oldcap, blob->capacity);
+        blob->srclinenos = (int*)neon_mem_growarray(state, sizeof(int), blob->srclinenos, oldcap, blob->capacity);
     }
-    chunk->bincode[chunk->count] = byte;
-    chunk->srclinenos[chunk->count] = line;
-    chunk->count++;
+    blob->bincode[blob->count] = byte;
+    blob->srclinenos[blob->count] = line;
+    blob->count++;
 }
 
-int neon_chunk_pushconst(NeonState* state, NeonChunk* chunk, NeonValue value)
+int neon_blob_pushconst(NeonState* state, NeonBinaryBlob* blob, NeonValue value)
 {
     (void)state;
     //neon_vm_stackpush(state, value);
-    neon_valarray_push(chunk->constants, value);
+    neon_valarray_push(blob->constants, value);
     //neon_vm_stackpop(state);
-    return neon_valarray_count(chunk->constants) - 1;
+    return neon_valarray_count(blob->constants) - 1;
 }
 
-void neon_chunk_disasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, const char* name)
+void neon_blob_disasm(NeonState* state, NeonWriter* wr, NeonBinaryBlob* blob, const char* name)
 {
     int offset;
     neon_writer_writefmt(wr, "== %s ==\n", name);
-    for(offset = 0; offset < chunk->count;)
+    for(offset = 0; offset < blob->count;)
     {
-        offset = neon_dbg_dumpdisasm(state, wr, chunk, offset);
+        offset = neon_dbg_dumpdisasm(state, wr, blob, offset);
     }
 }
 
@@ -3047,7 +3041,7 @@ const char* neon_dbg_op2str(int32_t opcode)
         case NEON_OP_PUSHTRUE: return "NEON_OP_PUSHTRUE";
         case NEON_OP_PUSHFALSE: return "NEON_OP_PUSHFALSE";
         case NEON_OP_PUSHONE: return "NEON_OP_PUSHONE";
-        case NEON_OP_POP: return "NEON_OP_POP";
+        case NEON_OP_POPONE: return "NEON_OP_POPONE";
         case NEON_OP_POPN: return "NEON_OP_POPN";
         case NEON_OP_DUP: return "NEON_OP_DUP";
         case NEON_OP_TYPEOF: return "NEON_OP_TYPEOF";
@@ -3103,16 +3097,16 @@ const char* neon_dbg_op2str(int32_t opcode)
 }
 
 
-int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
+int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, NeonBinaryBlob* blob, int offset)
 {
     NeonValue val;
     int32_t constant;
     (void)state;
     val = neon_value_makenil();
-    constant = chunk->bincode[offset + 1];
-    if(chunk->constants->size > 0)
+    constant = blob->bincode[offset + 1];
+    if(blob->constants->size > 0)
     {
-        val = chunk->constants->values[constant];
+        val = blob->constants->values[constant];
     }
     neon_writer_writefmt(wr, "%-16s %4d '", name, constant);
     neon_writer_printvalue(wr, val, true);
@@ -3120,15 +3114,15 @@ int neon_dbg_dumpconstinstr(NeonState* state, NeonWriter* wr, const char* name, 
     return offset + 2;
 }
 
-int neon_dbg_dumpinvokeinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
+int neon_dbg_dumpinvokeinstr(NeonState* state, NeonWriter* wr, const char* name, NeonBinaryBlob* blob, int offset)
 {
     int32_t argc;
     int32_t constant;
     (void)state;
-    constant = chunk->bincode[offset + 1];
-    argc = chunk->bincode[offset + 2];
+    constant = blob->bincode[offset + 1];
+    argc = blob->bincode[offset + 2];
     neon_writer_writefmt(wr, "%-16s (%d args) %4d {", name, argc, constant);
-    neon_writer_printvalue(wr, chunk->constants->values[constant], true);
+    neon_writer_printvalue(wr, blob->constants->values[constant], true);
     neon_writer_writestring(wr, "}\n");
     return offset + 3;
 }
@@ -3140,26 +3134,26 @@ int neon_dbg_dumpsimpleinstr(NeonState* state, NeonWriter* wr, const char* name,
     return offset + 1;
 }
 
-int neon_dbg_dumpbyteinstr(NeonState* state, NeonWriter* wr, const char* name, NeonChunk* chunk, int offset)
+int neon_dbg_dumpbyteinstr(NeonState* state, NeonWriter* wr, const char* name, NeonBinaryBlob* blob, int offset)
 {
     int32_t islot;
     (void)state;
-    islot = chunk->bincode[offset + 1];
+    islot = blob->bincode[offset + 1];
     neon_writer_writefmt(wr, "%-16s %4d\n", name, islot);
     return offset + 2;// [debug]
 }
 
-int neon_dbg_dumpjumpinstr(NeonState* state, NeonWriter* wr, const char* name, int sign, NeonChunk* chunk, int offset)
+int neon_dbg_dumpjumpinstr(NeonState* state, NeonWriter* wr, const char* name, int sign, NeonBinaryBlob* blob, int offset)
 {
     uint16_t jump;
     (void)state;
-    jump= (uint16_t)(chunk->bincode[offset + 1] << 8);
-    jump |= chunk->bincode[offset + 2];
+    jump= (uint16_t)(blob->bincode[offset + 1] << 8);
+    jump |= blob->bincode[offset + 2];
     neon_writer_writefmt(wr, "%-16s %4d -> %d\n", name, offset, offset + 3 + sign * jump);
     return offset + 3;
 }
 
-int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int offset)
+int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonBinaryBlob* blob, int offset)
 {
     int j;
     int index;
@@ -3168,40 +3162,40 @@ int neon_dbg_dumpclosure(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int
     NeonObjScriptFunction* fn;
     (void)state;
     offset++;
-    constant = chunk->bincode[offset++];
+    constant = blob->bincode[offset++];
     neon_writer_writefmt(wr, "%-16s %4d ", "NEON_OP_CLOSURE", constant);
-    neon_writer_printvalue(wr, chunk->constants->values[constant], true);
+    neon_writer_printvalue(wr, blob->constants->values[constant], true);
     neon_writer_writestring(wr, "\n");
-    fn = neon_value_asscriptfunction(chunk->constants->values[constant]);
+    fn = neon_value_asscriptfunction(blob->constants->values[constant]);
     for(j = 0; j < fn->upvaluecount; j++)
     {
-        islocal = chunk->bincode[offset++];
-        index = chunk->bincode[offset++];
+        islocal = blob->bincode[offset++];
+        index = blob->bincode[offset++];
         neon_writer_writefmt(wr, "%04d      |                     %s %d\n", offset - 2, islocal ? "local" : "upvalue", index);
     }
     return offset;
 }
 
-int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int offset)
+int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonBinaryBlob* blob, int offset)
 {
     int32_t instruction;
     const char* instrname;
     (void)state;
     neon_writer_writefmt(wr, "%04d ", offset);
-    if((offset > 0) && (chunk->srclinenos[offset] == chunk->srclinenos[offset - 1]))
+    if((offset > 0) && (blob->srclinenos[offset] == blob->srclinenos[offset - 1]))
     {
         neon_writer_writefmt(wr, "   | ");
     }
     else
     {
-        neon_writer_writefmt(wr, "%4d ", chunk->srclinenos[offset]);
+        neon_writer_writefmt(wr, "%4d ", blob->srclinenos[offset]);
     }
-    instruction = chunk->bincode[offset];
+    instruction = blob->bincode[offset];
     instrname = neon_dbg_op2str(instruction);
     switch(instruction)
     {
         case NEON_OP_PUSHCONST:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_PUSHONE:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_PUSHNIL:
@@ -3211,35 +3205,35 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
         case NEON_OP_PUSHFALSE:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_MAKEARRAY:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_MAKEMAP:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INDEXGET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INDEXSET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
-        case NEON_OP_POP:
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
+        case NEON_OP_POPONE:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_LOCALGET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_LOCALSET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_GLOBALGET:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_GLOBALDEFINE:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_GLOBALSET:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_UPVALGET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_UPVALSET:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_PROPERTYGET:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_PROPERTYSET:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INSTGETSUPER:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_EQUAL:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_PRIMGREATER:
@@ -3263,20 +3257,20 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
         case NEON_OP_GLOBALSTMT:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_JUMPNOW:
-            return neon_dbg_dumpjumpinstr(state, wr, instrname, 1, chunk, offset);
+            return neon_dbg_dumpjumpinstr(state, wr, instrname, 1, blob, offset);
         case NEON_OP_JUMPIFFALSE:
-            return neon_dbg_dumpjumpinstr(state, wr, instrname, 1, chunk, offset);
+            return neon_dbg_dumpjumpinstr(state, wr, instrname, 1, blob, offset);
         case NEON_OP_LOOP:
-            return neon_dbg_dumpjumpinstr(state, wr, instrname, -1, chunk, offset);
+            return neon_dbg_dumpjumpinstr(state, wr, instrname, -1, blob, offset);
         case NEON_OP_CALL:
-            return neon_dbg_dumpbyteinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INSTTHISINVOKE:
-            return neon_dbg_dumpinvokeinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpinvokeinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INSTSUPERINVOKE:
-            return neon_dbg_dumpinvokeinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpinvokeinstr(state, wr, instrname, blob, offset);
         case NEON_OP_CLOSURE:
             {
-                /*offset =*/ neon_dbg_dumpclosure(state, wr, chunk, offset);
+                /*offset =*/ neon_dbg_dumpclosure(state, wr, blob, offset);
                 return offset;
             }
         case NEON_OP_UPVALCLOSE:
@@ -3284,11 +3278,11 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonChunk* chunk, int 
         case NEON_OP_RETURN:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_CLASS:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INHERIT:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         case NEON_OP_METHOD:
-            return neon_dbg_dumpconstinstr(state, wr, instrname, chunk, offset);
+            return neon_dbg_dumpconstinstr(state, wr, instrname, blob, offset);
         case NEON_OP_HALTVM:
             return neon_dbg_dumpsimpleinstr(state, wr, instrname, offset);
         /*
@@ -3337,7 +3331,7 @@ void neon_astparser_markcompilerroots(NeonState* state)
         compiler = state->parser->currcompiler;
         while(compiler != NULL)
         {
-            neon_gcmem_markobject(state, (NeonObject*)compiler->compiledfn);
+            neon_gcmem_markobject(state, (NeonObject*)compiler->currfunc);
             compiler = compiler->enclosing;
         }
     }
@@ -3368,9 +3362,9 @@ void neon_state_vraiseerror(NeonState* state, const char* format, va_list va)
         /* Calls and Functions runtime-error-stack < Closures runtime-error-function */
         // NeonObjScriptFunction* function = frame->fnptr;
         fn = frame->closure->fnptr;
-        //instruction = frame->instrucptr - fn->chunk->bincode - 1;
+        //instruction = frame->instrucptr - fn->blob->bincode - 1;
         instruction = frame->instrucidx;
-        fprintf(stderr, "[line %d] in ", fn->chunk->srclinenos[instruction]);
+        fprintf(stderr, "[line %d] in ", fn->blob->srclinenos[instruction]);
         if(fn->name == NULL)
         {
             fprintf(stderr, "script\n");
@@ -3722,7 +3716,7 @@ NeonStatusCode neon_state_runsource(NeonState* state, const char* source, size_t
     return neon_vm_runvm(state, evdest, false);
 }
 
-static char* neon_util_readhandle(FILE* hnd, bool withminsize, size_t minsize, size_t* dlen)
+char* neon_util_readhandle(FILE* hnd, bool withminsize, size_t minsize, size_t* dlen)
 {
     long rawtold;
     /*
@@ -3779,7 +3773,7 @@ static char* neon_util_readhandle(FILE* hnd, bool withminsize, size_t minsize, s
     return NULL;
 }
 
-static char* neon_util_readfile(const char* filename, bool withminsize, size_t minsize, size_t* dlen)
+char* neon_util_readfile(const char* filename, bool withminsize, size_t minsize, size_t* dlen)
 {
     char* b;
     FILE* fh;
@@ -3818,7 +3812,7 @@ bool neon_state_runfile(NeonState* state, const char* path)
     return true;
 }
 
-static void repl(NeonState* state)
+void repl(NeonState* state)
 {
     int cnt;
     char line[1024];
@@ -3837,7 +3831,7 @@ static void repl(NeonState* state)
     }
 }
 
-static NeonValue cfn_clock(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+static NeonValue objfn_time_func_unixclock(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
     (void)state;
     (void)rec;
@@ -3859,6 +3853,20 @@ static NeonValue objfn_number_chr(NeonState* state, NeonValue selfval, int argc,
     os = neon_string_copy(state, &ch, 1);
     return neon_value_fromobject(os);
 }
+
+
+static NeonValue objfn_string_staticfunc_fromcharcode(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    char ch;
+    NeonObjString* os;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    ch = neon_value_asnumber(argv[0]);
+    os = neon_string_copy(state, &ch, 1);
+    return neon_value_fromobject(os);
+}
+
 
 static NeonValue objfn_string_func_length(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
@@ -3917,6 +3925,45 @@ static NeonValue objfn_string_func_indexof(NeonState* state, NeonValue selfval, 
     return neon_value_makenumber(-1);
 }
 
+static NeonValue objfn_string_func_charat(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    int idx;
+    char ch;
+    NeonObjString* os;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    selfstr = neon_value_asstring(selfval);
+    idx = neon_value_asnumber(argv[0]);
+    if(idx > (int)selfstr->sbuf->length)
+    {
+        return neon_value_fromobject(neon_string_copy(state, "", 0));
+    }
+    ch = selfstr->sbuf->data[idx];
+    os = neon_string_copy(state, &ch, 1);
+    return neon_value_fromobject(os);
+}
+
+
+static NeonValue objfn_string_func_charcodeat(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
+{
+    int idx;
+    char ch;
+    NeonObjString* selfstr;
+    (void)state;
+    (void)argc;
+    (void)argv;
+    selfstr = neon_value_asstring(selfval);
+    idx = neon_value_asnumber(argv[0]);
+    if(idx > (int)selfstr->sbuf->length)
+    {
+        return neon_value_makenumber(-1);
+    }
+    ch = selfstr->sbuf->data[idx];
+    return neon_value_makenumber(ch);
+}
+
 static NeonValue objfn_string_func_substr(NeonState* state, NeonValue selfval, int argc, NeonValue* argv)
 {
     size_t i;
@@ -3949,7 +3996,9 @@ static NeonValue objfn_string_func_substr(NeonState* state, NeonValue selfval, i
         iend = neon_value_asnumber(argv[1]);
     }
     os = neon_string_copy(state, "", 0);
-    for(i=ibegin; i<((len - iend) + 1); i++)
+    
+    //for(i=ibegin; i<((len - iend) + 1); i++)
+    for(i=ibegin; i<iend; i++)
     {
         dyn_strbuf_appendchar(os->sbuf, selfstr->sbuf->data[i]);
     }
@@ -4064,9 +4113,7 @@ void fillarrayfromtable(NeonState* state, NeonObjArray* dest, NeonHashTable* fro
 
 static NeonValue objfn_object_staticfunc_keys(NeonState* state, NeonValue unused, int argc, NeonValue* argv)
 {
-    size_t i;
     NeonValue selfval;
-    NeonObjString* tmp;
     NeonObjArray* oa;
     NeonObjMap* map;
     (void)unused;
@@ -4249,7 +4296,7 @@ static NeonValue objfn_array_func_map(NeonState* state, NeonValue selfval, int a
     */
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "expected receiver to be array, but got %s", neon_value_typename(selfval, true));
+        neon_state_raiseerror(state, "expected receiver to be array, but got %s", neon_value_typename(selfval));
         return neon_value_makenil();
     }
     if(argc == 0)
@@ -4292,7 +4339,7 @@ static NeonValue objfn_array_func_count(NeonState* state, NeonValue selfval, int
     (void)argv;
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "Array.count: first argument must be array, but got <%s>", neon_value_typename(selfval, true));
+        neon_state_raiseerror(state, "Array.count: first argument must be array, but got <%s>", neon_value_typename(selfval));
         return neon_value_makenil();
     }
     else
@@ -4312,7 +4359,7 @@ static NeonValue objfn_array_func_pop(NeonState* state, NeonValue selfval, int a
     (void)argv;
     if(!neon_value_isarray(selfval))
     {
-        neon_state_raiseerror(state, "Array.pop: first argument must be array, but got <%s>", neon_value_typename(selfval, true));
+        neon_state_raiseerror(state, "Array.pop: first argument must be array, but got <%s>", neon_value_typename(selfval));
         return neon_value_makenil();
     }
     else
@@ -4437,6 +4484,7 @@ static NeonValue objfn_map_func_size(NeonState* state, NeonValue rec, int argc, 
 {
     size_t sz;
     NeonObjMap* om;
+    (void)state;
     (void)rec;
     (void)argc;
     (void)argv;
@@ -4492,7 +4540,7 @@ static void fileopen_close(NeonState* state, NeonObjUserdata* ud)
 {
     FILE* fh;
     (void)state;
-    fh = ud->userptr;
+    fh = (FILE*)ud->userptr;
     if(fh != NULL)
     {
         fprintf(stderr, "closing file\n");
@@ -4747,6 +4795,7 @@ int main(int argc, char** argv)
     }
     {
         klass = state->objvars.classprimstring;
+        neon_class_setstaticfunctioncstr(klass, "fromCharCode", objfn_string_staticfunc_fromcharcode);        
         neon_class_setfunctioncstr(klass, "length", objfn_string_func_length);
         neon_class_setfunctioncstr(klass, "size", objfn_string_func_length);
         neon_class_setfunctioncstr(klass, "split", objfn_string_func_split);
@@ -4754,15 +4803,15 @@ int main(int argc, char** argv)
         neon_class_setfunctioncstr(klass, "ord", objfn_string_func_ord);
         neon_class_setfunctioncstr(klass, "toNumber", objfn_string_func_tonumber);
         neon_class_setfunctioncstr(klass, "substr", objfn_string_func_substr);
-        neon_class_setfunctioncstr(klass, "indexOf", objfn_string_func_indexof);        
+        neon_class_setfunctioncstr(klass, "indexOf", objfn_string_func_indexof);
+        neon_class_setfunctioncstr(klass, "charAt", objfn_string_func_charat);
+        neon_class_setfunctioncstr(klass, "charCodeAt", objfn_string_func_charcodeat);
         #if 0
         neon_class_setfunctioncstr(klass, "lstrip", objfn_string_func_leftstrip);
         neon_class_setfunctioncstr(klass, "rstrip", objfn_string_func_rightstrip);
         neon_class_setfunctioncstr(klass, "strip", objfn_string_func_strip);
         neon_class_setfunctioncstr(klass, "toUpper", objfn_string_func_toupper);
         neon_class_setfunctioncstr(klass, "tolower", objfn_string_func_tolower);
-        
-
         #endif
     }
     {
@@ -4780,7 +4829,7 @@ int main(int argc, char** argv)
     }
     {
         map = neon_object_makemap(state);
-        neon_map_setstrfunction(map, "unixclock", cfn_clock);
+        neon_map_setstrfunction(map, "unixclock", objfn_time_func_unixclock);
         neon_state_defvalue(state, "Time", neon_value_fromobject(map));        
     }
     {
