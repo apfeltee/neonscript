@@ -3539,16 +3539,8 @@ static inline void neon_vmbits_stackpush(NeonState* state, NeonValue value)
 static inline NeonValue neon_vmbits_stackpop(NeonState* state)
 {
     NeonValue v;
-
-    /*
-        vm.stackTop--;
-        return *vm.stackTop;
-    */
-
-
     state->vmstate.stacktop--;
     v = state->vmstate.stackvalues[state->vmstate.stacktop + 0];
-
     return v;
 }
 

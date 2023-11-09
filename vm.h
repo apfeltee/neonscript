@@ -358,6 +358,13 @@ bool neon_value_getcallable(NeonState* state, NeonValue receiver, NeonObjString*
     {
         /* first, check method table specific to that type ... */
         klass = neon_value_getvalueclass(state, receiver);
+        if(klass == NULL)
+        {
+            if(neon_value_isclass(receiver))
+            {
+                klass = neon_value_asclass(receiver);
+            }
+        }
         if(klass != NULL)
         {
             if(neon_class_getmethod(klass, name, dest))
@@ -424,7 +431,6 @@ bool neon_vmbits_invoke(NeonState* state, NeonObjString* name, int argc)
             state->vmstate.stackvalues[state->vmstate.stacktop + (-argc - 1)] = callable;
             return neon_vmbits_callvalue(state, receiver, callable, argc);
         }
-
         neon_state_raiseerror(state, "cannot invoke method '%s' on non-instance object type <%s> (peek at %d)", name->sbuf->data, neon_value_typename(receiver), argc);
     }
     return false;
