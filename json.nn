@@ -69,7 +69,7 @@ class JSON
         {
             this.m_index++;
         }
-        var str = this.m_source.substr(startidx, this.m_index);
+        var str = this.m_source.substr(startidx+0, this.m_index);
         println("parseNumber: str(startidx=", startidx, ", m_index=", this.m_index, ")=", str);
         return str.toNumber();
     }
@@ -263,5 +263,6 @@ function parse(str)
 var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
 //src = "[1, 2, 3, 4]"
 println("------------")
+var parsed = parse(src);
 println("src: ", src)
-println(parse(src));
+println("parsed: ", parsed);

@@ -1,1 +1,1 @@
-main.o: main.c strbuf.h prot.inc parse.h vm.h
+main.o: main.c neon.h strbuf.h prot.inc

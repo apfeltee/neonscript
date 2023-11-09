@@ -515,7 +515,6 @@ void neon_vmbits_defmethod(NeonState* state, NeonObjString* name)
     neon_vmbits_stackpop(state);
 }
 
-
 static inline void concatputval(NeonWriter* wr, NeonValue v)
 {
     NeonObjString* os;
@@ -1120,58 +1119,6 @@ bool neon_vmexec_doinstthispropertyget(NeonState* state)
     return false;
 }
 
-static inline void neon_vm_debugprintvalue(NeonState* state, NeonWriter* owr, NeonValue val, const char* fmt, ...)
-{
-    va_list va;
-    (void)state;
-    va_start(va, fmt);
-    neon_writer_vwritefmt(owr, fmt, va);
-    neon_writer_writefmt(owr, " [<%s>] ", neon_value_typename(val));
-    neon_writer_printvalue(owr, val, true);
-    neon_writer_writefmt(owr, "\n");
-    va_end(va);
-}
-
-static inline void neon_vm_debugprintstack(NeonState* state, NeonWriter* owr)
-{
-    int spos;
-    int frompos;
-    int nowpos;
-    int64_t stacktop;
-    NeonValue* slot;
-    NeonValue* stv;
-    stacktop = state->vmstate.stacktop;
-    stv = state->vmstate.stackvalues;
-    if(stacktop == -1)
-    {
-        stacktop = 0;
-    }
-    neon_writer_writefmt(owr, "  stack=[\n");
-    frompos = 0;
-    spos = 0;    
-    for(slot = &stv[frompos]; slot < &stv[stacktop]; slot++)
-    {
-        nowpos = spos;
-        spos++;
-        neon_vm_debugprintvalue(state, owr, *slot, "    [%d]", (int)nowpos-0);
-    }
-    neon_writer_writefmt(owr, "  ]\n");
-}
-
-static inline void neon_vm_debugprintinstruction(NeonState* state, NeonWriter* owr, NeonCallFrame* frame)
-{
-    int ofs;
-    NeonBinaryBlob* chnk;
-    if(frame == NULL)
-    {
-        return;
-    }
-    chnk = frame->closure->fnptr->blob;
-    ofs = frame->instrucidx - 1;
-    neon_dbg_dumpdisasm(state, owr, chnk, ofs);
-    neon_vm_debugprintstack(state, owr);
-}
-
 #define vmmac_opinstname(n) n
 #define vm_default() default:
 #define op_case(name) case vmmac_opinstname(name):
@@ -1192,7 +1139,7 @@ NeonStatusCode neon_vm_runvm(NeonState* state, NeonValue* evdest, bool fromneste
         instruc = neon_vmbits_readinstruction(state);
         if(state->conf.shouldprintruntime)
         {
-            neon_vm_debugprintinstruction(state, owr, state->vmstate.activeframe);
+            neon_dbg_debugprintatinstruction(state, owr, state->vmstate.activeframe);
         }
         sc = neon_vm_runexecinstruc(state, instruc, evdest, fromnested);
         if(sc != NEON_STATUS_OK)
