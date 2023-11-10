@@ -712,7 +712,7 @@ int neon_astparser_realgetcodeargscount(const int32_t* code, const NeonValue* co
         case NEON_OP_GET_EXPR_PROPERTY:
         case NEON_OP_SET_EXPR_PROPERTY:
         */
-        case NEON_OP_CALL:
+        case NEON_OP_CALLCALLABLE:
         case NEON_OP_INSTGETSUPER:
         case NEON_OP_GLOBALGET:
         case NEON_OP_GLOBALDEFINE:
@@ -1116,7 +1116,7 @@ void neon_astparser_rulecall(NeonAstParser* prs, NeonAstToken previous, bool can
     (void)previous;
     (void)canassign;
     argc = neon_astparser_parsearglist(prs);
-    neon_astparser_emit2byte(prs, NEON_OP_CALL, argc);
+    neon_astparser_emit2byte(prs, NEON_OP_CALLCALLABLE, argc);
 }
 
 void neon_astparser_ruledot(NeonAstParser* prs, NeonAstToken previous, bool canassign)
@@ -1502,12 +1502,46 @@ void neon_astparser_ruleunary(NeonAstParser* prs, bool canassign)
     }
 }
 
+static void neon_astparser_parseassign(NeonAstParser* p, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+{
+    if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_INSTTHISPROPERTYGET)
+    {
+        neon_astparser_emit1byte(p, NEON_OP_DUP);
+    }
+    if(arg != -1)
+    {
+        neon_astparser_emit2byte(p, getop, arg);
+    }
+    else
+    {
+        neon_astparser_emit2byte(p, getop, 1);
+    }
+    neon_astparser_parseexpr(p);
+    neon_astparser_emit1byte(p, realop);
+    if(arg != -1)
+    {
+        neon_astparser_emit2byte(p, setop, (uint16_t)arg);
+    }
+    else
+    {
+        neon_astparser_emit1byte(p, setop);
+    }
+}
+
 void neon_astparser_doassign(NeonAstParser* prs, int32_t getop, int32_t setop, int arg, bool canassign)
 {
     if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGN))
     {
         neon_astparser_parseexpr(prs);
         neon_astparser_emit2byte(prs, setop, (int32_t)arg);
+    }
+    else if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGNPLUS))
+    {
+        neon_astparser_parseassign(prs, NEON_OP_PRIMADD, getop, setop, arg);
+    }
+    else if(canassign && neon_astparser_match(prs, NEON_TOK_ASSIGNMINUS))
+    {
+        neon_astparser_parseassign(prs, NEON_OP_PRIMSUBTRACT, getop, setop, arg);
     }
     else if(canassign && neon_astparser_match(prs, NEON_TOK_INCREMENT))
     {

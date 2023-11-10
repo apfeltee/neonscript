@@ -197,10 +197,11 @@ function str2binb(str)
     var bin = [];
     var mask = (1 << K_CHARSIZE) - 1;
     var len = str.size();
-    
-    for(var i = 0; i < len * K_CHARSIZE; i = i + K_CHARSIZE)
+    var olen = len * K_CHARSIZE;
+    for(var i = 0; i < olen; i = i + K_CHARSIZE)
     {
         aidx = (i >> 5);
+        println("aidx=", aidx)
         if(aidx >= bin.size())
         {
             bin.push(0);
@@ -211,9 +212,9 @@ function str2binb(str)
         //bin[aidx] |= (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
         var right = ((str[i / K_CHARSIZE]).ord() & mask) << (24 - i%32);
         var left = bin[aidx]
+        println("left=", left, ", right=", right)
         bin[aidx] = left | right; 
         //println("bin[", aidx, "] = ", bin[aidx])
-
     }
     return bin;
 }
@@ -264,7 +265,8 @@ var demo = [
     ["bar", "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"],
     ["hello world", "2aae6c35c94fcfb415dbe95f408b9ce91ee846ed"],
     ["abcdx", "a96e144dfdc6380c8a4ae43bea1c81cb01215020"],
-    ["long text, some spaces, blah blah", "fc0aa2379ecce86eac0dc50d921ab2cef7030d12"]
+    ["long text, some spaces, blah blah", "fc0aa2379ecce86eac0dc50d921ab2cef7030d12"],
+    ["qux", "b54ba7f5621240d403f06815f7246006ef8c7d43"]
 ];
 
 

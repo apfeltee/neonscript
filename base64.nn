@@ -47,14 +47,14 @@ function util_utf8_decode(utftext)
         {
             c2 = utftext.charCodeAt(i+1);
             res.push(String.fromCharCode(((c & 31) << 6) | (c2 & 63)));
-            i = i + 2;
+            i += 2;
         }
         else
         {
             c2 = utftext.charCodeAt(i+1);
             c3 = utftext.charCodeAt(i+2);
             res.push(String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63)));
-            i = i + 3;
+            i += 3;
         }
     }
     return res.join("");
@@ -71,7 +71,7 @@ function b64encode(input)
         var chr1 = ninput.charCodeAt(i+0);
         var chr2 = ninput.charCodeAt(i+1);
         var chr3 = ninput.charCodeAt(i+2);
-        i = i + 3;
+        i += 3;
         var enc1 = chr1 >> 2;
         var enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
         var enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
@@ -103,7 +103,7 @@ function b64decode(input)
         var enc2 = B64_KEYCHARS.indexOf(input.charAt(i+1));
         var enc3 = B64_KEYCHARS.indexOf(input.charAt(i+2));
         var enc4 = B64_KEYCHARS.indexOf(input.charAt(i+3));
-        i = i + 4;
+        i += 4;
         var chr1 = (enc1 << 2) | (enc2 >> 4);
         var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
         var chr3 = ((enc3 & 3) << 6) | enc4;
@@ -130,5 +130,5 @@ println("encoded = ", encodedString);
 
 
 var decodedString = b64decode(encodedString);
-println("decoded = ", decodedString);
+println("decoded = ", decodedString.dump());
 

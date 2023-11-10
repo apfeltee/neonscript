@@ -15,7 +15,7 @@ function bf(src, input)
     {
         if(instr < 0)
         {
-            throw Exception("Invalid instruction pointer (instr=" + instr + ")")
+            println("Invalid instruction pointer (instr=" + instr + ")")
         }
         var c = src[instr]
         if(c == "+")
@@ -23,7 +23,7 @@ function bf(src, input)
             memory[memptr] = memory[memptr] + 1
             if(memptr >= memory.count())
             {
-                throw Exception("Heap overrun memptr=${memptr}")
+                println("Heap overrun memptr=${memptr}")
             }
         }
         else if(c == "-")
@@ -31,7 +31,7 @@ function bf(src, input)
             memory[memptr] = memory[memptr] - 1
             if(memptr < 0)
             {
-                throw Exception("Heap underrun")
+                println("Heap underrun")
             }
         }
         else if(c == ".")
@@ -41,44 +41,46 @@ function bf(src, input)
         else if(c == "x")
         {
            memory[memptr] = input[inptr]
-           inptr = inptr + 1
+           inptr += 1
         }
         else if(c == ">")
         {
-            memptr = memptr + 1
+            memptr += 1
             if(memptr > memory.count())
             {
-                throw Exception("data pointer out of bounds")
+                println("data pointer out of bounds")
             }
         }
         else if(c == "<")
         {
-            memptr = memptr - 1
+            memptr -= 1
             if(memptr < 0)
             {
-                throw Exception("data pointer cannot go below 0 (memptr=${memptr})")
+                println("data pointer cannot go below 0 (memptr=${memptr})")
             }
         }
         else if(c == "[")
         {
             if (memory[memptr] != 0)
+            {
                 stack.push(instr)
+            }
             else
             {
                 var bcount = 0
                 var cont = true
                 while(cont)
                 {
-                    instr = instr + 1
+                    instr += 1
                     if(instr > src.size())
                     {
-                        throw Exception("Missing matching ']'")
+                        println("Missing matching ']'")
                     }
                     if(src[instr] == "]")
                     {
                         if(bcount != 0)
                         {
-                            bcount = bcount - 1;
+                            bcount -= 1;
                         }
                         else
                         {
@@ -87,7 +89,7 @@ function bf(src, input)
                     }
                     else if(src[instr] == "[")
                     {
-                        bcount = bcount + 1;
+                        bcount += 1;
                     }
                }
            }
@@ -95,9 +97,9 @@ function bf(src, input)
         else if(c == "]")
         {
             instr = stack.pop();
-            instr = instr - 1
+            instr -= 1
         }
-        instr = instr + 1
+        instr += 1
     }
 }
 

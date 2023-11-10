@@ -18,7 +18,6 @@ int main(int argc, char** argv)
     nargc = argc;
     codeline = NULL;
     state = neon_state_make();
-    
     for(i=1; i<argc; i++)
     {
         if(argv[i][0] == '-')

@@ -89,29 +89,29 @@ class JSON
                 c = this.m_source[this.m_index];
                 if(c == "r")
                 {
-                    s = s + "\r";
+                    s += "\r";
                 }
                 else if (c == "n")
                 {
-                    s = s + "\n";
+                    s += "\n";
                 }
                 else if (c == "t")
                 {
-                    s = s + "\t";
+                    s += "\t";
                 }
                 else if (c == "f")
                 {
-                    s = s + "\f";
+                    s += "\f";
                 }
                 // Note escaped unicode not handled
                 else
                 {
-                    s = s + c;
+                    s += c;
                 }
             }
             else
             {
-                s = s + c;
+                s += c;
             }
             this.m_index++;
         }

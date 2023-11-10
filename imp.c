@@ -68,6 +68,11 @@ char* neon_util_readhandle(FILE* hnd, bool withminsize, size_t minsize, size_t* 
         }
     }
     buf = (char*)malloc(toldlen + 1);
+    if(buf == NULL)
+    {
+        fprintf(stderr, "failed to allocate %ld bytes for buffer\n", toldlen+1);
+        return NULL;
+    }
     memset(buf, 0, toldlen+1);
     if(buf != NULL)
     {
@@ -868,6 +873,7 @@ NeonWriter* neon_writer_make(NeonState* state)
     if(!wr)
     {
         fprintf(stderr, "cannot allocate NeonWriter\n");
+        return NULL;
     }
     wr->pvm = state;
     wr->isstring = false;
@@ -910,7 +916,6 @@ NeonObjString* neon_writer_takestring(NeonWriter* wr)
     os = neon_string_allocfromstrbuf(state, wr->strbuf, hash);
     wr->stringtaken = true;
     return os;
-
 }
 
 NeonWriter* neon_writer_makeio(NeonState* state, FILE* fh, bool shouldclose)
@@ -931,7 +936,7 @@ NeonWriter* neon_writer_makestring(NeonState* state)
     return wr;
 }
 
-void neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
+bool neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
 {
     if(wr->isstring)
     {
@@ -942,14 +947,15 @@ void neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
         fwrite(estr, sizeof(char), elen, wr->handle);
         fflush(wr->handle);
     }
+    return true;
 }
 
-void neon_writer_writestring(NeonWriter* wr, const char* estr)
+bool neon_writer_writestring(NeonWriter* wr, const char* estr)
 {
     return neon_writer_writestringl(wr, estr, strlen(estr));
 }
 
-void neon_writer_writechar(NeonWriter* wr, int b)
+bool neon_writer_writechar(NeonWriter* wr, int b)
 {
     char ch;
     if(wr->isstring)
@@ -962,9 +968,10 @@ void neon_writer_writechar(NeonWriter* wr, int b)
         fputc(b, wr->handle);
         fflush(wr->handle);
     }
+    return true;
 }
 
-void neon_writer_writeescapedchar(NeonWriter* wr, int ch)
+bool neon_writer_writeescapedchar(NeonWriter* wr, int ch)
 {
     switch(ch)
     {
@@ -1019,9 +1026,10 @@ void neon_writer_writeescapedchar(NeonWriter* wr, int ch)
             }
             break;
     }
+    return true;
 }
 
-void neon_writer_writequotedstring(NeonWriter* wr, const char* str, size_t len, bool withquot)
+bool neon_writer_writequotedstring(NeonWriter* wr, const char* str, size_t len, bool withquot)
 {
     int bch;
     size_t i;
@@ -1046,9 +1054,10 @@ void neon_writer_writequotedstring(NeonWriter* wr, const char* str, size_t len, 
     {
         neon_writer_writechar(wr, '"');
     }
+    return true;
 }
 
-void neon_writer_vwritefmttostring(NeonWriter* wr, const char* fmt, va_list va)
+bool neon_writer_vwritefmttostring(NeonWriter* wr, const char* fmt, va_list va)
 {
     size_t wsz;
     size_t needed;
@@ -1058,13 +1067,18 @@ void neon_writer_vwritefmttostring(NeonWriter* wr, const char* fmt, va_list va)
     needed = 1 + vsnprintf(NULL, 0, fmt, copy);
     va_end(copy);
     buf = (char*)malloc(needed+1);
+    if(!buf)
+    {
+        return false;
+    }
     memset(buf, 0, needed+1);
     wsz = vsnprintf(buf, needed, fmt, va);
     neon_writer_writestringl(wr, buf, wsz);
     free(buf);
+    return true;
 }
 
-void neon_writer_vwritefmt(NeonWriter* wr, const char* fmt, va_list va)
+bool neon_writer_vwritefmt(NeonWriter* wr, const char* fmt, va_list va)
 {
     if(wr->isstring)
     {
@@ -1075,17 +1089,19 @@ void neon_writer_vwritefmt(NeonWriter* wr, const char* fmt, va_list va)
         vfprintf(wr->handle, fmt, va);
         fflush(wr->handle);
     }
+    return true;
 }
 
-void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
+bool neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
 
-
-void neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...)
+bool neon_writer_writefmt(NeonWriter* wr, const char* fmt, ...)
 {
+    bool b;
     va_list va;
     va_start(va, fmt);
-    neon_writer_vwritefmt(wr, fmt, va);
+    b = neon_writer_vwritefmt(wr, fmt, va);
     va_end(va);
+    return b;
 }
 
 bool neon_writer_vvalfmt(NeonWriter* wr, const char* format, va_list arglist)
@@ -1152,19 +1168,16 @@ bool neon_writer_valfmt(NeonWriter* wr, const char* format, ...)
     return b;
 }
 
-void neon_writer_printfunction(NeonWriter* wr, NeonObjScriptFunction* ofn)
+bool neon_writer_printfunction(NeonWriter* wr, NeonObjScriptFunction* ofn)
 {
     if(ofn->name == NULL)
     {
-        neon_writer_writestring(wr, "<script>");
+        return neon_writer_writestring(wr, "<script>");
     }
-    else
-    {
-        neon_writer_writefmt(wr, "<function '%s'>", ofn->name->sbuf->data);
-    }
+    return neon_writer_writefmt(wr, "<function '%s'>", ofn->name->sbuf->data);
 }
 
-void neon_writer_printarray(NeonWriter* wr, NeonObjArray* arr)
+bool neon_writer_printarray(NeonWriter* wr, NeonObjArray* arr)
 {
     size_t i;
     size_t asz;
@@ -1179,9 +1192,10 @@ void neon_writer_printarray(NeonWriter* wr, NeonObjArray* arr)
         }
     }
     neon_writer_writestring(wr, "]");
+    return true;
 }
 
-void neon_writer_printmap(NeonWriter* wr, NeonObjMap* map)
+bool neon_writer_printmap(NeonWriter* wr, NeonObjMap* map)
 {
     size_t i;
     size_t cap;
@@ -1206,9 +1220,10 @@ void neon_writer_printmap(NeonWriter* wr, NeonObjMap* map)
         }
     }
     neon_writer_writestring(wr, "}");
+    return true;
 }
 
-void neon_writer_printstring(NeonWriter* wr, NeonObjString* os, bool fixstring)
+bool neon_writer_printstring(NeonWriter* wr, NeonObjString* os, bool fixstring)
 {
     size_t len;
     const char* sp;
@@ -1216,15 +1231,12 @@ void neon_writer_printstring(NeonWriter* wr, NeonObjString* os, bool fixstring)
     sp = os->sbuf->data;
     if(fixstring)
     {
-        neon_writer_writequotedstring(wr, sp, len, true);
+        return neon_writer_writequotedstring(wr, sp, len, true);
     }
-    else
-    {
-        neon_writer_writestringl(wr, sp, len);
-    }
+    return neon_writer_writestringl(wr, sp, len);
 }
 
-void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
+bool neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
 {
     switch(neon_value_objtype(value))
     {
@@ -1290,9 +1302,10 @@ void neon_writer_printobject(NeonWriter* wr, NeonValue value, bool fixstring)
                 neon_writer_writefmt(wr, "?unknownobject?");
             }
     }
+    return true;
 }
 
-void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
+bool neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
 {
     int64_t iv;
     double dw;
@@ -1325,6 +1338,7 @@ void neon_writer_printvalue(NeonWriter* wr, NeonValue value, bool fixstring)
             neon_writer_writefmt(wr, "?unknownvalue?");
             break;
     }
+    return true;
 }
 
 const char* neon_object_typename(NeonObject* obj, bool detailed)
@@ -1509,6 +1523,10 @@ NeonValArray* neon_valarray_make(NeonState* state)
 {
     NeonValArray* va;
     va = (NeonValArray*)malloc(sizeof(NeonValArray));
+    if(va == NULL)
+    {
+        return NULL;
+    }
     va->pvm = state;
     va->values = NULL;
     va->capacity = 0;
@@ -2189,6 +2207,10 @@ NeonHashTable* neon_hashtable_make(NeonState* state)
 {
     NeonHashTable* tbl;
     tbl = (NeonHashTable*)malloc(sizeof(NeonHashTable));
+    if(tbl == NULL)
+    {
+        return NULL;
+    }
     memset(tbl, 0, sizeof(NeonHashTable));
     tbl->pvm = state;
     tbl->count = 0;
@@ -2446,6 +2468,10 @@ NeonBinaryBlob* neon_blob_make(NeonState* state)
 {
     NeonBinaryBlob* blob;
     blob = (NeonBinaryBlob*)malloc(sizeof(NeonBinaryBlob));
+    if(blob == NULL)
+    {
+        return NULL;
+    }
     blob->count = 0;
     blob->capacity = 0;
     blob->bincode = NULL;
@@ -2540,7 +2566,7 @@ const char* neon_dbg_op2str(int32_t opcode)
         case NEON_OP_JUMPNOW: return "NEON_OP_JUMPNOW";
         case NEON_OP_JUMPIFFALSE: return "NEON_OP_JUMPIFFALSE";
         case NEON_OP_LOOP: return "NEON_OP_LOOP";
-        case NEON_OP_CALL: return "NEON_OP_CALL";
+        case NEON_OP_CALLCALLABLE: return "NEON_OP_CALLCALLABLE";
         case NEON_OP_INSTTHISINVOKE: return "NEON_OP_INSTTHISINVOKE";
         case NEON_OP_INSTSUPERINVOKE: return "NEON_OP_INSTSUPERINVOKE";
         case NEON_OP_CLOSURE: return "NEON_OP_CLOSURE";
@@ -2736,7 +2762,7 @@ int neon_dbg_dumpdisasm(NeonState* state, NeonWriter* wr, NeonBinaryBlob* blob, 
             return neon_dbg_dumpjumpinstr(state, wr, instrname, 1, blob, offset);
         case NEON_OP_LOOP:
             return neon_dbg_dumpjumpinstr(state, wr, instrname, -1, blob, offset);
-        case NEON_OP_CALL:
+        case NEON_OP_CALLCALLABLE:
             return neon_dbg_dumpbyteinstr(state, wr, instrname, blob, offset);
         case NEON_OP_INSTTHISINVOKE:
             return neon_dbg_dumpinvokeinstr(state, wr, instrname, blob, offset);
@@ -2945,10 +2971,27 @@ void neon_state_defnative(NeonState* state, const char* name, NeonNativeFN nat)
 
 void neon_vm_stackinit(NeonState* state)
 {
+    size_t asz;
     NeonVMStateVars* vm;
     vm = &state->vmstate;
-    vm->framevalues = (NeonCallFrame*)malloc((NEON_MAX_VMFRAMES + 1) * sizeof(NeonCallFrame));
-    vm->stackvalues = (NeonValue*)malloc((NEON_MAX_VMSTACK + 1) * sizeof(NeonValue));
+    {
+        asz = (NEON_MAX_VMFRAMES + 1) * sizeof(NeonCallFrame);
+        vm->framevalues = (NeonCallFrame*)malloc(asz);
+        if(vm->framevalues == NULL)
+        {
+            fprintf(stderr, "stackinit: cannot allocate frames (requested %ld bytes)\n", asz);
+            abort();
+        }
+    }
+    {
+        asz = (NEON_MAX_VMSTACK + 1) * sizeof(NeonValue);
+        vm->stackvalues = (NeonValue*)malloc(asz);
+        if(vm->stackvalues == NULL)
+        {
+            fprintf(stderr, "cannot allocate stack (requested %ld bytes)\n", asz);
+            abort();
+        }
+    }
     vm->stackcapacity = NEON_MAX_VMSTACK;
     vm->framecapacity = NEON_MAX_VMFRAMES;
 }
@@ -3156,6 +3199,8 @@ NeonState* neon_state_make()
     state = (NeonState*)malloc(sizeof(NeonState));
     if(state == NULL)
     {
+        fprintf(stderr, "failed to allocate state!\n");
+        abort();
         return NULL;
     }
     memset(state, 0, sizeof(NeonState));

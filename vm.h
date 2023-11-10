@@ -655,6 +655,13 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool asbool, NeonOpCod
                     numres = leftsigned << (rightusigned & 0x1F);
                 }
                 break;
+            case NEON_OP_PRIMMODULO:
+                {
+                    leftint = neon_vmutil_toint(leftinval);
+                    rightint = neon_vmutil_toint(rightinval);
+                    numres = (leftint % rightint);
+                }
+                break;
             case NEON_OP_PRIMBINXOR:
                 {
                     leftint = neon_vmutil_toint(leftinval);
@@ -1158,7 +1165,6 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
         {
             NeonValue cval;
             cval = neon_vmbits_readconst(state);
-            /* A Virtual Machine op-constant < A Virtual Machine push-constant */
             /*
             neon_writer_writefmt(state->stderrwriter, "pushconst: ");
             neon_writer_printvalue(state->stderrwriter, cval, true);
@@ -1253,7 +1259,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             name = neon_vmbits_readstring(state);
             if(!neon_hashtable_get(state->globals, name, &value))
             {
-                neon_state_raiseerror(state, "undefined variable '%s'.", name->sbuf->data);
+                neon_state_raiseerror(state, "undefined global variable '%s'.", name->sbuf->data);
                 return NEON_STATUS_RUNTIMEERROR;
             }
             neon_vmbits_stackpush(state, value);
@@ -1280,7 +1286,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
                 if(state->conf.strictmode)
                 {
                     neon_hashtable_delete(state, state->globals, name);// [delete]
-                    neon_state_raiseerror(state, "strict mode: undefined variable '%s'.", name->sbuf->data);
+                    neon_state_raiseerror(state, "strict mode: undefined global variable '%s'.", name->sbuf->data);
                     return NEON_STATUS_RUNTIMEERROR;
                 }
             }
@@ -1454,7 +1460,10 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
         vm_breakouter();
     op_case(NEON_OP_PRIMMODULO)
         {
-            if(!neon_vmexec_dobinary(state, false, NEON_OP_PRIMMODULO, (NeonVMBinaryCallbackFN)neon_util_modulo))
+            if(!neon_vmexec_dobinary(state, false, NEON_OP_PRIMMODULO, 
+            //(NeonVMBinaryCallbackFN)neon_util_modulo
+            NULL
+            ))
             {
                 return NEON_STATUS_RUNTIMEERROR;
             }
@@ -1549,7 +1558,7 @@ NeonStatusCode neon_vm_runexecinstruc(NeonState* state, int32_t instruc, NeonVal
             state->vmstate.activeframe->instrucidx -= offset;
         }
         vm_breakouter();
-    op_case(NEON_OP_CALL)
+    op_case(NEON_OP_CALLCALLABLE)
         {
             int argc;
             NeonValue peeked;
