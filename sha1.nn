@@ -193,26 +193,21 @@ function core_sha1(x, l)
 // In 8-bit function, characters >255 have their hi-byte silently ignored.
 function str2binb(str)
 {
-    var aidx;
     var bin = [];
     var mask = (1 << K_CHARSIZE) - 1;
     var len = str.size();
     var olen = len * K_CHARSIZE;
-    for(var i = 0; i < olen; i = i + K_CHARSIZE)
+    for(var i = 0; i < olen; i += K_CHARSIZE)
     {
-        aidx = (i >> 5);
-        println("aidx=", aidx)
+        var aidx = (i >> 5);
+        //println("bin[", aidx, "] = " , bin[aidx])
         if(aidx >= bin.size())
         {
             bin.push(0);
         }
-        //var right = (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
-        //bin[aidx] = bin[aidx] | right;
-        //bin[aidx] |= right;
-        //bin[aidx] |= (ord(str[i / K_CHARSIZE]) & mask) << (24 - i%32);
-        var right = ((str[i / K_CHARSIZE]).ord() & mask) << (24 - i%32);
+        var right = ((str[i / K_CHARSIZE]).ord() & mask) << (24 - (i % 32));
         var left = bin[aidx]
-        println("left=", left, ", right=", right)
+        //println("left=", left, ", right=", right)
         bin[aidx] = left | right; 
         //println("bin[", aidx, "] = ", bin[aidx])
     }
@@ -247,8 +242,8 @@ function binb2hex(binarray)
     {
         var c1 = hex_tab[(binarray[i>>2] >> ((3 - i%4)*8+4)) & 0xF];
         var c2 = hex_tab[(binarray[i>>2] >> ((3 - i%4)*8  )) & 0xF];
-        str = str + c1;
-        str = str + c2;
+        str += c1;
+        str += c2;
     }
     return str;
 }

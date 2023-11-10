@@ -119,7 +119,7 @@ enum NeonOpCode
 
 enum NeonValType
 {
-    NEON_VAL_NIL,// [user-types]
+    NEON_VAL_NIL,
     NEON_VAL_BOOL,
     NEON_VAL_NUMBER,
     NEON_VAL_OBJ

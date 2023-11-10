@@ -658,7 +658,6 @@ void neon_astparser_emitloop(NeonAstParser* prs, int loopstart)
     neon_astparser_emit1byte(prs, offset & 0xff);
 }
 
-
 int neon_astparser_realgetcodeargscount(const int32_t* code, const NeonValue* constants, int ip)
 {
     NeonOpCode op = code[ip];
@@ -2513,32 +2512,6 @@ void neon_astparser_parsewhilestmt(NeonAstParser* p)
     p->innermostloopstart = surroundingloopstart;
     p->innermostloopscopedepth = surroundingscopedepth;
 }
-
-/*
-void neon_astparser_parsebreakstmt(NeonAstParser* prs)
-{
-    if(prs->currcompiler->loop == NULL)
-    {
-        neon_astparser_raiseerror(prs, "cannot use 'break' outside of a loop");
-        return;
-    }
-    neon_astparser_skipsemicolon(prs);
-    neon_astparser_discardlocals(prs, prs->currcompiler);
-    neon_astparser_emitjump(prs, NEON_OP_PSEUDOBREAK);
-}
-
-void neon_astparser_parsecontinuestmt(NeonAstParser* prs)
-{
-    if(prs->currcompiler->loop == NULL)
-    {
-        neon_astparser_raiseerror(prs, "cannot use 'continue' outside of a loop");
-        return;
-    }
-    neon_astparser_skipsemicolon(prs);
-    neon_astparser_discardlocals(prs, prs->currcompiler);
-    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
-}
-*/
 
 void neon_astparser_parsecontinuestmt(NeonAstParser* p)
 {

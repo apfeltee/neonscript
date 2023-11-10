@@ -598,10 +598,9 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool asbool, NeonOpCod
     NeonValue rightinval;
     rightinval = neon_vm_stackpop(state);
     leftinval = neon_vm_stackpop(state);
-    //fprintf(stderr, "neon_vmexec_dobinary(asbool=%d, op=%s)\n", asbool, neon_dbg_op2str(op));
     if((!neon_value_isnumber(leftinval) && !neon_value_isbool(leftinval)) || (!neon_value_isnumber(rightinval) && !neon_value_isbool(rightinval)))
     {
-        neon_state_raiseerror(state, "unsupported operand %d for %s and %s", neon_dbg_op2str(op), neon_value_typename(leftinval), neon_value_typename(rightinval));
+        neon_state_raiseerror(state, "unsupported operand %d (%s) for %s and %s", op, neon_dbg_op2str(op), neon_value_typename(leftinval), neon_value_typename(rightinval));
     }
     if(fn != NULL)
     {
@@ -717,7 +716,7 @@ static inline bool neon_vmexec_dobinary(NeonState* state, bool asbool, NeonOpCod
     return true;
 }
 
-static inline bool neon_vmexec_doindexgetstring(NeonState* state, NeonObjString* os, NeonValue vidx, NeonValue* destval)
+static inline bool neon_vmutil_indexgetstring(NeonState* state, NeonObjString* os, NeonValue vidx, NeonValue* destval)
 {
     char ch;
     long nidx;
@@ -744,9 +743,10 @@ static inline bool neon_vmexec_doindexgetstring(NeonState* state, NeonObjString*
     return false;
 }
 
-static inline bool neon_vmexec_doindexgetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx, NeonValue* destval)
+static inline bool neon_vmutil_indexgetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx, NeonValue* destval)
 {
     long nidx;
+    long asz;
     NeonValue val;
     if(!neon_value_isnumber(vidx))
     {
@@ -754,8 +754,10 @@ static inline bool neon_vmexec_doindexgetarray(NeonState* state, NeonObjArray* o
         return false;
     }
     nidx = neon_value_asnumber(vidx);
-    //fprintf(stderr, "nidx=%d\n", nidx);
-    if((nidx >= 0) && (nidx < (long)oa->vala->size))
+    asz = oa->vala->size;
+    //fprintf(stderr, "nidx=%d, asz=%d\n", nidx, asz);
+    //if((nidx >= 0) && (nidx < asz))
+    if((asz > 0))
     {
         val = oa->vala->values[nidx];
         *destval = val;
@@ -768,7 +770,7 @@ static inline bool neon_vmexec_doindexgetarray(NeonState* state, NeonObjArray* o
     return false;
 }
 
-static inline bool neon_vmexec_doindexgetmap(NeonState* state, NeonObjMap* om, NeonValue vidx, NeonValue* destval)
+static inline bool neon_vmutil_indexgetmap(NeonState* state, NeonObjMap* om, NeonValue vidx, NeonValue* destval)
 {
     NeonValue val;
     NeonObjString* key;
@@ -812,21 +814,21 @@ static inline bool neon_vmexec_doindexget(NeonState* state)
     //fprintf(stderr, "indexget: waint=%d vidx=<%s> targetobj=<%s>\n", waint, neon_value_typename(vidx), neon_value_typename(targetobj));
     if(neon_value_isstring(targetobj))
     {
-        if(neon_vmexec_doindexgetstring(state, neon_value_asstring(targetobj), vidx, &destval))
+        if(neon_vmutil_indexgetstring(state, neon_value_asstring(targetobj), vidx, &destval))
         {
             ok = true;
         }
     }
     else if(neon_value_isarray(targetobj))
     {
-        if(neon_vmexec_doindexgetarray(state, neon_value_asarray(targetobj), vidx, &destval))
+        if(neon_vmutil_indexgetarray(state, neon_value_asarray(targetobj), vidx, &destval))
         {
             ok = true;
         }
     }
     else if(neon_value_ismap(targetobj))
     {
-        if(neon_vmexec_doindexgetmap(state, neon_value_asmap(targetobj), vidx, &destval))
+        if(neon_vmutil_indexgetmap(state, neon_value_asmap(targetobj), vidx, &destval))
         {
             ok = true;
         }
@@ -837,13 +839,14 @@ static inline bool neon_vmexec_doindexget(NeonState* state)
     }
     if(!ok)
     {
+        fprintf(stderr, "indexget failed: pushing nil\n");
         destval = neon_value_makenil();
     }
     neon_vmbits_stackpush(state, destval);
-    return ok;
+    return true;
 }
 
-static inline bool neon_vmexec_doindexsetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx, NeonValue setval)
+static inline bool neon_vmutil_indexsetarray(NeonState* state, NeonObjArray* oa, NeonValue vidx, NeonValue setval)
 {
     long nidx;
     if(!neon_value_isnumber(vidx))
@@ -861,7 +864,7 @@ static inline bool neon_vmexec_doindexsetarray(NeonState* state, NeonObjArray* o
     return true;
 }
 
-static inline bool neon_vmexec_doindexsetmap(NeonState* state, NeonObjMap* om, NeonValue vidx, NeonValue setval)
+static inline bool neon_vmutil_indexsetmap(NeonState* state, NeonObjMap* om, NeonValue vidx, NeonValue setval)
 {
     NeonObjString* key;
     if(!neon_value_isstring(vidx))
@@ -896,14 +899,14 @@ static inline bool neon_vmexec_doindexset(NeonState* state)
     }
     if(neon_value_isarray(targetobj))
     {
-        if(neon_vmexec_doindexsetarray(state, neon_value_asarray(targetobj), vidx, setval))
+        if(neon_vmutil_indexsetarray(state, neon_value_asarray(targetobj), vidx, setval))
         {
             ok = true;
         }
     }
     else if(neon_value_ismap(targetobj))
     {
-        if(neon_vmexec_doindexsetmap(state, neon_value_asmap(targetobj), vidx, setval))
+        if(neon_vmutil_indexsetmap(state, neon_value_asmap(targetobj), vidx, setval))
         {
             ok = true;
         }
@@ -913,9 +916,8 @@ static inline bool neon_vmexec_doindexset(NeonState* state)
         neon_state_raiseerror(state, "cannot set index object type <%s>", neon_value_typename(targetobj));
     }
     neon_vmbits_stackpush(state, setval);
-    return ok;
+    return true;
 }
-
 
 static inline bool neon_vmutil_hasproperties(NeonState* state, NeonValue val)
 {
@@ -1151,6 +1153,10 @@ NeonStatusCode neon_vm_runvm(NeonState* state, NeonValue* evdest, bool fromneste
         sc = neon_vm_runexecinstruc(state, instruc, evdest, fromnested);
         if(sc != NEON_STATUS_OK)
         {
+            if(instruc != NEON_OP_HALTVM)
+            {
+                fprintf(stderr, "**possible premature VM exit after op %d (%s)?**\n", instruc, neon_dbg_op2str(instruc));
+            }
             return sc;
         }
     }

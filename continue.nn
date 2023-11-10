@@ -1,3 +1,5 @@
+
+println("really simple test ...");
 var a = 0;
 while (a < 10) {
     a = a + 1;
@@ -6,21 +8,28 @@ while (a < 10) {
     }
     println(a);
 }
+println("done!");
 
-{
+
+    println("simple test ...");
     var b = 5;
-    while (b != 0) {
+    while (b != 0)
+    {
         b = b - 1;
-        if (b == 3) {
+        if (b == 3)
+        {
             println("printing three");
             continue;
         }
     }
-}
+    println("done!");
 
-{
+
+
+    println("other test ...");
     var b = 5;
-    while (b != 0) {
+    while (b != 0)
+    {
         b = b - 1;
         if (b == 3) {
             println("3!");
@@ -32,9 +41,9 @@ while (a < 10) {
             continue;
         }
     }
-}
 
-{
+
+
     var b = 5;
     var g = "scopes ok";
     while (b != 0) {
@@ -47,13 +56,13 @@ while (a < 10) {
         }
     }
     println(g);
-}
 
-{
+
+
     for (var b = 0; b != 5; b = b + 1) {
-        if (b == 0 or b == 1 or b == 2) {
+        if (b == 0 || b == 1 || b == 2) {
             println(b);
             continue;
         }
     }
-}
+
