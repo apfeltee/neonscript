@@ -660,8 +660,10 @@ void neon_astparser_emitloop(NeonAstParser* prs, int loopstart)
 
 int neon_astparser_realgetcodeargscount(const int32_t* code, const NeonValue* constants, int ip)
 {
-    NeonOpCode op = code[ip];
-    if(op == -1)
+    NeonOpCode op;
+    (void)constants;
+    op = code[ip];
+    if((int)op == (int)-1)
     {
         return 0;
     }

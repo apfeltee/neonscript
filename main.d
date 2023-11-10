@@ -1,1 +1,1 @@
-main.o: main.c neon.h strbuf.h prot.inc
+main.o: main.c neon.h strbuf.h prot.inc optparse.h

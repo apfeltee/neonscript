@@ -915,6 +915,9 @@ static inline bool neon_vmexec_doindexset(NeonState* state)
     {
         neon_state_raiseerror(state, "cannot set index object type <%s>", neon_value_typename(targetobj));
     }
+    if(!ok)
+    {
+    }
     neon_vmbits_stackpush(state, setval);
     return true;
 }

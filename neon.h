@@ -654,6 +654,197 @@ struct NeonState
 
 };
 
+static inline NeonValue neon_value_makevalue(NeonValType vt)
+{
+    NeonValue v;
+    v.type = vt;
+    return v;
+}
+
+static inline NeonValue neon_value_makenil()
+{
+    NeonValue v;
+    v = neon_value_makevalue(NEON_VAL_NIL);
+    return v;
+}
+
+static inline NeonValue neon_value_makenull()
+{
+    return neon_value_makenil();
+}
+
+
+static inline NeonValue neon_value_makebool(bool b)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_BOOL);
+    nv.as.valbool = b;
+    return nv;
+}
+
+static inline NeonValue neon_value_makenumber(double dw)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_NUMBER);
+    nv.as.valnumber = dw;
+    return nv;
+}
+
+#define neon_value_fromobject(obj) neon_value_fromobject_actual((NeonObject*)(obj))
+
+static inline NeonValue neon_value_fromobject_actual(NeonObject* o)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_OBJ);
+    nv.as.valobjptr = o;
+    return nv;
+}
+
+static inline bool neon_value_isbool(NeonValue v)
+{
+    return (v.type == NEON_VAL_BOOL);
+}
+
+static inline bool neon_value_isnil(NeonValue v)
+{
+    return (v.type == NEON_VAL_NIL);
+}
+
+static inline bool neon_value_isnumber(NeonValue v)
+{
+    return (v.type == NEON_VAL_NUMBER);
+}
+
+static inline bool neon_value_isobject(NeonValue v)
+{
+    return (v.type == NEON_VAL_OBJ);
+}
+
+static inline NeonObject* neon_value_asobject(NeonValue v)
+{
+    return v.as.valobjptr;
+}
+
+static inline bool neon_value_isobjtype(NeonValue value, NeonObjType type)
+{
+    return (
+        neon_value_isobject(value) &&
+        (neon_value_asobject(value)->type == type)
+    );
+}
+
+static inline bool neon_value_asbool(NeonValue v)
+{
+    return (v.as.valbool);
+}
+
+static inline double neon_value_asnumber(NeonValue v)
+{
+    return (v.as.valnumber);
+}
+
+static inline NeonObjUserdata* neon_value_asuserdata(NeonValue v)
+{
+    return ((NeonObjUserdata*)neon_value_asobject(v));
+}
+
+static inline NeonObjBoundFunction* neon_value_asboundfunction(NeonValue v)
+{
+    return ((NeonObjBoundFunction*)neon_value_asobject(v));
+}
+
+static inline NeonObjClass* neon_value_asclass(NeonValue v)
+{
+    return ((NeonObjClass*)neon_value_asobject(v));
+}
+
+static inline NeonObjClosure* neon_value_asclosure(NeonValue v)
+{
+    return ((NeonObjClosure*)neon_value_asobject(v));
+}
+
+static inline NeonObjScriptFunction* neon_value_asscriptfunction(NeonValue v)
+{
+    return ((NeonObjScriptFunction*)neon_value_asobject(v));
+}
+
+static inline NeonObjNativeFunction* neon_value_asnativefunction(NeonValue v)
+{
+    return ((NeonObjNativeFunction*)neon_value_asobject(v));
+}
+
+
+static inline NeonObjInstance* neon_value_asinstance(NeonValue v)
+{
+    return ((NeonObjInstance*)neon_value_asobject(v));
+}
+
+static inline NeonObjString* neon_value_asstring(NeonValue v)
+{
+    return ((NeonObjString*)neon_value_asobject(v));
+}
+
+static inline NeonObjArray* neon_value_asarray(NeonValue v)
+{
+    return ((NeonObjArray*)neon_value_asobject(v));
+}
+
+static inline NeonObjMap* neon_value_asmap(NeonValue v)
+{
+    return ((NeonObjMap*)neon_value_asobject(v));
+}
+
+static inline NeonObjType neon_value_objtype(NeonValue v)
+{
+    return (neon_value_asobject(v)->type);
+}
+
+//#define IS_CLOSURE(value) neon_value_isobjtype(value, NEON_OBJ_CLOSURE)
+//#define IS_FUNCTION(value) neon_value_isobjtype(value, NEON_OBJ_FUNCTION)
+//#define IS_NATIVE(value) neon_value_isobjtype(value, NEON_OBJ_NATIVE)
+//#define IS_BOUND_METHOD(value) neon_value_isobjtype(value, NEON_OBJ_BOUNDMETHOD)
+
+static inline bool neon_value_isclass(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_CLASS);
+}
+
+static inline bool neon_value_isuserdata(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_USERDATA);
+}
+
+static inline bool neon_value_isinstance(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_INSTANCE);
+}
+
+static inline bool neon_value_isstring(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_STRING);
+}
+    
+static inline bool neon_value_isarray(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_ARRAY);
+}
+
+static inline bool neon_value_ismap(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_MAP);
+}
+
+static inline bool neon_value_isfalsey(NeonValue value)
+{
+    return (
+        neon_value_isnil(value) || (
+            neon_value_isbool(value) &&
+            !neon_value_asbool(value)
+        )
+    );
+}
+
+
 #include "prot.inc"
 
 
