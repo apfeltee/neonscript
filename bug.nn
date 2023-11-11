@@ -1,22 +1,17 @@
-class Blah
-{
-    constructor()
-    {
-        this.counter = 0
-    }
 
-    shit()
-    {
-        this.counter = this.counter + 1
-        this.counter++
-        println("this.counter=", this.counter)
-    }
+
+function fpr(s1, s2)
+{
+    println(s1, s2)
 }
 
-b = Blah()
-b.shit()
+for(var dick=0; dick<10; dick++)
+{
+    fpr("dick=", dick)
+}
 
-a = []
-a[5] = "dicks"
 
-println(a)
+for(balls=0; balls<10; balls++)
+{
+    fpr("balls=", balls)
+}

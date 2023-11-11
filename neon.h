@@ -607,7 +607,7 @@ struct NeonCallFrame
     int instrucidx;
     int64_t frstackindex;
     NeonObjClosure* closure;
-    NeonValue* slots;
+    //NeonValue* slots;
 };
 
 struct NeonVMGCVars

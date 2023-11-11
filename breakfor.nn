@@ -34,13 +34,13 @@ var a = "no";
 
 var i
 var j
-for(var i=0; i<100; i++)
+for(i=0; i<100; i++)
 {
     if(i == 56)
     {
         break
     }
-    for(var j=0; j<100; j++)
+    for(j=0; j<100; j++)
     {
         if(j == 48)
         {

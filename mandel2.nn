@@ -1,6 +1,7 @@
-function do_add(x, y)
+
+function do_add(ax, ay)
 {
-    return x + y;
+    return ax + ay;
 }
 
 function do_sub(x, y)
@@ -54,12 +55,12 @@ function run()
     var ymin = of_int(-1);
     var ymax = of_int(1);
     var deltay = do_div(do_sub(ymax, ymin), of_int(steps));
-    var i = 0
     for(var i = 0; i < steps; i++)
     {
-        var j = 0
-        var y = do_add(ymin, do_mul(of_int(i), deltay));
-        for(j = 0; j < 2 * steps; j++)
+        var muld = do_mul(of_int(i), deltay);
+        //println("i=", i, ", muld=", muld, ", ymin=", ymin)
+        var y = do_add(ymin, muld);
+        for(var j = 0; j < 2 * steps; j++)
         {
             var x = do_add(xmin, do_mul(of_int(j), deltax));
             var ins = inside(x, y);

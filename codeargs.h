@@ -77,10 +77,10 @@ int neon_astparser_realgetcodeargscount(const int32_t* code, const NeonValArray*
         case NEON_OP_MAKEMAP:
 
         case NEON_OP_INSTTHISPROPERTYGET:
-            return 2;
         case NEON_OP_INSTTHISINVOKE:
         case NEON_OP_INSTSUPERINVOKE:
-            return 3;
+
+            return 2;
 
         case NEON_OP_CLOSURE:
             {
