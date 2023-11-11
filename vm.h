@@ -140,39 +140,10 @@ bool neon_vmbits_docallclosurewrap(NeonState* state, NeonValue receiver, NeonObj
     return true;
 }
 
-/*
-bool neon_vmbits_docallclosurewrap(NeonState* state, NeonValue receiver, NeonObjClosure* closure, int argc, bool iseval)
-{
-    NeonCallFrame* frame;
-    (void)receiver;
-    #if 0
-    if(argc != closure->fnptr->arity)
-    {
-        neon_state_raiseerror(state, "expected %d arguments, but got %d", closure->fnptr->arity, argc);
-        return false;
-    }
-    #endif
-    state->vmstate.iseval = iseval;
-    state->vmstate.havekeeper = iseval;
-    if(iseval)
-    {
-        state->vmstate.keepframe = *state->vmstate.activeframe;
-    }
-    neon_vm_framesmaybegrow(state, state->vmstate.framecount + 0);
-    frame = &state->vmstate.framevalues[state->vmstate.framecount];
-    state->vmstate.framecount++;
-    frame->closure = closure;
-    frame->instrucidx = 0;
-    frame->frstackindex = (state->vmstate.stacktop - argc) - 1;
-    return true;
-}
-*/
-
 bool neon_vmbits_docallclosure(NeonState* state, NeonValue receiver, NeonObjClosure* closure, int argc)
 {
     return neon_vmbits_docallclosurewrap(state, receiver, closure, argc, false);
 }
-
 
 bool neon_vmbits_callnativefunction(NeonState* state, NeonValue receiver, NeonValue callee, int argc)
 {

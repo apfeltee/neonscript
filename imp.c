@@ -288,6 +288,194 @@ double neon_util_modulo(double a, double b)
     return r;
 }
 
+NeonValue neon_value_makevalue(NeonValType vt)
+{
+    NeonValue v;
+    v.type = vt;
+    return v;
+}
+
+NeonValue neon_value_makenil()
+{
+    NeonValue v;
+    v = neon_value_makevalue(NEON_VAL_NIL);
+    return v;
+}
+
+NeonValue neon_value_makenull()
+{
+    return neon_value_makenil();
+}
+
+
+NeonValue neon_value_makebool(bool b)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_BOOL);
+    nv.as.valbool = b;
+    return nv;
+}
+
+NeonValue neon_value_makenumber(double dw)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_NUMBER);
+    nv.as.valnumber = dw;
+    return nv;
+}
+
+NeonValue neon_value_fromobject_actual(NeonObject* o)
+{
+    NeonValue nv;
+    nv = neon_value_makevalue(NEON_VAL_OBJ);
+    nv.as.valobjptr = o;
+    return nv;
+}
+
+bool neon_value_isbool(NeonValue v)
+{
+    return (v.type == NEON_VAL_BOOL);
+}
+
+bool neon_value_isnil(NeonValue v)
+{
+    return (v.type == NEON_VAL_NIL);
+}
+
+bool neon_value_isnumber(NeonValue v)
+{
+    return (v.type == NEON_VAL_NUMBER);
+}
+
+bool neon_value_isobject(NeonValue v)
+{
+    return (v.type == NEON_VAL_OBJ);
+}
+
+NeonObject* neon_value_asobject(NeonValue v)
+{
+    return v.as.valobjptr;
+}
+
+bool neon_value_isobjtype(NeonValue value, NeonObjType type)
+{
+    return (
+        neon_value_isobject(value) &&
+        (neon_value_asobject(value)->type == type)
+    );
+}
+
+bool neon_value_asbool(NeonValue v)
+{
+    return (v.as.valbool);
+}
+
+double neon_value_asnumber(NeonValue v)
+{
+    return (v.as.valnumber);
+}
+
+NeonObjUserdata* neon_value_asuserdata(NeonValue v)
+{
+    return ((NeonObjUserdata*)neon_value_asobject(v));
+}
+
+NeonObjBoundFunction* neon_value_asboundfunction(NeonValue v)
+{
+    return ((NeonObjBoundFunction*)neon_value_asobject(v));
+}
+
+NeonObjClass* neon_value_asclass(NeonValue v)
+{
+    return ((NeonObjClass*)neon_value_asobject(v));
+}
+
+NeonObjClosure* neon_value_asclosure(NeonValue v)
+{
+    return ((NeonObjClosure*)neon_value_asobject(v));
+}
+
+NeonObjScriptFunction* neon_value_asscriptfunction(NeonValue v)
+{
+    return ((NeonObjScriptFunction*)neon_value_asobject(v));
+}
+
+NeonObjNativeFunction* neon_value_asnativefunction(NeonValue v)
+{
+    return ((NeonObjNativeFunction*)neon_value_asobject(v));
+}
+
+
+NeonObjInstance* neon_value_asinstance(NeonValue v)
+{
+    return ((NeonObjInstance*)neon_value_asobject(v));
+}
+
+NeonObjString* neon_value_asstring(NeonValue v)
+{
+    return ((NeonObjString*)neon_value_asobject(v));
+}
+
+NeonObjArray* neon_value_asarray(NeonValue v)
+{
+    return ((NeonObjArray*)neon_value_asobject(v));
+}
+
+NeonObjMap* neon_value_asmap(NeonValue v)
+{
+    return ((NeonObjMap*)neon_value_asobject(v));
+}
+
+NeonObjType neon_value_objtype(NeonValue v)
+{
+    return (neon_value_asobject(v)->type);
+}
+
+//#define IS_CLOSURE(value) neon_value_isobjtype(value, NEON_OBJ_CLOSURE)
+//#define IS_FUNCTION(value) neon_value_isobjtype(value, NEON_OBJ_FUNCTION)
+//#define IS_NATIVE(value) neon_value_isobjtype(value, NEON_OBJ_NATIVE)
+//#define IS_BOUND_METHOD(value) neon_value_isobjtype(value, NEON_OBJ_BOUNDMETHOD)
+
+bool neon_value_isclass(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_CLASS);
+}
+
+bool neon_value_isuserdata(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_USERDATA);
+}
+
+bool neon_value_isinstance(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_INSTANCE);
+}
+
+bool neon_value_isstring(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_STRING);
+}
+    
+bool neon_value_isarray(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_ARRAY);
+}
+
+bool neon_value_ismap(NeonValue v)
+{
+    return neon_value_isobjtype(v, NEON_OBJ_MAP);
+}
+
+bool neon_value_isfalsey(NeonValue value)
+{
+    return (
+        neon_value_isnil(value) || (
+            neon_value_isbool(value) &&
+            !neon_value_asbool(value)
+        )
+    );
+}
+
 void* neon_mem_allocate(NeonState* state, size_t tsz, size_t count, bool dogc)
 {
     size_t totalsz;
@@ -614,8 +802,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjScriptFunction* ofn;
                 ofn = (NeonObjScriptFunction*)object;
-                neon_blob_destroy(state, ofn->blob);
-                neon_mem_release(state, sizeof(NeonObjScriptFunction), object);
+                neon_scriptfunction_destroy(ofn);
                 ofn = NULL;
             }
             break;
@@ -623,8 +810,7 @@ void neon_object_destroy(NeonState* state, NeonObject* object)
             {
                 NeonObjInstance* instance;
                 instance = (NeonObjInstance*)object;
-                neon_hashtable_destroy(instance->fields);
-                neon_mem_release(state, sizeof(NeonObjInstance), object);
+                neon_instance_destroy(instance);
                 instance = NULL;
             }
             break;
@@ -675,6 +861,17 @@ uint32_t neon_util_hashstring(const char* key, size_t length)
     return hash;
 }
 
+void neon_writer_initvars(NeonState* state, NeonWriter* wr)
+{
+    wr->pvm = state;
+    wr->fromstack = false;
+    wr->isstring = false;
+    wr->shouldclose = false;
+    wr->stringtaken = false;
+    wr->strbuf = NULL;
+    wr->handle = NULL;
+}
+
 NeonWriter* neon_writer_make(NeonState* state)
 {
     NeonWriter* wr;
@@ -685,13 +882,34 @@ NeonWriter* neon_writer_make(NeonState* state)
         fprintf(stderr, "cannot allocate NeonWriter\n");
         return NULL;
     }
-    wr->pvm = state;
-    wr->isstring = false;
-    wr->shouldclose = false;
-    wr->stringtaken = false;
-    wr->strbuf = NULL;
-    wr->handle = NULL;
+    neon_writer_initvars(state, wr);
     return wr;
+}
+
+NeonWriter* neon_writer_makeio(NeonState* state, FILE* fh, bool shouldclose)
+{
+    NeonWriter* wr;
+    wr = neon_writer_make(state);
+    wr->handle = fh;
+    wr->shouldclose = shouldclose;
+    return wr;
+}
+
+NeonWriter* neon_writer_makestring(NeonState* state)
+{
+    NeonWriter* wr;
+    wr = neon_writer_make(state);
+    wr->isstring = true;
+    wr->strbuf = dyn_strbuf_makeempty(0);
+    return wr;
+}
+
+void neon_writer_makestackio(NeonState* state, NeonWriter* wr, FILE* fh, bool shouldclose)
+{
+    neon_writer_initvars(state, wr);
+    wr->fromstack = true;
+    wr->handle = fh;
+    wr->shouldclose = shouldclose;
 }
 
 void neon_writer_destroy(NeonWriter* wr)
@@ -713,7 +931,10 @@ void neon_writer_destroy(NeonWriter* wr)
             fclose(wr->handle);
         }
     }
-    free(wr);
+    if(!wr->fromstack)
+    {
+        free(wr);
+    }
 }
 
 NeonObjString* neon_writer_takestring(NeonWriter* wr)
@@ -728,23 +949,6 @@ NeonObjString* neon_writer_takestring(NeonWriter* wr)
     return os;
 }
 
-NeonWriter* neon_writer_makeio(NeonState* state, FILE* fh, bool shouldclose)
-{
-    NeonWriter* wr;
-    wr = neon_writer_make(state);
-    wr->handle = fh;
-    wr->shouldclose = shouldclose;
-    return wr;
-}
-
-NeonWriter* neon_writer_makestring(NeonState* state)
-{
-    NeonWriter* wr;
-    wr = neon_writer_make(state);
-    wr->isstring = true;
-    wr->strbuf = dyn_strbuf_makeempty(0);
-    return wr;
-}
 
 bool neon_writer_writestringl(NeonWriter* wr, const char* estr, size_t elen)
 {
@@ -1509,7 +1713,6 @@ NeonObjUserdata* neon_object_makeuserdata(NeonState* state, void* ptr, NeonUserF
 {
     NeonObjUserdata* obj;
     obj = (NeonObjUserdata*)neon_object_allocobj(state, sizeof(NeonObjBoundFunction), NEON_OBJ_USERDATA);
-    obj->pvm = state;
     obj->userptr = ptr;
     obj->finalfn = finfn;
     obj->methods = neon_hashtable_make(state);
@@ -1519,7 +1722,7 @@ NeonObjUserdata* neon_object_makeuserdata(NeonState* state, void* ptr, NeonUserF
 void neon_userdata_destroy(NeonObjUserdata* ud)
 {
     NeonState* state;
-    state = ud->pvm;
+    state = ((NeonObject*)ud)->pvm;
     if(ud->finalfn != NULL)
     {
         ud->finalfn(state, ud);
@@ -1537,7 +1740,6 @@ NeonObjBoundFunction* neon_object_makeboundmethod(NeonState* state, NeonValue re
 {
     NeonObjBoundFunction* obj;
     obj = (NeonObjBoundFunction*)neon_object_allocobj(state, sizeof(NeonObjBoundFunction), NEON_OBJ_BOUNDMETHOD);
-    obj->pvm = state;
     obj->receiver = receiver;
     obj->method = method;
     return obj;
@@ -1547,7 +1749,6 @@ NeonObjClass* neon_object_makeclass(NeonState* state, NeonObjString* name, NeonO
 {
     NeonObjClass* obj;
     obj = (NeonObjClass*)neon_object_allocobj(state, sizeof(NeonObjClass), NEON_OBJ_CLASS);
-    obj->pvm = state;
     obj->name = name;
     obj->methods = neon_hashtable_make(state);
     obj->staticmethods = neon_hashtable_make(state);
@@ -1569,13 +1770,12 @@ NeonObjClass* neon_state_makeclass(NeonState* state, const char* name, NeonObjCl
 void neon_class_destroy(NeonObjClass* klass)
 {
     NeonState* state;
-    state = klass->pvm;
+    state = ((NeonObject*)klass)->pvm;
     neon_hashtable_destroy(klass->properties);
     neon_hashtable_destroy(klass->methods);
     neon_hashtable_destroy(klass->staticmethods);
     neon_mem_release(state, sizeof(NeonObjClass), klass);
 }
-
 
 bool neon_class_putvalintable(NeonState* state, NeonObjClass* klass, NeonHashTable* htab, NeonObjString* name, NeonValue val)
 {
@@ -1667,7 +1867,6 @@ NeonObjClosure* neon_object_makeclosure(NeonState* state, NeonObjScriptFunction*
         upvals[i] = NULL;
     }
     closure = (NeonObjClosure*)neon_object_allocobj(state, sizeof(NeonObjClosure), NEON_OBJ_CLOSURE);
-    closure->pvm = state;
     closure->fnptr = ofn;
     closure->upvalues = upvals;
     closure->upvaluecount = ofn->upvaluecount;
@@ -1678,7 +1877,7 @@ void neon_closure_mark(NeonObjClosure* closure)
 {
     size_t i;
     NeonState* state;
-    state = closure->pvm;
+    state = ((NeonObject*)closure)->pvm;
     neon_gcmem_markobject(state, (NeonObject*)closure->fnptr);
     for(i = 0; i < (size_t)closure->upvaluecount; i++)
     {
@@ -1689,7 +1888,7 @@ void neon_closure_mark(NeonObjClosure* closure)
 void neon_closure_destroy(NeonObjClosure* closure)
 {
     NeonState* state;
-    state = closure->pvm;
+    state = ((NeonObject*)closure)->pvm;
     neon_mem_freearray(state, sizeof(NeonObjUpvalue*), closure->upvalues, closure->upvaluecount);
     neon_mem_release(state, sizeof(NeonObjClosure), closure);
 }
@@ -1698,7 +1897,6 @@ NeonObjScriptFunction* neon_object_makefunction(NeonState* state)
 {
     NeonObjScriptFunction* obj;
     obj = (NeonObjScriptFunction*)neon_object_allocobj(state, sizeof(NeonObjScriptFunction), NEON_OBJ_FUNCTION);
-    obj->pvm = state;
     obj->arity = 0;
     obj->upvaluecount = 0;
     obj->name = NULL;
@@ -1707,20 +1905,35 @@ NeonObjScriptFunction* neon_object_makefunction(NeonState* state)
     return obj;
 }
 
+void neon_scriptfunction_destroy(NeonObjScriptFunction* ofn)
+{
+    NeonState* state;
+    state = ((NeonObject*)ofn)->pvm;
+    neon_blob_destroy(state, ofn->blob);
+    neon_mem_release(state, sizeof(NeonObjScriptFunction), ofn);
+}
+
 NeonObjInstance* neon_object_makeinstance(NeonState* state, NeonObjClass* klass)
 {
     NeonObjInstance* obj;
     obj = (NeonObjInstance*)neon_object_allocobj(state, sizeof(NeonObjInstance), NEON_OBJ_INSTANCE);
-    obj->pvm = state;
     obj->klass = klass;
     obj->fields = neon_hashtable_make(state);
     return obj;
 }
 
+void neon_instance_destroy(NeonObjInstance* instance)
+{
+    NeonState* state;
+    state = ((NeonObject*)instance)->pvm;
+    neon_hashtable_destroy(instance->fields);
+    neon_mem_release(state, sizeof(NeonObjInstance), instance);
+}
+
 void neon_instance_mark(NeonObjInstance* instance)
 {
     NeonState* state;
-    state = instance->pvm;
+    state = ((NeonObject*)instance)->pvm;
     neon_gcmem_markobject(state, (NeonObject*)instance->klass);
     neon_hashtable_mark(state, instance->fields);
 }
@@ -1729,7 +1942,6 @@ NeonObjNativeFunction* neon_object_makenative(NeonState* state, NeonNativeFN nat
 {
     NeonObjNativeFunction* obj;
     obj = (NeonObjNativeFunction*)neon_object_allocobj(state, sizeof(NeonObjNativeFunction), NEON_OBJ_NATIVE);
-    obj->pvm = state;
     obj->natfunc = nat;
     obj->name = name;
     return obj;
@@ -1739,7 +1951,6 @@ NeonObjString* neon_string_allocfromstrbuf(NeonState* state, StringBuffer* sbuf,
 {
     NeonObjString* rs;
     rs = (NeonObjString*)neon_object_allocobj(state, sizeof(NeonObjString), NEON_OBJ_STRING);
-    rs->pvm = state;
     rs->sbuf = sbuf;
     rs->hash = hash;
     //neon_vm_stackpush(state, neon_value_fromobject(rs));
@@ -1792,7 +2003,7 @@ NeonObjString* neon_string_copycstr(NeonState* state, const char* estr)
 void neon_string_destroy(NeonObjString* os)
 {
     NeonState* state;
-    state = os->pvm;
+    state = ((NeonObject*)os)->pvm;
     dyn_strbuf_destroy(os->sbuf);
     neon_mem_release(state, sizeof(NeonObjString), os);
 }
@@ -1892,7 +2103,6 @@ NeonObjArray* neon_array_makefromvalarray(NeonState* state, NeonValArray* va)
 {
     NeonObjArray* oa;
     oa = (NeonObjArray*)neon_object_allocobj(state, sizeof(NeonObjArray), NEON_OBJ_ARRAY);
-    oa->pvm = state;
     oa->vala = va;
     oa->vala->size = 0;
     return oa;
@@ -1908,14 +2118,14 @@ NeonObjArray* neon_array_make(NeonState* state)
 void neon_array_mark(NeonObjArray* arr)
 {
     NeonState* state;
-    state = arr->pvm;
+    state = ((NeonObject*)arr)->pvm;
     neon_gcmem_markvalarray(state, arr->vala);
 }
 
 void neon_array_destroy(NeonObjArray* arr)
 {
     NeonState* state;
-    state = arr->pvm;
+    state = ((NeonObject*)arr)->pvm;
     neon_valarray_destroy(arr->vala);
     neon_mem_release(state, sizeof(NeonObjArray), arr);
 }
@@ -1940,7 +2150,6 @@ NeonObjMap* neon_object_makemapfromtable(NeonState* state, NeonHashTable* tbl, b
 {
     NeonObjMap* obj;
     obj = (NeonObjMap*)neon_object_allocobj(state, sizeof(NeonObjMap), NEON_OBJ_MAP);
-    obj->pvm = state;
     if(tbl == NULL)
     {
         obj->mapping = neon_hashtable_make(state);
@@ -1963,7 +2172,6 @@ NeonObjArray* neon_object_makearray(NeonState* state)
     return neon_array_make(state);
 }
 
-
 bool neon_map_set(NeonObjMap* map, NeonObjString* name, NeonValue val)
 {
     return neon_hashtable_set(map->mapping, name, val);
@@ -1971,8 +2179,10 @@ bool neon_map_set(NeonObjMap* map, NeonObjString* name, NeonValue val)
 
 bool neon_map_setstr(NeonObjMap* map, const char* name, NeonValue val)
 {
+    NeonState* state;
     NeonObjString* os;
-    os = neon_string_copy(map->pvm, name, strlen(name));
+    state = ((NeonObject*)map)->pvm;
+    os = neon_string_copy(state, name, strlen(name));
     return neon_map_set(map, os, val);
 }
 
@@ -1983,7 +2193,9 @@ bool neon_map_setstrobject(NeonObjMap* map, const char* name, NeonObject* val)
 
 bool neon_map_setstrfunction(NeonObjMap* map, const char* name, NeonNativeFN nat)
 {
-    return neon_map_setstr(map, name, neon_value_fromobject(neon_object_makenative(map->pvm, nat, name)));
+    NeonState* state;
+    state = ((NeonObject*)map)->pvm;
+    return neon_map_setstr(map, name, neon_value_fromobject(neon_object_makenative(state, nat, name)));
 }
 
 bool neon_map_get(NeonObjMap* map, NeonObjString* key, NeonValue* dest)
@@ -1994,7 +2206,7 @@ bool neon_map_get(NeonObjMap* map, NeonObjString* key, NeonValue* dest)
 void neon_map_mark(NeonObjMap* map)
 {
     NeonState* state;
-    state = map->pvm;
+    state = ((NeonObject*)map)->pvm;
     if(map->shouldmark)
     {
         neon_hashtable_mark(state, map->mapping);
@@ -2004,7 +2216,7 @@ void neon_map_mark(NeonObjMap* map)
 void neon_map_destroy(NeonObjMap* map)
 {
     NeonState* state;
-    state = map->pvm;
+    state = ((NeonObject*)map)->pvm;
     if(map->shouldmark)
     {
         neon_hashtable_destroy(map->mapping);
@@ -3840,21 +4052,28 @@ static NeonValue objfn_file_func_readfile(NeonState* state, NeonValue rec, int a
     return neon_value_makenil();
 }
 
-static void fileopen_close(NeonState* state, NeonObjUserdata* ud)
+
+static void objfn_udfile_ondestroy(NeonState* state, NeonObjUserdata* ud)
 {
-    FILE* fh;
+    NeonFileHandle* nfh;
     (void)state;
-    fh = (FILE*)ud->userptr;
-    if(fh != NULL)
+    nfh = (NeonFileHandle*)ud->userptr;
+    if(nfh != NULL)
     {
-        fprintf(stderr, "closing file\n");
-        fclose(fh);
+        if(nfh->isopen)
+        {
+            fprintf(stderr, "closing file\n");
+            fclose(nfh->handle);
+            nfh->isopen = false;
+        }
     }
+    free(nfh);
+    ud->userptr = NULL;
 }
 
-bool neon_udfile_seek(NeonState* state, FILE* hnd, long offset, int whence)
+bool neon_udfile_seek(NeonState* state, NeonFileHandle* hnd, long offset, int whence)
 {
-    if(fseek(hnd, offset, whence) == -1)
+    if(fseek(hnd->handle, offset, whence) == -1)
     {
         neon_state_raiseerror(state, "cannot seek from offset %d to %d", offset, whence);
         return false;
@@ -3862,10 +4081,10 @@ bool neon_udfile_seek(NeonState* state, FILE* hnd, long offset, int whence)
     return true;
 }
 
-bool neon_udfile_tell(NeonState* state, FILE* hnd, size_t* dest)
+bool neon_udfile_tell(NeonState* state, NeonFileHandle* hnd, size_t* dest)
 {
     long rt;
-    rt = ftell(hnd);
+    rt = ftell(hnd->handle);
     if(rt == -1)
     {
         neon_state_raiseerror(state, "ftell() failed");
@@ -3876,7 +4095,7 @@ bool neon_udfile_tell(NeonState* state, FILE* hnd, size_t* dest)
 
 }
 
-static char* neon_udfile_read(NeonState* state, FILE* hnd, size_t howmuch, size_t* actual)
+static char* neon_udfile_read(NeonState* state, NeonFileHandle* hnd, size_t howmuch, size_t* actual)
 {
     char* buf;
     buf = (char*)malloc(howmuch+1);
@@ -3885,13 +4104,29 @@ static char* neon_udfile_read(NeonState* state, FILE* hnd, size_t howmuch, size_
         neon_state_raiseerror(state, "failed to allocate %d bytes", howmuch+1);
         return NULL;
     }
-    *actual = fread(buf, sizeof(char), howmuch, hnd);
+    *actual = fread(buf, sizeof(char), howmuch, hnd->handle);
     if(*actual == 0)
     {
         free(buf);
         return NULL;
     }
     return buf;
+}
+
+static NeonValue objfn_udfile_write(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
+{
+    size_t i;
+    NeonWriter owr;
+    NeonFileHandle* hnd;
+    NeonObjUserdata* selfud;
+    selfud = neon_value_asuserdata(rec);
+    hnd = (NeonFileHandle*)selfud->userptr;
+    neon_writer_makestackio(state, &owr, hnd->handle, false);
+    for(i=0; i<argc; i++)
+    {
+        neon_writer_printvalue(&owr, argv[i], false);
+    }
+    return neon_value_makenil();
 }
 
 static NeonValue objfn_udfile_read(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
@@ -3901,13 +4136,13 @@ static NeonValue objfn_udfile_read(NeonState* state, NeonValue rec, int argc, Ne
     size_t actuallen;
     size_t howmuch;
     char* buf;
-    FILE* hnd;
+    NeonFileHandle* hnd;
     NeonObjString* os;
     NeonObjUserdata* selfud;
     readall = true;
     howmuch = 0;
     selfud = neon_value_asuserdata(rec);
-    hnd = (FILE*)selfud->userptr;
+    hnd = (NeonFileHandle*)selfud->userptr;
     if(argc > 0)
     {
         readall = false;
@@ -3944,26 +4179,67 @@ static NeonValue objfn_udfile_read(NeonState* state, NeonValue rec, int argc, Ne
 
 static NeonValue objfn_udfile_close(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
-    FILE* hnd;
     NeonObjUserdata* selfud;
     (void)state;
     (void)argc;
     (void)argv;
     selfud = neon_value_asuserdata(rec);
-    hnd = (FILE*)selfud->userptr;
-    fprintf(stderr, "in udfile_close\n");
-    fclose(hnd);
-    selfud->userptr = NULL;
+    objfn_udfile_ondestroy(state, selfud);
     return neon_value_makenil();
+}
+
+NeonObjUserdata* neon_object_makefilefromhandle(NeonState* state, FILE* fh, NeonObjString* path, NeonObjString* mode)
+{
+    NeonObjUserdata* ud;
+    NeonFileHandle* nfh;
+    nfh = (NeonFileHandle*)malloc(sizeof(NeonFileHandle));
+    if(nfh == NULL)
+    {
+        return NULL;
+    }
+    nfh->isopen = true;
+    nfh->handle = fh;
+    nfh->path = path;
+    nfh->mode = mode;
+    ud = neon_object_makeuserdata(state, (void*)nfh, objfn_udfile_ondestroy);
+    if(ud == NULL)
+    {
+        return NULL;
+    }
+    neon_userdata_bindmethod(ud, "close", objfn_udfile_close);
+    neon_userdata_bindmethod(ud, "read", objfn_udfile_read);
+    neon_userdata_bindmethod(ud, "write", objfn_udfile_write);
+    return ud;
+}
+
+NeonObjUserdata* neon_object_makestdfilefromhandle(NeonState* state, FILE* fh, const char* cpath, const char* cmode)
+{
+    NeonObjString* path;
+    NeonObjString* mode;
+    path = neon_string_copycstr(state, cpath);
+    mode = neon_string_copycstr(state, cmode);
+    return neon_object_makefilefromhandle(state, fh, path, mode);
+}
+
+NeonObjUserdata* neon_object_makefilefrompath(NeonState* state, NeonObjString* path, NeonObjString* mode)
+{
+    FILE* fh;
+    fh = fopen(path->sbuf->data, mode->sbuf->data);
+    if(fh == NULL)
+    {
+        neon_state_raiseerror(state, "cannot open '%s': %s", path->sbuf->data, strerror(errno));
+        return NULL;
+    }
+    return neon_object_makefilefromhandle(state, fh, path, mode);
 }
 
 static NeonValue objfn_file_func_open(NeonState* state, NeonValue rec, int argc, NeonValue* argv)
 {
-    FILE* fh;
+    NeonValue nv;
     NeonValue va;
-    NeonObjUserdata* ud;
     NeonObjString* path;
     NeonObjString* mode;
+    NeonObjUserdata* ud;
     (void)rec;
     if(argc > 1)
     {
@@ -3987,17 +4263,12 @@ static NeonValue objfn_file_func_open(NeonState* state, NeonValue rec, int argc,
         neon_state_raiseerror(state, "expected string|string");
         return neon_value_makenil();
     }
-    fh = fopen(path->sbuf->data, mode->sbuf->data);
-    if(fh == NULL)
+    ud = neon_object_makefilefrompath(state, path, mode);
+    if(ud == NULL)
     {
-        neon_state_raiseerror(state, "cannot open '%s': %s", path->sbuf->data, strerror(errno));
+        neon_state_raiseerror(state, "failed to create file object for '%s' with mode '%s'", path->sbuf->data, mode->sbuf->data);
         return neon_value_makenil();
     }
-    ud = neon_object_makeuserdata(state, (void*)fh, fileopen_close);
-    
-    neon_userdata_bindmethod(ud, "close", objfn_udfile_close);
-    neon_userdata_bindmethod(ud, "read", objfn_udfile_read);
-
     return neon_value_fromobject(ud);
 }
 

@@ -16,7 +16,7 @@ srcfiles_all = \
 	$(wildcard *.c) \
 	$(wildcard modules/*.c)
 
-headerfiles_all = neon.h parse.h vm.h strbuf.h
+headerfiles_all = neon.h parse.h vm.h strbuf.h optparse.h
 
 objfiles_all = $(srcfiles_all:.c=.o)
 depfiles_all = $(objfiles_all:.o=.d)

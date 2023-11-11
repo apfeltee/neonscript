@@ -17,8 +17,12 @@ typedef struct StringBuffer StringBuffer;
 struct StringBuffer
 {
     char* data;
-    size_t length;// end is index of \0
-    size_t capacity;// capacity should be >= end+1 to allow for \0
+
+    /* total length of this buffer */
+    size_t length;
+
+    /* capacity should be >= length+1 to allow for \0 */
+    size_t capacity;
 };
 
 char *dyn_strutil_safencpy(char *dst, const char *src, size_t n);

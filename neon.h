@@ -1,4 +1,6 @@
 
+#pragma once
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -19,11 +21,17 @@
 #endif
 #include "strbuf.h"
 
+/*
 // In the book, we show them defined, but for working on them locally,
 // we don't want them to be.
+*/
 #define DEBUG_PRINT_CODE 0
 #undef DEBUG_STRESS_GC
 #undef DEBUG_LOG_GC
+
+#if !defined(NEON_CONF_USEPROTINC)
+    #define NEON_CONF_USEPROTINC 1
+#endif
 
 #define NEON_MAX_COMPUPVALS (128 + 1)
 #define NEON_MAX_COMPLOCALS (128 + 1)
@@ -51,8 +59,9 @@
     #define NEON_CONF_FORCEDISABLECOLOR
 #endif
 
-// NEON_OP_FUNCARG - explicitly for function arguments (and default values)?
-
+/*
+// OP_FUNCARG - explicitly for function arguments (and default values)?
+*/
 enum NeonOpCode
 {
     NEON_OP_PUSHCONST,
@@ -333,6 +342,7 @@ typedef struct /**/NeonVMGCVars NeonVMGCVars;
 typedef struct /**/NeonVMObjVars NeonVMObjVars;
 typedef struct /**/NeonConfig NeonConfig;
 typedef struct /**/NeonNestCall NeonNestCall;
+typedef struct /**/NeonFileHandle NeonFileHandle;
 
 
 typedef void (*NeonAstParsePrefixFN)(NeonAstParser*, bool);
@@ -352,7 +362,7 @@ struct NeonValue
         bool valbool;
         double valnumber;
         NeonObject* valobjptr;
-    } as;// [as]
+    } as;
 };
 
 struct NeonObject
@@ -370,6 +380,7 @@ struct NeonWriter
     bool isstring;
     bool shouldclose;
     bool stringtaken;
+    bool fromstack;
     NeonState* pvm;
     StringBuffer* strbuf;
     FILE* handle;
@@ -406,10 +417,17 @@ struct NeonValArray
     NeonValue* values;
 };
 
+struct NeonFileHandle
+{
+    bool isopen;
+    FILE* handle;
+    NeonObjString* path;
+    NeonObjString* mode;
+};
+
 struct NeonObjUserdata
 {
     NeonObject objectheader;
-    NeonState* pvm;
     void* userptr;
     NeonUserFinalizeFN finalfn;
     NeonHashTable* methods;
@@ -418,7 +436,6 @@ struct NeonObjUserdata
 struct NeonObjArray
 {
     NeonObject obj;
-    NeonState* pvm;
     NeonValArray* vala;
 };
 
@@ -426,7 +443,6 @@ struct NeonObjMap
 {
     NeonObject obj;
     bool shouldmark;
-    NeonState* pvm;
     NeonHashTable* mapping;
 };
 
@@ -434,7 +450,6 @@ struct NeonObjScriptFunction
 {
     NeonObject obj;
     bool isvariadic;
-    NeonState* pvm;
     int arity;
     int upvaluecount;
     NeonBinaryBlob* blob;
@@ -444,7 +459,6 @@ struct NeonObjScriptFunction
 struct NeonObjNativeFunction
 {
     NeonObject obj;
-    NeonState* pvm;
     const char* name;
     NeonNativeFN natfunc;
 };
@@ -452,17 +466,17 @@ struct NeonObjNativeFunction
 struct NeonObjString
 {
     NeonObject objectheader;
-    NeonState* pvm;
     uint32_t hash;
+    /*
     // actual string handling is handled by StringBuffer.
     // this is to avoid to trashing the stack with temporary values
+    */
     StringBuffer* sbuf;
 };
 
 struct NeonObjUpvalue
 {
     NeonObject objectheader;
-    NeonState* pvm;
     NeonValue location;
     NeonValue closed;
     NeonObjUpvalue* next;
@@ -472,7 +486,6 @@ struct NeonObjUpvalue
 struct NeonObjClosure
 {
     NeonObject objectheader;
-    NeonState* pvm;
     NeonObjScriptFunction* fnptr;
     NeonObjUpvalue** upvalues;
     int upvaluecount;
@@ -481,7 +494,6 @@ struct NeonObjClosure
 struct NeonObjClass
 {
     NeonObject objectheader;
-    NeonState* pvm;
     NeonObjString* name;
     NeonHashTable* methods;
     NeonHashTable* staticmethods;
@@ -492,15 +504,13 @@ struct NeonObjClass
 struct NeonObjInstance
 {
     NeonObject objectheader;
-    NeonState* pvm;
     NeonObjClass* klass;
-    NeonHashTable* fields;// [fields]
+    NeonHashTable* fields;
 };
 
 struct NeonObjBoundFunction
 {
     NeonObject objectheader;
-    NeonState* pvm;
     NeonValue receiver;
     NeonObjClosure* method;
 };
@@ -575,9 +585,6 @@ struct NeonAstParser
     bool panicmode;
     bool iseval;
     int blockcount;
-    // used for tracking loops for the continue statement...
-    int innermostloopstart;
-    int innermostloopscopedepth;
     NeonAstToken current;
     NeonAstToken previous;
     NeonState* pvm;
@@ -599,6 +606,8 @@ struct NeonConfig
 {
     /* if true, will print instruction and stack during execution */
     bool shouldprintruntime;
+
+    /* if true, all variables must be explicitly declared with 'var' */
     bool strictmode;
 };
 
@@ -607,11 +616,11 @@ struct NeonCallFrame
     int instrucidx;
     int64_t frstackindex;
     NeonObjClosure* closure;
-    //NeonValue* slots;
 };
 
 struct NeonVMGCVars
 {
+    /* is the GC currently allowed to collect? not currently used. */
     bool allowed;
     int graycount;
     int graycap;
@@ -623,230 +632,91 @@ struct NeonVMGCVars
 
 struct NeonVMStateVars
 {
+    /* whether an error has been raised; meant to avoid re-raising the same error in an infinite loop */
     bool hasraised;
+
+    /* whether this VM state was initiated by eval(), or something like it */
     bool iseval;
+
+    /* used by NEON_OP_RESTOREFRAME */
     bool havekeeper;
+
+    /* number of frames */
     int framecount;
+
+    /* index to the topmost $stackvalues entry, excluding the final NUL byte. */
     int64_t stacktop;
+
+    /* how big is stackvalues, before resizing is necessary? */
     size_t stackcapacity;
+
+    /* how many frames are available, before resizing is necessary? */
     size_t framecapacity;
+
+    /* used by NEON_OP_RESTOREFRAME */
     NeonCallFrame keepframe;
+
+    /* the currently active frame, which is $framevalues[$framecount - 1] */
     NeonCallFrame* activeframe;
+
+    /* where frames lie on the stack. dynamically allocated; avoid pointer-arithmetics. */
     NeonCallFrame* framevalues;
+
+    /* where values lie on the stack. dynamically allocated; avoid pointer-arithmetics. */
     NeonValue* stackvalues;
+
+    /* the closure compiled from the input source, whether file, or string. */
     NeonObjClosure* topclosure;
-    
 };
 
 struct NeonState
 {
     NeonConfig conf;
+
+    /* contains the system environment variables */
     NeonObjMap* envvars;
-    /* instance of the parser. this is */
+
+    /* instance of the parser. heap-allocated! */
     NeonAstParser* parser;
+
+    /* state of the VM */
     NeonVMStateVars vmstate;
+
+    /* state of the garbage collector, and related information */
     NeonVMGCVars gcstate;
+
+    /* contains class objects of primitive classes (Object, String, Number...) */
     NeonVMObjVars objvars;
+
+    /*
+    * global names are stored here.
+    * additionally, any variables declared outside of a block-scope are also stored here.
+    */
     NeonHashTable* globals;
+
+    /* llookup table for strings, to avoid redundant string copies */
     NeonHashTable* strings;
+
+    /* class constructor name */
     NeonObjString* initstring;
+
+    /* currently active upvalues */
     NeonObjUpvalue* openupvalues;
+
+    /* NeonWriter instances that point to standard output/error. */
     NeonWriter* stdoutwriter;
     NeonWriter* stderrwriter;
 
 };
 
-static inline NeonValue neon_value_makevalue(NeonValType vt)
-{
-    NeonValue v;
-    v.type = vt;
-    return v;
-}
-
-static inline NeonValue neon_value_makenil()
-{
-    NeonValue v;
-    v = neon_value_makevalue(NEON_VAL_NIL);
-    return v;
-}
-
-static inline NeonValue neon_value_makenull()
-{
-    return neon_value_makenil();
-}
-
-
-static inline NeonValue neon_value_makebool(bool b)
-{
-    NeonValue nv;
-    nv = neon_value_makevalue(NEON_VAL_BOOL);
-    nv.as.valbool = b;
-    return nv;
-}
-
-static inline NeonValue neon_value_makenumber(double dw)
-{
-    NeonValue nv;
-    nv = neon_value_makevalue(NEON_VAL_NUMBER);
-    nv.as.valnumber = dw;
-    return nv;
-}
-
+/*
+// wrapper that merely fixes warnings about NeonObj<name>* objects not being NeonObject*,
+// despite being down-castable. 
+*/
 #define neon_value_fromobject(obj) neon_value_fromobject_actual((NeonObject*)(obj))
 
-static inline NeonValue neon_value_fromobject_actual(NeonObject* o)
-{
-    NeonValue nv;
-    nv = neon_value_makevalue(NEON_VAL_OBJ);
-    nv.as.valobjptr = o;
-    return nv;
-}
-
-static inline bool neon_value_isbool(NeonValue v)
-{
-    return (v.type == NEON_VAL_BOOL);
-}
-
-static inline bool neon_value_isnil(NeonValue v)
-{
-    return (v.type == NEON_VAL_NIL);
-}
-
-static inline bool neon_value_isnumber(NeonValue v)
-{
-    return (v.type == NEON_VAL_NUMBER);
-}
-
-static inline bool neon_value_isobject(NeonValue v)
-{
-    return (v.type == NEON_VAL_OBJ);
-}
-
-static inline NeonObject* neon_value_asobject(NeonValue v)
-{
-    return v.as.valobjptr;
-}
-
-static inline bool neon_value_isobjtype(NeonValue value, NeonObjType type)
-{
-    return (
-        neon_value_isobject(value) &&
-        (neon_value_asobject(value)->type == type)
-    );
-}
-
-static inline bool neon_value_asbool(NeonValue v)
-{
-    return (v.as.valbool);
-}
-
-static inline double neon_value_asnumber(NeonValue v)
-{
-    return (v.as.valnumber);
-}
-
-static inline NeonObjUserdata* neon_value_asuserdata(NeonValue v)
-{
-    return ((NeonObjUserdata*)neon_value_asobject(v));
-}
-
-static inline NeonObjBoundFunction* neon_value_asboundfunction(NeonValue v)
-{
-    return ((NeonObjBoundFunction*)neon_value_asobject(v));
-}
-
-static inline NeonObjClass* neon_value_asclass(NeonValue v)
-{
-    return ((NeonObjClass*)neon_value_asobject(v));
-}
-
-static inline NeonObjClosure* neon_value_asclosure(NeonValue v)
-{
-    return ((NeonObjClosure*)neon_value_asobject(v));
-}
-
-static inline NeonObjScriptFunction* neon_value_asscriptfunction(NeonValue v)
-{
-    return ((NeonObjScriptFunction*)neon_value_asobject(v));
-}
-
-static inline NeonObjNativeFunction* neon_value_asnativefunction(NeonValue v)
-{
-    return ((NeonObjNativeFunction*)neon_value_asobject(v));
-}
-
-
-static inline NeonObjInstance* neon_value_asinstance(NeonValue v)
-{
-    return ((NeonObjInstance*)neon_value_asobject(v));
-}
-
-static inline NeonObjString* neon_value_asstring(NeonValue v)
-{
-    return ((NeonObjString*)neon_value_asobject(v));
-}
-
-static inline NeonObjArray* neon_value_asarray(NeonValue v)
-{
-    return ((NeonObjArray*)neon_value_asobject(v));
-}
-
-static inline NeonObjMap* neon_value_asmap(NeonValue v)
-{
-    return ((NeonObjMap*)neon_value_asobject(v));
-}
-
-static inline NeonObjType neon_value_objtype(NeonValue v)
-{
-    return (neon_value_asobject(v)->type);
-}
-
-//#define IS_CLOSURE(value) neon_value_isobjtype(value, NEON_OBJ_CLOSURE)
-//#define IS_FUNCTION(value) neon_value_isobjtype(value, NEON_OBJ_FUNCTION)
-//#define IS_NATIVE(value) neon_value_isobjtype(value, NEON_OBJ_NATIVE)
-//#define IS_BOUND_METHOD(value) neon_value_isobjtype(value, NEON_OBJ_BOUNDMETHOD)
-
-static inline bool neon_value_isclass(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_CLASS);
-}
-
-static inline bool neon_value_isuserdata(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_USERDATA);
-}
-
-static inline bool neon_value_isinstance(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_INSTANCE);
-}
-
-static inline bool neon_value_isstring(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_STRING);
-}
-    
-static inline bool neon_value_isarray(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_ARRAY);
-}
-
-static inline bool neon_value_ismap(NeonValue v)
-{
-    return neon_value_isobjtype(v, NEON_OBJ_MAP);
-}
-
-static inline bool neon_value_isfalsey(NeonValue value)
-{
-    return (
-        neon_value_isnil(value) || (
-            neon_value_isbool(value) &&
-            !neon_value_asbool(value)
-        )
-    );
-}
-
-
-#include "prot.inc"
+#if (NEON_CONF_USEPROTINC == 1)
+    #include "prot.inc"
+#endif
 
 

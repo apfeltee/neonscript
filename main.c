@@ -22,7 +22,7 @@ int main(int argc, char** argv)
         {"strict", 's', OPTPARSE_NONE},
         {"debug", 'd', OPTPARSE_NONE},
         {"eval", 'e', OPTPARSE_REQUIRED},
-        {0, 0, 0}
+        {0, 0, (optargtype_t)0}
     };
     int nsz;
     int nargc;
@@ -67,6 +67,22 @@ int main(int argc, char** argv)
         }
         neon_state_defvalue(state, "ARGV", neon_value_fromobject(oargv));
     }
+    {
+        NeonObjUserdata* ud;
+        //NeonObjUserdata* neon_object_makestdfilefromhandle(NeonState* state, FILE* fh, const char* path, const char* mode)
+        {
+            ud = neon_object_makestdfilefromhandle(state, stdin, "<stdin>", "rb");
+            neon_state_defvalue(state, "STDIN", neon_value_fromobject(ud));
+        }
+        {
+            ud = neon_object_makestdfilefromhandle(state, stdout, "<stdout>", "wb");
+            neon_state_defvalue(state, "STDOUT", neon_value_fromobject(ud));
+        }
+        {
+            ud = neon_object_makestdfilefromhandle(state, stderr, "<stdin>", "wb");
+            neon_state_defvalue(state, "STDERR", neon_value_fromobject(ud));
+        }
+    }
     if(codeline != NULL)
     {
         //fprintf(stderr, "codeline=%s\n", codeline);
@@ -88,6 +104,7 @@ int main(int argc, char** argv)
             repl(state);
         }
     }
+    free(nargv);
     neon_state_destroy(state);
     return exitcode;
 }
