@@ -1,5 +1,3 @@
-
-
 function unshiftright(a, b)
 {
     var na = a;

@@ -1,4 +1,3 @@
-
 xmin = -8601
 xmax = 2867
 ymin = -4915
@@ -36,5 +35,3 @@ while (cy <= ymax)
     print("\n")
     cy = cy + dy
 }
-
-

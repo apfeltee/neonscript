@@ -658,92 +658,9 @@ void neon_astparser_emitloop(NeonAstParser* prs, int loopstart)
     neon_astparser_emit1byte(prs, offset & 0xff);
 }
 
-int neon_astparser_realgetcodeargscount(const int32_t* code, const NeonValue* constants, int ip)
-{
-    NeonOpCode op;
-    (void)constants;
-    op = code[ip];
-    if((int)op == (int)-1)
-    {
-        return 0;
-    }
-    switch(op)
-    {
-        case NEON_OP_HALTVM:
-        case NEON_OP_RESTOREFRAME:
-        case NEON_OP_PUSHTRUE:
-        case NEON_OP_PUSHFALSE:
-        case NEON_OP_PUSHNIL:
-        case NEON_OP_POPONE:
-        case NEON_OP_EQUAL:
-        case NEON_OP_PRIMGREATER:
-        case NEON_OP_PRIMLESS:
-        case NEON_OP_PRIMADD:
-        case NEON_OP_PRIMSUBTRACT:
-        case NEON_OP_PRIMMULTIPLY:
-        case NEON_OP_PRIMDIVIDE:
-        case NEON_OP_PRIMBINAND:
-        case NEON_OP_PRIMBINOR:
-        case NEON_OP_PRIMBINXOR:
-        case NEON_OP_PRIMBINNOT:
-        case NEON_OP_PRIMMODULO:
-        case NEON_OP_PRIMSHIFTLEFT:
-        case NEON_OP_PRIMSHIFTRIGHT:
-        case NEON_OP_PRIMNOT:
-        case NEON_OP_PRIMNEGATE:
-        case NEON_OP_DEBUGPRINT:
-        case NEON_OP_GLOBALSTMT:
-        case NEON_OP_DUP:
-        case NEON_OP_PUSHONE:
-        case NEON_OP_UPVALCLOSE:
-        case NEON_OP_RETURN:
-        case NEON_OP_INHERIT:
-        case NEON_OP_INDEXSET:
-            return 0;
-        case NEON_OP_PUSHCONST:
-        //case NEON_OP_CONSTANT_LONG:
-        //case NEON_OP_POPN:
-        case NEON_OP_LOCALSET:
-        case NEON_OP_LOCALGET:
-        case NEON_OP_UPVALSET:
-        case NEON_OP_UPVALGET:
-        case NEON_OP_PROPERTYGET:
-        case NEON_OP_PROPERTYSET:
-        /*
-        case NEON_OP_GET_EXPR_PROPERTY:
-        case NEON_OP_SET_EXPR_PROPERTY:
-        */
-        case NEON_OP_CALLCALLABLE:
-        case NEON_OP_INSTGETSUPER:
-        case NEON_OP_GLOBALGET:
-        case NEON_OP_GLOBALDEFINE:
-        case NEON_OP_GLOBALSET:
-        case NEON_OP_CLOSURE:
-        case NEON_OP_CLASS:
-        case NEON_OP_METHOD:
-        case NEON_OP_INDEXGET:
-        case NEON_OP_TYPEOF:
-            return 1;
-        case NEON_OP_MAKEARRAY:
-        case NEON_OP_MAKEMAP:
-        case NEON_OP_JUMPNOW:
-        case NEON_OP_JUMPIFFALSE:
-        case NEON_OP_PSEUDOBREAK:
-        case NEON_OP_LOOP:
-        case NEON_OP_INSTTHISPROPERTYGET:
-        case NEON_OP_POPN:
-            return 2;
-        case NEON_OP_INSTTHISINVOKE:
-        case NEON_OP_INSTSUPERINVOKE:
-            return 3;
-    }
-    return 0;
+#include "codeargs.h"
 
-    fprintf(stderr, "internal error: failed to compute operand argument size of %d (%s) (prev=%d (%s))\n", op, neon_dbg_op2str(op), code[ip-1], neon_dbg_op2str(code[ip-1]));
-    return -1;
-}
-
-int neon_astparser_getcodeargscount(const int32_t* bytecode, const NeonValue* constants, int ip)
+int neon_astparser_getcodeargscount(const int32_t* bytecode, const NeonValArray* constants, int ip)
 {
     int rc;
     //const char* os;
@@ -753,6 +670,7 @@ int neon_astparser_getcodeargscount(const int32_t* bytecode, const NeonValue* co
     return rc;
 }
 
+/*
 void neon_astparser_startloop(NeonAstParser* prs, NeonAstLoop* loop)
 {
     loop->enclosing = prs->currcompiler->loop;
@@ -764,8 +682,10 @@ void neon_astparser_startloop(NeonAstParser* prs, NeonAstLoop* loop)
 void neon_astparser_endloop(NeonAstParser* p)
 {
     int i;
+    int bclen;
+    bclen = p->currcompiler->currfunc->blob->count;
     i = p->innermostloopstart;
-    while(i < p->currcompiler->currfunc->blob->count)
+    while(i < bclen)
     {
         if(p->currcompiler->currfunc->blob->bincode[i] == NEON_OP_PSEUDOBREAK)
         {
@@ -774,10 +694,11 @@ void neon_astparser_endloop(NeonAstParser* p)
         }
         else
         {
-            i += 1 + neon_astparser_getcodeargscount(p->currcompiler->currfunc->blob->bincode, p->currcompiler->currfunc->blob->constants->values, i);
+            i += 1 + neon_astparser_getcodeargscount(p->currcompiler->currfunc->blob->bincode, p->currcompiler->currfunc->blob->constants, i);
         }
     }
 }
+*/
 
 int neon_astparser_emitjump(NeonAstParser* prs, int32_t instruction)
 {
@@ -1447,6 +1368,7 @@ void neon_astparser_rulesuper(NeonAstParser* prs, bool canassign)
     neon_astparser_consume(prs, NEON_TOK_DOT, "expected '.' after 'super'");
     neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "expected superclass method name");
     name = neon_astparser_makeidentconstant(prs, &prs->previous);
+    
     neon_astparser_parsenamedvar(prs, neon_astparser_makesyntoken(prs, "this"), false);
     /* Superclasses super-get < Superclasses super-invoke */
     /*
@@ -2394,17 +2316,10 @@ void neon_astparser_parseexprstmt(NeonAstParser* p, bool isinitializer, bool sem
     }
 }
 
-
-//void neon_astparser_parseforstmt(NeonAstParser* prs)
+/*
 void neon_astparser_parseforstmt(NeonAstParser* p)
 {
-    /*
-    if(!neon_astparser_match(p, NEON_TOK_PARENOPEN))
-    {
-    }
-    */
     neon_astparser_consume(p, NEON_TOK_PARENOPEN, "expected '(' after 'for' keyword");
-
     neon_astparser_scopebegin(p);
     // parse initializer...
     if(neon_astparser_match(p, NEON_TOK_SEMICOLON))
@@ -2435,12 +2350,6 @@ void neon_astparser_parseforstmt(NeonAstParser* p)
         exitjump = neon_astparser_emitjump(p, NEON_OP_JUMPIFFALSE);
         neon_astparser_emit1byte(p, NEON_OP_POPONE);// pop the condition
     }
-    /*if(!neon_astparser_match(p, NEON_TOK_PARENCLOSE))
-    {
-
-    }
-    */
-
     // the iterator...
     if(!neon_astparser_checkcurrent(p, NEON_TOK_BRACEOPEN))
     {
@@ -2453,14 +2362,8 @@ void neon_astparser_parseforstmt(NeonAstParser* p)
         p->innermostloopstart = incrementstart;
         neon_astparser_emitpatchjump(p, bodyjump);
     }
-
     neon_astparser_consume(p, NEON_TOK_PARENCLOSE, "expected ')' after 'for' conditionals");
-
-
     neon_astparser_parsestmt(p);
-
-
-
     neon_astparser_emitloop(p, p->innermostloopstart);
     if(exitjump != -1)
     {
@@ -2473,29 +2376,79 @@ void neon_astparser_parseforstmt(NeonAstParser* p)
     p->innermostloopscopedepth = surroundingscopedepth;
     neon_astparser_scopeend(p);
 }
-
-/*
-void neon_astparser_parsewhilestmt(NeonAstParser* prs)
-{
-    int loopstart;
-    int exitjump;
-    NeonAstLoop loop;
-    neon_astparser_startloop(prs, &loop);
-    loopstart = neon_astparser_currentblob(prs)->count;
-    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'while'");
-    neon_astparser_parseexpr(prs);
-    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expected ')' after condition");
-    exitjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
-    prs->currcompiler->loop->body = neon_astparser_currentblob(prs)->count;
-    neon_astparser_parsestmt(prs);
-    neon_astparser_emitloop(prs, loopstart);
-    neon_astparser_emitpatchjump(prs, exitjump);
-    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
-    neon_astparser_endloop(prs);
-}
 */
 
+
+void neon_astparser_parseforstmt(NeonAstParser* prs)
+{
+    neon_astparser_scopebegin(prs);
+    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "Expect '(' after 'for'");
+
+    bool constant = false;
+    if(neon_astparser_match(prs, NEON_TOK_KWVAR) /*|| (constant = neon_astparser_match(prs, NEON_TOK_KWCONST))*/)
+    {
+        neon_astparser_consume(prs, NEON_TOK_IDENTIFIER, "Expect variable name");
+        NeonAstToken var = prs->previous;
+        /*
+        if(neon_astparser_checkcurrent(prs, NEON_TOK_KWIN) || neon_astparser_checkcurrent(prs, NEON_TOK_COMMA))
+        {
+            //for_in_statement(prs, var, constant);
+            neon_astparser_raiseerror(prs, "for(... in...) not implemented yet");
+            return;
+        }
+        */
+        uint8_t global = neon_astparser_makeidentconstant(prs, &prs->previous);
+        neon_astparser_parsenamedvar(prs, var, true);
+        if(neon_astparser_match(prs, NEON_TOK_ASSIGN))
+        {
+            neon_astparser_parseexpr(prs);
+        }
+        else
+        {
+            neon_astparser_emit1byte(prs, NEON_OP_PUSHNIL);
+        }
+
+        neon_astparser_emitdefvar(prs, global/*, constant*/);
+        neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "Expect ';' after loop variable");
+    }
+    else
+    {
+        neon_astparser_parseexprstmt(prs, true, false);
+        neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "Expect ';' after loop expression");
+    }
+
+    NeonAstLoop loop;
+    neon_astparser_beginloop(prs, &loop);
+    prs->currcompiler->loop->end = -1;
+    neon_astparser_parseexpr(prs);
+    neon_astparser_consume(prs, NEON_TOK_SEMICOLON, "Expect ';' after loop condition");
+
+    prs->currcompiler->loop->end = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_astparser_emit1byte(prs, NEON_OP_POPONE); /* Condition */
+
+    int body_jump = neon_astparser_emitjump(prs, NEON_OP_JUMPNOW);
+
+    int increment_start = neon_astparser_currentblob(prs)->count;
+    neon_astparser_parseexpr(prs);
+    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
+    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "Expect ')' after for clauses");
+
+    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
+    prs->currcompiler->loop->start = increment_start;
+
+    neon_astparser_emitpatchjump(prs, body_jump);
+
+    prs->currcompiler->loop->body = prs->currcompiler->currfunc->blob->count;
+    neon_astparser_parsestmt(prs);
+
+    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
+
+    neon_astparser_endloop(prs);
+    neon_astparser_scopeend(prs);
+}
+
+
+/*
 void neon_astparser_parsewhilestmt(NeonAstParser* p)
 {
     int surroundingloopstart = p->innermostloopstart;
@@ -2514,7 +2467,71 @@ void neon_astparser_parsewhilestmt(NeonAstParser* p)
     p->innermostloopstart = surroundingloopstart;
     p->innermostloopscopedepth = surroundingscopedepth;
 }
+*/
 
+void neon_astparser_beginloop(NeonAstParser* prs, NeonAstLoop* loop)
+{
+    loop->start = neon_astparser_currentblob(prs)->count;
+    loop->scopedepth = prs->currcompiler->scopedepth;
+    loop->enclosing = prs->currcompiler->loop;
+    prs->currcompiler->loop = loop;
+}
+
+void neon_astparser_endloop(NeonAstParser* prs)
+{
+    if(prs->currcompiler->loop->end != -1)
+    {
+        neon_astparser_emitpatchjump(prs, prs->currcompiler->loop->end);
+        neon_astparser_emit1byte(prs, NEON_OP_POPONE);
+    }
+    int i = prs->currcompiler->loop->body;
+    while(i < prs->currcompiler->currfunc->blob->count)
+    {
+        if(prs->currcompiler->currfunc->blob->bincode[i] == NEON_OP_PSEUDOBREAK)
+        {
+            prs->currcompiler->currfunc->blob->bincode[i] = NEON_OP_JUMPNOW;
+            neon_astparser_emitpatchjump(prs, i + 1);
+            i += 3;
+        }
+        else
+        {
+            //int neon_astparser_getcodeargscount(const int32_t *bytecode, const NeonValArray *constants, int ip);
+            i += 1 + neon_astparser_getcodeargscount(prs->currcompiler->currfunc->blob->bincode, prs->currcompiler->currfunc->blob->constants, i);
+        }
+    }
+    prs->currcompiler->loop = prs->currcompiler->loop->enclosing;
+}
+
+void neon_astparser_parsewhilestmt(NeonAstParser* prs)
+{
+    NeonAstLoop loop;
+    neon_astparser_beginloop(prs, &loop);
+    if(!neon_astparser_checkcurrent(prs, NEON_TOK_PARENOPEN))
+    {
+        neon_astparser_emit1byte(prs, NEON_OP_PUSHTRUE);
+    }
+    else
+    { 
+        neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "Expect '(' after 'while'");
+        neon_astparser_parseexpr(prs);
+        neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "Expect ')' after condition");
+    }
+
+    /* Jump ot of the loop if the condition is false */
+    prs->currcompiler->loop->end = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
+    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
+
+    /* Compile the body */
+    prs->currcompiler->loop->body = prs->currcompiler->currfunc->blob->count;
+    neon_astparser_parsestmt(prs);
+
+    /* Loop back to the start */
+    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
+    neon_astparser_endloop(prs);
+}
+
+
+/*
 void neon_astparser_parsecontinuestmt(NeonAstParser* p)
 {
     if(p->innermostloopstart == -1)
@@ -2527,7 +2544,23 @@ void neon_astparser_parsecontinuestmt(NeonAstParser* p)
     neon_astparser_emitloop(p, p->innermostloopstart);
     neon_astparser_consumestmtend(p);
 }
+*/
 
+
+static void neon_astparser_parsecontinuestmt(NeonAstParser* prs)
+{
+    if(prs->currcompiler->loop == NULL)
+    {
+        neon_astparser_raiseerror(prs, "Cannot use 'continue' outside of a loop");
+    }
+    /* Discard any locals created inside the loop */
+    neon_astparser_discardlocals(prs, prs->currcompiler->loop->scopedepth + 1);
+    /* Jump to the top of the innermost loop */
+    neon_astparser_emitloop(prs, prs->currcompiler->loop->start);
+    neon_astparser_consumestmtend(prs);
+}
+
+/*
 void neon_astparser_parsebreakstmt(NeonAstParser* p)
 {
     if(p->innermostloopstart == -1)
@@ -2539,28 +2572,19 @@ void neon_astparser_parsebreakstmt(NeonAstParser* p)
     neon_astparser_emitjump(p, NEON_OP_PSEUDOBREAK);
     neon_astparser_consumestmtend(p);
 }
-
-/*
-void neon_astparser_parseifstmt(NeonAstParser* prs)
-{
-    int thenjump;
-    int elsejump;
-    neon_astparser_consume(prs, NEON_TOK_PARENOPEN, "expected '(' after 'if'");
-    neon_astparser_parseexpr(prs);
-    neon_astparser_consume(prs, NEON_TOK_PARENCLOSE, "expect ')' after condition");// [paren]
-    thenjump = neon_astparser_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
-    neon_astparser_parsestmt(prs);
-    elsejump = neon_astparser_emitjump(prs, NEON_OP_JUMPNOW);
-    neon_astparser_emitpatchjump(prs, thenjump);
-    neon_astparser_emit1byte(prs, NEON_OP_POPONE);
-    if(neon_astparser_match(prs, NEON_TOK_KWELSE))
-    {
-        neon_astparser_parsestmt(prs);
-    }
-    neon_astparser_emitpatchjump(prs, elsejump);
-}
 */
+
+void neon_astparser_parsebreakstmt(NeonAstParser* prs)
+{
+    if(prs->currcompiler->loop == NULL)
+    {
+        neon_astparser_raiseerror(prs, "Cannot use 'break' outside of a loop");
+    }
+    /* Discard any locals created inside the loop */
+    neon_astparser_discardlocals(prs, prs->currcompiler->loop->scopedepth + 1);
+    neon_astparser_emitjump(prs, NEON_OP_PSEUDOBREAK);
+    neon_astparser_consumestmtend(prs);
+}
 
 static void neon_astparser_parseifstmt(NeonAstParser* p)
 {

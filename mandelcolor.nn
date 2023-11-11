@@ -1,6 +1,3 @@
-
-
-
 function calc_point(cx, cy, maxit)
 {
     var i = 0
@@ -70,4 +67,3 @@ function doit()
 }
 
 doit()
-

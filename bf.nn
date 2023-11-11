@@ -1,4 +1,3 @@
-
 function bf(src, input)
 {
     var i

@@ -1,16 +1,24 @@
 
-println("really simple test ...");
-var a = 0;
-while (a < 10) {
-    a = a + 1;
-    if (a > 5) {
-        continue;
+
+function t1()
+{
+    println("really simple test ...");
+    var a = 0;
+    while(a < 10)
+    {
+        a = a + 1;
+        if(a > 5)
+        {
+            continue;
+        }
+        println(a);
     }
-    println(a);
+    println("done!");
 }
-println("done!");
 
 
+function t2()
+{
     println("simple test ...");
     var b = 5;
     while (b != 0)
@@ -23,9 +31,10 @@ println("done!");
         }
     }
     println("done!");
+}
 
-
-
+function t3()
+{
     println("other test ...");
     var b = 5;
     while (b != 0)
@@ -41,9 +50,10 @@ println("done!");
             continue;
         }
     }
+}
 
-
-
+function t4()
+{
     var b = 5;
     var g = "scopes ok";
     while (b != 0) {
@@ -56,13 +66,20 @@ println("done!");
         }
     }
     println(g);
+}
 
-
-
+function t5()
+{
     for (var b = 0; b != 5; b = b + 1) {
         if (b == 0 || b == 1 || b == 2) {
             println(b);
             continue;
         }
     }
+}
 
+t1()
+t2()
+t3()
+t4()
+t5()

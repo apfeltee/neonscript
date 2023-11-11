@@ -1,4 +1,3 @@
-
 var B64_KEYCHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
 function util_utf8_encode(string)
@@ -131,4 +130,3 @@ println("encoded = ", encodedString);
 
 var decodedString = b64decode(encodedString);
 println("decoded = ", decodedString.dump());
-

@@ -522,6 +522,7 @@ struct NeonAstRule
 
 struct NeonAstLoop
 {
+    int end;
     int start;
     int body;
     int scopedepth;
@@ -606,6 +607,7 @@ struct NeonCallFrame
     int instrucidx;
     int64_t frstackindex;
     NeonObjClosure* closure;
+    NeonValue* slots;
 };
 
 struct NeonVMGCVars

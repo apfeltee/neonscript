@@ -1,4 +1,3 @@
-
 data = File.readfile("Makefile", 120)
 len = data.size()
 
@@ -17,4 +16,3 @@ for(i=0; i<len; i++)
         print("|", ch)
     }
 }
-

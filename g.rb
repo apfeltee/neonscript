@@ -1,77 +1,56 @@
-#!/usr/bin/ruby
 
-src=<<__eos__
-NEON_OP_PUSHCONST
-NEON_OP_PUSHNIL
-NEON_OP_PUSHTRUE
-NEON_OP_PUSHFALSE
-NEON_OP_PUSHONE
-NEON_OP_POPONE
-NEON_OP_POPN
-NEON_OP_DUP
-NEON_OP_TYPEOF
-NEON_OP_LOCALGET
-NEON_OP_LOCALSET
-NEON_OP_GLOBALGET
-NEON_OP_GLOBALDEFINE
-NEON_OP_GLOBALSET
-NEON_OP_UPVALGET
-NEON_OP_UPVALSET
-NEON_OP_PROPERTYGET
-NEON_OP_PROPERTYSET
-NEON_OP_INSTGETSUPER
-NEON_OP_EQUAL
-NEON_OP_PRIMGREATER
-NEON_OP_PRIMLESS
-NEON_OP_PRIMADD
-NEON_OP_PRIMSUBTRACT
-NEON_OP_PRIMMULTIPLY
-NEON_OP_PRIMDIVIDE
-NEON_OP_PRIMMODULO
-NEON_OP_PRIMSHIFTLEFT
-NEON_OP_PRIMSHIFTRIGHT
-NEON_OP_PRIMBINAND
-NEON_OP_PRIMBINOR
-NEON_OP_PRIMBINXOR
-NEON_OP_PRIMBINNOT
-NEON_OP_PRIMNOT
-NEON_OP_PRIMNEGATE
-NEON_OP_DEBUGPRINT
-NEON_OP_GLOBALSTMT
-NEON_OP_JUMPNOW
-NEON_OP_JUMPIFFALSE
-NEON_OP_LOOP
-NEON_OP_CALLCALLABLE
-NEON_OP_INSTTHISINVOKE
-NEON_OP_INSTSUPERINVOKE
-NEON_OP_INSTTHISPROPERTYGET
-NEON_OP_CLOSURE
-NEON_OP_UPVALCLOSE
-NEON_OP_RETURN
-NEON_OP_CLASS
-NEON_OP_INHERIT
-NEON_OP_METHOD
-NEON_OP_MAKEARRAY
-NEON_OP_MAKEMAP
-NEON_OP_INDEXGET
-NEON_OP_INDEXSET
-NEON_OP_RESTOREFRAME
-NEON_OP_HALTVM
-NEON_OP_PSEUDOBREAK
 
-__eos__
+
+
+
 
 begin
-  findmap = {}
-  src.split("\n").map(&:strip).reject(&:empty?).each{|origname|
-    blname = origname.gsub(/\bNEON_/, "BLADE_")
-    rx = /\b#{blname}\b/
-    findmap[origname] = rx
-  }
-  data = File.read("../blade/cver/main.c")
-  findmap.each do |name, rx|
-    if not data.match?(rx) then
-      $stderr.printf("cannot find %p\n", name)
+  ops = %w(
+    NEON_OP_INDEXGET
+    NEON_OP_GLOBALGET
+    NEON_OP_GLOBALDEFINE
+    NEON_OP_GLOBALSET
+    NEON_OP_PUSHCONST
+    NEON_OP_LOCALSET
+    NEON_OP_LOCALGET
+    NEON_OP_UPVALSET
+    NEON_OP_UPVALGET
+    NEON_OP_PROPERTYGET
+    NEON_OP_PROPERTYSET
+  )
+
+  ranges = [0, 1, 2, 3]
+
+  cnt = ops.length
+
+  rawdata = File.read("codeargs.h.tpl")
+  cock = rawdata + ""
+
+  i = 0
+
+
+  tree = []
+
+  ops.each do |op|
+
+    ranges.each do |r|
+
+      if tree[r] == nil then
+        tree[r] = []
+      end
+
+      tree[r].push([op, r])
+
     end
+
+
+
   end
+
+
+
+
 end
+
+
+

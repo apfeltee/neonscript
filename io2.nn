@@ -1,4 +1,3 @@
-
 f=File.open("Makefile", "rb")
 println("f = ", f)
 
@@ -27,5 +26,3 @@ while(true)
 }
 println("b=", b)
 f.close()
-
-
