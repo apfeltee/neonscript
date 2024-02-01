@@ -183,10 +183,15 @@
     }
 
 /* check for argument at index $i for $type, where $type is a nn_value_is*() function */
+/*
 #define NEON_ARGS_CHECKTYPE(chp, i, type) \
     if(!type((chp)->argv[i])) \
     { \
         return NEON_ARGS_FAIL(chp, "%s() expects argument %d as " NORMALIZE(type) ", %s given", (chp)->name, (i) + 1, nn_value_typename((chp)->argv[i])); \
+    }
+*/
+#define NEON_ARGS_CHECKTYPE(chp, i, type) \
+    { \
     }
 
 /* reject argument $type at $index */
@@ -586,6 +591,12 @@ void nn_import_closemodule(void *dlw);
 void nn_blob_destroy(NeonState* state, NeonBlob* blob);
 void nn_printer_printvalue(NeonPrinter *wr, NeonValue value, bool fixstring, bool invmethod);
 bool nn_exceptions_throwwithclass(NeonState *state, NeonObjClass *klass, const char *srcfile, int srcline, const char *format, ...);
+uint32_t nn_value_hashvalue(NeonValue value);
+bool nn_value_compare_actual(NeonState* state, NeonValue a, NeonValue b);
+bool nn_value_compare(NeonState *state, NeonValue a, NeonValue b);
+NeonValue nn_value_copyvalue(NeonState* state, NeonValue value);
+void nn_state_warn(NeonState *state, const char *fmt, ...);
+
 
 struct NeonValue
 {
@@ -652,11 +663,83 @@ struct NeonValue
         } as;
 
     public:
+        NEON_ALWAYSINLINE bool isObject() const
+        {
+            return (this->type == NEON_VALTYPE_OBJ);
+        }
+
+        NEON_ALWAYSINLINE bool isNull() const
+        {
+            return (this->type == NEON_VALTYPE_NULL);
+        }
+
+        NEON_ALWAYSINLINE bool isEmpty() const
+        {
+            return (this->type == NEON_VALTYPE_EMPTY);
+        }
+
+        NEON_ALWAYSINLINE bool isObjType(NeonObjType t) const;
+
+        NEON_ALWAYSINLINE bool isFuncNative() const
+        {
+            return this->isObjType(NEON_OBJTYPE_FUNCNATIVE);
+        }
+
+        NEON_ALWAYSINLINE bool isFuncScript() const
+        {
+            return this->isObjType(NEON_OBJTYPE_FUNCSCRIPT);
+        }
+
+        NEON_ALWAYSINLINE bool isFuncClosure() const
+        {
+            return this->isObjType(NEON_OBJTYPE_FUNCCLOSURE);
+        }
+
+        NEON_ALWAYSINLINE bool isFuncBound() const
+        {
+            return this->isObjType(NEON_OBJTYPE_FUNCBOUND);
+        }
+
+        NEON_ALWAYSINLINE bool isClass() const
+        {
+            return this->isObjType(NEON_OBJTYPE_CLASS);
+        }
+
+        NEON_ALWAYSINLINE bool isCallable() const
+        {
+            return (
+                this->isClass() ||
+                this->isFuncScript() ||
+                this->isFuncClosure() ||
+                this->isFuncBound() ||
+                this->isFuncNative()
+            );
+        }
+
+        NEON_ALWAYSINLINE bool isString() const
+        {
+            return this->isObjType(NEON_OBJTYPE_STRING);
+        }
+
+        NEON_ALWAYSINLINE NeonObject* asObject()
+        {
+            return (this->as.obj);
+        }
+
+        NEON_ALWAYSINLINE const NeonObject* asObject() const
+        {
+            return (this->as.obj);
+        }
+
         NEON_ALWAYSINLINE double asNumber()
         {
             return (this->as.number);
         }
 
+        NEON_ALWAYSINLINE  NeonObjString* asString()
+        {
+            return ((NeonObjString*)this->asObject());
+        }
 };
 
 struct NeonInstruction
@@ -809,6 +892,11 @@ struct NeonObject
     public:
 };
 
+NEON_ALWAYSINLINE bool NeonValue::isObjType(NeonObjType t) const
+{
+    return this->isObject() && this->asObject()->type == t;
+}
+
 struct NeonValArray
 {
     public:
@@ -927,10 +1015,38 @@ struct NeonPropGetSet
 
 struct NeonProperty
 {
-    NeonFieldType type;
-    NeonValue value;
-    bool havegetset;
-    NeonPropGetSet getset;
+    public:
+        NeonFieldType type;
+        NeonValue value;
+        bool havegetset;
+        NeonPropGetSet getset;
+
+    public:
+        void init(NeonValue val, NeonFieldType t)
+        {
+            this->type = t;
+            this->value = val;
+            this->havegetset = false;
+        }
+
+        NeonProperty(NeonValue val, NeonValue getter, NeonValue setter, NeonFieldType t)
+        {
+            bool getisfn;
+            bool setisfn;
+            init(val, t);
+            setisfn = setter.isCallable();
+            getisfn = getter.isCallable();
+            if(getisfn || setisfn)
+            {
+                this->getset.setter = setter;
+                this->getset.getter = getter;
+            }
+        }
+
+        NeonProperty(NeonValue val, NeonFieldType t)
+        {
+            init(val, t);
+        }
 };
 
 struct NeonHashTable
@@ -975,14 +1091,330 @@ struct NeonHashTable
             nn_gcmem_freearray(state, sizeof(NeonHashTable::Entry), this->entries, this->capacity);
         }
 
+        NeonHashTable::Entry* findEntryByValue(NeonHashTable::Entry* availents, int availcap, NeonValue key)
+        {
+            uint32_t hash;
+            uint32_t index;
+            NeonState* state;
+            NeonHashTable::Entry* entry;
+            NeonHashTable::Entry* tombstone;
+            state = this->pvm;
+            hash = nn_value_hashvalue(key);
+            #if defined(DEBUG_TABLE) && DEBUG_TABLE
+            fprintf(stderr, "looking for key ");
+            nn_printer_printvalue(state->debugwriter, key, true, false);
+            fprintf(stderr, " with hash %u in table...\n", hash);
+            #endif
+            index = hash & (availcap - 1);
+            tombstone = NULL;
+            while(true)
+            {
+                entry = &availents[index];
+                if(entry->key.isEmpty())
+                {
+                    if(entry->value.value.isNull())
+                    {
+                        /* empty entry */
+                        if(tombstone != NULL)
+                        {
+                            return tombstone;
+                        }
+                        else
+                        {
+                            return entry;
+                        }
+                    }
+                    else
+                    {
+                        /* we found a tombstone. */
+                        if(tombstone == NULL)
+                        {
+                            tombstone = entry;
+                        }
+                    }
+                }
+                else if(nn_value_compare(state, key, entry->key))
+                {
+                    return entry;
+                }
+                index = (index + 1) & (availcap - 1);
+            }
+            return NULL;
+        }
+
+        NeonHashTable::Entry* findEntryByStr(NeonHashTable::Entry* availents, int availcap, NeonValue valkey, const char* kstr, size_t klen, uint32_t hash);
+
+        NeonProperty* getFieldByValue(NeonValue key)
+        {
+            NeonState* state;
+            NeonHashTable::Entry* entry;
+            (void)state;
+            state = this->pvm;
+            if(this->count == 0 || this->entries == NULL)
+            {
+                return NULL;
+            }
+            #if defined(DEBUG_TABLE) && DEBUG_TABLE
+            fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
+            #endif
+            entry = this->findEntryByValue(this->entries, this->capacity, key);
+            if(entry->key.isEmpty() || entry->key.isNull())
+            {
+                return NULL;
+            }
+            #if defined(DEBUG_TABLE) && DEBUG_TABLE
+            fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
+            nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
+            fprintf(stderr, "\n");
+            #endif
+            return &entry->value;
+        }
+
+        NeonProperty* getFieldByStr(NeonValue valkey, const char* kstr, size_t klen, uint32_t hash)
+        {
+            NeonState* state;
+            NeonHashTable::Entry* entry;
+            (void)state;
+            state = this->pvm;
+            if(this->count == 0 || this->entries == NULL)
+            {
+                return NULL;
+            }
+            #if defined(DEBUG_TABLE) && DEBUG_TABLE
+            fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
+            #endif
+            entry = this->findEntryByStr(this->entries, this->capacity, valkey, kstr, klen, hash);
+            if(entry->key.isEmpty() || entry->key.isNull())
+            {
+                return NULL;
+            }
+            #if defined(DEBUG_TABLE) && DEBUG_TABLE
+            fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
+            nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
+            fprintf(stderr, "\n");
+            #endif
+            return &entry->value;
+        }
+
+        NeonProperty* getFieldByObjStr(NeonObjString* str);
+
+        NeonProperty* getFieldByCStr(const char* kstr)
+        {
+            size_t klen;
+            uint32_t hash;
+            klen = strlen(kstr);
+            hash = nn_util_hashstring(kstr, klen);
+            return this->getFieldByStr(NeonValue::makeEmpty(), kstr, klen, hash);
+        }
+
+        NeonProperty* getField(NeonValue key);
+
+        bool get(NeonValue key, NeonValue* value)
+        {
+            NeonProperty* field;
+            field = this->getField(key);
+            if(field != NULL)
+            {
+                *value = field->value;
+                return true;
+            }
+            return false;
+        }
+
+        void adjustCapacity(int needcap)
+        {
+            int i;
+            NeonState* state;
+            NeonHashTable::Entry* dest;
+            NeonHashTable::Entry* entry;
+            NeonHashTable::Entry* nents;
+            state = this->pvm;
+            nents = (NeonHashTable::Entry*)nn_gcmem_allocate(state, sizeof(NeonHashTable::Entry), needcap);
+            for(i = 0; i < needcap; i++)
+            {
+                nents[i].key = NeonValue::makeEmpty();
+                nents[i].value = NeonProperty(NeonValue::makeNull(), NEON_PROPTYPE_VALUE);
+            }
+            /* repopulate buckets */
+            this->count = 0;
+            for(i = 0; i < this->capacity; i++)
+            {
+                entry = &this->entries[i];
+                if(entry->key.isEmpty())
+                {
+                    continue;
+                }
+                dest = this->findEntryByValue(nents, needcap, entry->key);
+                dest->key = entry->key;
+                dest->value = entry->value;
+                this->count++;
+            }
+            /* free the old entries... */
+            nn_gcmem_freearray(state, sizeof(NeonHashTable::Entry), this->entries, this->capacity);
+            this->entries = nents;
+            this->capacity = needcap;
+        }
+
+        bool setType(NeonValue key, NeonValue value, NeonFieldType ftyp, bool keyisstring)
+        {
+            bool isnew;
+            int needcap;
+            NeonHashTable::Entry* entry;
+            (void)keyisstring;
+            if(this->count + 1 > this->capacity * NEON_CFG_MAXTABLELOAD)
+            {
+                needcap = GROW_CAPACITY(this->capacity);
+                this->adjustCapacity(needcap);
+            }
+            entry = this->findEntryByValue(this->entries, this->capacity, key);
+            isnew = entry->key.isEmpty();
+            if(isnew && entry->value.value.isNull())
+            {
+                this->count++;
+            }
+            /* overwrites existing entries. */
+            entry->key = key;
+            entry->value = NeonProperty(value, ftyp);
+            return isnew;
+        }
+
+        bool set(NeonValue key, NeonValue value)
+        {
+            return this->setType(key, value, NEON_PROPTYPE_VALUE, key.isString());
+        }
+
+        bool setCStrType(const char* cstrkey, NeonValue value, NeonFieldType ftype);
+
+        bool setCStr(const char* cstrkey, NeonValue value)
+        {
+            return setCStrType(cstrkey, value, NEON_PROPTYPE_VALUE);
+        }
+
+        bool removeByKey(NeonValue key)
+        {
+            NeonHashTable::Entry* entry;
+            if(this->count == 0)
+            {
+                return false;
+            }
+            /* find the entry */
+            entry = this->findEntryByValue(this->entries, this->capacity, key);
+            if(entry->key.isEmpty())
+            {
+                return false;
+            }
+            /* place a tombstone in the entry. */
+            entry->key = NeonValue::makeEmpty();
+            entry->value = NeonProperty(NeonValue::makeBool(true), NEON_PROPTYPE_VALUE);
+            return true;
+        }
+
+        static void addAll(NeonHashTable* from, NeonHashTable* to)
+        {
+            int i;
+            NeonHashTable::Entry* entry;
+            for(i = 0; i < from->capacity; i++)
+            {
+                entry = &from->entries[i];
+                if(!entry->key.isEmpty())
+                {
+                    to->setType(entry->key, entry->value.value, entry->value.type, false);
+                }
+            }
+        }
+
+        static void copy(NeonHashTable* from, NeonHashTable* to)
+        {
+            int i;
+            NeonState* state;
+            NeonHashTable::Entry* entry;
+            state = from->pvm;
+            for(i = 0; i < (int)from->capacity; i++)
+            {
+                entry = &from->entries[i];
+                if(!entry->key.isEmpty())
+                {
+                    to->setType(entry->key, nn_value_copyvalue(state, entry->value.value), entry->value.type, false);
+                }
+            }
+        }
+
+        NeonObjString* findString(const char* chars, size_t length, uint32_t hash);
+
+        NeonValue findKey(NeonValue value)
+        {
+            int i;
+            NeonHashTable::Entry* entry;
+            for(i = 0; i < (int)this->capacity; i++)
+            {
+                entry = &this->entries[i];
+                if(!entry->key.isNull() && !entry->key.isEmpty())
+                {
+                    if(nn_value_compare(this->pvm, entry->value.value, value))
+                    {
+                        return entry->key;
+                    }
+                }
+            }
+            return NeonValue::makeNull();
+        }
+
+        void printTo(NeonPrinter* pd, const char* name);
+
+        static void mark(NeonState* state, NeonHashTable* table)
+        {
+            int i;
+            NeonHashTable::Entry* entry;
+            if(table == NULL)
+            {
+                return;
+            }
+            if(!table->active)
+            {
+                nn_state_warn(state, "trying to mark inactive hashtable <%p>!", table);
+                return;
+            }
+            for(i = 0; i < table->capacity; i++)
+            {
+                entry = &table->entries[i];
+                if(entry != NULL)
+                {
+                    nn_gcmem_markvalue(state, entry->key);
+                    nn_gcmem_markvalue(state, entry->value.value);
+                }
+            }
+        }
+
+        static void removeMarked(NeonState* state, NeonHashTable* table)
+        {
+            int i;
+            NeonHashTable::Entry* entry;
+            for(i = 0; i < table->capacity; i++)
+            {
+                entry = &table->entries[i];
+                if(entry->key.isObject() && entry->key.asObject()->mark != state->markvalue)
+                {
+                    table->removeByKey(entry->key);
+                }
+            }
+        }
+
 };
 
 struct NeonObjString: public NeonObject
 {
     public:
-        static void putInterned(NeonState* state, NeonObjString* rs);
+        static void putInterned(NeonState* state, NeonObjString* rs)
+        {
+            nn_vm_stackpush(state, NeonValue::fromObject(rs));
+            state->strings->set(NeonValue::fromObject(rs), NeonValue::makeNull());
+            nn_vm_stackpop(state);
+        }
 
-        static NeonObjString* findInterned(NeonState* state, const char* chars, size_t length, uint32_t hash);
+        static NeonObjString* findInterned(NeonState* state, const char* chars, size_t length, uint32_t hash)
+        {
+            return state->strings->findString(chars, length, hash);
+        }
 
         static NeonObjString* makeFromStrbuf(NeonState* state, StringBuffer* sbuf, uint32_t hash)
         {
@@ -2010,24 +2442,162 @@ struct NeonArguments
 
 #include "prot.inc"
 
-static NEON_ALWAYSINLINE bool nn_value_isobject(NeonValue v)
+
+NeonHashTable::Entry* NeonHashTable::findEntryByStr(NeonHashTable::Entry* availents, int availcap, NeonValue valkey, const char* kstr, size_t klen, uint32_t hash)
 {
-    return ((v).type == NEON_VALTYPE_OBJ);
+    bool havevalhash;
+    uint32_t index;
+    uint32_t valhash;
+    NeonObjString* entoskey;
+    NeonHashTable::Entry* entry;
+    NeonHashTable::Entry* tombstone;
+    NeonState* state;
+    state = this->pvm;
+    (void)valhash;
+    (void)havevalhash;
+    #if defined(DEBUG_TABLE) && DEBUG_TABLE
+    fprintf(stderr, "looking for key ");
+    nn_printer_printvalue(state->debugwriter, key, true, false);
+    fprintf(stderr, " with hash %u in table...\n", hash);
+    #endif
+    valhash = 0;
+    havevalhash = false;
+    index = hash & (availcap - 1);
+    tombstone = NULL;
+    while(true)
+    {
+        entry = &availents[index];
+        if(entry->key.isEmpty())
+        {
+            if(entry->value.value.isNull())
+            {
+                /* empty entry */
+                if(tombstone != NULL)
+                {
+                    return tombstone;
+                }
+                else
+                {
+                    return entry;
+                }
+            }
+            else
+            {
+                /* we found a tombstone. */
+                if(tombstone == NULL)
+                {
+                    tombstone = entry;
+                }
+            }
+        }
+        if(entry->key.isString())
+        {
+            entoskey = entry->key.asString();
+            if(entoskey->length() == klen)
+            {
+                if(memcmp(kstr, entoskey->data(), klen) == 0)
+                {
+                    return entry;
+                }
+            }
+        }
+        else
+        {
+            if(!valkey.isEmpty())
+            {
+                if(nn_value_compare(state, valkey, entry->key))
+                {
+                    return entry;
+                }
+            }
+        }
+        index = (index + 1) & (availcap - 1);
+    }
+    return NULL;
 }
 
-static NEON_ALWAYSINLINE  NeonObject* nn_value_asobject(NeonValue v)
+NeonProperty* NeonHashTable::getFieldByObjStr(NeonObjString* str)
 {
-    return ((v).as.obj);
+    return this->getFieldByStr(NeonValue::makeEmpty(), str->data(), str->length(), str->hash);
 }
 
-static NEON_ALWAYSINLINE  bool nn_value_isobjtype(NeonValue v, NeonObjType t)
+NeonProperty* NeonHashTable::getField(NeonValue key)
 {
-    return nn_value_isobject(v) && nn_value_asobject(v)->type == t;
+    NeonObjString* oskey;
+    if(key.isString())
+    {
+        oskey = key.asString();
+        return this->getFieldByStr(key, oskey->data(), oskey->length(), oskey->hash);
+    }
+    return this->getFieldByValue(key);
 }
 
-static NEON_ALWAYSINLINE  bool nn_value_isnull(NeonValue v)
+bool NeonHashTable::setCStrType(const char* cstrkey, NeonValue value, NeonFieldType ftype)
 {
-    return ((v).type == NEON_VALTYPE_NULL);
+    NeonObjString* os;
+    NeonState* state;
+    state = this->pvm;
+    os = NeonObjString::copy(state, cstrkey);
+    return this->setType(NeonValue::fromObject(os), value, ftype, true);
+}
+
+NeonObjString* NeonHashTable::findString(const char* chars, size_t length, uint32_t hash)
+{
+    size_t slen;
+    uint32_t index;
+    const char* sdata;
+    NeonHashTable::Entry* entry;
+    NeonObjString* string;
+    if(this->count == 0)
+    {
+        return NULL;
+    }
+    index = hash & (this->capacity - 1);
+    while(true)
+    {
+        entry = &this->entries[index];
+        if(entry->key.isEmpty())
+        {
+            /*
+            // stop if we find an empty non-tombstone entry
+            //if (entry->value.isNull())
+            */
+            {
+                return NULL;
+            }
+        }
+        string = entry->key.asString();
+        slen = string->length();
+        sdata = string->data();
+        if((slen == length) && (string->hash == hash) && memcmp(sdata, chars, length) == 0)
+        {
+            /* we found it */
+            return string;
+        }
+        index = (index + 1) & (this->capacity - 1);
+    }
+}
+
+void NeonHashTable::printTo(NeonPrinter* pd, const char* name)
+{
+    int i;
+    NeonHashTable::Entry* entry;
+    pd->putformat("<HashTable of %s : {\n", name);
+    for(i = 0; i < this->capacity; i++)
+    {
+        entry = &this->entries[i];
+        if(!entry->key.isEmpty())
+        {
+            nn_printer_printvalue(pd, entry->key, true, true);
+            pd->putformat(": ");
+            nn_printer_printvalue(pd, entry->value.value, true, true);
+            if(i != this->capacity - 1)
+            {
+                pd->putformat(",\n");
+            }
+        }
+    }
+    pd->putformat("}>\n");
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_isbool(NeonValue v)
@@ -2040,85 +2610,40 @@ static NEON_ALWAYSINLINE  bool nn_value_isnumber(NeonValue v)
     return ((v).type == NEON_VALTYPE_NUMBER);
 }
 
-static NEON_ALWAYSINLINE  bool nn_value_isempty(NeonValue v)
-{
-    return ((v).type == NEON_VALTYPE_EMPTY);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isstring(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_STRING);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isfuncnative(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCNATIVE);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isfuncscript(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCSCRIPT);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isfuncclosure(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCCLOSURE);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isfuncbound(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCBOUND);
-}
-
-static NEON_ALWAYSINLINE  bool nn_value_isclass(NeonValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_CLASS);
-}
-
 static NEON_ALWAYSINLINE  bool nn_value_isinstance(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_INSTANCE);
+    return v.isObjType(NEON_OBJTYPE_INSTANCE);
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_isarray(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_ARRAY);
+    return v.isObjType(NEON_OBJTYPE_ARRAY);
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_isdict(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_DICT);
+    return v.isObjType(NEON_OBJTYPE_DICT);
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_isfile(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FILE);
+    return v.isObjType(NEON_OBJTYPE_FILE);
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_isrange(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_RANGE);
+    return v.isObjType(NEON_OBJTYPE_RANGE);
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_ismodule(NeonValue v)
 {
-    return nn_value_isobjtype(v, NEON_OBJTYPE_MODULE);
+    return v.isObjType(NEON_OBJTYPE_MODULE);
 }
 
-static NEON_ALWAYSINLINE  bool nn_value_iscallable(NeonValue v)
-{
-    return (
-        nn_value_isclass(v) ||
-        nn_value_isfuncscript(v) ||
-        nn_value_isfuncclosure(v) ||
-        nn_value_isfuncbound(v) ||
-        nn_value_isfuncnative(v)
-    );
-}
 
 static NEON_ALWAYSINLINE  NeonObjType nn_value_objtype(NeonValue v)
 {
-    return nn_value_asobject(v)->type;
+    return v.asObject()->type;
 }
 
 static NEON_ALWAYSINLINE  bool nn_value_asbool(NeonValue v)
@@ -2127,74 +2652,69 @@ static NEON_ALWAYSINLINE  bool nn_value_asbool(NeonValue v)
 }
 
 
-static NEON_ALWAYSINLINE  NeonObjString* nn_value_asstring(NeonValue v)
-{
-    return ((NeonObjString*)nn_value_asobject(v));
-}
-
 static NEON_ALWAYSINLINE  NeonObjFuncNative* nn_value_asfuncnative(NeonValue v)
 {
-    return ((NeonObjFuncNative*)nn_value_asobject(v));
+    return ((NeonObjFuncNative*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjFuncScript* nn_value_asfuncscript(NeonValue v)
 {
-    return ((NeonObjFuncScript*)nn_value_asobject(v));
+    return ((NeonObjFuncScript*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjFuncClosure* nn_value_asfuncclosure(NeonValue v)
 {
-    return ((NeonObjFuncClosure*)nn_value_asobject(v));
+    return ((NeonObjFuncClosure*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjClass* nn_value_asclass(NeonValue v)
 {
-    return ((NeonObjClass*)nn_value_asobject(v));
+    return ((NeonObjClass*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjInstance* nn_value_asinstance(NeonValue v)
 {
-    return ((NeonObjInstance*)nn_value_asobject(v));
+    return ((NeonObjInstance*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjFuncBound* nn_value_asfuncbound(NeonValue v)
 {
-    return ((NeonObjFuncBound*)nn_value_asobject(v));
+    return ((NeonObjFuncBound*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjSwitch* nn_value_asswitch(NeonValue v)
 {
-    return ((NeonObjSwitch*)nn_value_asobject(v));
+    return ((NeonObjSwitch*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjUserdata* nn_value_asuserdata(NeonValue v)
 {
-    return ((NeonObjUserdata*)nn_value_asobject(v));
+    return ((NeonObjUserdata*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjModule* nn_value_asmodule(NeonValue v)
 {
-    return ((NeonObjModule*)nn_value_asobject(v));
+    return ((NeonObjModule*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjArray* nn_value_asarray(NeonValue v)
 {
-    return ((NeonObjArray*)nn_value_asobject(v));
+    return ((NeonObjArray*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjDict* nn_value_asdict(NeonValue v)
 {
-    return ((NeonObjDict*)nn_value_asobject(v));
+    return ((NeonObjDict*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjFile* nn_value_asfile(NeonValue v)
 {
-    return ((NeonObjFile*)nn_value_asobject(v));
+    return ((NeonObjFile*)v.asObject());
 }
 
 static NEON_ALWAYSINLINE  NeonObjRange* nn_value_asrange(NeonValue v)
 {
-    return ((NeonObjRange*)nn_value_asobject(v));
+    return ((NeonObjRange*)v.asObject());
 }
 
 
@@ -2783,9 +3303,9 @@ void nn_gcmem_markobject(NeonState* state, NeonObject* object)
 
 void nn_gcmem_markvalue(NeonState* state, NeonValue value)
 {
-    if(nn_value_isobject(value))
+    if(value.isObject())
     {
-        nn_gcmem_markobject(state, nn_value_asobject(value));
+        nn_gcmem_markobject(state, value.asObject());
     }
 }
 
@@ -2802,14 +3322,14 @@ void nn_gcmem_blackenobject(NeonState* state, NeonObject* object)
             {
                 NeonObjModule* module;
                 module = (NeonObjModule*)object;
-                nn_table_mark(state, module->deftable);
+                NeonHashTable::mark(state, module->deftable);
             }
             break;
         case NEON_OBJTYPE_SWITCH:
             {
                 NeonObjSwitch* sw;
                 sw = (NeonObjSwitch*)object;
-                nn_table_mark(state, sw->table);
+                NeonHashTable::mark(state, sw->table);
             }
             break;
         case NEON_OBJTYPE_FILE:
@@ -2824,7 +3344,7 @@ void nn_gcmem_blackenobject(NeonState* state, NeonObject* object)
                 NeonObjDict* dict;
                 dict = (NeonObjDict*)object;
                 dict->names->gcMark();
-                nn_table_mark(state, dict->htab);
+                NeonHashTable::mark(state, dict->htab);
             }
             break;
         case NEON_OBJTYPE_ARRAY:
@@ -2847,9 +3367,9 @@ void nn_gcmem_blackenobject(NeonState* state, NeonObject* object)
                 NeonObjClass* klass;
                 klass = (NeonObjClass*)object;
                 nn_gcmem_markobject(state, (NeonObject*)klass->name);
-                nn_table_mark(state, klass->methods);
-                nn_table_mark(state, klass->staticmethods);
-                nn_table_mark(state, klass->staticproperties);
+                NeonHashTable::mark(state, klass->methods);
+                NeonHashTable::mark(state, klass->staticmethods);
+                NeonHashTable::mark(state, klass->staticproperties);
                 nn_gcmem_markvalue(state, klass->initializer);
                 if(klass->superclass != NULL)
                 {
@@ -3049,8 +3569,8 @@ void nn_gcmem_markroots(NeonState* state)
     {
         nn_gcmem_markobject(state, (NeonObject*)upvalue);
     }
-    nn_table_mark(state, state->globals);
-    nn_table_mark(state, state->modules);
+    NeonHashTable::mark(state, state->globals);
+    NeonHashTable::mark(state, state->modules);
     nn_gcmem_markobject(state, (NeonObject*)state->exceptions.stdexception);
     nn_gcmem_markcompilerroots(state);
 }
@@ -3127,8 +3647,8 @@ void nn_gcmem_collectgarbage(NeonState* state)
     #endif
     nn_gcmem_markroots(state);
     nn_gcmem_tracerefs(state);
-    nn_table_removewhites(state, state->strings);
-    nn_table_removewhites(state, state->modules);
+    NeonHashTable::removeMarked(state, state->strings);
+    NeonHashTable::removeMarked(state, state->modules);
     nn_gcmem_sweep(state);
     state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
     state->markvalue = !state->markvalue;
@@ -3602,540 +4122,6 @@ int nn_blob_pushargdefval(NeonState* state, NeonBlob* blob, NeonValue value)
     return blob->argdefvals->count - 1;
 }
 
-NeonProperty nn_property_makewithpointer(NeonState* state, NeonValue val, NeonFieldType type)
-{
-    NeonProperty vf;
-    (void)state;
-    memset(&vf, 0, sizeof(NeonProperty));
-    vf.type = type;
-    vf.value = val;
-    vf.havegetset = false;
-    return vf;
-}
-
-NeonProperty nn_property_makewithgetset(NeonState* state, NeonValue val, NeonValue getter, NeonValue setter, NeonFieldType type)
-{
-    bool getisfn;
-    bool setisfn;
-    NeonProperty np;
-    np = nn_property_makewithpointer(state, val, type);
-    setisfn = nn_value_iscallable(setter);
-    getisfn = nn_value_iscallable(getter);
-    if(getisfn || setisfn)
-    {
-        np.getset.setter = setter;
-        np.getset.getter = getter;
-    }
-    return np;
-}
-
-NeonProperty nn_property_make(NeonState* state, NeonValue val, NeonFieldType type)
-{
-    return nn_property_makewithpointer(state, val, type);
-}
-
-NeonHashTable::Entry* nn_table_findentrybyvalue(NeonHashTable* table, NeonHashTable::Entry* entries, int capacity, NeonValue key)
-{
-    uint32_t hash;
-    uint32_t index;
-    NeonState* state;
-    NeonHashTable::Entry* entry;
-    NeonHashTable::Entry* tombstone;
-    state = table->pvm;
-    hash = nn_value_hashvalue(key);
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "looking for key ");
-    nn_printer_printvalue(state->debugwriter, key, true, false);
-    fprintf(stderr, " with hash %u in table...\n", hash);
-    #endif
-    index = hash & (capacity - 1);
-    tombstone = NULL;
-    while(true)
-    {
-        entry = &entries[index];
-        if(nn_value_isempty(entry->key))
-        {
-            if(nn_value_isnull(entry->value.value))
-            {
-                /* empty entry */
-                if(tombstone != NULL)
-                {
-                    return tombstone;
-                }
-                else
-                {
-                    return entry;
-                }
-            }
-            else
-            {
-                /* we found a tombstone. */
-                if(tombstone == NULL)
-                {
-                    tombstone = entry;
-                }
-            }
-        }
-        else if(nn_value_compare(state, key, entry->key))
-        {
-            return entry;
-        }
-        index = (index + 1) & (capacity - 1);
-    }
-    return NULL;
-}
-
-NeonHashTable::Entry* nn_table_findentrybystr(NeonHashTable* table, NeonHashTable::Entry* entries, int capacity, NeonValue valkey, const char* kstr, size_t klen, uint32_t hash)
-{
-    bool havevalhash;
-    uint32_t index;
-    uint32_t valhash;
-    NeonObjString* entoskey;
-    NeonHashTable::Entry* entry;
-    NeonHashTable::Entry* tombstone;
-    NeonState* state;
-    state = table->pvm;
-    (void)valhash;
-    (void)havevalhash;
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "looking for key ");
-    nn_printer_printvalue(state->debugwriter, key, true, false);
-    fprintf(stderr, " with hash %u in table...\n", hash);
-    #endif
-    valhash = 0;
-    havevalhash = false;
-    index = hash & (capacity - 1);
-    tombstone = NULL;
-    while(true)
-    {
-        entry = &entries[index];
-        if(nn_value_isempty(entry->key))
-        {
-            if(nn_value_isnull(entry->value.value))
-            {
-                /* empty entry */
-                if(tombstone != NULL)
-                {
-                    return tombstone;
-                }
-                else
-                {
-                    return entry;
-                }
-            }
-            else
-            {
-                /* we found a tombstone. */
-                if(tombstone == NULL)
-                {
-                    tombstone = entry;
-                }
-            }
-        }
-        if(nn_value_isstring(entry->key))
-        {
-            entoskey = nn_value_asstring(entry->key);
-            if(entoskey->length() == klen)
-            {
-                if(memcmp(kstr, entoskey->data(), klen) == 0)
-                {
-                    return entry;
-                }
-            }
-        }
-        else
-        {
-            if(!nn_value_isempty(valkey))
-            {
-                if(nn_value_compare(state, valkey, entry->key))
-                {
-                    return entry;
-                }
-            }
-        }
-        index = (index + 1) & (capacity - 1);
-    }
-    return NULL;
-}
-
-NeonProperty* nn_table_getfieldbyvalue(NeonHashTable* table, NeonValue key)
-{
-    NeonState* state;
-    NeonHashTable::Entry* entry;
-    (void)state;
-    state = table->pvm;
-    if(table->count == 0 || table->entries == NULL)
-    {
-        return NULL;
-    }
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
-    #endif
-    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
-    if(nn_value_isempty(entry->key) || nn_value_isnull(entry->key))
-    {
-        return NULL;
-    }
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
-    nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
-    fprintf(stderr, "\n");
-    #endif
-    return &entry->value;
-}
-
-NeonProperty* nn_table_getfieldbystr(NeonHashTable* table, NeonValue valkey, const char* kstr, size_t klen, uint32_t hash)
-{
-    NeonState* state;
-    NeonHashTable::Entry* entry;
-    (void)state;
-    state = table->pvm;
-    if(table->count == 0 || table->entries == NULL)
-    {
-        return NULL;
-    }
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
-    #endif
-    entry = nn_table_findentrybystr(table, table->entries, table->capacity, valkey, kstr, klen, hash);
-    if(nn_value_isempty(entry->key) || nn_value_isnull(entry->key))
-    {
-        return NULL;
-    }
-    #if defined(DEBUG_TABLE) && DEBUG_TABLE
-    fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
-    nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
-    fprintf(stderr, "\n");
-    #endif
-    return &entry->value;
-}
-
-NeonProperty* nn_table_getfieldbyostr(NeonHashTable* table, NeonObjString* str)
-{
-    return nn_table_getfieldbystr(table, NeonValue::makeEmpty(), str->data(), str->length(), str->hash);
-}
-
-NeonProperty* nn_table_getfieldbycstr(NeonHashTable* table, const char* kstr)
-{
-    size_t klen;
-    uint32_t hash;
-    klen = strlen(kstr);
-    hash = nn_util_hashstring(kstr, klen);
-    return nn_table_getfieldbystr(table, NeonValue::makeEmpty(), kstr, klen, hash);
-}
-
-NeonProperty* nn_table_getfield(NeonHashTable* table, NeonValue key)
-{
-    NeonObjString* oskey;
-    if(nn_value_isstring(key))
-    {
-        oskey = nn_value_asstring(key);
-        return nn_table_getfieldbystr(table, key, oskey->data(), oskey->length(), oskey->hash);
-    }
-    return nn_table_getfieldbyvalue(table, key);
-}
-
-bool nn_table_get(NeonHashTable* table, NeonValue key, NeonValue* value)
-{
-    NeonProperty* field;
-    field = nn_table_getfield(table, key);
-    if(field != NULL)
-    {
-        *value = field->value;
-        return true;
-    }
-    return false;
-}
-
-void nn_table_adjustcapacity(NeonHashTable* table, int capacity)
-{
-    int i;
-    NeonState* state;
-    NeonHashTable::Entry* dest;
-    NeonHashTable::Entry* entry;
-    NeonHashTable::Entry* entries;
-    state = table->pvm;
-    entries = (NeonHashTable::Entry*)nn_gcmem_allocate(state, sizeof(NeonHashTable::Entry), capacity);
-    for(i = 0; i < capacity; i++)
-    {
-        entries[i].key = NeonValue::makeEmpty();
-        entries[i].value = nn_property_make(state, NeonValue::makeNull(), NEON_PROPTYPE_VALUE);
-    }
-    /* repopulate buckets */
-    table->count = 0;
-    for(i = 0; i < table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(nn_value_isempty(entry->key))
-        {
-            continue;
-        }
-        dest = nn_table_findentrybyvalue(table, entries, capacity, entry->key);
-        dest->key = entry->key;
-        dest->value = entry->value;
-        table->count++;
-    }
-    /* free the old entries... */
-    nn_gcmem_freearray(state, sizeof(NeonHashTable::Entry), table->entries, table->capacity);
-    table->entries = entries;
-    table->capacity = capacity;
-}
-
-bool nn_table_setwithtype(NeonHashTable* table, NeonValue key, NeonValue value, NeonFieldType ftyp, bool keyisstring)
-{
-    bool isnew;
-    int capacity;
-    NeonState* state;
-    NeonHashTable::Entry* entry;
-    (void)keyisstring;
-    state = table->pvm;
-    if(table->count + 1 > table->capacity * NEON_CFG_MAXTABLELOAD)
-    {
-        capacity = GROW_CAPACITY(table->capacity);
-        nn_table_adjustcapacity(table, capacity);
-    }
-    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
-    isnew = nn_value_isempty(entry->key);
-    if(isnew && nn_value_isnull(entry->value.value))
-    {
-        table->count++;
-    }
-    /* overwrites existing entries. */
-    entry->key = key;
-    entry->value = nn_property_make(state, value, ftyp);
-    return isnew;
-}
-
-bool nn_table_set(NeonHashTable* table, NeonValue key, NeonValue value)
-{
-    return nn_table_setwithtype(table, key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
-}
-
-bool nn_table_setcstrwithtype(NeonHashTable* table, const char* cstrkey, NeonValue value, NeonFieldType ftype)
-{
-    NeonObjString* os;
-    NeonState* state;
-    state = table->pvm;
-    os = NeonObjString::copy(state, cstrkey);
-    return nn_table_setwithtype(table, NeonValue::fromObject(os), value, ftype, true);
-}
-
-bool nn_table_setcstr(NeonHashTable* table, const char* cstrkey, NeonValue value)
-{
-    return nn_table_setcstrwithtype(table, cstrkey, value, NEON_PROPTYPE_VALUE);
-}
-
-bool nn_table_delete(NeonHashTable* table, NeonValue key)
-{
-    NeonHashTable::Entry* entry;
-    if(table->count == 0)
-    {
-        return false;
-    }
-    /* find the entry */
-    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
-    if(nn_value_isempty(entry->key))
-    {
-        return false;
-    }
-    /* place a tombstone in the entry. */
-    entry->key = NeonValue::makeEmpty();
-    entry->value = nn_property_make(table->pvm, NeonValue::makeBool(true), NEON_PROPTYPE_VALUE);
-    return true;
-}
-
-void nn_table_addall(NeonHashTable* from, NeonHashTable* to)
-{
-    int i;
-    NeonHashTable::Entry* entry;
-    for(i = 0; i < from->capacity; i++)
-    {
-        entry = &from->entries[i];
-        if(!nn_value_isempty(entry->key))
-        {
-            nn_table_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
-        }
-    }
-}
-
-void nn_table_importall(NeonHashTable* from, NeonHashTable* to)
-{
-    int i;
-    const char* csname;
-    NeonObjString* kname;
-    NeonHashTable::Entry* entry;
-    for(i = 0; i < (int)from->capacity; i++)
-    {
-        entry = &from->entries[i];
-        if(!nn_value_isempty(entry->key) && !nn_value_ismodule(entry->value.value))
-        {
-            /* Don't import private values */
-            
-            if(nn_value_isstring(entry->key))
-            {
-                kname = nn_value_asstring(entry->key);
-                csname = kname->data();
-                if(csname[0] == '_')
-                {
-                    continue;
-                }
-            }
-            nn_table_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
-        }
-    }
-}
-
-void nn_table_copy(NeonHashTable* from, NeonHashTable* to)
-{
-    int i;
-    NeonState* state;
-    NeonHashTable::Entry* entry;
-    state = from->pvm;
-    for(i = 0; i < (int)from->capacity; i++)
-    {
-        entry = &from->entries[i];
-        if(!nn_value_isempty(entry->key))
-        {
-            nn_table_setwithtype(to, entry->key, nn_value_copyvalue(state, entry->value.value), entry->value.type, false);
-        }
-    }
-}
-
-NeonObjString* nn_table_findstring(NeonHashTable* table, const char* chars, size_t length, uint32_t hash)
-{
-    size_t slen;
-    uint32_t index;
-    const char* sdata;
-    NeonHashTable::Entry* entry;
-    NeonObjString* string;
-    if(table->count == 0)
-    {
-        return NULL;
-    }
-    index = hash & (table->capacity - 1);
-    while(true)
-    {
-        entry = &table->entries[index];
-        if(nn_value_isempty(entry->key))
-        {
-            /*
-            // stop if we find an empty non-tombstone entry
-            //if (nn_value_isnull(entry->value))
-            */
-            {
-                return NULL;
-            }
-        }
-        string = nn_value_asstring(entry->key);
-        slen = string->length();
-        sdata = string->data();
-        if((slen == length) && (string->hash == hash) && memcmp(sdata, chars, length) == 0)
-        {
-            /* we found it */
-            return string;
-        }
-        index = (index + 1) & (table->capacity - 1);
-    }
-}
-
-NeonValue nn_table_findkey(NeonHashTable* table, NeonValue value)
-{
-    int i;
-    NeonHashTable::Entry* entry;
-    for(i = 0; i < (int)table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(!nn_value_isnull(entry->key) && !nn_value_isempty(entry->key))
-        {
-            if(nn_value_compare(table->pvm, entry->value.value, value))
-            {
-                return entry->key;
-            }
-        }
-    }
-    return NeonValue::makeNull();
-}
-
-NeonObjArray* nn_table_getkeys(NeonHashTable* table)
-{
-    int i;
-    NeonState* state;
-    NeonObjArray* list;
-    NeonHashTable::Entry* entry;
-    state = table->pvm;
-    list = (NeonObjArray*)nn_gcmem_protect(state, (NeonObject*)NeonObjArray::make(state));
-    for(i = 0; i < table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(!nn_value_isnull(entry->key) && !nn_value_isempty(entry->key))
-        {
-            list->varray->push(entry->key);
-        }
-    }
-    return list;
-}
-
-void nn_table_print(NeonState* state, NeonPrinter* pd, NeonHashTable* table, const char* name)
-{
-    int i;
-    NeonHashTable::Entry* entry;
-    (void)state;
-    pd->putformat("<HashTable of %s : {\n", name);
-    for(i = 0; i < table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(!nn_value_isempty(entry->key))
-        {
-            nn_printer_printvalue(pd, entry->key, true, true);
-            pd->putformat(": ");
-            nn_printer_printvalue(pd, entry->value.value, true, true);
-            if(i != table->capacity - 1)
-            {
-                pd->putformat(",\n");
-            }
-        }
-    }
-    pd->putformat("}>\n");
-}
-
-void nn_table_mark(NeonState* state, NeonHashTable* table)
-{
-    int i;
-    NeonHashTable::Entry* entry;
-    if(table == NULL)
-    {
-        return;
-    }
-    if(!table->active)
-    {
-        nn_state_warn(state, "trying to mark inactive hashtable <%p>!", table);
-        return;
-    }
-    for(i = 0; i < table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(entry != NULL)
-        {
-            nn_gcmem_markvalue(state, entry->key);
-            nn_gcmem_markvalue(state, entry->value.value);
-        }
-    }
-}
-
-void nn_table_removewhites(NeonState* state, NeonHashTable* table)
-{
-    int i;
-    NeonHashTable::Entry* entry;
-    for(i = 0; i < table->capacity; i++)
-    {
-        entry = &table->entries[i];
-        if(nn_value_isobject(entry->key) && nn_value_asobject(entry->key)->mark != state->markvalue)
-        {
-            nn_table_delete(table, entry->key);
-        }
-    }
-}
-
 void nn_printer_printfunction(NeonPrinter* pd, NeonObjFuncScript* func)
 {
     if(func->name == NULL)
@@ -4230,7 +4216,7 @@ void nn_printer_printdict(NeonPrinter* pd, NeonObjDict* dict)
             nn_printer_printvalue(pd, val, true, true);
         }
         pd->putformat(": ");
-        field = nn_table_getfield(dict->htab, dict->names->values[i]);
+        field = dict->htab->getField(dict->names->values[i]);
         if(field != NULL)
         {
             if(nn_value_isdict(field->value))
@@ -4283,7 +4269,7 @@ void nn_printer_printinstance(NeonPrinter* pd, NeonObjInstance* instance, bool i
     state = pd->pvm;
     if(invmethod)
     {
-        field = nn_table_getfieldbycstr(instance->klass->methods, "toString");
+        field = instance->klass->methods->getFieldByCStr("toString");
         if(field != NULL)
         {
             args = NeonObjArray::make(state);
@@ -4310,7 +4296,7 @@ void nn_printer_printinstance(NeonPrinter* pd, NeonObjInstance* instance, bool i
 void nn_printer_printobject(NeonPrinter* pd, NeonValue value, bool fixstring, bool invmethod)
 {
     NeonObject* obj;
-    obj = nn_value_asobject(value);
+    obj = value.asObject();
     switch(obj->type)
     {
         case NEON_OBJTYPE_SWITCH:
@@ -4403,7 +4389,7 @@ void nn_printer_printobject(NeonPrinter* pd, NeonValue value, bool fixstring, bo
         case NEON_OBJTYPE_STRING:
             {
                 NeonObjString* string;
-                string = nn_value_asstring(value);
+                string = value.asString();
                 if(fixstring)
                 {
                     pd->putQuotedString(string->data(), string->length(), true);
@@ -4498,11 +4484,11 @@ const char* nn_value_objecttypename(NeonObject* object)
 
 const char* nn_value_typename(NeonValue value)
 {
-    if(nn_value_isempty(value))
+    if(value.isEmpty())
     {
         return "empty";
     }
-    if(nn_value_isnull(value))
+    if(value.isNull())
     {
         return "null";
     }
@@ -4514,9 +4500,9 @@ const char* nn_value_typename(NeonValue value)
     {
         return "number";
     }
-    else if(nn_value_isobject(value))
+    else if(value.isObject())
     {
-        return nn_value_objecttypename(nn_value_asobject(value));
+        return nn_value_objecttypename(value.asObject());
     }
     return "unknown";
 }
@@ -4532,8 +4518,8 @@ bool nn_value_compobject(NeonState* state, NeonValue a, NeonValue b)
     NeonObjString* strb;
     NeonObjArray* arra;
     NeonObjArray* arrb;
-    oa = nn_value_asobject(a);
-    ob = nn_value_asobject(b);
+    oa = a.asObject();
+    ob = b.asObject();
     ta = oa->type;
     tb = ob->type;
     if(ta == tb)
@@ -4597,7 +4583,7 @@ bool nn_value_compare_actual(NeonState* state, NeonValue a, NeonValue b)
             break;
         case NEON_VALTYPE_OBJ:
             {
-                if(nn_value_asobject(a) == nn_value_asobject(b))
+                if(a.asObject() == b.asObject())
                 {
                     return true;
                 }
@@ -4702,7 +4688,7 @@ uint32_t nn_value_hashvalue(NeonValue value)
         case NEON_VALTYPE_NUMBER:
             return nn_util_hashdouble(value.asNumber());
         case NEON_VALTYPE_OBJ:
-            return nn_object_hashobject(nn_value_asobject(value));
+            return nn_object_hashobject(value.asObject());
         default:
             /* NEON_VALTYPE_EMPTY */
             break;
@@ -4719,13 +4705,13 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
 {
     NeonObjString* osa;
     NeonObjString* osb;    
-    if(nn_value_isnull(a))
+    if(a.isNull())
     {
         return b;
     }
     else if(nn_value_isbool(a))
     {
-        if(nn_value_isnull(b) || (nn_value_isbool(b) && nn_value_asbool(b) == false))
+        if(b.isNull() || (nn_value_isbool(b) && nn_value_asbool(b) == false))
         {
             /* only null, false and false are lower than numbers */
             return a;
@@ -4737,7 +4723,7 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
     }
     else if(nn_value_isnumber(a))
     {
-        if(nn_value_isnull(b) || nn_value_isbool(b))
+        if(b.isNull() || nn_value_isbool(b))
         {
             return a;
         }
@@ -4755,19 +4741,19 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
             return b;
         }
     }
-    else if(nn_value_isobject(a))
+    else if(a.isObject())
     {
-        if(nn_value_isstring(a) && nn_value_isstring(b))
+        if(a.isString() && b.isString())
         {
-            osa = nn_value_asstring(a);
-            osb = nn_value_asstring(b);
+            osa = a.asString();
+            osb = b.asString();
             if(strncmp(osa->data(), osb->data(), osa->length()) >= 0)
             {
                 return a;
             }
             return b;
         }
-        else if(nn_value_isfuncscript(a) && nn_value_isfuncscript(b))
+        else if(a.isFuncScript() && b.isFuncScript())
         {
             if(nn_value_asfuncscript(a)->arity >= nn_value_asfuncscript(b)->arity)
             {
@@ -4775,7 +4761,7 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
             }
             return b;
         }
-        else if(nn_value_isfuncclosure(a) && nn_value_isfuncclosure(b))
+        else if(a.isFuncClosure() && b.isFuncClosure())
         {
             if(nn_value_asfuncclosure(a)->scriptfunc->arity >= nn_value_asfuncclosure(b)->scriptfunc->arity)
             {
@@ -4791,7 +4777,7 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
             }
             return b;
         }
-        else if(nn_value_isclass(a) && nn_value_isclass(b))
+        else if(a.isClass() && b.isClass())
         {
             if(nn_value_asclass(a)->methods->count >= nn_value_asclass(b)->methods->count)
             {
@@ -4823,9 +4809,9 @@ NeonValue nn_value_findgreater(NeonValue a, NeonValue b)
             }
             return b;
         }
-        else if(nn_value_isobject(b))
+        else if(b.isObject())
         {
-            if(nn_value_asobject(a)->type >= nn_value_asobject(b)->type)
+            if(a.asObject()->type >= b.asObject()->type)
             {
                 return a;
             }
@@ -4872,14 +4858,14 @@ void nn_value_sortvalues(NeonState* state, NeonValue* values, int count)
 
 NeonValue nn_value_copyvalue(NeonState* state, NeonValue value)
 {
-    if(nn_value_isobject(value))
+    if(value.isObject())
     {
-        switch(nn_value_asobject(value)->type)
+        switch(value.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
                 {
                     NeonObjString* string;
-                    string = nn_value_asstring(value);
+                    string = value.asString();
                     return NeonValue::fromObject(NeonObjString::copy(state, string->data(), string->length()));
                 }
                 break;
@@ -4917,18 +4903,6 @@ NeonValue nn_value_copyvalue(NeonState* state, NeonValue value)
     return value;
 }
 
-void NeonObjString::putInterned(NeonState* state, NeonObjString* rs)
-{
-    nn_vm_stackpush(state, NeonValue::fromObject(rs));
-    nn_table_set(state->strings, NeonValue::fromObject(rs), NeonValue::makeNull());
-    nn_vm_stackpop(state);
-}
-
-NeonObjString* NeonObjString::findInterned(NeonState* state, const char* chars, size_t length, uint32_t hash)
-{
-    return nn_table_findstring(state->strings, chars, length, hash);
-}
-
 NeonObjUserdata* nn_object_makeuserdata(NeonState* state, void* pointer, const char* name)
 {
     NeonObjUserdata* ptr;
@@ -4956,7 +4930,7 @@ NeonObjModule* nn_module_make(NeonState* state, const char* name, const char* fi
 void nn_module_setfilefield(NeonState* state, NeonObjModule* module)
 {
     return;
-    nn_table_setcstr(module->deftable, "__file__", NeonValue::fromObject(NeonObjString::copyObjString(state, module->physicalpath)));
+    module->deftable->setCStr("__file__", NeonValue::fromObject(NeonObjString::copyObjString(state, module->physicalpath)));
 }
 
 NeonObjSwitch* nn_object_makeswitch(NeonState* state)
@@ -5052,14 +5026,14 @@ NeonObjClass* nn_object_makeclass(NeonState* state, NeonObjString* name)
 
 void nn_class_inheritfrom(NeonObjClass* subclass, NeonObjClass* superclass)
 {
-    nn_table_addall(superclass->instprops, subclass->instprops);
-    nn_table_addall(superclass->methods, subclass->methods);
+    NeonHashTable::addAll(superclass->instprops, subclass->instprops);
+    NeonHashTable::addAll(superclass->methods, subclass->methods);
     subclass->superclass = superclass;
 }
 
 void nn_class_defproperty(NeonObjClass* klass, const char* cstrname, NeonValue val)
 {
-    nn_table_setcstr(klass->instprops, cstrname, val);
+    klass->instprops->setCStr(cstrname, val);
 }
 
 void nn_class_defcallablefield(NeonState* state, NeonObjClass* klass, const char* cstrname, NeonNativeFN function)
@@ -5068,12 +5042,12 @@ void nn_class_defcallablefield(NeonState* state, NeonObjClass* klass, const char
     NeonObjFuncNative* ofn;
     oname = NeonObjString::copy(state, cstrname);
     ofn = nn_object_makefuncnative(state, function, cstrname);
-    nn_table_setwithtype(klass->instprops, NeonValue::fromObject(oname), NeonValue::fromObject(ofn), NEON_PROPTYPE_FUNCTION, true);
+    klass->instprops->setType(NeonValue::fromObject(oname), NeonValue::fromObject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
 void nn_class_setstaticpropertycstr(NeonObjClass* klass, const char* cstrname, NeonValue val)
 {
-    nn_table_setcstr(klass->staticproperties, cstrname, val);
+    klass->staticproperties->setCStr(cstrname, val);
 }
 
 void nn_class_setstaticproperty(NeonObjClass* klass, NeonObjString* name, NeonValue val)
@@ -5093,7 +5067,7 @@ void nn_class_defnativeconstructor(NeonState* state, NeonObjClass* klass, NeonNa
 void nn_class_defmethod(NeonState* state, NeonObjClass* klass, const char* name, NeonValue val)
 {
     (void)state;
-    nn_table_setcstr(klass->methods, name, val);
+    klass->methods->setCStr(name, val);
 }
 
 void nn_class_defnativemethod(NeonState* state, NeonObjClass* klass, const char* name, NeonNativeFN function)
@@ -5107,13 +5081,13 @@ void nn_class_defstaticnativemethod(NeonState* state, NeonObjClass* klass, const
 {
     NeonObjFuncNative* ofn;
     ofn = nn_object_makefuncnative(state, function, name);
-    nn_table_setcstr(klass->staticmethods, name, NeonValue::fromObject(ofn));
+    klass->staticmethods->setCStr(name, NeonValue::fromObject(ofn));
 }
 
 NeonProperty* nn_class_getmethodfield(NeonObjClass* klass, NeonObjString* name)
 {
     NeonProperty* field;
-    field = nn_table_getfield(klass->methods, NeonValue::fromObject(name));
+    field = klass->methods->getField(NeonValue::fromObject(name));
     if(field != NULL)
     {
         return field;
@@ -5128,19 +5102,19 @@ NeonProperty* nn_class_getmethodfield(NeonObjClass* klass, NeonObjString* name)
 NeonProperty* nn_class_getpropertyfield(NeonObjClass* klass, NeonObjString* name)
 {
     NeonProperty* field;
-    field = nn_table_getfield(klass->instprops, NeonValue::fromObject(name));
+    field = klass->instprops->getField(NeonValue::fromObject(name));
     return field;
 }
 
 NeonProperty* nn_class_getstaticproperty(NeonObjClass* klass, NeonObjString* name)
 {
-    return nn_table_getfieldbyostr(klass->staticproperties, name);
+    return klass->staticproperties->getFieldByObjStr(name);
 }
 
 NeonProperty* nn_class_getstaticmethodfield(NeonObjClass* klass, NeonObjString* name)
 {
     NeonProperty* field;
-    field = nn_table_getfield(klass->staticmethods, NeonValue::fromObject(name));
+    field = klass->staticmethods->getField(NeonValue::fromObject(name));
     return field;
 }
 
@@ -5155,7 +5129,7 @@ NeonObjInstance* nn_object_makeinstance(NeonState* state, NeonObjClass* klass)
     instance->properties = new NeonHashTable(state);
     if(klass->instprops->count > 0)
     {
-        nn_table_copy(klass->instprops, instance->properties);
+        NeonHashTable::copy(klass->instprops, instance->properties);
     }
     /* gc fix */
     nn_vm_stackpop(state);
@@ -5170,13 +5144,13 @@ void nn_instance_mark(NeonState* state, NeonObjInstance* instance)
         return;
     }
     nn_gcmem_markobject(state, (NeonObject*)instance->klass);
-    nn_table_mark(state, instance->properties);
+    NeonHashTable::mark(state, instance->properties);
 }
 
 
 void nn_instance_defproperty(NeonObjInstance* instance, const char *cstrname, NeonValue val)
 {
-    nn_table_setcstr(instance->properties, cstrname, val);
+    instance->properties->setCStr(cstrname, val);
 }
 
 NeonObjFuncScript* nn_object_makefuncscript(NeonState* state, NeonObjModule* module, NeonFuncType type)
@@ -8949,11 +8923,11 @@ void nn_astparser_parseswitchstmt(NeonAstParser* prs)
                     jump = NeonValue::makeNumber((double)nn_astparser_currentblob(prs)->count - (double)startoffset);
                     if(prs->prevtoken.type == NEON_ASTTOK_KWTRUE)
                     {
-                        nn_table_set(sw->table, NeonValue::makeBool(true), jump);
+                        sw->table->set(NeonValue::makeBool(true), jump);
                     }
                     else if(prs->prevtoken.type == NEON_ASTTOK_KWFALSE)
                     {
-                        nn_table_set(sw->table, NeonValue::makeBool(false), jump);
+                        sw->table->set(NeonValue::makeBool(false), jump);
                     }
                     else if(prs->prevtoken.type == NEON_ASTTOK_LITERAL)
                     {
@@ -8961,13 +8935,13 @@ void nn_astparser_parseswitchstmt(NeonAstParser* prs)
                         string = NeonObjString::take(prs->pvm, str, length);
                         /* gc fix */
                         nn_vm_stackpush(prs->pvm, NeonValue::fromObject(string));
-                        nn_table_set(sw->table, NeonValue::fromObject(string), jump);
+                        sw->table->set(NeonValue::fromObject(string), jump);
                         /* gc fix */
                         nn_vm_stackpop(prs->pvm);
                     }
                     else if(nn_astparser_checknumber(prs))
                     {
-                        nn_table_set(sw->table, nn_astparser_compilenumber(prs), jump);
+                        sw->table->set(nn_astparser_compilenumber(prs), jump);
                     }
                     else
                     {
@@ -9391,7 +9365,7 @@ NeonValue nn_modfn_os_readdir(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "os.readDir", args);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    os = nn_value_asstring(args->args[0]);
+    os = args->args[0].asString();
     dirn = os->data();
     if(fslib_diropen(&rd, dirn))
     {
@@ -9445,7 +9419,7 @@ NeonValue nn_modfn_astscan_scan(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "astscan.scan", args);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    insrc = nn_value_asstring(args->args[0]);
+    insrc = args->args[0].asString();
     scn = nn_astlex_init(state, insrc->data());
     arr = NeonObjArray::make(state);
     while(!nn_astlex_isatend(scn))
@@ -9525,7 +9499,7 @@ bool nn_import_loadnativemodule(NeonState* state, NeonModInitFN init_fn, char* i
                 fieldname = NeonValue::fromObject(nn_gcmem_protect(state, (NeonObject*)NeonObjString::copy(state, field.name)));
                 v = field.fieldvalfn(state);
                 nn_vm_stackpush(state, v);
-                nn_table_set(themodule->deftable, fieldname, v);
+                themodule->deftable->set(fieldname, v);
                 nn_vm_stackpop(state);
             }
         }
@@ -9537,7 +9511,7 @@ bool nn_import_loadnativemodule(NeonState* state, NeonModInitFN init_fn, char* i
                 funcname = NeonValue::fromObject(nn_gcmem_protect(state, (NeonObject*)NeonObjString::copy(state, func.name)));
                 funcrealvalue = NeonValue::fromObject(nn_gcmem_protect(state, (NeonObject*)nn_object_makefuncnative(state, func.function, func.name)));
                 nn_vm_stackpush(state, funcrealvalue);
-                nn_table_set(themodule->deftable, funcname, funcrealvalue);
+                themodule->deftable->set(funcname, funcrealvalue);
                 nn_vm_stackpop(state);
             }
         }
@@ -9563,7 +9537,7 @@ bool nn_import_loadnativemodule(NeonState* state, NeonModInitFN init_fn, char* i
                         {
                             native->type = NEON_FUNCTYPE_PRIVATE;
                         }
-                        nn_table_set(klass->methods, funcname, NeonValue::fromObject(native));
+                        klass->methods->set(funcname, NeonValue::fromObject(native));
                     }
                 }
                 if(klassreg.fields != NULL)
@@ -9579,11 +9553,11 @@ bool nn_import_loadnativemodule(NeonState* state, NeonModInitFN init_fn, char* i
                         {
                             tabdest = klass->staticproperties;
                         }
-                        nn_table_set(tabdest, fieldname, v);
+                        tabdest->set(fieldname, v);
                         nn_vm_stackpop(state);
                     }
                 }
-                nn_table_set(themodule->deftable, NeonValue::fromObject(classname), NeonValue::fromObject(klass));
+                themodule->deftable->set(NeonValue::fromObject(classname), NeonValue::fromObject(klass));
             }
         }
         if(dlw != NULL)
@@ -9611,7 +9585,7 @@ void nn_import_addnativemodule(NeonState* state, NeonObjModule* module, const ch
     name = NeonValue::fromObject(NeonObjString::copyObjString(state, module->name));
     nn_vm_stackpush(state, name);
     nn_vm_stackpush(state, NeonValue::fromObject(module));
-    nn_table_set(state->modules, name, NeonValue::fromObject(module));
+    state->modules->set(name, NeonValue::fromObject(module));
     nn_vm_stackpopn(state, 2);
 }
 
@@ -9678,7 +9652,7 @@ NeonObjModule* nn_import_loadmodulescript(NeonState* state, NeonObjModule* intom
     (void)os;
     (void)argc;
     (void)intomodule;
-    field = nn_table_getfieldbyostr(state->modules, modulename);
+    field = state->modules->getFieldByObjStr(modulename);
     if(field != NULL)
     {
         return nn_value_asmodule(field->value);
@@ -9737,7 +9711,7 @@ char* nn_import_resolvepath(NeonState* state, const char* modulename, const char
     splen = state->importpath->count;
     for(i=0; i<splen; i++)
     {
-        pitem = nn_value_asstring(state->importpath->values[i]);
+        pitem = state->importpath->values[i].asString();
         if(pathbuf == NULL)
         {
             pathbuf = new StringBuffer(pitem->length() + mlen + 5);
@@ -9839,7 +9813,7 @@ NeonValue nn_memberfunc_dict_add(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 2);
     ENFORCE_VALID_DICT_KEY(&check, 0);
     dict = nn_value_asdict(args->thisval);
-    if(nn_table_get(dict->htab, args->args[0], &tempvalue))
+    if(dict->htab->get(args->args[0], &tempvalue))
     {
         NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, args->args[0])->data());
     }
@@ -9856,7 +9830,7 @@ NeonValue nn_memberfunc_dict_set(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 2);
     ENFORCE_VALID_DICT_KEY(&check, 0);
     dict = nn_value_asdict(args->thisval);
-    if(!nn_table_get(dict->htab, args->args[0], &value))
+    if(!dict->htab->get(args->args[0], &value))
     {
         nn_dict_addentry(dict, args->args[0], args->args[1]);
     }
@@ -9889,7 +9863,7 @@ NeonValue nn_memberfunc_dict_clone(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(args->thisval);
     newdict = (NeonObjDict*)nn_gcmem_protect(state, (NeonObject*)nn_object_makedict(state));
-    nn_table_addall(dict->htab, newdict->htab);
+    NeonHashTable::addAll(dict->htab, newdict->htab);
     for(i = 0; i < dict->names->count; i++)
     {
         newdict->names->push(dict->names->values[i]);
@@ -9910,7 +9884,7 @@ NeonValue nn_memberfunc_dict_compact(NeonState* state, NeonArguments* args)
     newdict = (NeonObjDict*)nn_gcmem_protect(state, (NeonObject*)nn_object_makedict(state));
     for(i = 0; i < dict->names->count; i++)
     {
-        nn_table_get(dict->htab, dict->names->values[i], &tmpvalue);
+        dict->htab->get(dict->names->values[i], &tmpvalue);
         if(!nn_value_compare(state, tmpvalue, NeonValue::makeNull()))
         {
             nn_dict_addentry(newdict, dict->names->values[i], tmpvalue);
@@ -9928,7 +9902,7 @@ NeonValue nn_memberfunc_dict_contains(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     ENFORCE_VALID_DICT_KEY(&check, 0);
     dict = nn_value_asdict(args->thisval);
-    return NeonValue::makeBool(nn_table_get(dict->htab, args->args[0], &value));
+    return NeonValue::makeBool(dict->htab->get(args->args[0], &value));
 }
 
 NeonValue nn_memberfunc_dict_extend(NeonState* state, NeonArguments* args)
@@ -9945,12 +9919,12 @@ NeonValue nn_memberfunc_dict_extend(NeonState* state, NeonArguments* args)
     dictcpy = nn_value_asdict(args->args[0]);
     for(i = 0; i < dictcpy->names->count; i++)
     {
-        if(!nn_table_get(dict->htab, dictcpy->names->values[i], &tmp))
+        if(!dict->htab->get(dictcpy->names->values[i], &tmp))
         {
             dict->names->push(dictcpy->names->values[i]);
         }
     }
-    nn_table_addall(dictcpy->htab, dict->htab);
+    NeonHashTable::addAll(dictcpy->htab, dict->htab);
     return NeonValue::makeEmpty();
 }
 
@@ -10025,9 +9999,9 @@ NeonValue nn_memberfunc_dict_remove(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     ENFORCE_VALID_DICT_KEY(&check, 0);
     dict = nn_value_asdict(args->thisval);
-    if(nn_table_get(dict->htab, args->args[0], &value))
+    if(dict->htab->get(args->args[0], &value))
     {
-        nn_table_delete(dict->htab, args->args[0]);
+        dict->htab->removeByKey(args->args[0]);
         index = -1;
         for(i = 0; i < dict->names->count; i++)
         {
@@ -10060,7 +10034,7 @@ NeonValue nn_memberfunc_dict_findkey(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "findkey", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    return nn_table_findkey(nn_value_asdict(args->thisval)->htab, args->args[0]);
+    return nn_value_asdict(args->thisval)->htab->findKey(args->args[0]);
 }
 
 NeonValue nn_memberfunc_dict_tolist(NeonState* state, NeonArguments* args)
@@ -10080,7 +10054,7 @@ NeonValue nn_memberfunc_dict_tolist(NeonState* state, NeonArguments* args)
     {
         namelist->push(dict->names->values[i]);
         NeonValue value;
-        if(nn_table_get(dict->htab, dict->names->values[i], &value))
+        if(dict->htab->get(dict->names->values[i], &value))
         {
             valuelist->push(value);
         }
@@ -10104,7 +10078,7 @@ NeonValue nn_memberfunc_dict_iter(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "__iter__",  args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     dict = nn_value_asdict(args->thisval);
-    if(nn_table_get(dict->htab, args->args[0], &result))
+    if(dict->htab->get(args->args[0], &result))
     {
         return result;
     }
@@ -10119,7 +10093,7 @@ NeonValue nn_memberfunc_dict_itern(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "__itern__", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     dict = nn_value_asdict(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    if(args->args[0].isNull())
     {
         if(dict->names->count == 0)
         {
@@ -10159,7 +10133,7 @@ NeonValue nn_memberfunc_dict_each(NeonState* state, NeonArguments* args)
     {
         if(arity > 0)
         {
-            nn_table_get(dict->htab, dict->names->values[i], &value);
+            dict->htab->get(dict->names->values[i], &value);
             nestargs->varray->values[0] = value;
             if(arity > 1)
             {
@@ -10195,7 +10169,7 @@ NeonValue nn_memberfunc_dict_filter(NeonState* state, NeonArguments* args)
     resultdict = (NeonObjDict*)nn_gcmem_protect(state, (NeonObject*)nn_object_makedict(state));
     for(i = 0; i < dict->names->count; i++)
     {
-        nn_table_get(dict->htab, dict->names->values[i], &value);
+        dict->htab->get(dict->names->values[i], &value);
         if(arity > 0)
         {
             nestargs->varray->values[0] = value;
@@ -10237,7 +10211,7 @@ NeonValue nn_memberfunc_dict_some(NeonState* state, NeonArguments* args)
     {
         if(arity > 0)
         {
-            nn_table_get(dict->htab, dict->names->values[i], &value);
+            dict->htab->get(dict->names->values[i], &value);
             nestargs->varray->values[0] = value;
             if(arity > 1)
             {
@@ -10280,7 +10254,7 @@ NeonValue nn_memberfunc_dict_every(NeonState* state, NeonArguments* args)
     {
         if(arity > 0)
         {
-            nn_table_get(dict->htab, dict->names->values[i], &value);
+            dict->htab->get(dict->names->values[i], &value);
             nestargs->varray->values[0] = value;
             if(arity > 1)
             {
@@ -10322,9 +10296,9 @@ NeonValue nn_memberfunc_dict_reduce(NeonState* state, NeonArguments* args)
     {
         accumulator = args->args[1];
     }
-    if(nn_value_isnull(accumulator) && dict->names->count > 0)
+    if(accumulator.isNull() && dict->names->count > 0)
     {
-        nn_table_get(dict->htab, dict->names->values[0], &accumulator);
+        dict->htab->get(dict->names->values[0], &accumulator);
         startindex = 1;
     }
     nestargs = NeonObjArray::make(state);
@@ -10333,14 +10307,14 @@ NeonValue nn_memberfunc_dict_reduce(NeonState* state, NeonArguments* args)
     for(i = startindex; i < dict->names->count; i++)
     {
         /* only call map for non-empty values in a list. */
-        if(!nn_value_isnull(dict->names->values[i]) && !nn_value_isempty(dict->names->values[i]))
+        if(!dict->names->values[i].isNull() && !dict->names->values[i].isEmpty())
         {
             if(arity > 0)
             {
                 nestargs->varray->values[0] = accumulator;
                 if(arity > 1)
                 {
-                    nn_table_get(dict->htab, dict->names->values[i], &value);
+                    dict->htab->get(dict->names->values[i], &value);
                     nestargs->varray->values[1] = value;
                     if(arity > 2)
                     {
@@ -10434,7 +10408,7 @@ NeonValue nn_memberfunc_file_constructor(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "constructor", args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    opath = nn_value_asstring(args->args[0]);
+    opath = args->args[0].asString();
     if(opath->length() == 0)
     {
         NEON_RETURNERROR("file path cannot be empty");
@@ -10443,7 +10417,7 @@ NeonValue nn_memberfunc_file_constructor(NeonState* state, NeonArguments* args)
     if(args->count == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        mode = nn_value_asstring(args->args[1])->data();
+        mode = args->args[1].asString()->data();
     }
     path = opath->data();
     file = (NeonObjFile*)nn_gcmem_protect(state, (NeonObject*)nn_object_makefile(state, NULL, false, path, mode));
@@ -10458,7 +10432,7 @@ NeonValue nn_memberfunc_file_exists(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "exists", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = args->args[0].asString();
     return NeonValue::makeBool(nn_util_fsfileexists(state, file->data()));
 }
 
@@ -10470,7 +10444,7 @@ NeonValue nn_memberfunc_file_isfile(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "isFile", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = args->args[0].asString();
     return NeonValue::makeBool(nn_util_fsfileisfile(state, file->data()));
 }
 
@@ -10481,7 +10455,7 @@ NeonValue nn_memberfunc_file_isdirectory(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "isDirectory", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = args->args[0].asString();
     return NeonValue::makeBool(nn_util_fsfileisdirectory(state, file->data()));
 }
 
@@ -10722,7 +10696,7 @@ NeonValue nn_memberfunc_file_write(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     file = nn_value_asfile(args->thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = args->args[0].asString();
     data = (unsigned char*)string->data();
     length = string->length();
     if(!file->isstd)
@@ -10772,7 +10746,7 @@ NeonValue nn_memberfunc_file_puts(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     file = nn_value_asfile(args->thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = args->args[0].asString();
     data = (unsigned char*)string->data();
     length = string->length();
     if(!file->isstd)
@@ -10820,7 +10794,7 @@ NeonValue nn_memberfunc_file_printf(NeonState* state, NeonArguments* args)
     file = nn_value_asfile(args->thisval);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = args->args[0].asString();
     NeonPrinter::makeStackIO(state, &pd, file->handle, false);
     nfi.init(state, &pd, ofmt->cstr(), ofmt->length());
     if(!nfi.format(args->count, 1, args->args))
@@ -11598,7 +11572,7 @@ NeonValue nn_memberfunc_array_itern(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "__itern__", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     list = nn_value_asarray(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    if(args->args[0].isNull())
     {
         if(list->varray->count == 0)
         {
@@ -11673,7 +11647,7 @@ NeonValue nn_memberfunc_array_map(NeonState* state, NeonArguments* args)
     resultlist = (NeonObjArray*)nn_gcmem_protect(state, (NeonObject*)NeonObjArray::make(state));
     for(i = 0; i < list->varray->count; i++)
     {
-        if(!nn_value_isempty(list->varray->values[i]))
+        if(!list->varray->values[i].isEmpty())
         {
             if(arity > 0)
             {
@@ -11717,7 +11691,7 @@ NeonValue nn_memberfunc_array_filter(NeonState* state, NeonArguments* args)
     resultlist = (NeonObjArray*)nn_gcmem_protect(state, (NeonObject*)NeonObjArray::make(state));
     for(i = 0; i < list->varray->count; i++)
     {
-        if(!nn_value_isempty(list->varray->values[i]))
+        if(!list->varray->values[i].isEmpty())
         {
             if(arity > 0)
             {
@@ -11757,7 +11731,7 @@ NeonValue nn_memberfunc_array_some(NeonState* state, NeonArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = 0; i < list->varray->count; i++)
     {
-        if(!nn_value_isempty(list->varray->values[i]))
+        if(!list->varray->values[i].isEmpty())
         {
             if(arity > 0)
             {
@@ -11799,7 +11773,7 @@ NeonValue nn_memberfunc_array_every(NeonState* state, NeonArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = 0; i < list->varray->count; i++)
     {
-        if(!nn_value_isempty(list->varray->values[i]))
+        if(!list->varray->values[i].isEmpty())
         {
             if(arity > 0)
             {
@@ -11842,7 +11816,7 @@ NeonValue nn_memberfunc_array_reduce(NeonState* state, NeonArguments* args)
     {
         accumulator = args->args[1];
     }
-    if(nn_value_isnull(accumulator) && list->varray->count > 0)
+    if(accumulator.isNull() && list->varray->count > 0)
     {
         accumulator = list->varray->values[0];
         startindex = 1;
@@ -11852,7 +11826,7 @@ NeonValue nn_memberfunc_array_reduce(NeonState* state, NeonArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = startindex; i < list->varray->count; i++)
     {
-        if(!nn_value_isnull(list->varray->values[i]) && !nn_value_isempty(list->varray->values[i]))
+        if(!list->varray->values[i].isNull() && !list->varray->values[i].isEmpty())
         {
             if(arity > 0)
             {
@@ -11939,7 +11913,7 @@ NeonValue nn_memberfunc_range_itern(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "__itern__", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     range = nn_value_asrange(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    if(args->args[0].isNull())
     {
         if(range->range == 0)
         {
@@ -12049,7 +12023,7 @@ NeonValue nn_memberfunc_string_length(NeonState* state, NeonArguments* args)
     NeonObjString* selfstr;
     nn_argcheck_init(state, &check, "length", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     return NeonValue::makeNumber(selfstr->length());
 }
 
@@ -12062,7 +12036,7 @@ NeonValue nn_memberfunc_string_substring(NeonState* state, NeonArguments* args)
     NeonObjString* selfstr;
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "substring", args);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     maxlen = selfstr->length();
     end = maxlen;
@@ -12086,7 +12060,7 @@ NeonValue nn_memberfunc_string_charcodeat(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "charCodeAt", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     idx = args->args[0].asNumber();
     selflen = (int)selfstr->length();
     if((idx < 0) || (idx >= selflen))
@@ -12110,7 +12084,7 @@ NeonValue nn_memberfunc_string_charat(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "charAt", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     idx = args->args[0].asNumber();
     selflen = (int)selfstr->length();
     if((idx < 0) || (idx >= selflen))
@@ -12132,7 +12106,7 @@ NeonValue nn_memberfunc_string_upper(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "upper", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(args->thisval);
+    str = args->thisval.asString();
     copied = NeonObjString::copy(state, str->data(), str->length());
     slen = copied->length();
     (void)nn_util_strtoupperinplace(copied->mutableData(), slen);
@@ -12147,7 +12121,7 @@ NeonValue nn_memberfunc_string_lower(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "lower", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(args->thisval);
+    str = args->thisval.asString();
     copied = NeonObjString::copy(state, str->data(), str->length());
     slen = copied->length();
     (void)nn_util_strtolowerinplace(copied->mutableData(), slen);
@@ -12161,7 +12135,7 @@ NeonValue nn_memberfunc_string_isalpha(NeonState* state, NeonArguments* args)
     NeonObjString* selfstr;
     nn_argcheck_init(state, &check, "isAlpha", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     for(i = 0; i < (int)selfstr->length(); i++)
     {
         if(!isalpha((unsigned char)selfstr->data()[i]))
@@ -12179,7 +12153,7 @@ NeonValue nn_memberfunc_string_isalnum(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "isAlnum", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     for(i = 0; i < (int)selfstr->length(); i++)
     {
         if(!isalnum((unsigned char)selfstr->data()[i]))
@@ -12199,7 +12173,7 @@ NeonValue nn_memberfunc_string_isfloat(NeonState* state, NeonArguments* args)
     (void)f;
     nn_argcheck_init(state, &check, "isFloat", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     errno = 0;
     if(selfstr->length() ==0)
     {
@@ -12227,7 +12201,7 @@ NeonValue nn_memberfunc_string_isnumber(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "isNumber", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     for(i = 0; i < (int)selfstr->length(); i++)
     {
         if(!isdigit((unsigned char)selfstr->data()[i]))
@@ -12246,7 +12220,7 @@ NeonValue nn_memberfunc_string_islower(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "isLower", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     alphafound = false;
     for(i = 0; i < (int)selfstr->length(); i++)
     {
@@ -12270,7 +12244,7 @@ NeonValue nn_memberfunc_string_isupper(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "isUpper", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     alphafound = false;
     for(i = 0; i < (int)selfstr->length(); i++)
     {
@@ -12293,7 +12267,7 @@ NeonValue nn_memberfunc_string_isspace(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "isSpace", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     for(i = 0; i < (int)selfstr->length(); i++)
     {
         if(!isspace((unsigned char)selfstr->data()[i]))
@@ -12317,9 +12291,9 @@ NeonValue nn_memberfunc_string_trim(NeonState* state, NeonArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->data()[0];
+        trimmer = (char)args->args[0].asString()->data()[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     copied = NeonObjString::copy(state, selfstr->data(), selfstr->length());
     string = copied->mutableData();
     end = NULL;
@@ -12376,9 +12350,9 @@ NeonValue nn_memberfunc_string_ltrim(NeonState* state, NeonArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->data()[0];
+        trimmer = (char)args->args[0].asString()->data()[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     copied = NeonObjString::copy(state, selfstr->data(), selfstr->length());
     string = copied->mutableData();
     end = NULL;
@@ -12420,9 +12394,9 @@ NeonValue nn_memberfunc_string_rtrim(NeonState* state, NeonArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->data()[0];
+        trimmer = (char)args->args[0].asString()->data()[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     copied = NeonObjString::copy(state, selfstr->data(), selfstr->length());
     string = copied->mutableData();
     end = NULL;
@@ -12485,9 +12459,9 @@ NeonValue nn_memberfunc_array_join(NeonState* state, NeonArguments* args)
     if(args->count > 0)
     {
         vjoinee = args->args[0];
-        if(nn_value_isstring(vjoinee))
+        if(vjoinee.isString())
         {
-            joinee = nn_value_asstring(vjoinee);
+            joinee = vjoinee.asString();
         }
         else
         {
@@ -12523,8 +12497,8 @@ NeonValue nn_memberfunc_string_indexof(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "indexOf", args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    needle = nn_value_asstring(args->args[0]);
+    string = args->thisval.asString();
+    needle = args->args[0].asString();
     startindex = 0;
     if(args->count == 2)
     {
@@ -12551,8 +12525,8 @@ NeonValue nn_memberfunc_string_startswith(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "startsWith", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = args->thisval.asString();
+    substr = args->args[0].asString();
     if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
     {
         return NeonValue::makeBool(false);
@@ -12569,8 +12543,8 @@ NeonValue nn_memberfunc_string_endswith(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "endsWith", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = args->thisval.asString();
+    substr = args->args[0].asString();
     if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
     {
         return NeonValue::makeBool(false);
@@ -12589,8 +12563,8 @@ NeonValue nn_memberfunc_string_count(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "count", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = args->thisval.asString();
+    substr = args->args[0].asString();
     if(substr->length() == 0 || string->length() == 0)
     {
         return NeonValue::makeNumber(0);
@@ -12611,7 +12585,7 @@ NeonValue nn_memberfunc_string_tonumber(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "toNumber", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = args->thisval.asString();
     return NeonValue::makeNumber(strtod(selfstr->data(), NULL));
 }
 
@@ -12625,7 +12599,7 @@ NeonValue nn_memberfunc_string_isascii(NeonState* state, NeonArguments* args)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isbool);
     }
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     return NeonValue::fromObject(string);
 }
 
@@ -12640,7 +12614,7 @@ NeonValue nn_memberfunc_string_tolist(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "toList", args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     list = (NeonObjArray*)nn_gcmem_protect(state, (NeonObject*)NeonObjArray::make(state));
     length = string->length();
     if(length > 0)
@@ -12673,12 +12647,12 @@ NeonValue nn_memberfunc_string_lpad(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "lpad", args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     width = args->args[0].asNumber();
     fillchar = ' ';
     if(args->count == 2)
     {
-        ofillstr = nn_value_asstring(args->args[1]);
+        ofillstr = args->args[1].asString();
         fillchar = ofillstr->m_sbuf->data[0];
     }
     if(width <= (int)string->m_sbuf->length)
@@ -12721,12 +12695,12 @@ NeonValue nn_memberfunc_string_rpad(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "rpad", args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     width = args->args[0].asNumber();
     fillchar = ' ';
     if(args->count == 2)
     {
-        ofillstr = nn_value_asstring(args->args[1]);
+        ofillstr = args->args[1].asString();
         fillchar = ofillstr->m_sbuf->data[0];
     }
     if(width <= (int)string->m_sbuf->length)
@@ -12765,8 +12739,8 @@ NeonValue nn_memberfunc_string_split(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "split", args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    delimeter = nn_value_asstring(args->args[0]);
+    string = args->thisval.asString();
+    delimeter = args->args[0].asString();
     /* empty string matches empty string to empty list */
     if(((string->length() == 0) && (delimeter->length() == 0)) || (string->length() == 0) || (delimeter->length() == 0))
     {
@@ -12814,9 +12788,9 @@ NeonValue nn_memberfunc_string_replace(NeonState* state, NeonArguments* args)
     NEON_ARGS_CHECKCOUNTRANGE(&check, 2, 3);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
-    repsubstr = nn_value_asstring(args->args[1]);
+    string = args->thisval.asString();
+    substr = args->args[0].asString();
+    repsubstr = args->args[1].asString();
     if((string->length() == 0 && substr->length() == 0) || string->length() == 0 || substr->length() == 0)
     {
         return NeonValue::fromObject(NeonObjString::copy(state, string->data(), string->length()));
@@ -12853,7 +12827,7 @@ NeonValue nn_memberfunc_string_iter(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "__iter__", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     length = string->length();
     index = args->args[0].asNumber();
     if(index > -1 && index < length)
@@ -12872,9 +12846,9 @@ NeonValue nn_memberfunc_string_itern(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "__itern__", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     length = string->length();
-    if(nn_value_isnull(args->args[0]))
+    if(args->args[0].isNull())
     {
         if(length == 0)
         {
@@ -12906,7 +12880,7 @@ NeonValue nn_memberfunc_string_each(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "each", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    string = nn_value_asstring(args->thisval);
+    string = args->thisval.asString();
     callable = args->args[0];
     nestargs = NeonObjArray::make(state);
     nn_vm_stackpush(state, NeonValue::fromObject(nestargs));
@@ -12966,7 +12940,7 @@ NeonValue nn_memberfunc_object_isstring(NeonState* state, NeonArguments* args)
     NeonValue v;
     (void)state;
     v = args->thisval;
-    return NeonValue::makeBool(nn_value_isstring(v));
+    return NeonValue::makeBool(v.isString());
 }
 
 NeonValue nn_memberfunc_object_isarray(NeonState* state, NeonArguments* args)
@@ -12983,11 +12957,11 @@ NeonValue nn_memberfunc_object_iscallable(NeonState* state, NeonArguments* args)
     (void)state;
     selfval = args->thisval;
     return (NeonValue::makeBool(
-        nn_value_isclass(selfval) ||
-        nn_value_isfuncscript(selfval) ||
-        nn_value_isfuncclosure(selfval) ||
-        nn_value_isfuncbound(selfval) ||
-        nn_value_isfuncnative(selfval)
+        selfval.isClass() ||
+        selfval.isFuncScript() ||
+        selfval.isFuncClosure() ||
+        selfval.isFuncBound() ||
+        selfval.isFuncNative()
     ));
 }
 
@@ -13028,7 +13002,7 @@ NeonValue nn_memberfunc_object_isobject(NeonState* state, NeonArguments* args)
     NeonValue selfval;
     (void)state;
     selfval = args->thisval;
-    return NeonValue::makeBool(nn_value_isobject(selfval));
+    return NeonValue::makeBool(selfval.isObject());
 }
 
 NeonValue nn_memberfunc_object_isfunction(NeonState* state, NeonArguments* args)
@@ -13037,10 +13011,10 @@ NeonValue nn_memberfunc_object_isfunction(NeonState* state, NeonArguments* args)
     (void)state;
     selfval = args->thisval;
     return NeonValue::makeBool(
-        nn_value_isfuncscript(selfval) ||
-        nn_value_isfuncclosure(selfval) ||
-        nn_value_isfuncbound(selfval) ||
-        nn_value_isfuncnative(selfval)
+        selfval.isFuncScript() ||
+        selfval.isFuncClosure() ||
+        selfval.isFuncBound() ||
+        selfval.isFuncNative()
     );
 }
 
@@ -13052,12 +13026,12 @@ NeonValue nn_memberfunc_object_isiterable(NeonState* state, NeonArguments* args)
     NeonValue selfval;
     (void)state;
     selfval = args->thisval;
-    isiterable = nn_value_isarray(selfval) || nn_value_isdict(selfval) || nn_value_isstring(selfval);
+    isiterable = nn_value_isarray(selfval) || nn_value_isdict(selfval) || selfval.isString();
     if(!isiterable && nn_value_isinstance(selfval))
     {
         klass = nn_value_asinstance(selfval)->klass;
-        isiterable = nn_table_get(klass->methods, NeonValue::fromObject(NeonObjString::copy(state, "@iter")), &dummy)
-            && nn_table_get(klass->methods, NeonValue::fromObject(NeonObjString::copy(state, "@itern")), &dummy);
+        isiterable = klass->methods->get(NeonValue::fromObject(NeonObjString::copy(state, "@iter")), &dummy)
+            && klass->methods->get(NeonValue::fromObject(NeonObjString::copy(state, "@itern")), &dummy);
     }
     return NeonValue::makeBool(isiterable);
 }
@@ -13067,7 +13041,7 @@ NeonValue nn_memberfunc_object_isclass(NeonState* state, NeonArguments* args)
     NeonValue selfval;
     (void)state;
     selfval = args->thisval;
-    return NeonValue::makeBool(nn_value_isclass(selfval));
+    return NeonValue::makeBool(selfval.isClass());
 }
 
 NeonValue nn_memberfunc_object_isfile(NeonState* state, NeonArguments* args)
@@ -13424,7 +13398,7 @@ NeonValue nn_nativefn_ord(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "ord", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = args->args[0].asString();
     length = string->length();
     if(length > 1)
     {
@@ -13542,7 +13516,7 @@ NeonValue nn_nativefn_eval(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "eval", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(args->args[0]);
+    os = args->args[0].asString();
     /*fprintf(stderr, "eval:src=%s\n", os->data());*/
     result = nn_state_evalsource(state, os->data());
     return result;
@@ -13556,7 +13530,7 @@ NeonValue nn_nativefn_loadfile(NeonState* state, NeonArguments* args)
     NeonArgCheck check;
     nn_argcheck_init(state, &check, "loadfile", args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(args->args[0]);
+    os = args->args[0].asString();
     fprintf(stderr, "eval:src=%s\n", os->data());
     result = nn_state_evalsource(state, os->data());
     return result;
@@ -13584,7 +13558,7 @@ NeonValue nn_nativefn_sprintf(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "sprintf", args);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = args->args[0].asString();
     NeonPrinter::makeStackString(state, &pd);
     nfi.init(state, &pd, ofmt->cstr(), ofmt->length());
     if(!nfi.format(args->count, 1, args->args))
@@ -13603,7 +13577,7 @@ NeonValue nn_nativefn_printf(NeonState* state, NeonArguments* args)
     nn_argcheck_init(state, &check, "printf", args);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = args->args[0].asString();
     nfi.init(state, state->stdoutwriter, ofmt->cstr(), ofmt->length());
     if(!nfi.format(args->count, 1, args->args))
     {
@@ -13777,19 +13751,19 @@ bool nn_exceptions_propagate(NeonState* state)
     fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->data(), colreset);
     srcfile = "none";
     srcline = 0;
-    field = nn_table_getfieldbycstr(exception->properties, "srcline");
+    field = exception->properties->getFieldByCStr("srcline");
     if(field != NULL)
     {
         srcline = field->value.asNumber();
     }
-    field = nn_table_getfieldbycstr(exception->properties, "srcfile");
+    field = exception->properties->getFieldByCStr("srcfile");
     if(field != NULL)
     {
-        srcfile = nn_value_asstring(field->value)->data();
+        srcfile = field->value.asString()->data();
     }
     fprintf(stderr, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
     
-    field = nn_table_getfieldbycstr(exception->properties, "message");
+    field = exception->properties->getFieldByCStr("message");
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
@@ -13807,7 +13781,7 @@ bool nn_exceptions_propagate(NeonState* state)
     {
         fprintf(stderr, "\n");
     }
-    field = nn_table_getfieldbycstr(exception->properties, "stacktrace");
+    field = exception->properties->getFieldByCStr("stacktrace");
     if(field != NULL)
     {
         fprintf(stderr, "  stacktrace:\n");
@@ -13966,12 +13940,12 @@ NeonObjClass* nn_exceptions_makeclass(NeonState* state, NeonObjModule* module, c
     nn_vm_stackpop(state);
     /* set class constructor */
     nn_vm_stackpush(state, NeonValue::fromObject(closure));
-    nn_table_set(klass->methods, NeonValue::fromObject(classname), NeonValue::fromObject(closure));
+    klass->methods->set(NeonValue::fromObject(classname), NeonValue::fromObject(closure));
     klass->initializer = NeonValue::fromObject(closure);
     /* set class properties */
     nn_class_defproperty(klass, "message", NeonValue::makeNull());
     nn_class_defproperty(klass, "stacktrace", NeonValue::makeNull());
-    nn_table_set(state->globals, NeonValue::fromObject(classname), NeonValue::fromObject(klass));
+    state->globals->set(NeonValue::fromObject(classname), NeonValue::fromObject(klass));
     /* for class */
     nn_vm_stackpop(state);
     nn_vm_stackpop(state);
@@ -14044,7 +14018,7 @@ void nn_state_defglobalvalue(NeonState* state, const char* name, NeonValue val)
     oname = NeonObjString::copy(state, name);
     nn_vm_stackpush(state, NeonValue::fromObject(oname));
     nn_vm_stackpush(state, val);
-    nn_table_set(state->globals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
+    state->globals->set(state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
     nn_vm_stackpopn(state, 2);
 }
 
@@ -14062,7 +14036,7 @@ NeonObjClass* nn_util_makeclass(NeonState* state, const char* name, NeonObjClass
     os = NeonObjString::copy(state, name);
     cl = nn_object_makeclass(state, os);
     cl->superclass = parent;
-    nn_table_set(state->globals, NeonValue::fromObject(os), NeonValue::fromObject(cl));
+    state->globals->set(NeonValue::fromObject(os), NeonValue::fromObject(cl));
     return cl;
 }
 
@@ -14449,7 +14423,7 @@ bool nn_vm_callvaluewithobject(NeonState* state, NeonValue callable, NeonValue t
 {
     size_t spos;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
-    if(nn_value_isobject(callable))
+    if(callable.isObject())
     {
         switch(nn_value_objtype(callable))
         {
@@ -14468,11 +14442,11 @@ bool nn_vm_callvaluewithobject(NeonState* state, NeonValue callable, NeonValue t
                     klass = nn_value_asclass(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
-                    if(!nn_value_isempty(klass->initializer))
+                    if(!klass->initializer.isEmpty())
                     {
                         return nn_vm_callvaluewithobject(state, klass->initializer, thisval, argcount);
                     }
-                    else if(klass->superclass != NULL && !nn_value_isempty(klass->superclass->initializer))
+                    else if(klass->superclass != NULL && !klass->superclass->initializer.isEmpty())
                     {
                         return nn_vm_callvaluewithobject(state, klass->superclass->initializer, thisval, argcount);
                     }
@@ -14488,7 +14462,7 @@ bool nn_vm_callvaluewithobject(NeonState* state, NeonValue callable, NeonValue t
                     NeonObjModule* module;
                     NeonProperty* field;
                     module = nn_value_asmodule(callable);
-                    field = nn_table_getfieldbyostr(module->deftable, module->name);
+                    field = module->deftable->getFieldByObjStr(module->name);
                     if(field != NULL)
                     {
                         return nn_vm_callvalue(state, field->value, thisval, argcount);
@@ -14516,7 +14490,7 @@ bool nn_vm_callvaluewithobject(NeonState* state, NeonValue callable, NeonValue t
 bool nn_vm_callvalue(NeonState* state, NeonValue callable, NeonValue thisval, int argcount)
 {
     NeonValue actualthisval;
-    if(nn_value_isobject(callable))
+    if(callable.isObject())
     {
         switch(nn_value_objtype(callable))
         {
@@ -14525,7 +14499,7 @@ bool nn_vm_callvalue(NeonState* state, NeonValue callable, NeonValue thisval, in
                     NeonObjFuncBound* bound;
                     bound = nn_value_asfuncbound(callable);
                     actualthisval = bound->receiver;
-                    if(!nn_value_isempty(thisval))
+                    if(!thisval.isEmpty())
                     {
                         actualthisval = thisval;
                     }
@@ -14540,7 +14514,7 @@ bool nn_vm_callvalue(NeonState* state, NeonValue callable, NeonValue thisval, in
                     klass = nn_value_asclass(callable);
                     instance = nn_object_makeinstance(state, klass);
                     actualthisval = NeonValue::fromObject(instance);
-                    if(!nn_value_isempty(thisval))
+                    if(!thisval.isEmpty())
                     {
                         actualthisval = thisval;
                     }
@@ -14579,9 +14553,9 @@ NeonObjClass* nn_value_getclassfor(NeonState* state, NeonValue receiver)
     {
         return state->classprimnumber;
     }
-    if(nn_value_isobject(receiver))
+    if(receiver.isObject())
     {
-        switch(nn_value_asobject(receiver)->type)
+        switch(receiver.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
                 return state->classprimstring;
@@ -14706,14 +14680,14 @@ static NEON_ALWAYSINLINE NeonValue nn_vmbits_readconst(NeonState* state)
 
 static NEON_ALWAYSINLINE NeonObjString* nn_vmbits_readstring(NeonState* state)
 {
-    return nn_value_asstring(nn_vmbits_readconst(state));
+    return nn_vmbits_readconst(state).asString();
 }
 
 static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodfromclass(NeonState* state, NeonObjClass* klass, NeonObjString* name, int argcount)
 {
     NeonProperty* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
-    field = nn_table_getfieldbyostr(klass->methods, name);
+    field = klass->methods->getFieldByObjStr(name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -14736,12 +14710,12 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(NeonState* state, NeonO
     if(nn_value_isinstance(receiver))
     {
         instance = nn_value_asinstance(receiver);
-        field = nn_table_getfieldbyostr(instance->klass->methods, name);
+        field = instance->klass->methods->getFieldByObjStr(name);
         if(field != NULL)
         {
             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
         }
-        field = nn_table_getfieldbyostr(instance->properties, name);
+        field = instance->properties->getFieldByObjStr(name);
         if(field != NULL)
         {
             spos = (state->vmstate.stackidx + (-argcount - 1));
@@ -14754,9 +14728,9 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(NeonState* state, NeonO
             #endif
         }
     }
-    else if(nn_value_isclass(receiver))
+    else if(receiver.isClass())
     {
-        field = nn_table_getfieldbyostr(nn_value_asclass(receiver)->methods, name);
+        field = nn_value_asclass(receiver)->methods->getFieldByObjStr(name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -14778,9 +14752,9 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(NeonState* state, NeonObjSt
     NeonObjClass* klass;
     receiver = nn_vmbits_stackpeek(state, argcount);
     NEON_APIDEBUG(state, "receiver.type=%s, argcount=%d", nn_value_typename(receiver), argcount);
-    if(nn_value_isobject(receiver))
+    if(receiver.isObject())
     {
-        rectype = nn_value_asobject(receiver)->type;
+        rectype = receiver.asObject()->type;
         switch(rectype)
         {
             case NEON_OBJTYPE_MODULE:
@@ -14788,7 +14762,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(NeonState* state, NeonObjSt
                     NeonObjModule* module;
                     NEON_APIDEBUG(state, "receiver is a module");
                     module = nn_value_asmodule(receiver);
-                    field = nn_table_getfieldbyostr(module->deftable, name);
+                    field = module->deftable->getFieldByObjStr(name);
                     if(field != NULL)
                     {
                         if(nn_util_methodisprivate(name))
@@ -14804,7 +14778,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(NeonState* state, NeonObjSt
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
                     klass = nn_value_asclass(receiver);
-                    field = nn_table_getfieldbyostr(klass->methods, name);
+                    field = klass->methods->getFieldByObjStr(name);
                     if(field != NULL)
                     {
                         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -14833,7 +14807,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(NeonState* state, NeonObjSt
                     NeonObjInstance* instance;
                     NEON_APIDEBUG(state, "receiver is an instance");
                     instance = nn_value_asinstance(receiver);
-                    field = nn_table_getfieldbyostr(instance->properties, name);
+                    field = instance->properties->getFieldByObjStr(name);
                     if(field != NULL)
                     {
                         spos = (state->vmstate.stackidx + (-argcount - 1));
@@ -14858,10 +14832,10 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(NeonState* state, NeonObjSt
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
                     {
-                        field = nn_table_getfieldbyostr(nn_value_asdict(receiver)->htab, name);
+                        field = nn_value_asdict(receiver)->htab->getFieldByObjStr(name);
                         if(field != NULL)
                         {
-                            if(nn_value_iscallable(field->value))
+                            if(field->value.isCallable())
                             {
                                 return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                             }
@@ -14894,7 +14868,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_bindmethod(NeonState* state, NeonObjClas
     NeonValue val;
     NeonProperty* field;
     NeonObjFuncBound* bound;
-    field = nn_table_getfieldbyostr(klass->methods, name);
+    field = klass->methods->getFieldByObjStr(name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -14957,7 +14931,7 @@ static NEON_ALWAYSINLINE void nn_vmutil_definemethod(NeonState* state, NeonObjSt
     NeonObjClass* klass;
     method = nn_vmbits_stackpeek(state, 0);
     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
-    nn_table_set(klass->methods, NeonValue::fromObject(name), method);
+    klass->methods->set(NeonValue::fromObject(name), method);
     if(nn_value_getmethodtype(method) == NEON_FUNCTYPE_INITIALIZER)
     {
         klass->initializer = method;
@@ -14988,7 +14962,7 @@ bool nn_value_isfalse(NeonValue value)
     {
         return nn_value_isbool(value) && !nn_value_asbool(value);
     }
-    if(nn_value_isnull(value) || nn_value_isempty(value))
+    if(value.isNull() || value.isEmpty())
     {
         return true;
     }
@@ -14998,9 +14972,9 @@ bool nn_value_isfalse(NeonValue value)
         return value.asNumber() < 0;
     }
     /* Non-empty strings are true, empty strings are false.*/
-    if(nn_value_isstring(value))
+    if(value.isString())
     {
-        return nn_value_asstring(value)->length() < 1;
+        return value.asString()->length() < 1;
     }
     /* Non-empty lists are true, empty lists are false.*/
     if(nn_value_isarray(value))
@@ -15046,12 +15020,12 @@ bool nn_util_isinstanceof(NeonObjClass* klass1, NeonObjClass* expected)
 bool nn_dict_setentry(NeonObjDict* dict, NeonValue key, NeonValue value)
 {
     NeonValue tempvalue;
-    if(!nn_table_get(dict->htab, key, &tempvalue))
+    if(!dict->htab->get(key, &tempvalue))
     {
         /* add key if it doesn't exist. */
         dict->names->push(key);
     }
-    return nn_table_set(dict->htab, key, value);
+    return dict->htab->set(key, value);
 }
 
 void nn_dict_addentry(NeonObjDict* dict, NeonValue key, NeonValue value)
@@ -15068,7 +15042,7 @@ void nn_dict_addentrycstr(NeonObjDict* dict, const char* ckey, NeonValue value)
 
 NeonProperty* nn_dict_getentry(NeonObjDict* dict, NeonValue key)
 {
-    return nn_table_getfield(dict->htab, key);
+    return dict->htab->getField(key);
 }
 
 static NEON_ALWAYSINLINE NeonObjString* nn_vmutil_multiplystring(NeonState* state, NeonObjString* str, double number)
@@ -15137,7 +15111,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(NeonState* state
     NeonObjArray* newlist;
     valupper = nn_vmbits_stackpeek(state, 0);
     vallower = nn_vmbits_stackpeek(state, 1);
-    if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
+    if(!(vallower.isNull() || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || valupper.isNull()))
     {
         nn_vmbits_stackpopn(state, 2);
         return nn_exceptions_throwException(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
@@ -15147,7 +15121,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(NeonState* state
     {
         idxlower = vallower.asNumber();
     }
-    if(nn_value_isnull(valupper))
+    if(valupper.isNull())
     {
         idxupper = list->varray->count;
     }
@@ -15202,7 +15176,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofstring(NeonState* stat
     NeonValue vallower;
     valupper = nn_vmbits_stackpeek(state, 0);
     vallower = nn_vmbits_stackpeek(state, 1);
-    if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
+    if(!(vallower.isNull() || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || valupper.isNull()))
     {
         nn_vmbits_stackpopn(state, 2);
         return nn_exceptions_throwException(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
@@ -15213,7 +15187,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofstring(NeonState* stat
     {
         idxlower = vallower.asNumber();
     }
-    if(nn_value_isnull(valupper))
+    if(valupper.isNull())
     {
         idxupper = length;
     }
@@ -15259,13 +15233,13 @@ static NEON_ALWAYSINLINE bool nn_vmdo_getrangedindex(NeonState* state)
     willassign = nn_vmbits_readbyte(state);
     isgotten = true;
     vfrom = nn_vmbits_stackpeek(state, 2);
-    if(nn_value_isobject(vfrom))
+    if(vfrom.isObject())
     {
-        switch(nn_value_asobject(vfrom)->type)
+        switch(vfrom.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
             {
-                if(!nn_vmutil_dogetrangedindexofstring(state, nn_value_asstring(vfrom), willassign))
+                if(!nn_vmutil_dogetrangedindexofstring(state, vfrom.asString(), willassign))
                 {
                     return false;
                 }
@@ -15323,7 +15297,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetmodule(NeonState* state, NeonO
     NeonValue vindex;
     NeonValue result;
     vindex = nn_vmbits_stackpeek(state, 0);
-    if(nn_table_get(module->deftable, vindex, &result))
+    if(module->deftable->get(vindex, &result))
     {
         if(!willassign)
         {
@@ -15445,13 +15419,13 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexget(NeonState* state)
     willassign = nn_vmbits_readbyte(state);
     isgotten = true;
     peeked = nn_vmbits_stackpeek(state, 1);
-    if(NEON_LIKELY(nn_value_isobject(peeked)))
+    if(NEON_LIKELY(peeked.isObject()))
     {
-        switch(nn_value_asobject(peeked)->type)
+        switch(peeked.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
             {
-                if(!nn_vmutil_doindexgetstring(state, nn_value_asstring(peeked), willassign))
+                if(!nn_vmutil_doindexgetstring(state, peeked.asString(), willassign))
                 {
                     return false;
                 }
@@ -15515,7 +15489,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexdict(NeonState* state, NeonObj
 
 static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexmodule(NeonState* state, NeonObjModule* module, NeonValue index, NeonValue value)
 {
-    nn_table_set(module->deftable, index, value);
+    module->deftable->set(index, value);
     /* pop the value, index and dict out */
     nn_vmbits_stackpopn(state, 3);
     /*
@@ -15650,15 +15624,15 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexset(NeonState* state)
     NeonValue target;
     isset = true;
     target = nn_vmbits_stackpeek(state, 2);
-    if(NEON_LIKELY(nn_value_isobject(target)))
+    if(NEON_LIKELY(target.isObject()))
     {
         value = nn_vmbits_stackpeek(state, 0);
         index = nn_vmbits_stackpeek(state, 1);
-        if(NEON_UNLIKELY(nn_value_isempty(value)))
+        if(NEON_UNLIKELY(value.isEmpty()))
         {
             return nn_exceptions_throwException(state, "empty cannot be assigned");
         }
-        switch(nn_value_asobject(target)->type)
+        switch(target.asObject()->type)
         {
             case NEON_OBJTYPE_ARRAY:
                 {
@@ -15670,7 +15644,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexset(NeonState* state)
                 break;
             case NEON_OBJTYPE_STRING:
                 {
-                    if(!nn_vmutil_dosetindexstring(state, nn_value_asstring(target), index, value))
+                    if(!nn_vmutil_dosetindexstring(state, target.asString(), index, value))
                     {
                         return false;
                     }
@@ -15742,13 +15716,13 @@ static NEON_ALWAYSINLINE double nn_vmutil_modulo(double a, double b)
 static NEON_ALWAYSINLINE NeonProperty* nn_vmutil_getproperty(NeonState* state, NeonValue peeked, NeonObjString* name)
 {
     NeonProperty* field;
-    switch(nn_value_asobject(peeked)->type)
+    switch(peeked.asObject()->type)
     {
         case NEON_OBJTYPE_MODULE:
             {
                 NeonObjModule* module;
                 module = nn_value_asmodule(peeked);
-                field = nn_table_getfieldbyostr(module->deftable, name);
+                field = module->deftable->getFieldByObjStr(name);
                 if(field != NULL)
                 {
                     if(nn_util_methodisprivate(name))
@@ -15764,7 +15738,7 @@ static NEON_ALWAYSINLINE NeonProperty* nn_vmutil_getproperty(NeonState* state, N
             break;
         case NEON_OBJTYPE_CLASS:
             {
-                field = nn_table_getfieldbyostr(nn_value_asclass(peeked)->methods, name);
+                field = nn_value_asclass(peeked)->methods->getFieldByObjStr(name);
                 if(field != NULL)
                 {
                     if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -15801,7 +15775,7 @@ static NEON_ALWAYSINLINE NeonProperty* nn_vmutil_getproperty(NeonState* state, N
             {
                 NeonObjInstance* instance;
                 instance = nn_value_asinstance(peeked);
-                field = nn_table_getfieldbyostr(instance->properties, name);
+                field = instance->properties->getFieldByObjStr(name);
                 if(field != NULL)
                 {
                     if(nn_util_methodisprivate(name))
@@ -15860,7 +15834,7 @@ static NEON_ALWAYSINLINE NeonProperty* nn_vmutil_getproperty(NeonState* state, N
             break;
         case NEON_OBJTYPE_DICT:
             {
-                field = nn_table_getfieldbyostr(nn_value_asdict(peeked)->htab, name);
+                field = nn_value_asdict(peeked)->htab->getFieldByObjStr(name);
                 if(field == NULL)
                 {
                     field = nn_class_getpropertyfield(state->classprimdict, name);
@@ -15901,7 +15875,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyget(NeonState* state)
     NeonObjString* name;
     name = nn_vmbits_readstring(state);
     peeked = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isobject(peeked))
+    if(peeked.isObject())
     {
         field = nn_vmutil_getproperty(state, peeked, name);
         if(field == NULL)
@@ -15943,7 +15917,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(NeonState* state)
     if(nn_value_isinstance(peeked))
     {
         instance = nn_value_asinstance(peeked);
-        field = nn_table_getfieldbyostr(instance->properties, name);
+        field = instance->properties->getFieldByObjStr(name);
         if(field != NULL)
         {
             /* pop the instance... */
@@ -15959,10 +15933,10 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(NeonState* state)
             nn_value_asinstance(peeked)->klass->name->data(), name->data());
         return false;
     }
-    else if(nn_value_isclass(peeked))
+    else if(peeked.isClass())
     {
         klass = nn_value_asclass(peeked);
-        field = nn_table_getfieldbyostr(klass->methods, name);
+        field = klass->methods->getFieldByObjStr(name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -15990,7 +15964,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(NeonState* state)
     else if(nn_value_ismodule(peeked))
     {
         module = nn_value_asmodule(peeked);
-        field = nn_table_getfieldbyostr(module->deftable, name);
+        field = module->deftable->getFieldByObjStr(name);
         if(field != NULL)
         {
             /* pop the module... */
@@ -16016,22 +15990,22 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(NeonState* state)
     NeonObjDict* dict;
     NeonObjInstance* instance;
     vtarget = nn_vmbits_stackpeek(state, 1);
-    if(!nn_value_isclass(vtarget) && !nn_value_isinstance(vtarget) && !nn_value_isdict(vtarget))
+    if(!vtarget.isClass() && !nn_value_isinstance(vtarget) && !nn_value_isdict(vtarget))
     {
         nn_exceptions_throwException(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
         return false;
     }
-    else if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+    else if(nn_vmbits_stackpeek(state, 0).isEmpty())
     {
         nn_exceptions_throwException(state, "empty cannot be assigned");
         return false;
     }
     name = nn_vmbits_readstring(state);
     vpeek = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isclass(vtarget))
+    if(vtarget.isClass())
     {
         klass = nn_value_asclass(vtarget);
-        if(nn_value_iscallable(vpeek))
+        if(vpeek.isCallable())
         {
             //fprintf(stderr, "setting '%s' as method\n", name->data());
             nn_class_defmethod(state, klass, name->data(), vpeek);
@@ -16068,7 +16042,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(NeonState* state)
 
 static NEON_ALWAYSINLINE double nn_vmutil_valtonum(NeonValue v)
 {
-    if(nn_value_isnull(v))
+    if(v.isNull())
     {
         return 0;
     }
@@ -16086,7 +16060,7 @@ static NEON_ALWAYSINLINE double nn_vmutil_valtonum(NeonValue v)
 
 static NEON_ALWAYSINLINE uint32_t nn_vmutil_valtouint(NeonValue v)
 {
-    if(nn_value_isnull(v))
+    if(v.isNull())
     {
         return 0;
     }
@@ -16125,8 +16099,8 @@ static NEON_ALWAYSINLINE bool nn_vmdo_dobinary(NeonState* state)
     binvalright = nn_vmbits_stackpeek(state, 0);
     binvalleft = nn_vmbits_stackpeek(state, 1);
     isfail = (
-        (!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright) && !nn_value_isnull(binvalright)) ||
-        (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft) && !nn_value_isnull(binvalleft))
+        (!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright) && !binvalright.isNull()) ||
+        (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft) && !binvalleft.isNull())
     );
     if(isfail)
     {
@@ -16252,16 +16226,16 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globaldefine(NeonState* state)
     NeonHashTable* tab;
     name = nn_vmbits_readstring(state);
     val = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isempty(val))
+    if(val.isEmpty())
     {
         nn_vmmac_tryraise(state, false, "empty cannot be assigned");
         return false;
     }
     tab = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    nn_table_set(tab, NeonValue::fromObject(name), val);
+    tab->set(NeonValue::fromObject(name), val);
     nn_vmbits_stackpop(state);
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
-    nn_table_print(state, state->debugwriter, state->globals, "globals");
+    state->globals->printTo(state->debugwriter, "globals");
     #endif
     return true;
 }
@@ -16273,10 +16247,10 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globalget(NeonState* state)
     NeonProperty* field;
     name = nn_vmbits_readstring(state);
     tab = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    field = nn_table_getfieldbyostr(tab, name);
+    field = tab->getFieldByObjStr(name);
     if(field == NULL)
     {
-        field = nn_table_getfieldbyostr(state->globals, name);
+        field = state->globals->getFieldByObjStr(name);
         if(field == NULL)
         {
             nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->data());
@@ -16291,18 +16265,18 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globalset(NeonState* state)
 {
     NeonObjString* name;
     NeonHashTable* table;
-    if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+    if(nn_vmbits_stackpeek(state, 0).isEmpty())
     {
         nn_vmmac_tryraise(state, false, "empty cannot be assigned");
         return false;
     }
     name = nn_vmbits_readstring(state);
     table = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    if(nn_table_set(table, NeonValue::fromObject(name), nn_vmbits_stackpeek(state, 0)))
+    if(table->set(NeonValue::fromObject(name), nn_vmbits_stackpeek(state, 0)))
     {
         if(state->conf.enablestrictmode)
         {
-            nn_table_delete(table, NeonValue::fromObject(name));
+            table->removeByKey(NeonValue::fromObject(name));
             nn_vmmac_tryraise(state, false, "global name '%s' was not declared", name->data());
             return false;
         }
@@ -16329,7 +16303,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_localset(NeonState* state)
     NeonValue peeked;
     slot = nn_vmbits_readshort(state);
     peeked = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isempty(peeked))
+    if(peeked.isEmpty())
     {
         nn_vmmac_tryraise(state, false, "empty cannot be assigned");
         return false;
@@ -16359,7 +16333,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_funcargset(NeonState* state)
     NeonValue peeked;
     slot = nn_vmbits_readshort(state);
     peeked = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isempty(peeked))
+    if(peeked.isEmpty())
     {
         nn_vmmac_tryraise(state, false, "empty cannot be assigned");
         return false;
@@ -16432,7 +16406,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_makedict(NeonState* state)
     for(i = 0; i < count; i += 2)
     {
         name = state->vmstate.stackvalues[state->vmstate.stackidx + (-count + i)];
-        if(!nn_value_isstring(name) && !nn_value_isnumber(name) && !nn_value_isbool(name))
+        if(!name.isString() && !nn_value_isnumber(name) && !nn_value_isbool(name))
         {
             nn_vmmac_tryraise(state, false, "dictionary key must be one of string, number or boolean");
             return false;
@@ -16557,7 +16531,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonValue result;
                     valright = nn_vmbits_stackpeek(state, 0);
                     valleft = nn_vmbits_stackpeek(state, 1);
-                    if(nn_value_isstring(valright) || nn_value_isstring(valleft))
+                    if(valright.isString() || valleft.isString())
                     {
                         if(!nn_vmutil_concatenate(state))
                         {
@@ -16594,10 +16568,10 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonObjArray* newlist;
                     peekright = nn_vmbits_stackpeek(state, 0);
                     peekleft = nn_vmbits_stackpeek(state, 1);
-                    if(nn_value_isstring(peekleft) && nn_value_isnumber(peekright))
+                    if(peekleft.isString() && nn_value_isnumber(peekright))
                     {
                         dbnum = peekright.asNumber();
-                        string = nn_value_asstring(nn_vmbits_stackpeek(state, 1));
+                        string = nn_vmbits_stackpeek(state, 1).asString();
                         result = NeonValue::fromObject(nn_vmutil_multiplystring(state, string, dbnum));
                         nn_vmbits_stackpopn(state, 2);
                         nn_vmbits_stackpush(state, result);
@@ -16767,7 +16741,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonValue val;
                     val = nn_vmbits_stackpeek(state, 0);
                     nn_printer_printvalue(state->stdoutwriter, val, state->isrepl, true);
-                    if(!nn_value_isempty(val))
+                    if(!val.isEmpty())
                     {
                         state->stdoutwriter->put("\n");
                     }
@@ -16779,7 +16753,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonValue peeked;
                     NeonObjString* value;
                     peeked = nn_vmbits_stackpeek(state, 0);
-                    if(!nn_value_isstring(peeked) && !nn_value_isnull(peeked))
+                    if(!peeked.isString() && !peeked.isNull())
                     {
                         value = nn_value_tostring(state, nn_vmbits_stackpop(state));
                         if(value->length() != 0)
@@ -16923,7 +16897,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                 {
                     int index;
                     index = nn_vmbits_readshort(state);
-                    if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+                    if(nn_vmbits_stackpeek(state, 0).isEmpty())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "empty cannot be assigned");
                         break;
@@ -16977,19 +16951,19 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonProperty* field;
                     haveval = false;
                     name = nn_vmbits_readstring(state);
-                    field = nn_table_getfieldbyostr(state->vmstate.currentframe->closure->scriptfunc->module->deftable, name);
+                    field = state->vmstate.currentframe->closure->scriptfunc->module->deftable->getFieldByObjStr(name);
                     if(field != NULL)
                     {
-                        if(nn_value_isclass(field->value))
+                        if(field->value.isClass())
                         {
                             haveval = true;
                             pushme = field->value;
                         }
                     }
-                    field = nn_table_getfieldbyostr(state->globals, name);
+                    field = state->globals->getFieldByObjStr(name);
                     if(field != NULL)
                     {
-                        if(nn_value_isclass(field->value))
+                        if(field->value.isClass())
                         {
                             haveval = true;
                             pushme = field->value;
@@ -17023,7 +16997,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                 {
                     NeonObjClass* superclass;
                     NeonObjClass* subclass;
-                    if(!nn_value_isclass(nn_vmbits_stackpeek(state, 1)))
+                    if(!nn_vmbits_stackpeek(state, 1).isClass())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "cannot inherit from non-class object");
                         break;
@@ -17139,7 +17113,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonValue res;
                     NeonObjString* name;
                     NeonObjModule* mod;
-                    name = nn_value_asstring(nn_vmbits_stackpeek(state, 0));
+                    name = nn_vmbits_stackpeek(state, 0).asString();
                     fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->data());
                     mod = nn_import_loadmodulescript(state, state->topmodule, name);
                     fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", mod);
@@ -17173,7 +17147,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     expression = nn_vmbits_stackpop(state);
                     if(nn_value_isfalse(expression))
                     {
-                        if(!nn_value_isnull(message))
+                        if(!message.isNull())
                         {
                             nn_exceptions_throwclass(state, state->exceptions.asserterror, nn_value_tostring(state, message)->data());
                         }
@@ -17221,9 +17195,9 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     finaddr = nn_vmbits_readshort(state);
                     if(addr != 0)
                     {
-                        if(!nn_table_get(state->globals, NeonValue::fromObject(type), &value) || !nn_value_isclass(value))
+                        if(!state->globals->get(NeonValue::fromObject(type), &value) || !value.isClass())
                         {
-                            if(!nn_table_get(state->vmstate.currentframe->closure->scriptfunc->module->deftable, NeonValue::fromObject(type), &value) || !nn_value_isclass(value))
+                            if(!state->vmstate.currentframe->closure->scriptfunc->module->deftable->get(NeonValue::fromObject(type), &value) || !value.isClass())
                             {
                                 nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->data());
                                 break;
@@ -17260,7 +17234,7 @@ NeonStatus nn_vm_runvm(NeonState* state, int exitframe, NeonValue* rv)
                     NeonObjSwitch* sw;
                     sw = nn_value_asswitch(nn_vmbits_readconst(state));
                     expr = nn_vmbits_stackpeek(state, 0);
-                    if(nn_table_get(sw->table, expr, &value))
+                    if(sw->table->get(expr, &value))
                     {
                         state->vmstate.currentframe->inscode += (int)value.asNumber();
                     }
@@ -17290,16 +17264,16 @@ int nn_nestcall_prepare(NeonState* state, NeonValue callable, NeonValue mthobj, 
     NeonObjFuncClosure* closure;
     (void)state;
     arity = 0;
-    if(nn_value_isfuncclosure(callable))
+    if(callable.isFuncClosure())
     {
         closure = nn_value_asfuncclosure(callable);
         arity = closure->scriptfunc->arity;
     }
-    else if(nn_value_isfuncscript(callable))
+    else if(callable.isFuncScript())
     {
         arity = nn_value_asfuncscript(callable)->arity;
     }
-    else if(nn_value_isfuncnative(callable))
+    else if(callable.isFuncNative())
     {
         //arity = nn_value_asfuncnative(callable);
     }
@@ -17924,7 +17898,7 @@ int main(int argc, char* argv[], char** envp)
             os = NeonObjString::copy(state, nargv[i]);
             state->cliargv->push(NeonValue::fromObject(os));
         }
-        nn_table_setcstr(state->globals, "ARGV", NeonValue::fromObject(state->cliargv));
+        state->globals->setCStr("ARGV", NeonValue::fromObject(state->cliargv));
     }
     state->gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);
@@ -17934,7 +17908,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = nn_value_asstring(state->cliargv->varray->values[0])->data();
+        filename = state->cliargv->varray->values[0].asString()->data();
         fprintf(stderr, "nargv[0]=%s\n", filename);
         ok = nn_cli_runfile(state, filename);
     }
