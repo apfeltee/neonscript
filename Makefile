@@ -1,7 +1,7 @@
 
 INCFLAGS = -I. -Ithirdparty
 
-CXX ?= g++
+CXX = g++
 #WARNFLAGS_OPTIONAL = -Wno-unused-parameter
 WARNFLAGS_NEEDED = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(WARNFLAGS_OPTIONAL)
 CCCMD = $(CXX) $(WARNFLAGS_NEEDED)
@@ -12,9 +12,9 @@ CFLAGS =
 CFLAGS += $(INCFLAGS) -O0 -g3 -ggdb3
 
 # debug flags
-CFLAGS += -ftrapv -fsanitize=undefined
+CFLAGS +=
 
-LDFLAGS = -flto -ldl -lm  -lreadline -lpthread -lubsan
+LDFLAGS = -flto -ldl -lm  -lreadline -lpthread
 target = run
 
 srcfiles_all = $(wildcard *.cpp)
