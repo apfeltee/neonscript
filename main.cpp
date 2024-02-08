@@ -58,6 +58,7 @@
 #include "strbuf.h"
 #include "optparse.h"
 #include "os.h"
+#include "utf8.h"
 
 #if 0 //defined(__GNUC__)
     #define NEON_ALWAYSINLINE __attribute__((always_inline)) inline
@@ -242,6 +243,7 @@
 
 namespace neon
 {
+
     enum class Status
     {
         OK,
@@ -288,6 +290,147 @@ namespace neon
     typedef Value (*ClassFieldFN)(State*);
     typedef void (*ModLoaderFN)(State*);
     typedef RegModule* (*ModInitFN)(State*);
+
+    namespace Util
+    {
+        /* returns the number of bytes contained in a unicode character */
+        int utf8NumBytes(int value)
+        {
+            if(value < 0)
+            {
+                return -1;
+            }
+            if(value <= 0x7f)
+            {
+                return 1;
+            }
+            if(value <= 0x7ff)
+            {
+                return 2;
+            }
+            if(value <= 0xffff)
+            {
+                return 3;
+            }
+            if(value <= 0x10ffff)
+            {
+                return 4;
+            }
+            return 0;
+        }
+
+        char* utf8Encode(neon::State* state, unsigned int code, size_t* dlen)
+        {
+            int count;
+            char* chars;
+            (void)state;
+            *dlen = 0;
+            count = neon::Util::utf8NumBytes((int)code);
+            if(count > 0)
+            {
+                *dlen = count;
+                //chars = (char*)neon::State::GC::allocate(state, sizeof(char), (size_t)count + 1);
+                chars = (char*)malloc(sizeof(char)*(count+1));
+                if(chars != nullptr)
+                {
+                    if(code <= 0x7F)
+                    {
+                        chars[0] = (char)(code & 0x7F);
+                        chars[1] = '\0';
+                    }
+                    else if(code <= 0x7FF)
+                    {
+                        /* one continuation byte */
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xC0 | (code & 0x1F));
+                    }
+                    else if(code <= 0xFFFF)
+                    {
+                        /* two continuation bytes */
+                        chars[2] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xE0 | (code & 0xF));
+                    }
+                    else if(code <= 0x10FFFF)
+                    {
+                        /* three continuation bytes */
+                        chars[3] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[2] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xF0 | (code & 0x7));
+                    }
+                    else
+                    {
+                        /* unicode replacement character */
+                        chars[2] = (char)0xEF;
+                        chars[1] = (char)0xBF;
+                        chars[0] = (char)0xBD;
+                    }
+                    return chars;
+                }
+            }
+            return nullptr;
+        }
+
+        int utf8Decode(const uint8_t* bytes, uint32_t length)
+        {
+            int value;
+            uint32_t remainingbytes;
+            /* Single byte (i.e. fits in ASCII). */
+            if(*bytes <= 0x7f)
+            {
+                return *bytes;
+            }
+            if((*bytes & 0xe0) == 0xc0)
+            {
+                /* Two byte sequence: 110xxxxx 10xxxxxx. */
+                value = *bytes & 0x1f;
+                remainingbytes = 1;
+            }
+            else if((*bytes & 0xf0) == 0xe0)
+            {
+                /* Three byte sequence: 1110xxxx	 10xxxxxx 10xxxxxx. */
+                value = *bytes & 0x0f;
+                remainingbytes = 2;
+            }
+            else if((*bytes & 0xf8) == 0xf0)
+            {
+                /* Four byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx. */
+                value = *bytes & 0x07;
+                remainingbytes = 3;
+            }
+            else
+            {
+                /* Invalid UTF-8 sequence. */
+                return -1;
+            }
+            /* Don't read past the end of the buffer on truncated UTF-8. */
+            if(remainingbytes > length - 1)
+            {
+                return -1;
+            }
+            while(remainingbytes > 0)
+            {
+                bytes++;
+                remainingbytes--;
+                /* Remaining bytes must be of form 10xxxxxx. */
+                if((*bytes & 0xc0) != 0x80)
+                {
+                    return -1;
+                }
+                value = value << 6 | (*bytes & 0x3f);
+            }
+            return value;
+        }
+
+    }
+
 
     union DoubleHashUnion
     {
@@ -2707,13 +2850,13 @@ namespace neon
             {
                 ClassObject* klass;
                 klass = (ClassObject*)Object::make<ClassObject>(state, Value::OBJTYPE_CLASS);
-                klass->name = name;
-                klass->instprops = new HashTable(state);
-                klass->staticproperties = new HashTable(state);
-                klass->methods = new HashTable(state);
-                klass->staticmethods = new HashTable(state);
-                klass->initializer = Value::makeEmpty();
-                klass->superclass = nullptr;
+                klass->m_classname = name;
+                klass->m_instprops = new HashTable(state);
+                klass->m_staticprops = new HashTable(state);
+                klass->m_methods = new HashTable(state);
+                klass->m_staticmethods = new HashTable(state);
+                klass->m_constructor = Value::makeEmpty();
+                klass->m_superclass = nullptr;
                 return klass;
             }
 
@@ -2722,32 +2865,32 @@ namespace neon
             * the constructor, if any. defaults to <empty>, and if not <empty>, expects to be
             * some callable value.
             */
-            Value initializer;
+            Value m_constructor;
 
             /*
-            * when declaring a class, $instprops (their names, and initial values) are
+            * when declaring a class, $m_instprops (their names, and initial values) are
             * copied to ClassInstance::properties.
-            * so `$instprops["something"] = somefunction;` remains untouched *until* an
+            * so `$m_instprops["something"] = somefunction;` remains untouched *until* an
             * instance of this class is created.
             */
-            HashTable* instprops;
+            HashTable* m_instprops;
 
             /*
             * static, unchangeable(-ish) values. intended for values that are not unique, but shared
             * across classes, without being copied.
             */
-            HashTable* staticproperties;
+            HashTable* m_staticprops;
 
             /*
             * method table; they are currently not unique when instantiated; instead, they are
-            * read from $methods as-is. this includes adding methods!
+            * read from $m_methods as-is. this includes adding methods!
             * TODO: introduce a new hashtable field for ClassInstance for unique methods, perhaps?
             * right now, this method just prevents unnecessary copying.
             */
-            HashTable* methods;
-            HashTable* staticmethods;
-            String* name;
-            ClassObject* superclass;
+            HashTable* m_methods;
+            HashTable* m_staticmethods;
+            String* m_classname;
+            ClassObject* m_superclass;
 
         public:
             //ClassObject() = delete;
@@ -2755,13 +2898,105 @@ namespace neon
 
             bool destroyThisObject()
             {
-                delete this->methods;
-                delete this->staticmethods;
-                delete this->instprops;
-                delete this->staticproperties;
+                delete this->m_methods;
+                delete this->m_staticmethods;
+                delete this->m_instprops;
+                delete this->m_staticprops;
                 return true;
             }
 
+            void inheritFrom(ClassObject* superclass)
+            {
+                HashTable::addAll(superclass->m_instprops, this->m_instprops);
+                HashTable::addAll(superclass->m_methods, this->m_methods);
+                this->m_superclass = superclass;
+            }
+
+            void defProperty(const char* cstrname, Value val)
+            {
+                this->m_instprops->setCStr(cstrname, val);
+            }
+
+            void defCallableField(const char* cstrname, NativeFN function)
+            {
+                String* oname;
+                FuncNative* ofn;
+                oname = String::copy(m_pvm, cstrname);
+                ofn = FuncNative::make(m_pvm, function, cstrname);
+                this->m_instprops->setType(Value::fromObject(oname), Value::fromObject(ofn), Property::PROPTYPE_FUNCTION, true);
+            }
+
+            void setStaticPropertyCstr(const char* cstrname, Value val)
+            {
+                this->m_staticprops->setCStr(cstrname, val);
+            }
+
+            void setStaticProperty(String* name, Value val)
+            {
+                this->setStaticPropertyCstr(name->data(), val);
+            }
+
+            void defNativeConstructor(NativeFN function)
+            {
+                const char* cname;
+                FuncNative* ofn;
+                cname = "constructor";
+                ofn = FuncNative::make(m_pvm, function, cname);
+                this->m_constructor = Value::fromObject(ofn);
+            }
+
+            void defMethod(const char* name, Value val)
+            {
+                this->m_methods->setCStr(name, val);
+            }
+
+            void defNativeMethod(const char* name, NativeFN function)
+            {
+                FuncNative* ofn;
+                ofn = FuncNative::make(m_pvm, function, name);
+                this->defMethod(name, Value::fromObject(ofn));
+            }
+
+            void defStaticNativeMethod(const char* name, NativeFN function)
+            {
+                FuncNative* ofn;
+                ofn = FuncNative::make(m_pvm, function, name);
+                this->m_staticmethods->setCStr(name, Value::fromObject(ofn));
+            }
+
+            Property* getMethodField(String* name)
+            {
+                Property* field;
+                field = this->m_methods->getField(Value::fromObject(name));
+                if(field != nullptr)
+                {
+                    return field;
+                }
+                if(this->m_superclass != nullptr)
+                {
+                    return this->m_superclass->getMethodField(name);
+                }
+                return nullptr;
+            }
+
+            Property* getPropertyField(String* name)
+            {
+                Property* field;
+                field = this->m_instprops->getField(Value::fromObject(name));
+                return field;
+            }
+
+            Property* getStaticProperty(String* name)
+            {
+                return this->m_staticprops->getFieldByObjStr(name);
+            }
+
+            Property* getStaticMethodField(String* name)
+            {
+                Property* field;
+                field = this->m_staticmethods->getField(Value::fromObject(name));
+                return field;
+            }
     };
 
     struct ClassInstance final: public Object
@@ -2776,9 +3011,9 @@ namespace neon
                 instance->active = true;
                 instance->klass = klass;
                 instance->properties = new HashTable(state);
-                if(klass->instprops->m_count > 0)
+                if(klass->m_instprops->m_count > 0)
                 {
-                    HashTable::copy(klass->instprops, instance->properties);
+                    HashTable::copy(klass->m_instprops, instance->properties);
                 }
                 /* gc fix */
                 state->stackPop();
@@ -3802,7 +4037,7 @@ bool neon::State::exceptionHandleUncaught(neon::ClassInstance* exception)
     colreset = nc.color('0');
     colyellow = nc.color('y');
     /* at this point, the exception is unhandled; so, print it out. */
-    fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->data(), colreset);
+    fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->m_classname->data(), colreset);
     srcfile = "none";
     srcline = 0;
     field = exception->properties->getFieldByCStr("srcline");
@@ -4039,138 +4274,6 @@ char* nn_util_readfile(neon::State* state, const char* filename, size_t* dlen)
     b = nn_util_readhandle(state, fh, dlen);
     fclose(fh);
     return b;
-}
-
-/* returns the number of bytes contained in a unicode character */
-int nn_util_utf8numbytes(int value)
-{
-    if(value < 0)
-    {
-        return -1;
-    }
-    if(value <= 0x7f)
-    {
-        return 1;
-    }
-    if(value <= 0x7ff)
-    {
-        return 2;
-    }
-    if(value <= 0xffff)
-    {
-        return 3;
-    }
-    if(value <= 0x10ffff)
-    {
-        return 4;
-    }
-    return 0;
-}
-
-char* nn_util_utf8encode(neon::State* state, unsigned int code)
-{
-    int count;
-    char* chars;
-    count = nn_util_utf8numbytes((int)code);
-    if(count > 0)
-    {
-        chars = (char*)neon::State::GC::allocate(state, sizeof(char), (size_t)count + 1);
-        if(chars != nullptr)
-        {
-            if(code <= 0x7F)
-            {
-                chars[0] = (char)(code & 0x7F);
-                chars[1] = '\0';
-            }
-            else if(code <= 0x7FF)
-            {
-                /* one continuation byte */
-                chars[1] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[0] = (char)(0xC0 | (code & 0x1F));
-            }
-            else if(code <= 0xFFFF)
-            {
-                /* two continuation bytes */
-                chars[2] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[1] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[0] = (char)(0xE0 | (code & 0xF));
-            }
-            else if(code <= 0x10FFFF)
-            {
-                /* three continuation bytes */
-                chars[3] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[2] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[1] = (char)(0x80 | (code & 0x3F));
-                code = (code >> 6);
-                chars[0] = (char)(0xF0 | (code & 0x7));
-            }
-            else
-            {
-                /* unicode replacement character */
-                chars[2] = (char)0xEF;
-                chars[1] = (char)0xBF;
-                chars[0] = (char)0xBD;
-            }
-            return chars;
-        }
-    }
-    return nullptr;
-}
-
-int nn_util_utf8decode(const uint8_t* bytes, uint32_t length)
-{
-    int value;
-    uint32_t remainingbytes;
-    /* Single byte (i.e. fits in ASCII). */
-    if(*bytes <= 0x7f)
-    {
-        return *bytes;
-    }
-    if((*bytes & 0xe0) == 0xc0)
-    {
-        /* Two byte sequence: 110xxxxx 10xxxxxx. */
-        value = *bytes & 0x1f;
-        remainingbytes = 1;
-    }
-    else if((*bytes & 0xf0) == 0xe0)
-    {
-        /* Three byte sequence: 1110xxxx	 10xxxxxx 10xxxxxx. */
-        value = *bytes & 0x0f;
-        remainingbytes = 2;
-    }
-    else if((*bytes & 0xf8) == 0xf0)
-    {
-        /* Four byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx. */
-        value = *bytes & 0x07;
-        remainingbytes = 3;
-    }
-    else
-    {
-        /* Invalid UTF-8 sequence. */
-        return -1;
-    }
-    /* Don't read past the end of the buffer on truncated UTF-8. */
-    if(remainingbytes > length - 1)
-    {
-        return -1;
-    }
-    while(remainingbytes > 0)
-    {
-        bytes++;
-        remainingbytes--;
-        /* Remaining bytes must be of form 10xxxxxx. */
-        if((*bytes & 0xc0) != 0x80)
-        {
-            return -1;
-        }
-        value = value << 6 | (*bytes & 0x3f);
-    }
-    return value;
 }
 
 char* nn_util_utf8codepoint(const char* str, char* outcodepoint)
@@ -4412,14 +4515,14 @@ void nn_gcmem_blackenobject(neon::State* state, neon::Object* object)
             {
                 neon::ClassObject* klass;
                 klass = static_cast<neon::ClassObject*>(object);
-                nn_gcmem_markobject(state, static_cast<neon::Object*>(klass->name));
-                neon::HashTable::mark(state, klass->methods);
-                neon::HashTable::mark(state, klass->staticmethods);
-                neon::HashTable::mark(state, klass->staticproperties);
-                nn_gcmem_markvalue(state, klass->initializer);
-                if(klass->superclass != nullptr)
+                nn_gcmem_markobject(state, static_cast<neon::Object*>(klass->m_classname));
+                neon::HashTable::mark(state, klass->m_methods);
+                neon::HashTable::mark(state, klass->m_staticmethods);
+                neon::HashTable::mark(state, klass->m_staticprops);
+                nn_gcmem_markvalue(state, klass->m_constructor);
+                if(klass->m_superclass != nullptr)
                 {
-                    nn_gcmem_markobject(state, static_cast<neon::Object*>(klass->superclass));
+                    nn_gcmem_markobject(state, static_cast<neon::Object*>(klass->m_superclass));
                 }
             }
             break;
@@ -5254,7 +5357,7 @@ void nn_printer_printinstance(neon::Printer* pd, neon::ClassInstance* instance, 
     state = pd->m_pvm;
     if(invmethod)
     {
-        field = instance->klass->methods->getFieldByCStr("toString");
+        field = instance->klass->m_methods->getFieldByCStr("toString");
         if(field != nullptr)
         {
             args = neon::Array::make(state);
@@ -5275,7 +5378,7 @@ void nn_printer_printinstance(neon::Printer* pd, neon::ClassInstance* instance, 
         }
     }
     #endif
-    pd->putformat("<instance of %s at %p>", instance->klass->name->data(), (void*)instance);
+    pd->putformat("<instance of %s at %p>", instance->klass->m_classname->data(), (void*)instance);
 }
 
 void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring, bool invmethod)
@@ -5334,7 +5437,7 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
             {
                 neon::ClassObject* klass;
                 klass = nn_value_asclass(value);
-                pd->putformat("<class %s at %p>", klass->name->data(), (void*)klass);
+                pd->putformat("<class %s at %p>", klass->m_classname->data(), (void*)klass);
             }
             break;
         case neon::Value::OBJTYPE_FUNCCLOSURE:
@@ -5454,7 +5557,7 @@ const char* nn_value_objecttypename(neon::Object* object)
         case neon::Value::OBJTYPE_FUNCBOUND:
             return "function";
         case neon::Value::OBJTYPE_INSTANCE:
-            return (static_cast<neon::ClassInstance*>(object))->klass->name->data();
+            return (static_cast<neon::ClassInstance*>(object))->klass->m_classname->data();
         case neon::Value::OBJTYPE_STRING:
             return "string";
         case neon::Value::OBJTYPE_USERDATA:
@@ -5635,7 +5738,7 @@ uint32_t nn_object_hashobject(neon::Object* object)
         case neon::Value::OBJTYPE_CLASS:
             {
                 /* Classes just use their name. */
-                return (static_cast<neon::ClassObject*>(object))->name->m_hash;
+                return (static_cast<neon::ClassObject*>(object))->m_classname->m_hash;
             }
             break;
         case neon::Value::OBJTYPE_FUNCSCRIPT:
@@ -5764,7 +5867,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
         }
         else if(a.isClass() && b.isClass())
         {
-            if(nn_value_asclass(a)->methods->m_count >= nn_value_asclass(b)->methods->m_count)
+            if(nn_value_asclass(a)->m_methods->m_count >= nn_value_asclass(b)->m_methods->m_count)
             {
                 return a;
             }
@@ -5896,99 +5999,7 @@ void nn_file_mark(neon::State* state, neon::File* file)
 }
 
 
-void nn_class_inheritfrom(neon::ClassObject* subclass, neon::ClassObject* superclass)
-{
-    neon::HashTable::addAll(superclass->instprops, subclass->instprops);
-    neon::HashTable::addAll(superclass->methods, subclass->methods);
-    subclass->superclass = superclass;
-}
 
-void nn_class_defproperty(neon::ClassObject* klass, const char* cstrname, neon::Value val)
-{
-    klass->instprops->setCStr(cstrname, val);
-}
-
-void nn_class_defcallablefield(neon::State* state, neon::ClassObject* klass, const char* cstrname, neon::NativeFN function)
-{
-    neon::String* oname;
-    neon::FuncNative* ofn;
-    oname = neon::String::copy(state, cstrname);
-    ofn = neon::FuncNative::make(state, function, cstrname);
-    klass->instprops->setType(neon::Value::fromObject(oname), neon::Value::fromObject(ofn), neon::Property::PROPTYPE_FUNCTION, true);
-}
-
-void nn_class_setstaticpropertycstr(neon::ClassObject* klass, const char* cstrname, neon::Value val)
-{
-    klass->staticproperties->setCStr(cstrname, val);
-}
-
-void nn_class_setstaticproperty(neon::ClassObject* klass, neon::String* name, neon::Value val)
-{
-    nn_class_setstaticpropertycstr(klass, name->data(), val);
-}
-
-void nn_class_defnativeconstructor(neon::State* state, neon::ClassObject* klass, neon::NativeFN function)
-{
-    const char* cname;
-    neon::FuncNative* ofn;
-    cname = "constructor";
-    ofn = neon::FuncNative::make(state, function, cname);
-    klass->initializer = neon::Value::fromObject(ofn);
-}
-
-void nn_class_defmethod(neon::State* state, neon::ClassObject* klass, const char* name, neon::Value val)
-{
-    (void)state;
-    klass->methods->setCStr(name, val);
-}
-
-void nn_class_defnativemethod(neon::State* state, neon::ClassObject* klass, const char* name, neon::NativeFN function)
-{
-    neon::FuncNative* ofn;
-    ofn = neon::FuncNative::make(state, function, name);
-    nn_class_defmethod(state, klass, name, neon::Value::fromObject(ofn));
-}
-
-void nn_class_defstaticnativemethod(neon::State* state, neon::ClassObject* klass, const char* name, neon::NativeFN function)
-{
-    neon::FuncNative* ofn;
-    ofn = neon::FuncNative::make(state, function, name);
-    klass->staticmethods->setCStr(name, neon::Value::fromObject(ofn));
-}
-
-neon::Property* nn_class_getmethodfield(neon::ClassObject* klass, neon::String* name)
-{
-    neon::Property* field;
-    field = klass->methods->getField(neon::Value::fromObject(name));
-    if(field != nullptr)
-    {
-        return field;
-    }
-    if(klass->superclass != nullptr)
-    {
-        return nn_class_getmethodfield(klass->superclass, name);
-    }
-    return nullptr;
-}
-
-neon::Property* nn_class_getpropertyfield(neon::ClassObject* klass, neon::String* name)
-{
-    neon::Property* field;
-    field = klass->instprops->getField(neon::Value::fromObject(name));
-    return field;
-}
-
-neon::Property* nn_class_getstaticproperty(neon::ClassObject* klass, neon::String* name)
-{
-    return klass->staticproperties->getFieldByObjStr(name);
-}
-
-neon::Property* nn_class_getstaticmethodfield(neon::ClassObject* klass, neon::String* name)
-{
-    neon::Property* field;
-    field = klass->staticmethods->getField(neon::Value::fromObject(name));
-    return field;
-}
 
 void nn_instance_mark(neon::State* state, neon::ClassInstance* instance)
 {
@@ -8480,10 +8491,11 @@ int nn_astparser_readunicodeescape(neon::AstParser* prs, char* string, const cha
 {
     int value;
     int count;
+    size_t len;
     char* chr;
     NEON_ASTDEBUG(prs->m_pvm, "");
     value = nn_astparser_readhexescape(prs, realstring, realindex, numberbytes);
-    count = nn_util_utf8numbytes(value);
+    count = neon::Util::utf8NumBytes(value);
     if(count == -1)
     {
         nn_astparser_raiseerror(prs, "cannot encode a negative unicode value");
@@ -8495,7 +8507,7 @@ int nn_astparser_readunicodeescape(neon::AstParser* prs, char* string, const cha
     }
     if(count != 0)
     {
-        chr = nn_util_utf8encode(prs->m_pvm, value);
+        chr = neon::Util::utf8Encode(prs->m_pvm, value, &len);
         if(chr)
         {
             memcpy(string + index, chr, (size_t)count + 1);
@@ -10308,7 +10320,7 @@ bool nn_import_loadnativemodule(neon::State* state, neon::ModInitFN init_fn, cha
                         {
                             native->type = neon::FuncCommon::FUNCTYPE_PRIVATE;
                         }
-                        klass->methods->set(funcname, neon::Value::fromObject(native));
+                        klass->m_methods->set(funcname, neon::Value::fromObject(native));
                     }
                 }
                 if(klassreg.fields != nullptr)
@@ -10319,10 +10331,10 @@ bool nn_import_loadnativemodule(neon::State* state, neon::ModInitFN init_fn, cha
                         fieldname = neon::Value::fromObject(state->gcProtect(neon::String::copy(state, field.name)));
                         v = field.fieldvalfn(state);
                         state->stackPush(v);
-                        tabdest = klass->instprops;
+                        tabdest = klass->m_instprops;
                         if(field.isstatic)
                         {
-                            tabdest = klass->staticproperties;
+                            tabdest = klass->m_staticprops;
                         }
                         tabdest->set(fieldname, v);
                         state->stackPop();
@@ -12466,6 +12478,87 @@ neon::Value nn_memberfunc_range_constructor(neon::State* state, neon::Arguments*
     return neon::Value::fromObject(orng);
 }
 
+neon::Value nn_memberfunc_string_utf8numbytes(neon::State* state, neon::Arguments* args)
+{
+    int incode;
+    int res;
+    (void)state;
+    NEON_ARGS_CHECKCOUNT(args, 1);
+    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+    incode = args->argv[0].asNumber();
+    //static int utf8NumBytes(int value)
+    res = neon::Util::utf8NumBytes(incode);
+    return neon::Value::makeNumber(res);
+}
+
+neon::Value nn_memberfunc_string_utf8decode(neon::State* state, neon::Arguments* args)
+{
+    int res;
+    neon::String* instr;
+    (void)state;
+    NEON_ARGS_CHECKCOUNT(args, 1);
+    NEON_ARGS_CHECKTYPE(args, 0, isString);
+    instr = args->argv[0].asString();
+    //static int utf8Decode(const uint8_t* bytes, uint32_t length)
+    res = neon::Util::utf8Decode((const uint8_t*)instr->data(), instr->length());
+    return neon::Value::makeNumber(res);
+}
+
+neon::Value nn_memberfunc_string_utf8encode(neon::State* state, neon::Arguments* args)
+{
+    int incode;
+    size_t len;
+    neon::String* res;
+    char* buf;
+    (void)state;
+    NEON_ARGS_CHECKCOUNT(args, 1);
+    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+    incode = args->argv[0].asNumber();
+    //static char* utf8Encode(unsigned int code)
+    buf = neon::Util::utf8Encode(state, incode, &len);
+    res = neon::String::take(state, buf, len);
+    return neon::Value::fromObject(res);
+}
+
+neon::Value nn_util_stringutf8chars(neon::State* state, neon::Arguments* args, bool onlycodepoint)
+{
+    int cp;
+    const char* cstr;
+    utf8iterator_t iter;
+    neon::Array* res;
+    neon::String* os;
+    neon::String* instr;
+    (void)state;
+    instr = args->thisval.asString();
+    res = neon::Array::make(state);
+    utf8_init(&iter, instr->data(), instr->length());
+    while (utf8_next(&iter))
+    {
+        cp = iter.codepoint;
+        cstr = utf8_getchar(&iter);
+        if(onlycodepoint)
+        {
+            res->push(neon::Value::makeNumber(cp));
+        }
+        else
+        {
+            os = neon::String::copy(state, cstr, iter.size);
+            res->push(neon::Value::fromObject(os));
+        }
+    }
+    return neon::Value::fromObject(res);
+}
+
+neon::Value nn_memberfunc_string_utf8chars(neon::State* state, neon::Arguments* args)
+{
+    return nn_util_stringutf8chars(state, args, false);
+}
+
+neon::Value nn_memberfunc_string_utf8codepoints(neon::State* state, neon::Arguments* args)
+{
+    return nn_util_stringutf8chars(state, args, true);
+}
+
 neon::Value nn_memberfunc_string_fromcharcode(neon::State* state, neon::Arguments* args)
 {
     char ch;
@@ -13452,8 +13545,8 @@ neon::Value nn_memberfunc_object_isiterable(neon::State* state, neon::Arguments*
     if(!isiterable && selfval.isInstance())
     {
         klass = selfval.asInstance()->klass;
-        isiterable = klass->methods->get(neon::Value::fromObject(neon::String::copy(state, "@iter")), &dummy)
-            && klass->methods->get(neon::Value::fromObject(neon::String::copy(state, "@itern")), &dummy);
+        isiterable = klass->m_methods->get(neon::Value::fromObject(neon::String::copy(state, "@iter")), &dummy)
+            && klass->m_methods->get(neon::Value::fromObject(neon::String::copy(state, "@itern")), &dummy);
     }
     return neon::Value::makeBool(isiterable);
 }
@@ -13500,173 +13593,181 @@ neon::Value nn_memberfunc_number_tohexstring(neon::State* state, neon::Arguments
 void nn_state_initbuiltinmethods(neon::State* state)
 {
     {
-        nn_class_setstaticpropertycstr(state->classprimprocess, "env", neon::Value::fromObject(state->envdict));
+        state->classprimprocess->setStaticPropertyCstr("env", neon::Value::fromObject(state->envdict));
     }
     {
-        nn_class_defstaticnativemethod(state, state->classprimobject, "typename", nn_memberfunc_object_typename);
-        nn_class_defnativemethod(state, state->classprimobject, "dump", nn_memberfunc_object_dump);
-        nn_class_defnativemethod(state, state->classprimobject, "toString", nn_memberfunc_object_tostring);
-        nn_class_defnativemethod(state, state->classprimobject, "isArray", nn_memberfunc_object_isarray);        
-        nn_class_defnativemethod(state, state->classprimobject, "isString", nn_memberfunc_object_isstring);
-        nn_class_defnativemethod(state, state->classprimobject, "isCallable", nn_memberfunc_object_iscallable);
-        nn_class_defnativemethod(state, state->classprimobject, "isBool", nn_memberfunc_object_isbool);
-        nn_class_defnativemethod(state, state->classprimobject, "isNumber", nn_memberfunc_object_isnumber);
-        nn_class_defnativemethod(state, state->classprimobject, "isInt", nn_memberfunc_object_isint);
-        nn_class_defnativemethod(state, state->classprimobject, "isDict", nn_memberfunc_object_isdict);
-        nn_class_defnativemethod(state, state->classprimobject, "isObject", nn_memberfunc_object_isobject);
-        nn_class_defnativemethod(state, state->classprimobject, "isFunction", nn_memberfunc_object_isfunction);
-        nn_class_defnativemethod(state, state->classprimobject, "isIterable", nn_memberfunc_object_isiterable);
-        nn_class_defnativemethod(state, state->classprimobject, "isClass", nn_memberfunc_object_isclass);
-        nn_class_defnativemethod(state, state->classprimobject, "isFile", nn_memberfunc_object_isfile);
-        nn_class_defnativemethod(state, state->classprimobject, "isInstance", nn_memberfunc_object_isinstance);
+        state->classprimobject->defStaticNativeMethod("typename", nn_memberfunc_object_typename);
+        state->classprimobject->defNativeMethod("dump", nn_memberfunc_object_dump);
+        state->classprimobject->defNativeMethod("toString", nn_memberfunc_object_tostring);
+        state->classprimobject->defNativeMethod("isArray", nn_memberfunc_object_isarray);        
+        state->classprimobject->defNativeMethod("isString", nn_memberfunc_object_isstring);
+        state->classprimobject->defNativeMethod("isCallable", nn_memberfunc_object_iscallable);
+        state->classprimobject->defNativeMethod("isBool", nn_memberfunc_object_isbool);
+        state->classprimobject->defNativeMethod("isNumber", nn_memberfunc_object_isnumber);
+        state->classprimobject->defNativeMethod("isInt", nn_memberfunc_object_isint);
+        state->classprimobject->defNativeMethod("isDict", nn_memberfunc_object_isdict);
+        state->classprimobject->defNativeMethod("isObject", nn_memberfunc_object_isobject);
+        state->classprimobject->defNativeMethod("isFunction", nn_memberfunc_object_isfunction);
+        state->classprimobject->defNativeMethod("isIterable", nn_memberfunc_object_isiterable);
+        state->classprimobject->defNativeMethod("isClass", nn_memberfunc_object_isclass);
+        state->classprimobject->defNativeMethod("isFile", nn_memberfunc_object_isfile);
+        state->classprimobject->defNativeMethod("isInstance", nn_memberfunc_object_isinstance);
 
     }
     
     {
-        nn_class_defnativemethod(state, state->classprimnumber, "toHexString", nn_memberfunc_number_tohexstring);
-        nn_class_defnativemethod(state, state->classprimnumber, "toOctString", nn_memberfunc_number_tooctstring);
-        nn_class_defnativemethod(state, state->classprimnumber, "toBinString", nn_memberfunc_number_tobinstring);
+        state->classprimnumber->defNativeMethod("toHexString", nn_memberfunc_number_tohexstring);
+        state->classprimnumber->defNativeMethod("toOctString", nn_memberfunc_number_tooctstring);
+        state->classprimnumber->defNativeMethod("toBinString", nn_memberfunc_number_tobinstring);
     }
     {
-        nn_class_defnativeconstructor(state, state->classprimstring, nn_memberfunc_string_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimstring, "fromCharCode", nn_memberfunc_string_fromcharcode);
-        nn_class_defcallablefield(state, state->classprimstring, "length", nn_memberfunc_string_length);
-        nn_class_defnativemethod(state, state->classprimstring, "@iter", nn_memberfunc_string_iter);
-        nn_class_defnativemethod(state, state->classprimstring, "@itern", nn_memberfunc_string_itern);
-        nn_class_defnativemethod(state, state->classprimstring, "size", nn_memberfunc_string_length);
-        nn_class_defnativemethod(state, state->classprimstring, "substr", nn_memberfunc_string_substring);
-        nn_class_defnativemethod(state, state->classprimstring, "substring", nn_memberfunc_string_substring);
-        nn_class_defnativemethod(state, state->classprimstring, "charCodeAt", nn_memberfunc_string_charcodeat);
-        nn_class_defnativemethod(state, state->classprimstring, "charAt", nn_memberfunc_string_charat);
-        nn_class_defnativemethod(state, state->classprimstring, "upper", nn_memberfunc_string_upper);
-        nn_class_defnativemethod(state, state->classprimstring, "lower", nn_memberfunc_string_lower);
-        nn_class_defnativemethod(state, state->classprimstring, "trim", nn_memberfunc_string_trim);
-        nn_class_defnativemethod(state, state->classprimstring, "ltrim", nn_memberfunc_string_ltrim);
-        nn_class_defnativemethod(state, state->classprimstring, "rtrim", nn_memberfunc_string_rtrim);
-        nn_class_defnativemethod(state, state->classprimstring, "split", nn_memberfunc_string_split);
-        nn_class_defnativemethod(state, state->classprimstring, "indexOf", nn_memberfunc_string_indexof);
-        nn_class_defnativemethod(state, state->classprimstring, "count", nn_memberfunc_string_count);
-        nn_class_defnativemethod(state, state->classprimstring, "toNumber", nn_memberfunc_string_tonumber);
-        nn_class_defnativemethod(state, state->classprimstring, "toList", nn_memberfunc_string_tolist);
-        nn_class_defnativemethod(state, state->classprimstring, "lpad", nn_memberfunc_string_lpad);
-        nn_class_defnativemethod(state, state->classprimstring, "rpad", nn_memberfunc_string_rpad);
-        nn_class_defnativemethod(state, state->classprimstring, "replace", nn_memberfunc_string_replace);
-        nn_class_defnativemethod(state, state->classprimstring, "each", nn_memberfunc_string_each);
-        nn_class_defnativemethod(state, state->classprimstring, "startswith", nn_memberfunc_string_startswith);
-        nn_class_defnativemethod(state, state->classprimstring, "endswith", nn_memberfunc_string_endswith);
-        nn_class_defnativemethod(state, state->classprimstring, "isAscii", nn_memberfunc_string_isascii);
-        nn_class_defnativemethod(state, state->classprimstring, "isAlpha", nn_memberfunc_string_isalpha);
-        nn_class_defnativemethod(state, state->classprimstring, "isAlnum", nn_memberfunc_string_isalnum);
-        nn_class_defnativemethod(state, state->classprimstring, "isNumber", nn_memberfunc_string_isnumber);
-        nn_class_defnativemethod(state, state->classprimstring, "isFloat", nn_memberfunc_string_isfloat);
-        nn_class_defnativemethod(state, state->classprimstring, "isLower", nn_memberfunc_string_islower);
-        nn_class_defnativemethod(state, state->classprimstring, "isUpper", nn_memberfunc_string_isupper);
-        nn_class_defnativemethod(state, state->classprimstring, "isSpace", nn_memberfunc_string_isspace);
+        state->classprimstring->defNativeConstructor(nn_memberfunc_string_constructor);
+        state->classprimstring->defStaticNativeMethod("fromCharCode", nn_memberfunc_string_fromcharcode);
+        state->classprimstring->defStaticNativeMethod("utf8Decode", nn_memberfunc_string_utf8decode);
+        state->classprimstring->defStaticNativeMethod("utf8Encode", nn_memberfunc_string_utf8encode);
+        state->classprimstring->defStaticNativeMethod("utf8NumBytes", nn_memberfunc_string_utf8numbytes);
+        
+        state->classprimstring->defCallableField("length", nn_memberfunc_string_length);
+        state->classprimstring->defNativeMethod("utf8Chars", nn_memberfunc_string_utf8chars);
+        state->classprimstring->defNativeMethod("utf8Codepoints", nn_memberfunc_string_utf8codepoints);
+        state->classprimstring->defNativeMethod("utf8Bytes", nn_memberfunc_string_utf8codepoints);
+
+        state->classprimstring->defNativeMethod("@iter", nn_memberfunc_string_iter);
+        state->classprimstring->defNativeMethod("@itern", nn_memberfunc_string_itern);
+        state->classprimstring->defNativeMethod("size", nn_memberfunc_string_length);
+        state->classprimstring->defNativeMethod("substr", nn_memberfunc_string_substring);
+        state->classprimstring->defNativeMethod("substring", nn_memberfunc_string_substring);
+        state->classprimstring->defNativeMethod("charCodeAt", nn_memberfunc_string_charcodeat);
+        state->classprimstring->defNativeMethod("charAt", nn_memberfunc_string_charat);
+        state->classprimstring->defNativeMethod("upper", nn_memberfunc_string_upper);
+        state->classprimstring->defNativeMethod("lower", nn_memberfunc_string_lower);
+        state->classprimstring->defNativeMethod("trim", nn_memberfunc_string_trim);
+        state->classprimstring->defNativeMethod("ltrim", nn_memberfunc_string_ltrim);
+        state->classprimstring->defNativeMethod("rtrim", nn_memberfunc_string_rtrim);
+        state->classprimstring->defNativeMethod("split", nn_memberfunc_string_split);
+        state->classprimstring->defNativeMethod("indexOf", nn_memberfunc_string_indexof);
+        state->classprimstring->defNativeMethod("count", nn_memberfunc_string_count);
+        state->classprimstring->defNativeMethod("toNumber", nn_memberfunc_string_tonumber);
+        state->classprimstring->defNativeMethod("toList", nn_memberfunc_string_tolist);
+        state->classprimstring->defNativeMethod("lpad", nn_memberfunc_string_lpad);
+        state->classprimstring->defNativeMethod("rpad", nn_memberfunc_string_rpad);
+        state->classprimstring->defNativeMethod("replace", nn_memberfunc_string_replace);
+        state->classprimstring->defNativeMethod("each", nn_memberfunc_string_each);
+        state->classprimstring->defNativeMethod("startswith", nn_memberfunc_string_startswith);
+        state->classprimstring->defNativeMethod("endswith", nn_memberfunc_string_endswith);
+        state->classprimstring->defNativeMethod("isAscii", nn_memberfunc_string_isascii);
+        state->classprimstring->defNativeMethod("isAlpha", nn_memberfunc_string_isalpha);
+        state->classprimstring->defNativeMethod("isAlnum", nn_memberfunc_string_isalnum);
+        state->classprimstring->defNativeMethod("isNumber", nn_memberfunc_string_isnumber);
+        state->classprimstring->defNativeMethod("isFloat", nn_memberfunc_string_isfloat);
+        state->classprimstring->defNativeMethod("isLower", nn_memberfunc_string_islower);
+        state->classprimstring->defNativeMethod("isUpper", nn_memberfunc_string_isupper);
+        state->classprimstring->defNativeMethod("isSpace", nn_memberfunc_string_isspace);
         
     }
     {
         #if 1
-        nn_class_defnativeconstructor(state, state->classprimarray, nn_memberfunc_array_constructor);
+        state->classprimarray->defNativeConstructor(nn_memberfunc_array_constructor);
         #endif
-        nn_class_defcallablefield(state, state->classprimarray, "length", nn_memberfunc_array_length);
-        nn_class_defnativemethod(state, state->classprimarray, "size", nn_memberfunc_array_length);
-        nn_class_defnativemethod(state, state->classprimarray, "join", nn_memberfunc_array_join);
-        nn_class_defnativemethod(state, state->classprimarray, "append", nn_memberfunc_array_append);
-        nn_class_defnativemethod(state, state->classprimarray, "push", nn_memberfunc_array_append);
-        nn_class_defnativemethod(state, state->classprimarray, "clear", nn_memberfunc_array_clear);
-        nn_class_defnativemethod(state, state->classprimarray, "clone", nn_memberfunc_array_clone);
-        nn_class_defnativemethod(state, state->classprimarray, "count", nn_memberfunc_array_count);
-        nn_class_defnativemethod(state, state->classprimarray, "extend", nn_memberfunc_array_extend);
-        nn_class_defnativemethod(state, state->classprimarray, "indexOf", nn_memberfunc_array_indexof);
-        nn_class_defnativemethod(state, state->classprimarray, "insert", nn_memberfunc_array_insert);
-        nn_class_defnativemethod(state, state->classprimarray, "pop", nn_memberfunc_array_pop);
-        nn_class_defnativemethod(state, state->classprimarray, "shift", nn_memberfunc_array_shift);
-        nn_class_defnativemethod(state, state->classprimarray, "removeAt", nn_memberfunc_array_removeat);
-        nn_class_defnativemethod(state, state->classprimarray, "remove", nn_memberfunc_array_remove);
-        nn_class_defnativemethod(state, state->classprimarray, "reverse", nn_memberfunc_array_reverse);
-        nn_class_defnativemethod(state, state->classprimarray, "sort", nn_memberfunc_array_sort);
-        nn_class_defnativemethod(state, state->classprimarray, "contains", nn_memberfunc_array_contains);
-        nn_class_defnativemethod(state, state->classprimarray, "delete", nn_memberfunc_array_delete);
-        nn_class_defnativemethod(state, state->classprimarray, "first", nn_memberfunc_array_first);
-        nn_class_defnativemethod(state, state->classprimarray, "last", nn_memberfunc_array_last);
-        nn_class_defnativemethod(state, state->classprimarray, "isEmpty", nn_memberfunc_array_isempty);
-        nn_class_defnativemethod(state, state->classprimarray, "take", nn_memberfunc_array_take);
-        nn_class_defnativemethod(state, state->classprimarray, "get", nn_memberfunc_array_get);
-        nn_class_defnativemethod(state, state->classprimarray, "compact", nn_memberfunc_array_compact);
-        nn_class_defnativemethod(state, state->classprimarray, "unique", nn_memberfunc_array_unique);
-        nn_class_defnativemethod(state, state->classprimarray, "zip", nn_memberfunc_array_zip);
-        nn_class_defnativemethod(state, state->classprimarray, "zipFrom", nn_memberfunc_array_zipfrom);
-        nn_class_defnativemethod(state, state->classprimarray, "toDict", nn_memberfunc_array_todict);
-        nn_class_defnativemethod(state, state->classprimarray, "each", nn_memberfunc_array_each);
-        nn_class_defnativemethod(state, state->classprimarray, "map", nn_memberfunc_array_map);
-        nn_class_defnativemethod(state, state->classprimarray, "filter", nn_memberfunc_array_filter);
-        nn_class_defnativemethod(state, state->classprimarray, "some", nn_memberfunc_array_some);
-        nn_class_defnativemethod(state, state->classprimarray, "every", nn_memberfunc_array_every);
-        nn_class_defnativemethod(state, state->classprimarray, "reduce", nn_memberfunc_array_reduce);
-        nn_class_defnativemethod(state, state->classprimarray, "@iter", nn_memberfunc_array_iter);
-        nn_class_defnativemethod(state, state->classprimarray, "@itern", nn_memberfunc_array_itern);
+        state->classprimarray->defCallableField("length", nn_memberfunc_array_length);
+        state->classprimarray->defNativeMethod("size", nn_memberfunc_array_length);
+        state->classprimarray->defNativeMethod("join", nn_memberfunc_array_join);
+        state->classprimarray->defNativeMethod("append", nn_memberfunc_array_append);
+        state->classprimarray->defNativeMethod("push", nn_memberfunc_array_append);
+        state->classprimarray->defNativeMethod("clear", nn_memberfunc_array_clear);
+        state->classprimarray->defNativeMethod("clone", nn_memberfunc_array_clone);
+        state->classprimarray->defNativeMethod("count", nn_memberfunc_array_count);
+        state->classprimarray->defNativeMethod("extend", nn_memberfunc_array_extend);
+        state->classprimarray->defNativeMethod("indexOf", nn_memberfunc_array_indexof);
+        state->classprimarray->defNativeMethod("insert", nn_memberfunc_array_insert);
+        state->classprimarray->defNativeMethod("pop", nn_memberfunc_array_pop);
+        state->classprimarray->defNativeMethod("shift", nn_memberfunc_array_shift);
+        state->classprimarray->defNativeMethod("removeAt", nn_memberfunc_array_removeat);
+        state->classprimarray->defNativeMethod("remove", nn_memberfunc_array_remove);
+        state->classprimarray->defNativeMethod("reverse", nn_memberfunc_array_reverse);
+        state->classprimarray->defNativeMethod("sort", nn_memberfunc_array_sort);
+        state->classprimarray->defNativeMethod("contains", nn_memberfunc_array_contains);
+        state->classprimarray->defNativeMethod("delete", nn_memberfunc_array_delete);
+        state->classprimarray->defNativeMethod("first", nn_memberfunc_array_first);
+        state->classprimarray->defNativeMethod("last", nn_memberfunc_array_last);
+        state->classprimarray->defNativeMethod("isEmpty", nn_memberfunc_array_isempty);
+        state->classprimarray->defNativeMethod("take", nn_memberfunc_array_take);
+        state->classprimarray->defNativeMethod("get", nn_memberfunc_array_get);
+        state->classprimarray->defNativeMethod("compact", nn_memberfunc_array_compact);
+        state->classprimarray->defNativeMethod("unique", nn_memberfunc_array_unique);
+        state->classprimarray->defNativeMethod("zip", nn_memberfunc_array_zip);
+        state->classprimarray->defNativeMethod("zipFrom", nn_memberfunc_array_zipfrom);
+        state->classprimarray->defNativeMethod("toDict", nn_memberfunc_array_todict);
+        state->classprimarray->defNativeMethod("each", nn_memberfunc_array_each);
+        state->classprimarray->defNativeMethod("map", nn_memberfunc_array_map);
+        state->classprimarray->defNativeMethod("filter", nn_memberfunc_array_filter);
+        state->classprimarray->defNativeMethod("some", nn_memberfunc_array_some);
+        state->classprimarray->defNativeMethod("every", nn_memberfunc_array_every);
+        state->classprimarray->defNativeMethod("reduce", nn_memberfunc_array_reduce);
+        state->classprimarray->defNativeMethod("@iter", nn_memberfunc_array_iter);
+        state->classprimarray->defNativeMethod("@itern", nn_memberfunc_array_itern);
     }
     {
         #if 0
-        nn_class_defnativeconstructor(state, state->classprimdict, nn_memberfunc_dict_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimdict, "keys", nn_memberfunc_dict_keys);
+        state->classprimdict->defNativeConstructor(nn_memberfunc_dict_constructor);
+        state->classprimdict->defStaticNativeMethod("keys", nn_memberfunc_dict_keys);
         #endif
-        nn_class_defnativemethod(state, state->classprimdict, "keys", nn_memberfunc_dict_keys);
-        nn_class_defnativemethod(state, state->classprimdict, "size", nn_memberfunc_dict_length);
-        nn_class_defnativemethod(state, state->classprimdict, "add", nn_memberfunc_dict_add);
-        nn_class_defnativemethod(state, state->classprimdict, "set", nn_memberfunc_dict_set);
-        nn_class_defnativemethod(state, state->classprimdict, "clear", nn_memberfunc_dict_clear);
-        nn_class_defnativemethod(state, state->classprimdict, "clone", nn_memberfunc_dict_clone);
-        nn_class_defnativemethod(state, state->classprimdict, "compact", nn_memberfunc_dict_compact);
-        nn_class_defnativemethod(state, state->classprimdict, "contains", nn_memberfunc_dict_contains);
-        nn_class_defnativemethod(state, state->classprimdict, "extend", nn_memberfunc_dict_extend);
-        nn_class_defnativemethod(state, state->classprimdict, "get", nn_memberfunc_dict_get);
-        nn_class_defnativemethod(state, state->classprimdict, "values", nn_memberfunc_dict_values);
-        nn_class_defnativemethod(state, state->classprimdict, "remove", nn_memberfunc_dict_remove);
-        nn_class_defnativemethod(state, state->classprimdict, "isEmpty", nn_memberfunc_dict_isempty);
-        nn_class_defnativemethod(state, state->classprimdict, "findKey", nn_memberfunc_dict_findkey);
-        nn_class_defnativemethod(state, state->classprimdict, "toList", nn_memberfunc_dict_tolist);
-        nn_class_defnativemethod(state, state->classprimdict, "each", nn_memberfunc_dict_each);
-        nn_class_defnativemethod(state, state->classprimdict, "filter", nn_memberfunc_dict_filter);
-        nn_class_defnativemethod(state, state->classprimdict, "some", nn_memberfunc_dict_some);
-        nn_class_defnativemethod(state, state->classprimdict, "every", nn_memberfunc_dict_every);
-        nn_class_defnativemethod(state, state->classprimdict, "reduce", nn_memberfunc_dict_reduce);
-        nn_class_defnativemethod(state, state->classprimdict, "@iter", nn_memberfunc_dict_iter);
-        nn_class_defnativemethod(state, state->classprimdict, "@itern", nn_memberfunc_dict_itern);
+        state->classprimdict->defNativeMethod("keys", nn_memberfunc_dict_keys);
+        state->classprimdict->defNativeMethod("size", nn_memberfunc_dict_length);
+        state->classprimdict->defNativeMethod("add", nn_memberfunc_dict_add);
+        state->classprimdict->defNativeMethod("set", nn_memberfunc_dict_set);
+        state->classprimdict->defNativeMethod("clear", nn_memberfunc_dict_clear);
+        state->classprimdict->defNativeMethod("clone", nn_memberfunc_dict_clone);
+        state->classprimdict->defNativeMethod("compact", nn_memberfunc_dict_compact);
+        state->classprimdict->defNativeMethod("contains", nn_memberfunc_dict_contains);
+        state->classprimdict->defNativeMethod("extend", nn_memberfunc_dict_extend);
+        state->classprimdict->defNativeMethod("get", nn_memberfunc_dict_get);
+        state->classprimdict->defNativeMethod("values", nn_memberfunc_dict_values);
+        state->classprimdict->defNativeMethod("remove", nn_memberfunc_dict_remove);
+        state->classprimdict->defNativeMethod("isEmpty", nn_memberfunc_dict_isempty);
+        state->classprimdict->defNativeMethod("findKey", nn_memberfunc_dict_findkey);
+        state->classprimdict->defNativeMethod("toList", nn_memberfunc_dict_tolist);
+        state->classprimdict->defNativeMethod("each", nn_memberfunc_dict_each);
+        state->classprimdict->defNativeMethod("filter", nn_memberfunc_dict_filter);
+        state->classprimdict->defNativeMethod("some", nn_memberfunc_dict_some);
+        state->classprimdict->defNativeMethod("every", nn_memberfunc_dict_every);
+        state->classprimdict->defNativeMethod("reduce", nn_memberfunc_dict_reduce);
+        state->classprimdict->defNativeMethod("@iter", nn_memberfunc_dict_iter);
+        state->classprimdict->defNativeMethod("@itern", nn_memberfunc_dict_itern);
     }
     {
-        nn_class_defnativeconstructor(state, state->classprimfile, nn_memberfunc_file_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimfile, "exists", nn_memberfunc_file_exists);
-        nn_class_defnativemethod(state, state->classprimfile, "close", nn_memberfunc_file_close);
-        nn_class_defnativemethod(state, state->classprimfile, "open", nn_memberfunc_file_open);
-        nn_class_defnativemethod(state, state->classprimfile, "read", nn_memberfunc_file_read);
-        nn_class_defnativemethod(state, state->classprimfile, "get", nn_memberfunc_file_get);
-        nn_class_defnativemethod(state, state->classprimfile, "gets", nn_memberfunc_file_gets);
-        nn_class_defnativemethod(state, state->classprimfile, "write", nn_memberfunc_file_write);
-        nn_class_defnativemethod(state, state->classprimfile, "puts", nn_memberfunc_file_puts);
-        nn_class_defnativemethod(state, state->classprimfile, "printf", nn_memberfunc_file_printf);
-        nn_class_defnativemethod(state, state->classprimfile, "number", nn_memberfunc_file_number);
-        nn_class_defnativemethod(state, state->classprimfile, "isTTY", nn_memberfunc_file_istty);
-        nn_class_defnativemethod(state, state->classprimfile, "isOpen", nn_memberfunc_file_isopen);
-        nn_class_defnativemethod(state, state->classprimfile, "isClosed", nn_memberfunc_file_isclosed);
-        nn_class_defnativemethod(state, state->classprimfile, "flush", nn_memberfunc_file_flush);
-        nn_class_defnativemethod(state, state->classprimfile, "stats", nn_memberfunc_file_stats);
-        nn_class_defnativemethod(state, state->classprimfile, "path", nn_memberfunc_file_path);
-        nn_class_defnativemethod(state, state->classprimfile, "seek", nn_memberfunc_file_seek);
-        nn_class_defnativemethod(state, state->classprimfile, "tell", nn_memberfunc_file_tell);
-        nn_class_defnativemethod(state, state->classprimfile, "mode", nn_memberfunc_file_mode);
-        nn_class_defnativemethod(state, state->classprimfile, "name", nn_memberfunc_file_name);
+        state->classprimfile->defNativeConstructor(nn_memberfunc_file_constructor);
+        state->classprimfile->defStaticNativeMethod("exists", nn_memberfunc_file_exists);
+        state->classprimfile->defNativeMethod("close", nn_memberfunc_file_close);
+        state->classprimfile->defNativeMethod("open", nn_memberfunc_file_open);
+        state->classprimfile->defNativeMethod("read", nn_memberfunc_file_read);
+        state->classprimfile->defNativeMethod("get", nn_memberfunc_file_get);
+        state->classprimfile->defNativeMethod("gets", nn_memberfunc_file_gets);
+        state->classprimfile->defNativeMethod("write", nn_memberfunc_file_write);
+        state->classprimfile->defNativeMethod("puts", nn_memberfunc_file_puts);
+        state->classprimfile->defNativeMethod("printf", nn_memberfunc_file_printf);
+        state->classprimfile->defNativeMethod("number", nn_memberfunc_file_number);
+        state->classprimfile->defNativeMethod("isTTY", nn_memberfunc_file_istty);
+        state->classprimfile->defNativeMethod("isOpen", nn_memberfunc_file_isopen);
+        state->classprimfile->defNativeMethod("isClosed", nn_memberfunc_file_isclosed);
+        state->classprimfile->defNativeMethod("flush", nn_memberfunc_file_flush);
+        state->classprimfile->defNativeMethod("stats", nn_memberfunc_file_stats);
+        state->classprimfile->defNativeMethod("path", nn_memberfunc_file_path);
+        state->classprimfile->defNativeMethod("seek", nn_memberfunc_file_seek);
+        state->classprimfile->defNativeMethod("tell", nn_memberfunc_file_tell);
+        state->classprimfile->defNativeMethod("mode", nn_memberfunc_file_mode);
+        state->classprimfile->defNativeMethod("name", nn_memberfunc_file_name);
     }
     {
-        nn_class_defnativeconstructor(state, state->classprimrange, nn_memberfunc_range_constructor);
-        nn_class_defnativemethod(state, state->classprimrange, "lower", nn_memberfunc_range_lower);
-        nn_class_defnativemethod(state, state->classprimrange, "upper", nn_memberfunc_range_upper);
-        nn_class_defnativemethod(state, state->classprimrange, "range", nn_memberfunc_range_range);
-        nn_class_defnativemethod(state, state->classprimrange, "loop", nn_memberfunc_range_loop);
-        nn_class_defnativemethod(state, state->classprimrange, "expand", nn_memberfunc_range_expand);
-        nn_class_defnativemethod(state, state->classprimrange, "toArray", nn_memberfunc_range_expand);
-        nn_class_defnativemethod(state, state->classprimrange, "@iter", nn_memberfunc_range_iter);
-        nn_class_defnativemethod(state, state->classprimrange, "@itern", nn_memberfunc_range_itern);
+        state->classprimrange->defNativeConstructor(nn_memberfunc_range_constructor);
+        state->classprimrange->defNativeMethod("lower", nn_memberfunc_range_lower);
+        state->classprimrange->defNativeMethod("upper", nn_memberfunc_range_upper);
+        state->classprimrange->defNativeMethod("range", nn_memberfunc_range_range);
+        state->classprimrange->defNativeMethod("loop", nn_memberfunc_range_loop);
+        state->classprimrange->defNativeMethod("expand", nn_memberfunc_range_expand);
+        state->classprimrange->defNativeMethod("toArray", nn_memberfunc_range_expand);
+        state->classprimrange->defNativeMethod("@iter", nn_memberfunc_range_iter);
+        state->classprimrange->defNativeMethod("@itern", nn_memberfunc_range_itern);
     }
 }
 
@@ -13713,10 +13814,11 @@ neon::Value nn_nativefn_int(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_nativefn_chr(neon::State* state, neon::Arguments* args)
 {
+    size_t len;
     char* string;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    string = nn_util_utf8encode(state, (int)args->argv[0].asNumber());
+    string = neon::Util::utf8Encode(state, (int)args->argv[0].asNumber(), &len);
     return neon::Value::fromObject(neon::String::take(state, string));
 }
 
@@ -14058,11 +14160,11 @@ neon::ClassObject* nn_exceptions_makeclass(neon::State* state, neon::Module* mod
     state->stackPop();
     /* set class constructor */
     state->stackPush(neon::Value::fromObject(closure));
-    klass->methods->set(neon::Value::fromObject(classname), neon::Value::fromObject(closure));
-    klass->initializer = neon::Value::fromObject(closure);
+    klass->m_methods->set(neon::Value::fromObject(classname), neon::Value::fromObject(closure));
+    klass->m_constructor = neon::Value::fromObject(closure);
     /* set class properties */
-    nn_class_defproperty(klass, "message", neon::Value::makeNull());
-    nn_class_defproperty(klass, "stacktrace", neon::Value::makeNull());
+    klass->defProperty("message", neon::Value::makeNull());
+    klass->defProperty("stacktrace", neon::Value::makeNull());
     state->globals->set(neon::Value::fromObject(classname), neon::Value::fromObject(klass));
     /* for class */
     state->stackPop();
@@ -14111,7 +14213,7 @@ neon::ClassObject* nn_util_makeclass(neon::State* state, const char* name, neon:
     neon::String* os;
     os = neon::String::copy(state, name);
     cl = neon::ClassObject::make(state, os);
-    cl->superclass = parent;
+    cl->m_superclass = parent;
     state->globals->set(neon::Value::fromObject(os), neon::Value::fromObject(cl));
     return cl;
 }
@@ -14401,17 +14503,17 @@ bool nn_vm_callvaluewithobject(neon::State* state, neon::Value callable, neon::V
                     klass = nn_value_asclass(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
-                    if(!klass->initializer.isEmpty())
+                    if(!klass->m_constructor.isEmpty())
                     {
-                        return nn_vm_callvaluewithobject(state, klass->initializer, thisval, argcount);
+                        return nn_vm_callvaluewithobject(state, klass->m_constructor, thisval, argcount);
                     }
-                    else if(klass->superclass != nullptr && !klass->superclass->initializer.isEmpty())
+                    else if(klass->m_superclass != nullptr && !klass->m_superclass->m_constructor.isEmpty())
                     {
-                        return nn_vm_callvaluewithobject(state, klass->superclass->initializer, thisval, argcount);
+                        return nn_vm_callvaluewithobject(state, klass->m_superclass->m_constructor, thisval, argcount);
                     }
                     else if(argcount != 0)
                     {
-                        return nn_exceptions_throwException(state, "%s constructor expects 0 arguments, %d given", klass->name->data(), argcount);
+                        return nn_exceptions_throwException(state, "%s constructor expects 0 arguments, %d given", klass->m_classname->data(), argcount);
                     }
                     return true;
                 }
@@ -14596,16 +14698,16 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodfromclass(neon::State* state
 {
     neon::Property* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
-    field = klass->methods->getFieldByObjStr(name);
+    field = klass->m_methods->getFieldByObjStr(name);
     if(field != nullptr)
     {
         if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_PRIVATE)
         {
-            return nn_exceptions_throwException(state, "cannot call private method '%s' from instance of %s", name->data(), klass->name->data());
+            return nn_exceptions_throwException(state, "cannot call private method '%s' from instance of %s", name->data(), klass->m_classname->data());
         }
         return nn_vm_callvaluewithobject(state, field->value, neon::Value::fromObject(klass), argcount);
     }
-    return nn_exceptions_throwException(state, "undefined method '%s' in %s", name->data(), klass->name->data());
+    return nn_exceptions_throwException(state, "undefined method '%s' in %s", name->data(), klass->m_classname->data());
 }
 
 static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neon::String* name, int argcount)
@@ -14619,7 +14721,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neo
     if(receiver.isInstance())
     {
         instance = receiver.asInstance();
-        field = instance->klass->methods->getFieldByObjStr(name);
+        field = instance->klass->m_methods->getFieldByObjStr(name);
         if(field != nullptr)
         {
             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
@@ -14639,7 +14741,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neo
     }
     else if(receiver.isClass())
     {
-        field = nn_value_asclass(receiver)->methods->getFieldByObjStr(name);
+        field = nn_value_asclass(receiver)->m_methods->getFieldByObjStr(name);
         if(field != nullptr)
         {
             if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_STATIC)
@@ -14687,29 +14789,29 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
                     klass = nn_value_asclass(receiver);
-                    field = klass->methods->getFieldByObjStr(name);
+                    field = klass->m_methods->getFieldByObjStr(name);
                     if(field != nullptr)
                     {
                         if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_PRIVATE)
                         {
-                            return nn_exceptions_throwException(state, "cannot call private method %s() on %s", name->data(), klass->name->data());
+                            return nn_exceptions_throwException(state, "cannot call private method %s() on %s", name->data(), klass->m_classname->data());
                         }
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
                     else
                     {
-                        field = nn_class_getstaticproperty(klass, name);
+                        field = klass->getStaticProperty(name);
                         if(field != nullptr)
                         {
                             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                         }
-                        field = nn_class_getstaticmethodfield(klass, name);
+                        field = klass->getStaticMethodField(name);
                         if(field != nullptr)
                         {
                             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                         }
                     }
-                    return nn_exceptions_throwException(state, "unknown method %s() in class %s", name->data(), klass->name->data());
+                    return nn_exceptions_throwException(state, "unknown method %s() in class %s", name->data(), klass->m_classname->data());
                 }
             case neon::Value::OBJTYPE_INSTANCE:
                 {
@@ -14733,7 +14835,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
             case neon::Value::OBJTYPE_DICT:
                 {
                     NEON_APIDEBUG(state, "receiver is a dictionary");
-                    field = nn_class_getmethodfield(state->classprimdict, name);
+                    field = state->classprimdict->getMethodField(name);
                     if(field != nullptr)
                     {
                         return nn_vm_callnative(state, nn_value_asfuncnative(field->value), receiver, argcount);
@@ -14764,12 +14866,12 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
         /* @TODO: have methods for non objects as well. */
         return nn_exceptions_throwException(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->data());
     }
-    field = nn_class_getmethodfield(klass, name);
+    field = klass->getMethodField(name);
     if(field != nullptr)
     {
         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
     }
-    return nn_exceptions_throwException(state, "'%s' has no method %s()", klass->name->data(), name->data());
+    return nn_exceptions_throwException(state, "'%s' has no method %s()", klass->m_classname->data(), name->data());
 }
 
 static NEON_ALWAYSINLINE bool nn_vmutil_bindmethod(neon::State* state, neon::ClassObject* klass, neon::String* name)
@@ -14777,7 +14879,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_bindmethod(neon::State* state, neon::Cla
     neon::Value val;
     neon::Property* field;
     neon::FuncBound* bound;
-    field = klass->methods->getFieldByObjStr(name);
+    field = klass->m_methods->getFieldByObjStr(name);
     if(field != nullptr)
     {
         if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_PRIVATE)
@@ -14840,10 +14942,10 @@ static NEON_ALWAYSINLINE void nn_vmutil_definemethod(neon::State* state, neon::S
     neon::ClassObject* klass;
     method = state->stackPeek(0);
     klass = nn_value_asclass(state->stackPeek(1));
-    klass->methods->set(neon::Value::fromObject(name), method);
+    klass->m_methods->set(neon::Value::fromObject(name), method);
     if(nn_value_getmethodtype(method) == neon::FuncCommon::FUNCTYPE_INITIALIZER)
     {
-        klass->initializer = method;
+        klass->m_constructor = method;
     }
     state->stackPop();
 }
@@ -14856,11 +14958,11 @@ static NEON_ALWAYSINLINE void nn_vmutil_defineproperty(neon::State* state, neon:
     klass = nn_value_asclass(state->stackPeek(1));
     if(!isstatic)
     {
-        nn_class_defproperty(klass, name->data(), property);
+        klass->defProperty(name->data(), property);
     }
     else
     {
-        nn_class_setstaticproperty(klass, name, property);
+        klass->setStaticProperty(name, property);
     }
     state->stackPop();
 }
@@ -14913,15 +15015,15 @@ bool nn_util_isinstanceof(neon::ClassObject* klass1, neon::ClassObject* expected
     const char* ename;
     while(klass1 != nullptr)
     {
-        elen = expected->name->length();
-        klen = klass1->name->length();
-        ename = expected->name->data();
-        kname = klass1->name->data();
+        elen = expected->m_classname->length();
+        klen = klass1->m_classname->length();
+        ename = expected->m_classname->data();
+        kname = klass1->m_classname->data();
         if(elen == klen && memcmp(kname, ename, klen) == 0)
         {
             return true;
         }
-        klass1 = klass1->superclass;
+        klass1 = klass1->m_superclass;
     }
     return false;
 }
@@ -15647,7 +15749,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_CLASS:
             {
-                field = nn_value_asclass(peeked)->methods->getFieldByObjStr(name);
+                field = nn_value_asclass(peeked)->m_methods->getFieldByObjStr(name);
                 if(field != nullptr)
                 {
                     if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_STATIC)
@@ -15655,7 +15757,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                         if(nn_util_methodisprivate(name))
                         {
                             nn_exceptions_throwException(state, "cannot call private property '%s' of class %s", name->data(),
-                                nn_value_asclass(peeked)->name->data());
+                                nn_value_asclass(peeked)->m_classname->data());
                             return nullptr;
                         }
                         return field;
@@ -15663,20 +15765,20 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                 }
                 else
                 {
-                    field = nn_class_getstaticproperty(nn_value_asclass(peeked), name);
+                    field = nn_value_asclass(peeked)->getStaticProperty(name);
                     if(field != nullptr)
                     {
                         if(nn_util_methodisprivate(name))
                         {
                             nn_exceptions_throwException(state, "cannot call private property '%s' of class %s", name->data(),
-                                nn_value_asclass(peeked)->name->data());
+                                nn_value_asclass(peeked)->m_classname->data());
                             return nullptr;
                         }
                         return field;
                     }
                 }
                 nn_exceptions_throwException(state, "class %s does not have a static property or method named '%s'",
-                    nn_value_asclass(peeked)->name->data(), name->data());
+                    nn_value_asclass(peeked)->m_classname->data(), name->data());
                 return nullptr;
             }
             break;
@@ -15689,14 +15791,14 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                 {
                     if(nn_util_methodisprivate(name))
                     {
-                        nn_exceptions_throwException(state, "cannot call private property '%s' from instance of %s", name->data(), instance->klass->name->data());
+                        nn_exceptions_throwException(state, "cannot call private property '%s' from instance of %s", name->data(), instance->klass->m_classname->data());
                         return nullptr;
                     }
                     return field;
                 }
                 if(nn_util_methodisprivate(name))
                 {
-                    nn_exceptions_throwException(state, "cannot bind private property '%s' to instance of %s", name->data(), instance->klass->name->data());
+                    nn_exceptions_throwException(state, "cannot bind private property '%s' to instance of %s", name->data(), instance->klass->m_classname->data());
                     return nullptr;
                 }
                 if(nn_vmutil_bindmethod(state, instance->klass, name))
@@ -15704,13 +15806,13 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                     return field;
                 }
                 nn_exceptions_throwException(state, "instance of class %s does not have a property or method named '%s'",
-                    peeked.asInstance()->klass->name->data(), name->data());
+                    peeked.asInstance()->klass->m_classname->data(), name->data());
                 return nullptr;
             }
             break;
         case neon::Value::OBJTYPE_STRING:
             {
-                field = nn_class_getpropertyfield(state->classprimstring, name);
+                field = state->classprimstring->getPropertyField(name);
                 if(field != nullptr)
                 {
                     return field;
@@ -15721,7 +15823,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_ARRAY:
             {
-                field = nn_class_getpropertyfield(state->classprimarray, name);
+                field = state->classprimarray->getPropertyField(name);
                 if(field != nullptr)
                 {
                     return field;
@@ -15732,7 +15834,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_RANGE:
             {
-                field = nn_class_getpropertyfield(state->classprimrange, name);
+                field = state->classprimrange->getPropertyField(name);
                 if(field != nullptr)
                 {
                     return field;
@@ -15746,7 +15848,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                 field = nn_value_asdict(peeked)->htab->getFieldByObjStr(name);
                 if(field == nullptr)
                 {
-                    field = nn_class_getpropertyfield(state->classprimdict, name);
+                    field = state->classprimdict->getPropertyField(name);
                 }
                 if(field != nullptr)
                 {
@@ -15758,7 +15860,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_FILE:
             {
-                field = nn_class_getpropertyfield(state->classprimfile, name);
+                field = state->classprimfile->getPropertyField(name);
                 if(field != nullptr)
                 {
                     return field;
@@ -15839,13 +15941,13 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
             return true;
         }
         nn_vmmac_tryraise(state, false, "instance of class %s does not have a property or method named '%s'",
-            peeked.asInstance()->klass->name->data(), name->data());
+            peeked.asInstance()->klass->m_classname->data(), name->data());
         return false;
     }
     else if(peeked.isClass())
     {
         klass = nn_value_asclass(peeked);
-        field = klass->methods->getFieldByObjStr(name);
+        field = klass->m_methods->getFieldByObjStr(name);
         if(field != nullptr)
         {
             if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_STATIC)
@@ -15858,7 +15960,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
         }
         else
         {
-            field = nn_class_getstaticproperty(klass, name);
+            field = klass->getStaticProperty(name);
             if(field != nullptr)
             {
                 /* pop the class... */
@@ -15867,7 +15969,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
                 return true;
             }
         }
-        nn_vmmac_tryraise(state, false, "class %s does not have a static property or method named '%s'", klass->name->data(), name->data());
+        nn_vmmac_tryraise(state, false, "class %s does not have a static property or method named '%s'", klass->m_classname->data(), name->data());
         return false;
     }
     else if(peeked.isModule())
@@ -15917,11 +16019,11 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
         if(vpeek.isCallable())
         {
             //fprintf(stderr, "setting '%s' as method\n", name->data());
-            nn_class_defmethod(state, klass, name->data(), vpeek);
+            klass->defMethod(name->data(), vpeek);
         }
         else
         {
-            nn_class_defproperty(klass, name->data(), vpeek);
+            klass->defProperty(name->data(), vpeek);
         }
         value = state->stackPop();
         /* removing the class object */
@@ -16914,7 +17016,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     }
                     superclass = nn_value_asclass(state->stackPeek(1));
                     subclass = nn_value_asclass(state->stackPeek(0));
-                    nn_class_inheritfrom(subclass, superclass);
+                    subclass->inheritFrom(superclass);
                     /* pop the subclass */
                     state->stackPop();
                 }
@@ -16925,9 +17027,9 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     neon::String* name;
                     name = nn_vmbits_readstring(state);
                     klass = nn_value_asclass(state->stackPeek(0));
-                    if(!nn_vmutil_bindmethod(state, klass->superclass, name))
+                    if(!nn_vmutil_bindmethod(state, klass->m_superclass, name))
                     {
-                        nn_vmmac_tryraise(state, neon::Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->name->data(), name->data());
+                        nn_vmmac_tryraise(state, neon::Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname->data(), name->data());
                     }
                 }
                 break;
