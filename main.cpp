@@ -204,6 +204,41 @@
         return NEON_ARGS_FAIL(chp, "invalid type %s() as argument %d in %s()", nn_value_typename((chp)->argv[index]), (index) + 1, (chp)->name); \
     }
 
+#if defined(_WIN32)
+    #include <fcntl.h>
+    #include <io.h>
+#endif
+
+
+#if defined(__STRICT_ANSI__)
+    #define va_copy(...)
+#endif
+
+#if defined(__GNUC__)
+    #define NEON_LIKELY(x) \
+        __builtin_expect(!!(x), 1)
+
+    #define NEON_UNLIKELY(x) \
+        __builtin_expect(!!(x), 0)
+#else
+    #define NEON_LIKELY(x) x
+    #define NEON_UNLIKELY(x) x
+#endif
+
+
+#define NEON_APIDEBUG(state, ...) \
+    if((NEON_UNLIKELY((state)->conf.enableapidebug))) \
+    { \
+        nn_state_apidebug(state, __FUNCTION__, __VA_ARGS__); \
+    }
+
+
+#define NEON_ASTDEBUG(state, ...) \
+    if((NEON_UNLIKELY((state)->conf.enableastdebug))) \
+    { \
+        nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
+    }
+
 
 namespace neon
 {
@@ -244,6 +279,7 @@ namespace neon
     struct /**/ScopeUpvalue;
     struct /**/Dictionary;
     struct /**/Array;
+    struct /**/FuncScript;
 
     typedef Value (*NativeFN)(State*, Arguments*);
     typedef void (*PtrFreeFN)(void*);
@@ -257,13 +293,6 @@ namespace neon
     {
         uint64_t bits;
         double num;
-    };
-
-    struct IOResult
-    {
-        bool success;
-        char* data;
-        size_t length;    
     };
 
     struct Color
@@ -295,7 +324,29 @@ namespace neon
                 #endif
             }
 
-            const char* color(Code tc)
+            NEON_ALWAYSINLINE Code codeFromChar(char c)
+            {
+                switch(c)
+                {
+                    case '0':
+                        return COLOR_RESET;
+                    case 'r':
+                        return COLOR_RED;
+                    case 'g':
+                        return COLOR_GREEN;
+                    case 'b':
+                        return COLOR_BLUE;
+                    case 'y':
+                        return COLOR_YELLOW;
+                    case 'm':
+                        return COLOR_MAGENTA;
+                    case 'c':
+                        return COLOR_CYAN;
+                }
+                return COLOR_RESET;
+            }
+
+            NEON_ALWAYSINLINE const char* color(Code tc)
             {
                 #if !defined(NEON_CFG_FORCEDISABLECOLOR)
 
@@ -324,10 +375,13 @@ namespace neon
                 #endif
                 return "";
             }
+
+            NEON_ALWAYSINLINE const char* color(char tc)
+            {
+                return color(codeFromChar(tc));
+            }
     };
 }
-
-
 
 
 // preproto
@@ -335,11 +389,19 @@ char *nn_util_strndup(neon::State *state, const char *src, size_t len);
 char *nn_util_strdup(neon::State *state, const char *src);
 char *nn_util_strtoupperinplace(char *str, size_t length);
 char *nn_util_strtolowerinplace(char *str, size_t length);
-
 uint32_t nn_util_hashstring(const char* key, int length);
+bool nn_util_fsfileexists(neon::State *state, const char *filepath);
+bool nn_util_fsfileisfile(neon::State *state, const char *filepath);
+bool nn_util_fsfileisdirectory(neon::State *state, const char *filepath);
+char *nn_util_fsgetbasename(neon::State *state, const char *path);
+
+char *nn_util_readfile(neon::State *state, const char *filename, size_t *dlen);
+neon::FuncScript *nn_astparser_compilesource(neon::State *state, neon::Module *module, const char *source, neon::Blob *blob, bool fromimport, bool keeplast);
+int nn_nestcall_prepare(neon::State *state, neon::Value callable, neon::Value mthobj, neon::Array *callarr);
+bool nn_nestcall_callfunction(neon::State *state, neon::Value callable, neon::Value thisval, neon::Array *args, neon::Value *dest);
+
 void nn_gcmem_markvalue(neon::State* state, neon::Value value);
 void nn_import_closemodule(void *dlw);
-void nn_blob_destroy(neon::State* state, neon::Blob* blob);
 void nn_printer_printvalue(neon::Printer *wr, neon::Value value, bool fixstring, bool invmethod);
 uint32_t nn_value_hashvalue(neon::Value value);
 bool nn_value_compare_actual(neon::State* state, neon::Value a, neon::Value b);
@@ -348,10 +410,18 @@ neon::Value nn_value_copyvalue(neon::State* state, neon::Value value);
 void nn_gcmem_destroylinkedobjects(neon::State *state);
 
 neon::ClassInstance *nn_exceptions_makeinstance(neon::State *state, neon::ClassObject *exklass, const char *srcfile, int srcline, neon::String *message);
-void nn_blob_init(neon::State *state, neon::Blob *blob);
 int nn_fileobject_close(neon::File *file);
 bool nn_fileobject_open(neon::File *file);
 
+static NEON_ALWAYSINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...);
+static NEON_ALWAYSINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...);
+
+
+/*
+* quite a number of types ***MUST NOT EVER BE DERIVED FROM***, to ensure
+* that they are correctly initialized.
+* Just declare them as an instance variable instead.
+*/
 
 namespace neon
 {
@@ -385,7 +455,96 @@ namespace neon
     };
 
 
-    struct Value
+    struct Instruction
+    {
+        public:
+            enum OpCode
+            {
+                OP_GLOBALDEFINE,
+                OP_GLOBALGET,
+                OP_GLOBALSET,
+                OP_LOCALGET,
+                OP_LOCALSET,
+                OP_FUNCARGSET,
+                OP_FUNCARGGET,
+                OP_UPVALUEGET,
+                OP_UPVALUESET,
+                OP_UPVALUECLOSE,
+                OP_PROPERTYGET,
+                OP_PROPERTYGETSELF,
+                OP_PROPERTYSET,
+                OP_JUMPIFFALSE,
+                OP_JUMPNOW,
+                OP_LOOP,
+                OP_EQUAL,
+                OP_PRIMGREATER,
+                OP_PRIMLESSTHAN,
+                OP_PUSHEMPTY,
+                OP_PUSHNULL,
+                OP_PUSHTRUE,
+                OP_PUSHFALSE,
+                OP_PRIMADD,
+                OP_PRIMSUBTRACT,
+                OP_PRIMMULTIPLY,
+                OP_PRIMDIVIDE,
+                OP_PRIMFLOORDIVIDE,
+                OP_PRIMMODULO,
+                OP_PRIMPOW,
+                OP_PRIMNEGATE,
+                OP_PRIMNOT,
+                OP_PRIMBITNOT,
+                OP_PRIMAND,
+                OP_PRIMOR,
+                OP_PRIMBITXOR,
+                OP_PRIMSHIFTLEFT,
+                OP_PRIMSHIFTRIGHT,
+                OP_PUSHONE,
+                /* 8-bit constant address (0 - 255) */
+                OP_PUSHCONSTANT,
+                OP_ECHO,
+                OP_POPONE,
+                OP_DUPONE,
+                OP_POPN,
+                OP_ASSERT,
+                OP_EXTHROW,
+                OP_MAKECLOSURE,
+                OP_CALLFUNCTION,
+                OP_CALLMETHOD,
+                OP_CLASSINVOKETHIS,
+                OP_RETURN,
+                OP_MAKECLASS,
+                OP_MAKEMETHOD,
+                OP_CLASSPROPERTYDEFINE,
+                OP_CLASSINHERIT,
+                OP_CLASSGETSUPER,
+                OP_CLASSINVOKESUPER,
+                OP_CLASSINVOKESUPERSELF,
+                OP_MAKERANGE,
+                OP_MAKEARRAY,
+                OP_MAKEDICT,
+                OP_INDEXGET,
+                OP_INDEXGETRANGED,
+                OP_INDEXSET,
+                OP_IMPORTIMPORT,
+                OP_EXTRY,
+                OP_EXPOPTRY,
+                OP_EXPUBLISHTRY,
+                OP_STRINGIFY,
+                OP_SWITCH,
+                OP_TYPEOF,
+                OP_BREAK_PL,
+            };
+
+        public:
+            /* is this instruction an opcode? */
+            bool isop;
+            /* opcode or value */
+            uint8_t code;
+            /* line corresponding to where this instruction was emitted */
+            int srcline;
+    };
+
+    struct Value final
     {
         public:
             enum ValType
@@ -618,111 +777,14 @@ namespace neon
                 return ((ClassInstance*)this->asObject());
             }
 
-    };
-
-    struct Instruction
-    {
-        public:
-            enum OpCode
+            NEON_ALWAYSINLINE Module* asModule()
             {
-                OP_GLOBALDEFINE,
-                OP_GLOBALGET,
-                OP_GLOBALSET,
-                OP_LOCALGET,
-                OP_LOCALSET,
-                OP_FUNCARGSET,
-                OP_FUNCARGGET,
-                OP_UPVALUEGET,
-                OP_UPVALUESET,
-                OP_UPVALUECLOSE,
-                OP_PROPERTYGET,
-                OP_PROPERTYGETSELF,
-                OP_PROPERTYSET,
-                OP_JUMPIFFALSE,
-                OP_JUMPNOW,
-                OP_LOOP,
-                OP_EQUAL,
-                OP_PRIMGREATER,
-                OP_PRIMLESSTHAN,
-                OP_PUSHEMPTY,
-                OP_PUSHNULL,
-                OP_PUSHTRUE,
-                OP_PUSHFALSE,
-                OP_PRIMADD,
-                OP_PRIMSUBTRACT,
-                OP_PRIMMULTIPLY,
-                OP_PRIMDIVIDE,
-                OP_PRIMFLOORDIVIDE,
-                OP_PRIMMODULO,
-                OP_PRIMPOW,
-                OP_PRIMNEGATE,
-                OP_PRIMNOT,
-                OP_PRIMBITNOT,
-                OP_PRIMAND,
-                OP_PRIMOR,
-                OP_PRIMBITXOR,
-                OP_PRIMSHIFTLEFT,
-                OP_PRIMSHIFTRIGHT,
-                OP_PUSHONE,
-                /* 8-bit constant address (0 - 255) */
-                OP_PUSHCONSTANT,
-                OP_ECHO,
-                OP_POPONE,
-                OP_DUPONE,
-                OP_POPN,
-                OP_ASSERT,
-                OP_EXTHROW,
-                OP_MAKECLOSURE,
-                OP_CALLFUNCTION,
-                OP_CALLMETHOD,
-                OP_CLASSINVOKETHIS,
-                OP_RETURN,
-                OP_MAKECLASS,
-                OP_MAKEMETHOD,
-                OP_CLASSPROPERTYDEFINE,
-                OP_CLASSINHERIT,
-                OP_CLASSGETSUPER,
-                OP_CLASSINVOKESUPER,
-                OP_CLASSINVOKESUPERSELF,
-                OP_MAKERANGE,
-                OP_MAKEARRAY,
-                OP_MAKEDICT,
-                OP_INDEXGET,
-                OP_INDEXGETRANGED,
-                OP_INDEXSET,
-                OP_IMPORTIMPORT,
-                OP_EXTRY,
-                OP_EXPOPTRY,
-                OP_EXPUBLISHTRY,
-                OP_STRINGIFY,
-                OP_SWITCH,
-                OP_TYPEOF,
-                OP_BREAK_PL,
-            };
+                return ((neon::Module*)this->asObject());
+            }
 
-        public:
-            /* is this instruction an opcode? */
-            bool isop;
-            /* opcode or value */
-            uint8_t code;
-            /* line corresponding to where this instruction was emitted */
-            int srcline;
     };
 
-    struct Blob
-    {
-        public:
-            int count;
-            int capacity;
-            Instruction* instrucs;
-            ValArray* constants;
-            ValArray* argdefvals;
-
-        public:
-    };
-
-
-    struct State
+    struct State final
     {
         public:
             struct ExceptionFrame
@@ -1107,21 +1169,8 @@ namespace neon
                 (void)buf;
                 (void)plain;
                 size = sizeof(SubObjT);
-                #if 1
-                    buf = (Object*)State::GC::allocate(state, size+sizeof(Object), 1);
-                    plain = new(buf) SubObjT;
-                #else
-                    #if 0
-                        plain = new Object;
-                    #else
-                        #if 1
-                            plain = new SubObjT;
-                        #else
-                            buf = static_cast<SubObjT*>(State::GC::allocate(state, size+sizeof(Object), 1));
-                            plain = static_cast<Object*>(buf); 
-                        #endif
-                    #endif
-                #endif
+                buf = (Object*)State::GC::allocate(state, size+sizeof(Object), 1);
+                plain = new(buf) SubObjT;
                 plain->m_objtype = type;
                 plain->m_mark = !state->markvalue;
                 plain->m_isstale = false;
@@ -1167,12 +1216,9 @@ namespace neon
             }
     };
 
-    NEON_ALWAYSINLINE bool Value::isObjType(Value::ObjType t) const
-    {
-        return this->isObject() && this->asObject()->m_objtype == t;
-    }
 
-    struct ValArray
+
+    struct ValArray final
     {
         public:
             State* m_pvm;
@@ -1282,12 +1328,6 @@ namespace neon
             }
     };
 
-    struct PropGetSet
-    {
-        Value getter;
-        Value setter;
-    };
-
     struct Property
     {
         public:
@@ -1302,12 +1342,17 @@ namespace neon
                 PROPTYPE_FUNCTION,
             };
 
+            struct GetSetter
+            {
+                Value getter;
+                Value setter;
+            };
 
         public:
             Type type;
             Value value;
             bool havegetset;
-            PropGetSet getset;
+            GetSetter getset;
 
         public:
             void init(Value val, Type t)
@@ -1337,7 +1382,7 @@ namespace neon
             }
     };
 
-    struct HashTable
+    struct HashTable final
     {
         public:
             struct Entry
@@ -1689,19 +1734,156 @@ namespace neon
 
     };
 
-    struct String: public Object
+
+    struct Blob
     {
         public:
-            static void putInterned(State* state, String* rs)
+            State* pvm;
+            int count;
+            int capacity;
+            Instruction* instrucs;
+            ValArray* constants;
+            ValArray* argdefvals;
+
+        public:
+            Blob(State* state)
             {
-                state->stackPush(Value::fromObject(rs));
-                state->strings->set(Value::fromObject(rs), Value::makeNull());
-                state->stackPop();
+                this->pvm = state;
+                this->count = 0;
+                this->capacity = 0;
+                this->instrucs = nullptr;
+                this->constants = new ValArray(state);
+                this->argdefvals = new ValArray(state);
             }
 
-            static String* findInterned(State* state, const char* chars, size_t length, uint32_t hash)
+            ~Blob()
             {
-                return state->strings->findString(chars, length, hash);
+                if(this->instrucs != nullptr)
+                {
+                    nn_gcmem_freearray(pvm, sizeof(Instruction), this->instrucs, this->capacity);
+                }
+                delete this->constants;
+                delete this->argdefvals;
+            }
+
+
+            void push(Instruction ins)
+            {
+                int oldcapacity;
+                if(this->capacity < this->count + 1)
+                {
+                    oldcapacity = this->capacity;
+                    this->capacity = GROW_CAPACITY(oldcapacity);
+                    this->instrucs = (Instruction*)nn_gcmem_growarray(pvm, sizeof(Instruction), this->instrucs, oldcapacity, this->capacity);
+                }
+                this->instrucs[this->count] = ins;
+                this->count++;
+            }
+
+            int pushConst(Value value)
+            {
+                this->constants->push(value);
+                return this->constants->m_count - 1;
+            }
+
+
+            int pushArgDefault(Value value)
+            {
+                this->argdefvals->push(value);
+                return this->argdefvals->m_count - 1;
+            }
+    };
+
+
+    NEON_ALWAYSINLINE bool Value::isObjType(Value::ObjType t) const
+    {
+        return this->isObject() && this->asObject()->m_objtype == t;
+    }
+
+    struct String final: public Object
+    {
+        public:
+            static String* numToBinString(State* state, long n)
+            {
+                int i;
+                int rem;
+                int count;
+                int length;
+                long j;
+                /* assume maximum of 1024 bits */
+                char str[1024];
+                char newstr[1027];
+                count = 0;
+                j = n;
+                if(j == 0)
+                {
+                    str[count++] = '0';
+                }
+                while(j != 0)
+                {
+                    rem = abs((int)(j % 2));
+                    j /= 2;
+                    if(rem == 1)
+                    {
+                        str[count] = '1';
+                    }
+                    else
+                    {
+                        str[count] = '0';
+                    }
+                    count++;
+                }
+                /* assume maximum of 1024 bits + 0b (indicator) + sign (-). */
+                length = 0;
+                if(n < 0)
+                {
+                    newstr[length++] = '-';
+                }
+                newstr[length++] = '0';
+                newstr[length++] = 'b';
+                for(i = count - 1; i >= 0; i--)
+                {
+                    newstr[length++] = str[i];
+                }
+                newstr[length++] = 0;
+                return String::copy(state, newstr, length);
+                /*
+                //  // To store the binary number
+                //  long long number = 0;
+                //  int cnt = 0;
+                //  while (n != 0) {
+                //    long long rem = n % 2;
+                //    long long c = (long long) pow(10, cnt);
+                //    number += rem * c;
+                //    n /= 2;
+                //
+                //    // Count used to store exponent value
+                //    cnt++;
+                //  }
+                //
+                //  char str[67]; // assume maximum of 64 bits + 2 binary indicators (0b)
+                //  int length = sprintf(str, "0b%lld", number);
+                //
+                //  return String::copy(state, str, length);
+                */
+            }
+
+            static String* numToOctString(State* state, long long n, bool numeric)
+            {
+                int length;
+                /* assume maximum of 64 bits + 2 octal indicators (0c) */
+                char str[66];
+                length = sprintf(str, numeric ? "0c%llo" : "%llo", n);
+                return String::copy(state, str, length);
+            }
+
+            static String* numToHexString(State* state, long long n, bool numeric)
+            {
+                int length;
+                /* assume maximum of 64 bits + 2 hex indicators (0x) */
+                char str[66];
+                length = sprintf(str, numeric ? "0x%llx" : "%llx", n);
+                return String::copy(state, str, length);
             }
 
             static String* makeFromStrbuf(State* state, StringBuffer* sbuf, uint32_t hash)
@@ -1710,17 +1892,8 @@ namespace neon
                 rs = (String*)Object::make<String>(state, Value::OBJTYPE_STRING);
                 rs->m_sbuf = sbuf;
                 rs->m_hash = hash;
-                putInterned(state, rs);
+                selfCachePut(state, rs);
                 return rs;
-            }
-
-            static String* allocString(State* state, const char* estr, size_t elen, uint32_t hash, bool istaking)
-            {
-                StringBuffer* sbuf;
-                (void)istaking;
-                sbuf = new StringBuffer(elen);
-                sbuf->append(estr, elen);
-                return makeFromStrbuf(state, sbuf, hash);
             }
 
             static String* take(State* state, char* chars, int length)
@@ -1728,10 +1901,10 @@ namespace neon
                 uint32_t hash;
                 String* rs;
                 hash = nn_util_hashstring(chars, length);
-                rs = findInterned(state, chars, length, hash);
+                rs = selfCacheFind(state, chars, length, hash);
                 if(rs == nullptr)
                 {
-                    rs = allocString(state, chars, length, hash, true);
+                    rs = makeFromChars(state, chars, length, hash, true);
                 }
                 nn_gcmem_freearray(state, sizeof(char), chars, (size_t)length + 1);
                 return rs;
@@ -1742,12 +1915,12 @@ namespace neon
                 uint32_t hash;
                 String* rs;
                 hash = nn_util_hashstring(chars, length);
-                rs = findInterned(state, chars, length, hash);
+                rs = selfCacheFind(state, chars, length, hash);
                 if(rs != nullptr)
                 {
                     return rs;
                 }
-                rs = allocString(state, chars, length, hash, false);
+                rs = makeFromChars(state, chars, length, hash, false);
                 return rs;
             }
 
@@ -1781,6 +1954,27 @@ namespace neon
                 return str;
             }
 
+        private:
+            static String* makeFromChars(State* state, const char* estr, size_t elen, uint32_t hash, bool istaking)
+            {
+                StringBuffer* sbuf;
+                (void)istaking;
+                sbuf = new StringBuffer(elen);
+                sbuf->append(estr, elen);
+                return makeFromStrbuf(state, sbuf, hash);
+            }
+
+            static void selfCachePut(State* state, String* rs)
+            {
+                state->stackPush(Value::fromObject(rs));
+                state->strings->set(Value::fromObject(rs), Value::makeNull());
+                state->stackPop();
+            }
+
+            static String* selfCacheFind(State* state, const char* chars, size_t length, uint32_t hash)
+            {
+                return state->strings->findString(chars, length, hash);
+            }
 
         public:
             uint32_t m_hash;
@@ -1859,7 +2053,7 @@ namespace neon
             }
     };
 
-    struct ScopeUpvalue: public Object
+    struct ScopeUpvalue final: public Object
     {
         public:
             static ScopeUpvalue* make(State* state, Value* slot, int stackpos)
@@ -1889,298 +2083,8 @@ namespace neon
             }
     };
 
-    struct Module: public Object
-    {
-        public:
-            bool imported;
-            HashTable* deftable;
-            String* name;
-            String* physicalpath;
-            void* preloader;
-            void* unloader;
-            void* handle;
 
-        public:
-            //Module() = delete;
-            //~Module() = delete;
-
-            bool destroyThisObject()
-            {
-                delete this->deftable;
-                /*
-                free(this->name);
-                free(this->physicalpath);
-                */
-                if(this->unloader != nullptr && this->imported)
-                {
-                    ((ModLoaderFN)this->unloader)(m_pvm);
-                }
-                if(this->handle != nullptr)
-                {
-                    nn_import_closemodule(this->handle);
-                }
-                return true;
-            }
-    };
-
-    struct FuncCommon: public Object
-    {
-        public:
-            enum Type
-            {
-                FUNCTYPE_ANONYMOUS,
-                FUNCTYPE_FUNCTION,
-                FUNCTYPE_METHOD,
-                FUNCTYPE_INITIALIZER,
-                FUNCTYPE_PRIVATE,
-                FUNCTYPE_STATIC,
-                FUNCTYPE_SCRIPT,
-            };
-    };
-
-    struct FuncScript: public FuncCommon
-    {
-        public:
-            static FuncScript* make(State* state, Module* module, FuncCommon::Type type)
-            {
-                FuncScript* function;
-                function = (FuncScript*)Object::make<FuncScript>(state, Value::OBJTYPE_FUNCSCRIPT);
-                function->arity = 0;
-                function->upvalcount = 0;
-                function->isvariadic = false;
-                function->name = nullptr;
-                function->type = type;
-                function->module = module;
-                nn_blob_init(state, &function->blob);
-                return function;
-            }
-
-        public:
-            FuncCommon::Type type;
-            int arity;
-            int upvalcount;
-            bool isvariadic;
-            Blob blob;
-            String* name;
-            Module* module;
-
-        public:
-            bool destroyThisObject()
-            {
-                nn_blob_destroy(m_pvm, &this->blob);
-                return true;
-            }
-    };
-
-    struct FuncClosure: public FuncCommon
-    {
-        public:
-            static FuncClosure* make(State* state, FuncScript* function)
-            {
-                int i;
-                ScopeUpvalue** upvals;
-                FuncClosure* closure;
-                upvals = (ScopeUpvalue**)State::GC::allocate(state, sizeof(ScopeUpvalue*), function->upvalcount);
-                for(i = 0; i < function->upvalcount; i++)
-                {
-                    upvals[i] = nullptr;
-                }
-                closure = (FuncClosure*)Object::make<FuncClosure>(state, Value::OBJTYPE_FUNCCLOSURE);
-                closure->scriptfunc = function;
-                closure->upvalues = upvals;
-                closure->upvalcount = function->upvalcount;
-                return closure;
-            }
-
-
-
-        public:
-            int upvalcount;
-            FuncScript* scriptfunc;
-            ScopeUpvalue** upvalues;
-
-        public:
-            bool destroyThisObject()
-            {
-                nn_gcmem_freearray(m_pvm, sizeof(ScopeUpvalue*), this->upvalues, this->upvalcount);
-                /*
-                // there may be multiple closures that all reference the same function
-                // for this reason, we do not free functions when freeing closures
-                */
-                return true;
-            }
-    };
-
-    struct ClassObject: public Object
-    {
-        public:
-            static ClassObject* make(State* state, String* name)
-            {
-                ClassObject* klass;
-                klass = (ClassObject*)Object::make<ClassObject>(state, Value::OBJTYPE_CLASS);
-                klass->name = name;
-                klass->instprops = new HashTable(state);
-                klass->staticproperties = new HashTable(state);
-                klass->methods = new HashTable(state);
-                klass->staticmethods = new HashTable(state);
-                klass->initializer = Value::makeEmpty();
-                klass->superclass = nullptr;
-                return klass;
-            }
-
-
-        public:
-            /*
-            * the constructor, if any. defaults to <empty>, and if not <empty>, expects to be
-            * some callable value.
-            */
-            Value initializer;
-
-            /*
-            * when declaring a class, $instprops (their names, and initial values) are
-            * copied to ClassInstance::properties.
-            * so `$instprops["something"] = somefunction;` remains untouched *until* an
-            * instance of this class is created.
-            */
-            HashTable* instprops;
-
-            /*
-            * static, unchangeable(-ish) values. intended for values that are not unique, but shared
-            * across classes, without being copied.
-            */
-            HashTable* staticproperties;
-
-            /*
-            * method table; they are currently not unique when instantiated; instead, they are
-            * read from $methods as-is. this includes adding methods!
-            * TODO: introduce a new hashtable field for ClassInstance for unique methods, perhaps?
-            * right now, this method just prevents unnecessary copying.
-            */
-            HashTable* methods;
-            HashTable* staticmethods;
-            String* name;
-            ClassObject* superclass;
-
-        public:
-            //ClassObject() = delete;
-            //~ClassObject() = delete;
-
-            bool destroyThisObject()
-            {
-                delete this->methods;
-                delete this->staticmethods;
-                delete this->instprops;
-                delete this->staticproperties;
-                return true;
-            }
-
-    };
-
-    struct ClassInstance: public Object
-    {
-        public:
-            static ClassInstance* make(State* state, ClassObject* klass)
-            {
-                ClassInstance* instance;
-                instance = (ClassInstance*)Object::make<ClassInstance>(state, Value::OBJTYPE_INSTANCE);
-                /* gc fix */
-                state->stackPush(Value::fromObject(instance));
-                instance->active = true;
-                instance->klass = klass;
-                instance->properties = new HashTable(state);
-                if(klass->instprops->m_count > 0)
-                {
-                    HashTable::copy(klass->instprops, instance->properties);
-                }
-                /* gc fix */
-                state->stackPop();
-                return instance;
-            }
-
-        public:
-            /*
-            * whether this instance is still "active", i.e., not destroyed, deallocated, etc.
-            * in rare circumstances s
-            */
-            bool active;
-            HashTable* properties;
-            ClassObject* klass;
-
-        public:
-            //ClassInstance() = delete;
-            //~ClassInstance() = delete;
-
-            bool destroyThisObject()
-            {
-                delete this->properties;
-                this->properties = nullptr;
-                this->active = false;
-                return true;
-            }
-    };
-
-    struct FuncBound: public FuncCommon
-    {
-        public:
-            static FuncBound* make(State* state, Value receiver, FuncClosure* method)
-            {
-                FuncBound* bound;
-                bound = (FuncBound*)Object::make<FuncBound>(state, Value::OBJTYPE_FUNCBOUND);
-                bound->receiver = receiver;
-                bound->method = method;
-                return bound;
-            }
-
-        public:
-            Value receiver;
-            FuncClosure* method;
-
-        public:
-            //FuncBound() = delete;
-            //~FuncBound() = delete;
-
-            bool destroyThisObject()
-            {
-                return true;
-            }
-    };
-
-    struct FuncNative: public FuncCommon
-    {
-        public:
-            static FuncNative* make(State* state, NativeFN function, const char* name, void* uptr)
-            {
-                FuncNative* native;
-                native = (FuncNative*)Object::make<FuncNative>(state, Value::OBJTYPE_FUNCNATIVE);
-                native->natfunc = function;
-                native->name = name;
-                native->userptr = uptr;
-                native->type = FuncCommon::FUNCTYPE_FUNCTION;
-                return native;
-            }
-
-            static FuncNative* make(State* state, NativeFN function, const char* name)
-            {
-                return make(state, function, name, nullptr);
-            }
-
-        public:
-            FuncCommon::Type type;
-            const char* name;
-            NativeFN natfunc;
-            void* userptr;
-
-        public:
-            //FuncNative() = delete;
-            //~FuncNative() = delete;
-
-            bool destroyThisObject()
-            {
-                return true;
-            }
-    };
-
-    struct Array: public Object
+    struct Array final: public Object
     {
         public:
             static Array* make(State* state, size_t cnt, Value filler)
@@ -2249,7 +2153,7 @@ namespace neon
             }
     };
 
-    struct Range: public Object
+    struct Range final: public Object
     {
         public:
             static Range* make(State* state, int lower, int upper)
@@ -2285,7 +2189,7 @@ namespace neon
             }
     };
 
-    struct Dictionary: public Object
+    struct Dictionary final: public Object
     {
         public:
             static Dictionary* make(State* state)
@@ -2313,8 +2217,16 @@ namespace neon
             }
     };
 
-    struct File: public Object
+    struct File final: public Object
     {
+        public:
+            struct IOResult
+            {
+                bool success;
+                char* data;
+                size_t length;    
+            };
+
         public:
             static File* make(State* state, FILE* handle, bool isstd, const char* path, const char* mode)
             {
@@ -2354,7 +2266,7 @@ namespace neon
             }
     };
 
-    struct VarSwitch: public Object
+    struct VarSwitch final: public Object
     {
         public:
             static VarSwitch* make(State* state)
@@ -2383,7 +2295,7 @@ namespace neon
             }
     };
 
-    struct Userdata: public Object
+    struct Userdata final: public Object
     {
         public:
             static Userdata* make(State* state, void* pointer, const char* name)
@@ -2414,6 +2326,491 @@ namespace neon
                 }
                 return false;
             }
+    };
+
+
+    struct FuncCommon: public Object
+    {
+        public:
+            enum Type
+            {
+                FUNCTYPE_UNSPECIFIED,
+                FUNCTYPE_ANONYMOUS,
+                FUNCTYPE_FUNCTION,
+                FUNCTYPE_METHOD,
+                FUNCTYPE_INITIALIZER,
+                FUNCTYPE_PRIVATE,
+                FUNCTYPE_STATIC,
+                FUNCTYPE_SCRIPT,
+            };
+
+        public:
+            int arity = 0;
+            FuncCommon::Type type = FUNCTYPE_UNSPECIFIED;
+
+    };
+
+    struct FuncScript final: public FuncCommon
+    {
+        public:
+            static FuncScript* make(State* state, Module* module, FuncCommon::Type type)
+            {
+                FuncScript* function;
+                function = (FuncScript*)Object::make<FuncScript>(state, Value::OBJTYPE_FUNCSCRIPT);
+                function->arity = 0;
+                function->upvalcount = 0;
+                function->isvariadic = false;
+                function->name = nullptr;
+                function->type = type;
+                function->module = module;
+                function->blob = new Blob(state);
+                return function;
+            }
+
+        public:
+            int upvalcount;
+            bool isvariadic;
+            Blob* blob;
+            String* name;
+            Module* module;
+
+        public:
+            bool destroyThisObject()
+            {
+                delete this->blob;
+                return true;
+            }
+    };
+
+    struct FuncClosure final: public FuncCommon
+    {
+        public:
+            static FuncClosure* make(State* state, FuncScript* function)
+            {
+                int i;
+                ScopeUpvalue** upvals;
+                FuncClosure* closure;
+                upvals = (ScopeUpvalue**)State::GC::allocate(state, sizeof(ScopeUpvalue*), function->upvalcount);
+                for(i = 0; i < function->upvalcount; i++)
+                {
+                    upvals[i] = nullptr;
+                }
+                closure = (FuncClosure*)Object::make<FuncClosure>(state, Value::OBJTYPE_FUNCCLOSURE);
+                closure->scriptfunc = function;
+                closure->upvalues = upvals;
+                closure->upvalcount = function->upvalcount;
+                return closure;
+            }
+
+        public:
+            int upvalcount;
+            FuncScript* scriptfunc;
+            ScopeUpvalue** upvalues;
+
+        public:
+            bool destroyThisObject()
+            {
+                nn_gcmem_freearray(m_pvm, sizeof(ScopeUpvalue*), this->upvalues, this->upvalcount);
+                /*
+                // there may be multiple closures that all reference the same function
+                // for this reason, we do not free functions when freeing closures
+                */
+                return true;
+            }
+    };
+
+    struct FuncBound final: public FuncCommon
+    {
+        public:
+            static FuncBound* make(State* state, Value receiver, FuncClosure* method)
+            {
+                FuncBound* bound;
+                bound = (FuncBound*)Object::make<FuncBound>(state, Value::OBJTYPE_FUNCBOUND);
+                bound->receiver = receiver;
+                bound->method = method;
+                return bound;
+            }
+
+        public:
+            Value receiver;
+            FuncClosure* method;
+
+        public:
+            //FuncBound() = delete;
+            //~FuncBound() = delete;
+
+            bool destroyThisObject()
+            {
+                return true;
+            }
+    };
+
+    struct FuncNative final: public FuncCommon
+    {
+        public:
+            static FuncNative* make(State* state, NativeFN function, const char* name, void* uptr)
+            {
+                FuncNative* native;
+                native = (FuncNative*)Object::make<FuncNative>(state, Value::OBJTYPE_FUNCNATIVE);
+                native->natfunc = function;
+                native->name = name;
+                native->userptr = uptr;
+                native->type = FuncCommon::FUNCTYPE_FUNCTION;
+                return native;
+            }
+
+            static FuncNative* make(State* state, NativeFN function, const char* name)
+            {
+                return make(state, function, name, nullptr);
+            }
+
+        public:
+            const char* name;
+            NativeFN natfunc;
+            void* userptr;
+
+        public:
+            //FuncNative() = delete;
+            //~FuncNative() = delete;
+
+            bool destroyThisObject()
+            {
+                return true;
+            }
+    };
+
+    struct Module final: public Object
+    {
+        public:
+            static Module* make(State* state, const char* name, const char* file, bool imported)
+            {
+                Module* module;
+                module = Object::make<Module>(state, Value::OBJTYPE_MODULE);
+                module->deftable = new HashTable(state);
+                module->name = String::copy(state, name);
+                module->physicalpath = String::copy(state, file);
+                module->unloader = nullptr;
+                module->preloader = nullptr;
+                module->handle = nullptr;
+                module->imported = imported;
+                return module;
+            }
+
+            static char* resolvePath(State* state, const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+            {
+                size_t i;
+                size_t mlen;
+                size_t splen;
+                char* path1;
+                char* path2;
+                char* retme;
+                const char* cstrpath;
+                struct stat stroot;
+                struct stat stmod;
+                String* pitem;
+                StringBuffer* pathbuf;
+                (void)rootfile;
+                (void)isrelative;
+                (void)stroot;
+                (void)stmod;
+                pathbuf = nullptr;
+                mlen = strlen(modulename);
+                splen = state->importpath->m_count;
+                for(i=0; i<splen; i++)
+                {
+                    pitem = state->importpath->values[i].asString();
+                    if(pathbuf == nullptr)
+                    {
+                        pathbuf = new StringBuffer(pitem->length() + mlen + 5);
+                    }
+                    else
+                    {
+                        pathbuf->reset();
+                    }
+                    pathbuf->append(pitem->data(), pitem->length());
+                    if(pathbuf->contains('@'))
+                    {
+                        pathbuf->replace('@', modulename, mlen);
+                    }
+                    else
+                    {
+                        pathbuf->append("/");
+                        pathbuf->append(modulename);
+                        pathbuf->append(NEON_CFG_FILEEXT);
+                    }
+                    cstrpath = pathbuf->data; 
+                    fprintf(stderr, "import: trying '%s' ... ", cstrpath);
+                    if(nn_util_fsfileexists(state, cstrpath))
+                    {
+                        fprintf(stderr, "found!\n");
+                        /* stop a core library from importing itself */
+                        #if 0
+                        if(stat(currentfile, &stroot) == -1)
+                        {
+                            fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
+                            return nullptr;
+                        }
+                        if(stat(cstrpath, &stmod) == -1)
+                        {
+                            fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
+                            return nullptr;
+                        }
+                        if(stroot.st_ino == stmod.st_ino)
+                        {
+                            fprintf(stderr, "resolvepath: refusing to import itself\n");
+                            return nullptr;
+                        }
+                        #endif
+                        path1 = osfn_realpath(cstrpath, nullptr);
+                        path2 = osfn_realpath(currentfile, nullptr);
+                        if(path1 != nullptr && path2 != nullptr)
+                        {
+                            if(memcmp(path1, path2, (int)strlen(path2)) == 0)
+                            {
+                                free(path1);
+                                free(path2);
+                                fprintf(stderr, "resolvepath: refusing to import itself\n");
+                                return nullptr;
+                            }
+                            free(path2);
+                            delete pathbuf;
+                            pathbuf = nullptr;
+                            retme = nn_util_strdup(state, path1);
+                            free(path1);
+                            return retme;
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "does not exist\n");
+                    }
+                }
+                if(pathbuf != nullptr)
+                {
+                    delete pathbuf;
+                }
+                return nullptr;
+            }
+
+            static void addNative(State* state, Module* module, const char* as)
+            {
+                Value name;
+                if(as != nullptr)
+                {
+                    module->name = String::copy(state, as);
+                }
+                name = Value::fromObject(String::copyObjString(state, module->name));
+                state->stackPush(name);
+                state->stackPush(Value::fromObject(module));
+                state->modules->set(name, Value::fromObject(module));
+                state->stackPop(2);
+            }
+
+            static Module* loadModuleByName(State* state, Module* intomodule, String* modulename)
+            {
+                int argc;
+                size_t fsz;
+                char* source;
+                char* physpath;
+                Blob* blob;
+                Value retv;
+                Value callable;
+                Property* field;
+                Array* args;
+                String* os;
+                Module* module;
+                FuncClosure* closure;
+                FuncScript* function;
+                (void)os;
+                (void)argc;
+                (void)intomodule;
+                field = state->modules->getFieldByObjStr(modulename);
+                if(field != nullptr)
+                {
+                    return field->value.asModule();
+                }
+                physpath = Module::resolvePath(state, modulename->data(), intomodule->physicalpath->data(), nullptr, false);
+                if(physpath == nullptr)
+                {
+                    nn_exceptions_throwException(state, "module not found: '%s'\n", modulename->data());
+                    return nullptr;
+                }
+                fprintf(stderr, "loading module from '%s'\n", physpath);
+                source = nn_util_readfile(state, physpath, &fsz);
+                if(source == nullptr)
+                {
+                    nn_exceptions_throwException(state, "could not read import file %s", physpath);
+                    return nullptr;
+                }
+                blob = new Blob(state);
+                module = Module::make(state, modulename->data(), physpath, true);
+                free(physpath);
+                function = nn_astparser_compilesource(state, module, source, blob, true, false);
+                free(source);
+                closure = FuncClosure::make(state, function);
+                callable = Value::fromObject(closure);
+                args = Array::make(state);
+                argc = nn_nestcall_prepare(state, callable, Value::makeNull(), args);
+                if(!nn_nestcall_callfunction(state, callable, Value::makeNull(), args, &retv))
+                {
+                    delete blob;
+                    nn_exceptions_throwException(state, "failed to call compiled import closure");
+                    return nullptr;
+                }
+                delete blob;
+                return module;
+            }
+
+        public:
+            bool imported;
+            HashTable* deftable;
+            String* name;
+            String* physicalpath;
+            void* preloader;
+            void* unloader;
+            void* handle;
+
+        public:
+            //Module() = delete;
+            //~Module() = delete;
+
+            bool destroyThisObject()
+            {
+                delete this->deftable;
+                /*
+                free(this->name);
+                free(this->physicalpath);
+                */
+                if(this->unloader != nullptr && this->imported)
+                {
+                    ((ModLoaderFN)this->unloader)(m_pvm);
+                }
+                if(this->handle != nullptr)
+                {
+                    nn_import_closemodule(this->handle);
+                }
+                return true;
+            }
+
+            void setFileField()
+            {
+                return;
+                this->deftable->setCStr("__file__", Value::fromObject(String::copyObjString(m_pvm, this->physicalpath)));
+            }
+    };
+
+
+    struct ClassObject final: public Object
+    {
+        public:
+            static ClassObject* make(State* state, String* name)
+            {
+                ClassObject* klass;
+                klass = (ClassObject*)Object::make<ClassObject>(state, Value::OBJTYPE_CLASS);
+                klass->name = name;
+                klass->instprops = new HashTable(state);
+                klass->staticproperties = new HashTable(state);
+                klass->methods = new HashTable(state);
+                klass->staticmethods = new HashTable(state);
+                klass->initializer = Value::makeEmpty();
+                klass->superclass = nullptr;
+                return klass;
+            }
+
+        public:
+            /*
+            * the constructor, if any. defaults to <empty>, and if not <empty>, expects to be
+            * some callable value.
+            */
+            Value initializer;
+
+            /*
+            * when declaring a class, $instprops (their names, and initial values) are
+            * copied to ClassInstance::properties.
+            * so `$instprops["something"] = somefunction;` remains untouched *until* an
+            * instance of this class is created.
+            */
+            HashTable* instprops;
+
+            /*
+            * static, unchangeable(-ish) values. intended for values that are not unique, but shared
+            * across classes, without being copied.
+            */
+            HashTable* staticproperties;
+
+            /*
+            * method table; they are currently not unique when instantiated; instead, they are
+            * read from $methods as-is. this includes adding methods!
+            * TODO: introduce a new hashtable field for ClassInstance for unique methods, perhaps?
+            * right now, this method just prevents unnecessary copying.
+            */
+            HashTable* methods;
+            HashTable* staticmethods;
+            String* name;
+            ClassObject* superclass;
+
+        public:
+            //ClassObject() = delete;
+            //~ClassObject() = delete;
+
+            bool destroyThisObject()
+            {
+                delete this->methods;
+                delete this->staticmethods;
+                delete this->instprops;
+                delete this->staticproperties;
+                return true;
+            }
+
+    };
+
+    struct ClassInstance final: public Object
+    {
+        public:
+            static ClassInstance* make(State* state, ClassObject* klass)
+            {
+                ClassInstance* instance;
+                instance = (ClassInstance*)Object::make<ClassInstance>(state, Value::OBJTYPE_INSTANCE);
+                /* gc fix */
+                state->stackPush(Value::fromObject(instance));
+                instance->active = true;
+                instance->klass = klass;
+                instance->properties = new HashTable(state);
+                if(klass->instprops->m_count > 0)
+                {
+                    HashTable::copy(klass->instprops, instance->properties);
+                }
+                /* gc fix */
+                state->stackPop();
+                return instance;
+            }
+
+        public:
+            /*
+            * whether this instance is still "active", i.e., not destroyed, deallocated, etc.
+            * in rare circumstances s
+            */
+            bool active;
+            HashTable* properties;
+            ClassObject* klass;
+
+        public:
+            //ClassInstance() = delete;
+            //~ClassInstance() = delete;
+
+            bool destroyThisObject()
+            {
+                delete this->properties;
+                this->properties = nullptr;
+                this->active = false;
+                return true;
+            }
+
+            void defProperty(const char *cstrname, Value val)
+            {
+                this->properties->setCStr(cstrname, val);
+            }
+
     };
 
 
@@ -2834,6 +3231,10 @@ namespace neon
 
     };
 
+
+    static const char* g_strthis = "this";
+    static const char* g_strsuper = "super";
+
     struct AstToken
     {
         public:
@@ -2948,12 +3349,29 @@ namespace neon
 
     struct AstLexer
     {
-        State* m_pvm;
-        const char* start;
-        const char* sourceptr;
-        int line;
-        int tplstringcount;
-        int tplstringbuffer[NEON_CFG_ASTMAXSTRTPLDEPTH];
+        public:
+            State* m_pvm;
+            const char* start;
+            const char* sourceptr;
+            int line;
+            int tplstringcount;
+            int tplstringbuffer[NEON_CFG_ASTMAXSTRTPLDEPTH];
+
+        public:
+            AstLexer(State* state, const char* source)
+            {
+                NEON_ASTDEBUG(state, "");
+                this->m_pvm = state;
+                this->sourceptr = source;
+                this->start = source;
+                this->line = 1;
+                this->tplstringcount = -1;
+            }
+
+            ~AstLexer()
+            {
+                NEON_ASTDEBUG(m_pvm, "");
+            }
     };
 
     struct AstLocal
@@ -3018,7 +3436,7 @@ namespace neon
             CompContext compcontext;
             const char* currentfile;
             State* m_pvm;
-            AstLexer* scanner;
+            AstLexer* lexer;
             AstToken currtoken;
             AstToken prevtoken;
             AstClassCompiler* currentclass;
@@ -3313,8 +3731,8 @@ void neon::State::raiseFatal(const char* format, ArgsT&&... args)
     fflush(stdout);
     frame = &this->vmstate.framevalues[this->vmstate.framecount - 1];
     function = frame->closure->scriptfunc;
-    instruction = frame->inscode - function->blob.instrucs - 1;
-    line = function->blob.instrucs[instruction].srcline;
+    instruction = frame->inscode - function->blob->instrucs - 1;
+    line = function->blob->instrucs[instruction].srcline;
     fprintf(stderr, "RuntimeError: ");
     fn_fprintf(stderr, format, args...);
     fprintf(stderr, " -> %s:%d ", function->module->physicalpath->data(), line);
@@ -3327,8 +3745,8 @@ void neon::State::raiseFatal(const char* format, ArgsT&&... args)
             frame = &this->vmstate.framevalues[i];
             function = frame->closure->scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
-            instruction = frame->inscode - function->blob.instrucs - 1;
-            fprintf(stderr, "    %s:%d -> ", function->module->physicalpath->data(), function->blob.instrucs[instruction].srcline);
+            instruction = frame->inscode - function->blob->instrucs - 1;
+            fprintf(stderr, "    %s:%d -> ", function->module->physicalpath->data(), function->blob->instrucs[instruction].srcline);
             if(function->name == nullptr)
             {
                 fprintf(stderr, "<script>");
@@ -3361,7 +3779,7 @@ bool neon::State::raiseClass(neon::ClassObject* exklass, const char* srcfile, in
     this->stackPush(neon::Value::fromObject(instance));
     stacktrace = nn_exceptions_getstacktrace(this);
     this->stackPush(stacktrace);
-    nn_instance_defproperty(instance, "stacktrace", stacktrace);
+    instance->defProperty("stacktrace", stacktrace);
     this->stackPop();
     return this->exceptionPropagate();
 }
@@ -3380,9 +3798,9 @@ bool neon::State::exceptionHandleUncaught(neon::ClassInstance* exception)
     neon::String* emsg;
     neon::Array* oa;
     neon::Color nc;
-    colred = nc.color(neon::Color::COLOR_RED);
-    colreset = nc.color(neon::Color::COLOR_RESET);
-    colyellow = nc.color(neon::Color::COLOR_YELLOW);
+    colred = nc.color('r');
+    colreset = nc.color('0');
+    colyellow = nc.color('y');
     /* at this point, the exception is unhandled; so, print it out. */
     fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->data(), colreset);
     srcfile = "none";
@@ -3459,14 +3877,14 @@ bool neon::State::exceptionPropagate()
             function = this->vmstate.currentframe->closure->scriptfunc;
             if(handler->address != 0 && nn_util_isinstanceof(exception->klass, handler->klass))
             {
-                this->vmstate.currentframe->inscode = &function->blob.instrucs[handler->address];
+                this->vmstate.currentframe->inscode = &function->blob->instrucs[handler->address];
                 return true;
             }
             else if(handler->finallyaddress != 0)
             {
                 /* continue propagating once the 'finally' block completes */
                 this->stackPush(neon::Value::makeBool(true));
-                this->vmstate.currentframe->inscode = &function->blob.instrucs[handler->finallyaddress];
+                this->vmstate.currentframe->inscode = &function->blob->instrucs[handler->finallyaddress];
                 return true;
             }
         }
@@ -3521,11 +3939,6 @@ static NEON_ALWAYSINLINE  neon::Userdata* nn_value_asuserdata(neon::Value v)
     return ((neon::Userdata*)v.asObject());
 }
 
-static NEON_ALWAYSINLINE  neon::Module* nn_value_asmodule(neon::Value v)
-{
-    return ((neon::Module*)v.asObject());
-}
-
 static NEON_ALWAYSINLINE  neon::Dictionary* nn_value_asdict(neon::Value v)
 {
     return ((neon::Dictionary*)v.asObject());
@@ -3541,28 +3954,6 @@ static NEON_ALWAYSINLINE  neon::Range* nn_value_asrange(neon::Value v)
     return ((neon::Range*)v.asObject());
 }
 
-
-
-#if defined(_WIN32)
-    #include <fcntl.h>
-    #include <io.h>
-#endif
-
-
-#if defined(__STRICT_ANSI__)
-    #define va_copy(...)
-#endif
-
-#if defined(__GNUC__)
-    #define NEON_LIKELY(x) \
-        __builtin_expect(!!(x), 1)
-
-    #define NEON_UNLIKELY(x) \
-        __builtin_expect(!!(x), 0)
-#else
-    #define NEON_LIKELY(x) x
-    #define NEON_UNLIKELY(x) x
-#endif
 
 char* nn_util_strndup(neon::State* state, const char* src, size_t len)
 {
@@ -3893,19 +4284,6 @@ char* nn_util_strtolowerinplace(char* str, size_t length)
     return str;
 }
 
-#define NEON_APIDEBUG(state, ...) \
-    if((NEON_UNLIKELY((state)->conf.enableapidebug))) \
-    { \
-        nn_state_apidebug(state, __FUNCTION__, __VA_ARGS__); \
-    }
-
-
-#define NEON_ASTDEBUG(state, ...) \
-    if((NEON_UNLIKELY((state)->conf.enableastdebug))) \
-    { \
-        nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
-    }
-
 
 static NEON_ALWAYSINLINE void nn_state_apidebugv(neon::State* state, const char* funcname, const char* format, va_list va)
 {
@@ -4063,7 +4441,7 @@ void nn_gcmem_blackenobject(neon::State* state, neon::Object* object)
                 function = static_cast<neon::FuncScript*>(object);
                 nn_gcmem_markobject(state, static_cast<neon::Object*>(function->name));
                 nn_gcmem_markobject(state, static_cast<neon::Object*>(function->module));
-                function->blob.constants->gcMark();
+                function->blob->constants->gcMark();
             }
             break;
         case neon::Value::OBJTYPE_INSTANCE:
@@ -4349,7 +4727,7 @@ void nn_dbg_disasmblob(neon::Printer* pd, neon::Blob* blob, const char* name)
 void nn_dbg_printinstrname(neon::Printer* pd, const char* name)
 {
     neon::Color nc;
-    pd->putformat("%s%-16s%s ", nc.color(neon::Color::COLOR_RED), name, nc.color(neon::Color::COLOR_RESET));
+    pd->putformat("%s%-16s%s ", nc.color('r'), name, nc.color('0'));
 }
 
 int nn_dbg_printsimpleinstr(neon::Printer* pd, const char* name, int offset)
@@ -4728,52 +5106,6 @@ int nn_dbg_printinstructionat(neon::Printer* pd, neon::Blob* blob, int offset)
     return offset + 1;
 }
 
-void nn_blob_init(neon::State* state, neon::Blob* blob)
-{
-    blob->count = 0;
-    blob->capacity = 0;
-    blob->instrucs = nullptr;
-    blob->constants = new neon::ValArray(state);
-    blob->argdefvals = new neon::ValArray(state);
-}
-
-void nn_blob_push(neon::State* state, neon::Blob* blob, neon::Instruction ins)
-{
-    int oldcapacity;
-    if(blob->capacity < blob->count + 1)
-    {
-        oldcapacity = blob->capacity;
-        blob->capacity = GROW_CAPACITY(oldcapacity);
-        blob->instrucs = (neon::Instruction*)nn_gcmem_growarray(state, sizeof(neon::Instruction), blob->instrucs, oldcapacity, blob->capacity);
-    }
-    blob->instrucs[blob->count] = ins;
-    blob->count++;
-}
-
-void nn_blob_destroy(neon::State* state, neon::Blob* blob)
-{
-    if(blob->instrucs != nullptr)
-    {
-        nn_gcmem_freearray(state, sizeof(neon::Instruction), blob->instrucs, blob->capacity);
-    }
-    delete blob->constants;
-    delete blob->argdefvals;
-}
-
-int nn_blob_pushconst(neon::State* state, neon::Blob* blob, neon::Value value)
-{
-    (void)state;
-    blob->constants->push(value);
-    return blob->constants->m_count - 1;
-}
-
-
-int nn_blob_pushargdefval(neon::State* state, neon::Blob* blob, neon::Value value)
-{
-    (void)state;
-    blob->argdefvals->push(value);
-    return blob->argdefvals->m_count - 1;
-}
 
 void nn_printer_printfunction(neon::Printer* pd, neon::FuncScript* func)
 {
@@ -4994,7 +5326,7 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
         case neon::Value::OBJTYPE_MODULE:
             {
                 neon::Module* mod;
-                mod = nn_value_asmodule(value);
+                mod = value.asModule();
                 pd->putformat("<module '%s' at '%s'>", mod->name->data(), mod->physicalpath->data());
             }
             break;
@@ -5316,7 +5648,7 @@ uint32_t nn_object_hashobject(neon::Object* object)
                 */
                 neon::FuncScript* fn;
                 fn = static_cast<neon::FuncScript*>(object);
-                return nn_util_hashdouble(fn->arity) ^ nn_util_hashdouble(fn->blob.count);
+                return nn_util_hashdouble(fn->arity) ^ nn_util_hashdouble(fn->blob->count);
             }
             break;
         case neon::Value::OBJTYPE_STRING:
@@ -5557,28 +5889,6 @@ neon::Value nn_value_copyvalue(neon::State* state, neon::Value value)
 }
 
 
-neon::Module* nn_module_make(neon::State* state, const char* name, const char* file, bool imported)
-{
-    neon::Module* module;
-    module = (neon::Module*)neon::Object::make<neon::Module>(state, neon::Value::OBJTYPE_MODULE);
-    module->deftable = new neon::HashTable(state);
-    module->name = neon::String::copy(state, name);
-    module->physicalpath = neon::String::copy(state, file);
-    module->unloader = nullptr;
-    module->preloader = nullptr;
-    module->handle = nullptr;
-    module->imported = imported;
-    return module;
-}
-
-void nn_module_setfilefield(neon::State* state, neon::Module* module)
-{
-    return;
-    module->deftable->setCStr("__file__", neon::Value::fromObject(neon::String::copyObjString(state, module->physicalpath)));
-}
-
-
-
 void nn_file_mark(neon::State* state, neon::File* file)
 {
     nn_gcmem_markobject(state, (neon::Object*)file->mode);
@@ -5692,34 +6002,6 @@ void nn_instance_mark(neon::State* state, neon::ClassInstance* instance)
 }
 
 
-void nn_instance_defproperty(neon::ClassInstance* instance, const char *cstrname, neon::Value val)
-{
-    instance->properties->setCStr(cstrname, val);
-}
-
-
-
-static const char* g_strthis = "this";
-static const char* g_strsuper = "super";
-
-neon::AstLexer* nn_astlex_init(neon::State* state, const char* source)
-{
-    neon::AstLexer* lex;
-    NEON_ASTDEBUG(state, "");
-    lex = (neon::AstLexer*)neon::State::GC::allocate(state, sizeof(neon::AstLexer), 1);
-    lex->m_pvm = state;
-    lex->sourceptr = source;
-    lex->start = source;
-    lex->line = 1;
-    lex->tplstringcount = -1;
-    return lex;
-}
-
-void nn_astlex_destroy(neon::State* state, neon::AstLexer* lex)
-{
-    NEON_ASTDEBUG(state, "");
-    neon::State::GC::release(state, lex, sizeof(neon::AstLexer));
-}
 
 bool nn_astlex_isatend(neon::AstLexer* lex)
 {
@@ -6567,7 +6849,7 @@ neon::AstParser* nn_astparser_make(neon::State* state, neon::AstLexer* lexer, ne
     NEON_ASTDEBUG(state, "");
     parser = (neon::AstParser*)neon::State::GC::allocate(state, sizeof(neon::AstParser), 1);
     parser->m_pvm = state;
-    parser->scanner = lexer;
+    parser->lexer = lexer;
     parser->haderror = false;
     parser->panicmode = false;
     parser->blockcount = 0;
@@ -6593,7 +6875,7 @@ void nn_astparser_destroy(neon::State* state, neon::AstParser* parser)
 
 neon::Blob* nn_astparser_currentblob(neon::AstParser* prs)
 {
-    return &prs->m_pvm->compiler->targetfunc->blob;
+    return prs->m_pvm->compiler->targetfunc->blob;
 }
 
 bool nn_astparser_raiseerroratv(neon::AstParser* prs, neon::AstToken* t, const char* message, va_list args)
@@ -6659,7 +6941,7 @@ void nn_astparser_advance(neon::AstParser* prs)
     prs->prevtoken = prs->currtoken;
     while(true)
     {
-        prs->currtoken = nn_astlex_scantoken(prs->scanner);
+        prs->currtoken = nn_astlex_scantoken(prs->lexer);
         if(prs->currtoken.type != neon::AstToken::TOK_ERROR)
         {
             break;
@@ -6981,7 +7263,7 @@ void nn_astemit_emit(neon::AstParser* prs, uint8_t byte, int line, bool isop)
     ins.code = byte;
     ins.srcline = line;
     ins.isop = isop;
-    nn_blob_push(prs->m_pvm, nn_astparser_currentblob(prs), ins);
+    nn_astparser_currentblob(prs)->push(ins);
 }
 
 void nn_astemit_patchat(neon::AstParser* prs, size_t idx, uint8_t byte)
@@ -7061,7 +7343,7 @@ void nn_astemit_emitreturn(neon::AstParser* prs)
 int nn_astparser_pushconst(neon::AstParser* prs, neon::Value value)
 {
     int constant;
-    constant = nn_blob_pushconst(prs->m_pvm, nn_astparser_currentblob(prs), value);
+    constant = nn_astparser_currentblob(prs)->pushConst(value);
     if(constant >= UINT16_MAX)
     {
         nn_astparser_raiseerror(prs, "too many constants in current scope");
@@ -7184,7 +7466,7 @@ void nn_astfunccompiler_init(neon::AstParser* prs, neon::AstFuncCompiler* compil
     );
     if(candeclthis || (/*(type == neon::FuncCommon::FUNCTYPE_ANONYMOUS) &&*/ (prs->compcontext != neon::AstParser::COMPCONTEXT_CLASS)))
     {
-        local->name.start = g_strthis;
+        local->name.start = neon::g_strthis;
         local->name.length = 4;
     }
     else
@@ -7479,18 +7761,18 @@ void nn_astparser_endloop(neon::AstParser* prs)
     // find all neon::Instruction::OP_BREAK_PL placeholder and replace with the appropriate jump...
     */
     i = prs->innermostloopstart;
-    while(i < prs->m_pvm->compiler->targetfunc->blob.count)
+    while(i < prs->m_pvm->compiler->targetfunc->blob->count)
     {
-        if(prs->m_pvm->compiler->targetfunc->blob.instrucs[i].code == neon::Instruction::OP_BREAK_PL)
+        if(prs->m_pvm->compiler->targetfunc->blob->instrucs[i].code == neon::Instruction::OP_BREAK_PL)
         {
-            prs->m_pvm->compiler->targetfunc->blob.instrucs[i].code = neon::Instruction::OP_JUMPNOW;
+            prs->m_pvm->compiler->targetfunc->blob->instrucs[i].code = neon::Instruction::OP_JUMPNOW;
             nn_astemit_patchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            bcode = prs->m_pvm->compiler->targetfunc->blob.instrucs;
-            cvals = prs->m_pvm->compiler->targetfunc->blob.constants->values;
+            bcode = prs->m_pvm->compiler->targetfunc->blob->instrucs;
+            cvals = prs->m_pvm->compiler->targetfunc->blob->constants->values;
             i += 1 + nn_astparser_getcodeargscount(bcode, cvals, i);
         }
     }
@@ -8034,7 +8316,7 @@ bool nn_astparser_rulethis(neon::AstParser* prs, bool canassign)
     //if(prs->currentclass != nullptr)
     {
         nn_astparser_namedvar(prs, prs->prevtoken, false);
-        //nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strthis), false);
+        //nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
     }
     return true;
 }
@@ -8068,11 +8350,11 @@ bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
     {
         invokeself = true;
     }
-    nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strthis), false);
+    nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
     if(nn_astparser_match(prs, neon::AstToken::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
-        nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strsuper), false);
+        nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
         if(!invokeself)
         {
             nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_CLASSINVOKESUPER, name);
@@ -8085,7 +8367,7 @@ bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
     }
     else
     {
-        nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strsuper), false);
+        nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
         nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_CLASSGETSUPER, name);
     }
     return true;
@@ -8728,12 +9010,12 @@ bool nn_astparser_doparseprecedence(neon::AstParser* prs, neon::AstRule::Precede
 
 bool nn_astparser_parseprecedence(neon::AstParser* prs, neon::AstRule::Precedence precedence)
 {
-    if(nn_astlex_isatend(prs->scanner) && prs->m_pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->m_pvm->isrepl)
     {
         return false;
     }
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astlex_isatend(prs->scanner) && prs->m_pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->m_pvm->isrepl)
     {
         return false;
     }
@@ -8743,12 +9025,12 @@ bool nn_astparser_parseprecedence(neon::AstParser* prs, neon::AstRule::Precedenc
 
 bool nn_astparser_parseprecnoadvance(neon::AstParser* prs, neon::AstRule::Precedence precedence)
 {
-    if(nn_astlex_isatend(prs->scanner) && prs->m_pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->m_pvm->isrepl)
     {
         return false;
     }
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astlex_isatend(prs->scanner) && prs->m_pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->m_pvm->isrepl)
     {
         return false;
     }
@@ -9012,7 +9294,7 @@ void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
             nn_astparser_raiseerror(prs, "class %.*s cannot inherit from itself", classname.length, classname.start);
         }
         nn_astparser_scopebegin(prs);
-        nn_astparser_addlocal(prs, nn_astparser_synthtoken(g_strsuper));
+        nn_astparser_addlocal(prs, nn_astparser_synthtoken(neon::g_strsuper));
         nn_astparser_definevariable(prs, 0);
         nn_astparser_namedvar(prs, classname, false);
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_CLASSINHERIT);
@@ -9791,7 +10073,7 @@ neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* m
     neon::FuncScript* function;
     (void)blob;
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
-    lexer = nn_astlex_init(state, source);
+    lexer = new neon::AstLexer(state, source);
     parser = nn_astparser_make(state, lexer, module, keeplast);
     nn_astfunccompiler_init(parser, &compiler, neon::FuncCommon::FUNCTYPE_SCRIPT, true);
     compiler.fromimport = fromimport;
@@ -9801,7 +10083,7 @@ neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* m
     {
         function = nullptr;
     }
-    nn_astlex_destroy(state, lexer);
+    delete lexer;
     nn_astparser_destroy(state, parser);
     return function;
 }
@@ -9903,25 +10185,25 @@ neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
 {
     const char* cstr;
     neon::String* insrc;
-    neon::AstLexer* scn;
+    neon::AstLexer* lex;
     neon::Array* arr;
     neon::Dictionary* itm;
     neon::AstToken token;
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     insrc = args->argv[0].asString();
-    scn = nn_astlex_init(state, insrc->data());
+    lex = new neon::AstLexer(state, insrc->data());
     arr = neon::Array::make(state);
-    while(!nn_astlex_isatend(scn))
+    while(!nn_astlex_isatend(lex))
     {
         itm = neon::Dictionary::make(state);
-        token = nn_astlex_scantoken(scn);
+        token = nn_astlex_scantoken(lex);
         nn_dict_addentrycstr(itm, "line", neon::Value::makeNumber(token.line));
         cstr = nn_astutil_toktype2str(token.type);
         nn_dict_addentrycstr(itm, "type", neon::Value::fromObject(neon::String::copy(state, cstr + 12)));
         nn_dict_addentrycstr(itm, "source", neon::Value::fromObject(neon::String::copy(state, token.start, token.length)));
         arr->push(neon::Value::fromObject(itm));
     }
-    nn_astlex_destroy(state, scn);
+    delete lex;
     return neon::Value::fromObject(arr);
 }
 
@@ -9977,7 +10259,7 @@ bool nn_import_loadnativemodule(neon::State* state, neon::ModInitFN init_fn, cha
     module = init_fn(state);
     if(module != nullptr)
     {
-        themodule = state->gcProtect(nn_module_make(state, (char*)module->name, source, false));
+        themodule = state->gcProtect(neon::Module::make(state, (char*)module->name, source, false));
         themodule->preloader = (void*)module->preloader;
         themodule->unloader = (void*)module->unloader;
         if(module->fields != nullptr)
@@ -10053,7 +10335,7 @@ bool nn_import_loadnativemodule(neon::State* state, neon::ModInitFN init_fn, cha
         {
             themodule->handle = dlw;
         }
-        nn_import_addnativemodule(state, themodule, themodule->name->data());
+        neon::Module::addNative(state, themodule, themodule->name->data());
         state->clearProtect();
         return true;
     }
@@ -10064,19 +10346,6 @@ bool nn_import_loadnativemodule(neon::State* state, neon::ModInitFN init_fn, cha
     return false;
 }
 
-void nn_import_addnativemodule(neon::State* state, neon::Module* module, const char* as)
-{
-    neon::Value name;
-    if(as != nullptr)
-    {
-        module->name = neon::String::copy(state, as);
-    }
-    name = neon::Value::fromObject(neon::String::copyObjString(state, module->name));
-    state->stackPush(name);
-    state->stackPush(neon::Value::fromObject(module));
-    state->modules->set(name, neon::Value::fromObject(module));
-    state->stackPop(2);
-}
 
 void nn_import_loadbuiltinmodules(neon::State* state)
 {
@@ -10121,157 +10390,6 @@ bool nn_util_fsfileisdirectory(neon::State* state, const char* filepath)
     (void)state;
     (void)filepath;
     return false;
-}
-
-neon::Module* nn_import_loadmodulescript(neon::State* state, neon::Module* intomodule, neon::String* modulename)
-{
-    int argc;
-    size_t fsz;
-    char* source;
-    char* physpath;
-    neon::Blob blob;
-    neon::Value retv;
-    neon::Value callable;
-    neon::Property* field;
-    neon::Array* args;
-    neon::String* os;
-    neon::Module* module;
-    neon::FuncClosure* closure;
-    neon::FuncScript* function;
-    (void)os;
-    (void)argc;
-    (void)intomodule;
-    field = state->modules->getFieldByObjStr(modulename);
-    if(field != nullptr)
-    {
-        return nn_value_asmodule(field->value);
-    }
-    physpath = nn_import_resolvepath(state, modulename->data(), intomodule->physicalpath->data(), nullptr, false);
-    if(physpath == nullptr)
-    {
-        nn_exceptions_throwException(state, "module not found: '%s'\n", modulename->data());
-        return nullptr;
-    }
-    fprintf(stderr, "loading module from '%s'\n", physpath);
-    source = nn_util_readfile(state, physpath, &fsz);
-    if(source == nullptr)
-    {
-        nn_exceptions_throwException(state, "could not read import file %s", physpath);
-        return nullptr;
-    }
-    nn_blob_init(state, &blob);
-    module = nn_module_make(state, modulename->data(), physpath, true);
-    free(physpath);
-    function = nn_astparser_compilesource(state, module, source, &blob, true, false);
-    free(source);
-    closure = neon::FuncClosure::make(state, function);
-    callable = neon::Value::fromObject(closure);
-    args = neon::Array::make(state);
-    argc = nn_nestcall_prepare(state, callable, neon::Value::makeNull(), args);
-    if(!nn_nestcall_callfunction(state, callable, neon::Value::makeNull(), args, &retv))
-    {
-        nn_blob_destroy(state, &blob);
-        nn_exceptions_throwException(state, "failed to call compiled import closure");
-        return nullptr;
-    }
-    nn_blob_destroy(state, &blob);
-    return module;
-}
-
-char* nn_import_resolvepath(neon::State* state, const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
-{
-    size_t i;
-    size_t mlen;
-    size_t splen;
-    char* path1;
-    char* path2;
-    char* retme;
-    const char* cstrpath;
-    struct stat stroot;
-    struct stat stmod;
-    neon::String* pitem;
-    StringBuffer* pathbuf;
-    (void)rootfile;
-    (void)isrelative;
-    (void)stroot;
-    (void)stmod;
-    pathbuf = nullptr;
-    mlen = strlen(modulename);
-    splen = state->importpath->m_count;
-    for(i=0; i<splen; i++)
-    {
-        pitem = state->importpath->values[i].asString();
-        if(pathbuf == nullptr)
-        {
-            pathbuf = new StringBuffer(pitem->length() + mlen + 5);
-        }
-        else
-        {
-            pathbuf->reset();
-        }
-        pathbuf->append(pitem->data(), pitem->length());
-        if(pathbuf->contains('@'))
-        {
-            pathbuf->replace('@', modulename, mlen);
-        }
-        else
-        {
-            pathbuf->append("/");
-            pathbuf->append(modulename);
-            pathbuf->append(NEON_CFG_FILEEXT);
-        }
-        cstrpath = pathbuf->data; 
-        fprintf(stderr, "import: trying '%s' ... ", cstrpath);
-        if(nn_util_fsfileexists(state, cstrpath))
-        {
-            fprintf(stderr, "found!\n");
-            /* stop a core library from importing itself */
-            #if 0
-            if(stat(currentfile, &stroot) == -1)
-            {
-                fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
-                return nullptr;
-            }
-            if(stat(cstrpath, &stmod) == -1)
-            {
-                fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
-                return nullptr;
-            }
-            if(stroot.st_ino == stmod.st_ino)
-            {
-                fprintf(stderr, "resolvepath: refusing to import itself\n");
-                return nullptr;
-            }
-            #endif
-            path1 = osfn_realpath(cstrpath, nullptr);
-            path2 = osfn_realpath(currentfile, nullptr);
-            if(path1 != nullptr && path2 != nullptr)
-            {
-                if(memcmp(path1, path2, (int)strlen(path2)) == 0)
-                {
-                    free(path1);
-                    free(path2);
-                    fprintf(stderr, "resolvepath: refusing to import itself\n");
-                    return nullptr;
-                }
-                free(path2);
-                delete pathbuf;
-                pathbuf = nullptr;
-                retme = nn_util_strdup(state, path1);
-                free(path1);
-                return retme;
-            }
-        }
-        else
-        {
-            fprintf(stderr, "does not exist\n");
-        }
-    }
-    if(pathbuf != nullptr)
-    {
-        delete pathbuf;
-    }
-    return nullptr;
 }
 
 char* nn_util_fsgetbasename(neon::State* state, const char* path)
@@ -10937,7 +11055,7 @@ neon::Value nn_memberfunc_file_isclosed(neon::State* state, neon::Arguments* arg
     return neon::Value::makeBool(!file->isstd && !file->isopen);
 }
 
-bool nn_file_read(neon::State* state, neon::File* file, size_t readhowmuch, neon::IOResult* dest)
+bool nn_file_read(neon::State* state, neon::File* file, size_t readhowmuch, neon::File::IOResult* dest)
 {
     size_t filesizereal;
     struct stat stats;
@@ -11016,7 +11134,7 @@ bool nn_file_read(neon::State* state, neon::File* file, size_t readhowmuch, neon
 neon::Value nn_memberfunc_file_read(neon::State* state, neon::Arguments* args)
 {
     size_t readhowmuch;
-    neon::IOResult res;
+    neon::File::IOResult res;
     neon::File* file;
     NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
     readhowmuch = -1;
@@ -13364,103 +13482,19 @@ neon::Value nn_memberfunc_object_isinstance(neon::State* state, neon::Arguments*
     return neon::Value::makeBool(selfval.isInstance());
 }
 
-
-neon::String* nn_util_numbertobinstring(neon::State* state, long n)
-{
-    int i;
-    int rem;
-    int count;
-    int length;
-    long j;
-    /* assume maximum of 1024 bits */
-    char str[1024];
-    char newstr[1027];
-    count = 0;
-    j = n;
-    if(j == 0)
-    {
-        str[count++] = '0';
-    }
-    while(j != 0)
-    {
-        rem = abs((int)(j % 2));
-        j /= 2;
-        if(rem == 1)
-        {
-            str[count] = '1';
-        }
-        else
-        {
-            str[count] = '0';
-        }
-        count++;
-    }
-    /* assume maximum of 1024 bits + 0b (indicator) + sign (-). */
-    length = 0;
-    if(n < 0)
-    {
-        newstr[length++] = '-';
-    }
-    newstr[length++] = '0';
-    newstr[length++] = 'b';
-    for(i = count - 1; i >= 0; i--)
-    {
-        newstr[length++] = str[i];
-    }
-    newstr[length++] = 0;
-    return neon::String::copy(state, newstr, length);
-    /*
-    //  // To store the binary number
-    //  long long number = 0;
-    //  int cnt = 0;
-    //  while (n != 0) {
-    //    long long rem = n % 2;
-    //    long long c = (long long) pow(10, cnt);
-    //    number += rem * c;
-    //    n /= 2;
-    //
-    //    // Count used to store exponent value
-    //    cnt++;
-    //  }
-    //
-    //  char str[67]; // assume maximum of 64 bits + 2 binary indicators (0b)
-    //  int length = sprintf(str, "0b%lld", number);
-    //
-    //  return neon::String::copy(state, str, length);
-    */
-}
-
-neon::String* nn_util_numbertooctstring(neon::State* state, long long n, bool numeric)
-{
-    int length;
-    /* assume maximum of 64 bits + 2 octal indicators (0c) */
-    char str[66];
-    length = sprintf(str, numeric ? "0c%llo" : "%llo", n);
-    return neon::String::copy(state, str, length);
-}
-
-neon::String* nn_util_numbertohexstring(neon::State* state, long long n, bool numeric)
-{
-    int length;
-    /* assume maximum of 64 bits + 2 hex indicators (0x) */
-    char str[66];
-    length = sprintf(str, numeric ? "0x%llx" : "%llx", n);
-    return neon::String::copy(state, str, length);
-}
-
 neon::Value nn_memberfunc_number_tobinstring(neon::State* state, neon::Arguments* args)
 {
-    return neon::Value::fromObject(nn_util_numbertobinstring(state, args->thisval.asNumber()));
+    return neon::Value::fromObject(neon::String::numToBinString(state, args->thisval.asNumber()));
 }
 
 neon::Value nn_memberfunc_number_tooctstring(neon::State* state, neon::Arguments* args)
 {
-    return neon::Value::fromObject(nn_util_numbertooctstring(state, args->thisval.asNumber(), false));
+    return neon::Value::fromObject(neon::String::numToOctString(state, args->thisval.asNumber(), false));
 }
 
 neon::Value nn_memberfunc_number_tohexstring(neon::State* state, neon::Arguments* args)
 {
-    return neon::Value::fromObject(nn_util_numbertohexstring(state, args->thisval.asNumber(), false));
+    return neon::Value::fromObject(neon::String::numToHexString(state, args->thisval.asNumber(), false));
 }
 
 void nn_state_initbuiltinmethods(neon::State* state)
@@ -13927,8 +13961,8 @@ neon::Value nn_exceptions_getstacktrace(neon::State* state)
             frame = &state->vmstate.framevalues[i];
             function = frame->closure->scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
-            instruction = frame->inscode - function->blob.instrucs - 1;
-            line = function->blob.instrucs[instruction].srcline;
+            instruction = frame->inscode - function->blob->instrucs - 1;
+            line = function->blob->instrucs[instruction].srcline;
             physfile = "(unknown)";
             if(function->module->physicalpath != nullptr)
             {
@@ -13986,39 +14020,39 @@ neon::ClassObject* nn_exceptions_makeclass(neon::State* state, neon::Module* mod
     state->stackPush(neon::Value::fromObject(function));
     {
         /* g_loc 0 */
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, 0 & 0xff, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
+        function->blob->push(nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
+        function->blob->push(nn_util_makeinst(false, 0 & 0xff, 0));
     }
     {
         /* g_loc 1 */
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, (1 >> 8) & 0xff, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, 1 & 0xff, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
+        function->blob->push(nn_util_makeinst(false, (1 >> 8) & 0xff, 0));
+        function->blob->push(nn_util_makeinst(false, 1 & 0xff, 0));
     }
     {
-        messageconst = nn_blob_pushconst(state, &function->blob, neon::Value::fromObject(neon::String::copy(state, "message")));
+        messageconst = function->blob->pushConst(neon::Value::fromObject(neon::String::copy(state, "message")));
         /* s_prop 0 */
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_PROPERTYSET, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(false, messageconst & 0xff, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_PROPERTYSET, 0));
+        function->blob->push(nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
+        function->blob->push(nn_util_makeinst(false, messageconst & 0xff, 0));
     }
     {
         /* pop */
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_POPONE, 0));
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_POPONE, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_POPONE, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_POPONE, 0));
     }
     {
         /* g_loc 0 */
         /*
-        //  nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
-        //  nn_blob_push(state, &function->blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
-        //  nn_blob_push(state, &function->blob, nn_util_makeinst(false, 0 & 0xff, 0));
+        //  function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_LOCALGET, 0));
+        //  function->blob->push(nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
+        //  function->blob->push(nn_util_makeinst(false, 0 & 0xff, 0));
         */
     }
     {
         /* ret */
-        nn_blob_push(state, &function->blob, nn_util_makeinst(true, neon::Instruction::OP_RETURN, 0));
+        function->blob->push(nn_util_makeinst(true, neon::Instruction::OP_RETURN, 0));
     }
     closure = neon::FuncClosure::make(state, function);
     state->stackPop();
@@ -14045,9 +14079,9 @@ neon::ClassInstance* nn_exceptions_makeinstance(neon::State* state, neon::ClassO
     instance = neon::ClassInstance::make(state, exklass);
     osfile = neon::String::copy(state, srcfile);
     state->stackPush(neon::Value::fromObject(instance));
-    nn_instance_defproperty(instance, "message", neon::Value::fromObject(message));
-    nn_instance_defproperty(instance, "srcfile", neon::Value::fromObject(osfile));
-    nn_instance_defproperty(instance, "srcline", neon::Value::makeNumber(srcline));
+    instance->defProperty("message", neon::Value::fromObject(message));
+    instance->defProperty("srcfile", neon::Value::fromObject(osfile));
+    instance->defProperty("srcline", neon::Value::makeNumber(srcline));
     state->stackPop();
     return instance;
 }
@@ -14217,7 +14251,7 @@ void neon::State::init(void* userptr)
         this->globals = new neon::HashTable(this);
     }
     {
-        this->topmodule = nn_module_make(this, "", "<this>", false);
+        this->topmodule = neon::Module::make(this, "", "<this>", false);
         this->constructorname = neon::String::copy(this, "constructor");
     }
     {
@@ -14321,7 +14355,7 @@ bool nn_vm_callclosure(neon::State* state, neon::FuncClosure* closure, neon::Val
     }
     frame = &state->vmstate.framevalues[state->vmstate.framecount++];
     frame->closure = closure;
-    frame->inscode = closure->scriptfunc->blob.instrucs;
+    frame->inscode = closure->scriptfunc->blob->instrucs;
     frame->stackslotpos = state->vmstate.stackidx + (-argcount - 1);
     return true;
 }
@@ -14386,7 +14420,7 @@ bool nn_vm_callvaluewithobject(neon::State* state, neon::Value callable, neon::V
                 {
                     neon::Module* module;
                     neon::Property* field;
-                    module = nn_value_asmodule(callable);
+                    module = callable.asModule();
                     field = module->deftable->getFieldByObjStr(module->name);
                     if(field != nullptr)
                     {
@@ -14550,7 +14584,7 @@ static NEON_ALWAYSINLINE neon::Value nn_vmbits_readconst(neon::State* state)
 {
     uint16_t idx;
     idx = nn_vmbits_readshort(state);
-    return state->vmstate.currentframe->closure->scriptfunc->blob.constants->values[idx];
+    return state->vmstate.currentframe->closure->scriptfunc->blob->constants->values[idx];
 }
 
 static NEON_ALWAYSINLINE neon::String* nn_vmbits_readstring(neon::State* state)
@@ -14636,7 +14670,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
                 {
                     neon::Module* module;
                     NEON_APIDEBUG(state, "receiver is a module");
-                    module = nn_value_asmodule(receiver);
+                    module = receiver.asModule();
                     field = module->deftable->getFieldByObjStr(name);
                     if(field != nullptr)
                     {
@@ -15324,7 +15358,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexget(neon::State* state)
             }
             case neon::Value::OBJTYPE_MODULE:
             {
-                if(!nn_vmutil_doindexgetmodule(state, nn_value_asmodule(peeked), willassign))
+                if(!nn_vmutil_doindexgetmodule(state, peeked.asModule(), willassign))
                 {
                     return false;
                 }
@@ -15532,7 +15566,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexset(neon::State* state)
                 break;
             case neon::Value::OBJTYPE_MODULE:
                 {
-                    return nn_vmutil_dosetindexmodule(state, nn_value_asmodule(target), index, value);
+                    return nn_vmutil_dosetindexmodule(state, target.asModule(), index, value);
                 }
                 break;
             default:
@@ -15596,7 +15630,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
         case neon::Value::OBJTYPE_MODULE:
             {
                 neon::Module* module;
-                module = nn_value_asmodule(peeked);
+                module = peeked.asModule();
                 field = module->deftable->getFieldByObjStr(name);
                 if(field != nullptr)
                 {
@@ -15838,7 +15872,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
     }
     else if(peeked.isModule())
     {
-        module = nn_value_asmodule(peeked);
+        module = peeked.asModule();
         field = module->deftable->getFieldByObjStr(name);
         if(field != nullptr)
         {
@@ -15897,7 +15931,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
     else if(vtarget.isInstance())
     {
         instance = vtarget.asInstance();
-        nn_instance_defproperty(instance, name->data(), vpeek);
+        instance->defProperty(name->data(), vpeek);
         value = state->stackPop();
         /* removing the instance object */
         state->stackPop();
@@ -16345,18 +16379,18 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
         }
         if(state->conf.shoulddumpstack)
         {
-            ofs = (int)(state->vmstate.currentframe->inscode - state->vmstate.currentframe->closure->scriptfunc->blob.instrucs);
-            nn_dbg_printinstructionat(state->debugwriter, &state->vmstate.currentframe->closure->scriptfunc->blob, ofs);
+            ofs = (int)(state->vmstate.currentframe->inscode - state->vmstate.currentframe->closure->scriptfunc->blob->instrucs);
+            nn_dbg_printinstructionat(state->debugwriter, state->vmstate.currentframe->closure->scriptfunc->blob, ofs);
             fprintf(stderr, "stack (before)=[\n");
             iterpos = 0;
             for(dbgslot = state->vmstate.stackvalues; dbgslot < &state->vmstate.stackvalues[state->vmstate.stackidx]; dbgslot++)
             {
                 printpos = iterpos + 1;
                 iterpos++;
-                fprintf(stderr, "  [%s%d%s] ", nc.color(neon::Color::COLOR_YELLOW), printpos, nc.color(neon::Color::COLOR_RESET));
-                state->debugwriter->putformat("%s", nc.color(neon::Color::COLOR_YELLOW));
+                fprintf(stderr, "  [%s%d%s] ", nc.color('y'), printpos, nc.color('0'));
+                state->debugwriter->putformat("%s", nc.color('y'));
                 nn_printer_printvalue(state->debugwriter, *dbgslot, true, false);
-                state->debugwriter->putformat("%s", nc.color(neon::Color::COLOR_RESET));
+                state->debugwriter->putformat("%s", nc.color('0'));
                 fprintf(stderr, "\n");
             }
             fprintf(stderr, "]\n");
@@ -16991,7 +17025,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     neon::Module* mod;
                     name = state->stackPeek(0).asString();
                     fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->data());
-                    mod = nn_import_loadmodulescript(state, state->topmodule, name);
+                    mod = neon::Module::loadModuleByName(state, state->topmodule, name);
                     fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", mod);
                     if(mod == nullptr)
                     {
@@ -17052,7 +17086,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     }
                     stacktrace = nn_exceptions_getstacktrace(state);
                     instance = peeked.asInstance();
-                    nn_instance_defproperty(instance, "stacktrace", stacktrace);
+                    instance->defProperty("stacktrace", stacktrace);
                     if(state->exceptionPropagate())
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
@@ -17205,14 +17239,14 @@ bool nn_nestcall_callfunction(neon::State* state, neon::Value callable, neon::Va
 
 neon::FuncClosure* nn_state_compilesource(neon::State* state, neon::Module* module, bool fromeval, const char* source)
 {
-    neon::Blob blob;
+    neon::Blob* blob;
     neon::FuncScript* function;
     neon::FuncClosure* closure;
-    nn_blob_init(state, &blob);
-    function = nn_astparser_compilesource(state, module, source, &blob, false, fromeval);
+    blob = new neon::Blob(state);
+    function = nn_astparser_compilesource(state, module, source, blob, false, fromeval);
     if(function == nullptr)
     {
-        nn_blob_destroy(state, &blob);
+        delete blob;
         return nullptr;
     }
     if(!fromeval)
@@ -17229,7 +17263,7 @@ neon::FuncClosure* nn_state_compilesource(neon::State* state, neon::Module* modu
         state->stackPop();
         state->stackPush(neon::Value::fromObject(closure));
     }
-    nn_blob_destroy(state, &blob);
+    delete blob;
     return closure;
 }
 
@@ -17237,7 +17271,7 @@ neon::Status nn_state_execsource(neon::State* state, neon::Module* module, const
 {
     neon::Status status;
     neon::FuncClosure* closure;
-    nn_module_setfilefield(state, module);
+    module->setFileField();
     closure = nn_state_compilesource(state, module, false, source);
     if(closure == nullptr)
     {
@@ -17543,7 +17577,7 @@ void nn_cli_printtypesizes()
     ptyp(neon::Printer);
     ptyp(neon::Value);
     ptyp(neon::Object);
-    ptyp(neon::PropGetSet);
+    ptyp(neon::Property::GetSetter);
     ptyp(neon::Property);
     ptyp(neon::ValArray);
     ptyp(neon::Blob);
