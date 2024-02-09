@@ -255,11 +255,9 @@ namespace neon
     struct /**/HashTable;
     struct /**/Printer;
     struct /**/FormatInfo;
-    struct /**/AstToken;
-    struct /**/AstLexer;
-    struct /**/AstFuncCompiler;
-    struct /**/AstClassCompiler;
-    struct /**/AstParser;
+    struct /**/Token;
+    struct /**/Lexer;
+    struct /**/Parser;
     struct /**/RegModule;
     struct /**/Arguments;
     struct /**/Value;
@@ -1403,7 +1401,7 @@ namespace neon
 
             void* m_memuserptr;
 
-            AstParser* m_activeparser;
+            Parser* m_activeparser;
 
             char* m_rootphysfile;
 
@@ -4048,7 +4046,7 @@ namespace neon
     static const char* g_strthis = "this";
     static const char* g_strsuper = "super";
 
-    struct AstToken
+    struct Token
     {
         public:
             enum Type
@@ -4160,7 +4158,7 @@ namespace neon
             int line;
     };
 
-    struct AstLexer
+    struct Lexer
     {
         public:
             State* m_pvm;
@@ -4171,7 +4169,7 @@ namespace neon
             int m_tplstringbuffer[NEON_CFG_ASTMAXSTRTPLDEPTH];
 
         public:
-            AstLexer(State* state, const char* source)
+            Lexer(State* state, const char* source)
             {
                 NEON_ASTDEBUG(state, "");
                 m_pvm = state;
@@ -4181,7 +4179,7 @@ namespace neon
                 m_tplstringcount = -1;
             }
 
-            ~AstLexer()
+            ~Lexer()
             {
                 NEON_ASTDEBUG(m_pvm, "");
             }
@@ -4191,9 +4189,9 @@ namespace neon
                 return *m_sourceptr == '\0';
             }
 
-            AstToken makeToken(AstToken::Type type)
+            Token makeToken(Token::Type type)
             {
-                AstToken t;
+                Token t;
                 t.isglobal = false;
                 t.type = type;
                 t.start = m_plainsource;
@@ -4202,18 +4200,18 @@ namespace neon
                 return t;
             }
 
-            AstToken errorToken(const char* fmt, ...)
+            Token errorToken(const char* fmt, ...)
             {
                 int length;
                 char* buf;
                 va_list va;
-                AstToken t;
+                Token t;
                 va_start(va, fmt);
                 buf = (char*)State::GC::allocate(m_pvm, sizeof(char), 1024);
                 /* TODO: used to be vasprintf. need to check how much to actually allocate! */
                 length = vsprintf(buf, fmt, va);
                 va_end(va);
-                t.type = AstToken::TOK_ERROR;
+                t.type = Token::TOK_ERROR;
                 t.start = buf;
                 t.isglobal = false;
                 if(buf != nullptr)
@@ -4230,43 +4228,7 @@ namespace neon
 
     };
 
-    struct AstFuncCompiler
-    {
-        public:
-            struct CompiledUpvalue
-            {
-                bool islocal;
-                uint16_t index;
-            };
-
-            struct CompiledLocal
-            {
-                bool iscaptured;
-                int depth;
-                AstToken name;
-            };
-
-        public:
-            int localcount;
-            int scopedepth;
-            int handlercount;
-            bool fromimport;
-            AstFuncCompiler* enclosing;
-            /* current function */
-            FuncScript* targetfunc;
-            FuncCommon::Type type;
-            CompiledLocal locals[NEON_CFG_ASTMAXLOCALS];
-            CompiledUpvalue upvalues[NEON_CFG_ASTMAXUPVALS];
-    };
-
-    struct AstClassCompiler
-    {
-        bool hassuperclass;
-        AstClassCompiler* enclosing;
-        AstToken name;
-    };
-
-    struct AstParser
+    struct Parser
     {
         public:
             enum CompContext
@@ -4317,8 +4279,8 @@ namespace neon
                         PREC_PRIMARY
                     };
 
-                    using PrefixFN = bool (*)(AstParser*, bool);
-                    using InfixFN = bool (*)(AstParser*, AstToken, bool);
+                    using PrefixFN = bool (*)(Parser*, bool);
+                    using InfixFN = bool (*)(Parser*, Token, bool);
 
                 public:
                     PrefixFN prefix;
@@ -4326,6 +4288,41 @@ namespace neon
                     Precedence precedence;
             };
 
+            struct CompiledUpvalue
+            {
+                bool islocal;
+                uint16_t index;
+            };
+
+            struct CompiledLocal
+            {
+                bool iscaptured;
+                int depth;
+                Token name;
+            };
+
+            struct FuncCompiler
+            {
+
+                public:
+                    int localcount;
+                    int scopedepth;
+                    int handlercount;
+                    bool fromimport;
+                    FuncCompiler* enclosing;
+                    /* current function */
+                    FuncScript* targetfunc;
+                    FuncCommon::Type type;
+                    CompiledLocal locals[NEON_CFG_ASTMAXLOCALS];
+                    CompiledUpvalue upvalues[NEON_CFG_ASTMAXUPVALS];
+            };
+
+            struct ClassCompiler
+            {
+                bool hassuperclass;
+                ClassCompiler* enclosing;
+                Token name;
+            };
 
         public:
             bool m_haderror;
@@ -4344,15 +4341,15 @@ namespace neon
             CompContext m_compcontext;
             const char* m_currentphysfile;
             State* m_pvm;
-            AstLexer* m_lexer;
-            AstToken m_currtoken;
-            AstToken m_prevtoken;
-            AstClassCompiler* m_currclasscompiler;
-            AstFuncCompiler* m_currfunccompiler;
+            Lexer* m_lexer;
+            Token m_currtoken;
+            Token m_prevtoken;
+            ClassCompiler* m_currclasscompiler;
+            FuncCompiler* m_currfunccompiler;
             Module* m_currmodule;
 
         public:
-            AstParser(State* state, AstLexer* lexer, Module* module, bool keeplast)
+            Parser(State* state, Lexer* lexer, Module* module, bool keeplast)
             {
                 NEON_ASTDEBUG(state, "");
                 m_pvm = state;
@@ -4365,7 +4362,7 @@ namespace neon
                 m_replcanecho = false;
                 m_isreturning = false;
                 m_istrying = false;
-                m_compcontext = AstParser::COMPCONTEXT_NONE;
+                m_compcontext = Parser::COMPCONTEXT_NONE;
                 m_innermostloopstart = -1;
                 m_innermostloopscopedepth = 0;
                 m_currclasscompiler = nullptr;
@@ -4376,7 +4373,7 @@ namespace neon
                 m_currentphysfile = m_currmodule->physicalpath->data();
             }
 
-            ~AstParser()
+            ~Parser()
             {
             }
     };
@@ -6460,108 +6457,108 @@ const char* nn_astutil_toktype2str(int t)
 {
     switch(t)
     {
-        case neon::AstToken::TOK_NEWLINE: return "neon::AstToken::TOK_NEWLINE";
-        case neon::AstToken::TOK_PARENOPEN: return "neon::AstToken::TOK_PARENOPEN";
-        case neon::AstToken::TOK_PARENCLOSE: return "neon::AstToken::TOK_PARENCLOSE";
-        case neon::AstToken::TOK_BRACKETOPEN: return "neon::AstToken::TOK_BRACKETOPEN";
-        case neon::AstToken::TOK_BRACKETCLOSE: return "neon::AstToken::TOK_BRACKETCLOSE";
-        case neon::AstToken::TOK_BRACEOPEN: return "neon::AstToken::TOK_BRACEOPEN";
-        case neon::AstToken::TOK_BRACECLOSE: return "neon::AstToken::TOK_BRACECLOSE";
-        case neon::AstToken::TOK_SEMICOLON: return "neon::AstToken::TOK_SEMICOLON";
-        case neon::AstToken::TOK_COMMA: return "neon::AstToken::TOK_COMMA";
-        case neon::AstToken::TOK_BACKSLASH: return "neon::AstToken::TOK_BACKSLASH";
-        case neon::AstToken::TOK_EXCLMARK: return "neon::AstToken::TOK_EXCLMARK";
-        case neon::AstToken::TOK_NOTEQUAL: return "neon::AstToken::TOK_NOTEQUAL";
-        case neon::AstToken::TOK_COLON: return "neon::AstToken::TOK_COLON";
-        case neon::AstToken::TOK_AT: return "neon::AstToken::TOK_AT";
-        case neon::AstToken::TOK_DOT: return "neon::AstToken::TOK_DOT";
-        case neon::AstToken::TOK_DOUBLEDOT: return "neon::AstToken::TOK_DOUBLEDOT";
-        case neon::AstToken::TOK_TRIPLEDOT: return "neon::AstToken::TOK_TRIPLEDOT";
-        case neon::AstToken::TOK_PLUS: return "neon::AstToken::TOK_PLUS";
-        case neon::AstToken::TOK_PLUSASSIGN: return "neon::AstToken::TOK_PLUSASSIGN";
-        case neon::AstToken::TOK_INCREMENT: return "neon::AstToken::TOK_INCREMENT";
-        case neon::AstToken::TOK_MINUS: return "neon::AstToken::TOK_MINUS";
-        case neon::AstToken::TOK_MINUSASSIGN: return "neon::AstToken::TOK_MINUSASSIGN";
-        case neon::AstToken::TOK_DECREMENT: return "neon::AstToken::TOK_DECREMENT";
-        case neon::AstToken::TOK_MULTIPLY: return "neon::AstToken::TOK_MULTIPLY";
-        case neon::AstToken::TOK_MULTASSIGN: return "neon::AstToken::TOK_MULTASSIGN";
-        case neon::AstToken::TOK_POWEROF: return "neon::AstToken::TOK_POWEROF";
-        case neon::AstToken::TOK_POWASSIGN: return "neon::AstToken::TOK_POWASSIGN";
-        case neon::AstToken::TOK_DIVIDE: return "neon::AstToken::TOK_DIVIDE";
-        case neon::AstToken::TOK_DIVASSIGN: return "neon::AstToken::TOK_DIVASSIGN";
-        case neon::AstToken::TOK_FLOOR: return "neon::AstToken::TOK_FLOOR";
-        case neon::AstToken::TOK_ASSIGN: return "neon::AstToken::TOK_ASSIGN";
-        case neon::AstToken::TOK_EQUAL: return "neon::AstToken::TOK_EQUAL";
-        case neon::AstToken::TOK_LESSTHAN: return "neon::AstToken::TOK_LESSTHAN";
-        case neon::AstToken::TOK_LESSEQUAL: return "neon::AstToken::TOK_LESSEQUAL";
-        case neon::AstToken::TOK_LEFTSHIFT: return "neon::AstToken::TOK_LEFTSHIFT";
-        case neon::AstToken::TOK_LEFTSHIFTASSIGN: return "neon::AstToken::TOK_LEFTSHIFTASSIGN";
-        case neon::AstToken::TOK_GREATERTHAN: return "neon::AstToken::TOK_GREATERTHAN";
-        case neon::AstToken::TOK_GREATER_EQ: return "neon::AstToken::TOK_GREATER_EQ";
-        case neon::AstToken::TOK_RIGHTSHIFT: return "neon::AstToken::TOK_RIGHTSHIFT";
-        case neon::AstToken::TOK_RIGHTSHIFTASSIGN: return "neon::AstToken::TOK_RIGHTSHIFTASSIGN";
-        case neon::AstToken::TOK_MODULO: return "neon::AstToken::TOK_MODULO";
-        case neon::AstToken::TOK_PERCENT_EQ: return "neon::AstToken::TOK_PERCENT_EQ";
-        case neon::AstToken::TOK_AMP: return "neon::AstToken::TOK_AMP";
-        case neon::AstToken::TOK_AMP_EQ: return "neon::AstToken::TOK_AMP_EQ";
-        case neon::AstToken::TOK_BAR: return "neon::AstToken::TOK_BAR";
-        case neon::AstToken::TOK_BAR_EQ: return "neon::AstToken::TOK_BAR_EQ";
-        case neon::AstToken::TOK_TILDE: return "neon::AstToken::TOK_TILDE";
-        case neon::AstToken::TOK_TILDE_EQ: return "neon::AstToken::TOK_TILDE_EQ";
-        case neon::AstToken::TOK_XOR: return "neon::AstToken::TOK_XOR";
-        case neon::AstToken::TOK_XOR_EQ: return "neon::AstToken::TOK_XOR_EQ";
-        case neon::AstToken::TOK_QUESTION: return "neon::AstToken::TOK_QUESTION";
-        case neon::AstToken::TOK_KWAND: return "neon::AstToken::TOK_KWAND";
-        case neon::AstToken::TOK_KWAS: return "neon::AstToken::TOK_KWAS";
-        case neon::AstToken::TOK_KWASSERT: return "neon::AstToken::TOK_KWASSERT";
-        case neon::AstToken::TOK_KWBREAK: return "neon::AstToken::TOK_KWBREAK";
-        case neon::AstToken::TOK_KWCATCH: return "neon::AstToken::TOK_KWCATCH";
-        case neon::AstToken::TOK_KWCLASS: return "neon::AstToken::TOK_KWCLASS";
-        case neon::AstToken::TOK_KWCONTINUE: return "neon::AstToken::TOK_KWCONTINUE";
-        case neon::AstToken::TOK_KWFUNCTION: return "neon::AstToken::TOK_KWFUNCTION";
-        case neon::AstToken::TOK_KWDEFAULT: return "neon::AstToken::TOK_KWDEFAULT";
-        case neon::AstToken::TOK_KWTHROW: return "neon::AstToken::TOK_KWTHROW";
-        case neon::AstToken::TOK_KWDO: return "neon::AstToken::TOK_KWDO";
-        case neon::AstToken::TOK_KWECHO: return "neon::AstToken::TOK_KWECHO";
-        case neon::AstToken::TOK_KWELSE: return "neon::AstToken::TOK_KWELSE";
-        case neon::AstToken::TOK_KWFALSE: return "neon::AstToken::TOK_KWFALSE";
-        case neon::AstToken::TOK_KWFINALLY: return "neon::AstToken::TOK_KWFINALLY";
-        case neon::AstToken::TOK_KWFOREACH: return "neon::AstToken::TOK_KWFOREACH";
-        case neon::AstToken::TOK_KWIF: return "neon::AstToken::TOK_KWIF";
-        case neon::AstToken::TOK_KWIMPORT: return "neon::AstToken::TOK_KWIMPORT";
-        case neon::AstToken::TOK_KWIN: return "neon::AstToken::TOK_KWIN";
-        case neon::AstToken::TOK_KWFOR: return "neon::AstToken::TOK_KWFOR";
-        case neon::AstToken::TOK_KWNULL: return "neon::AstToken::TOK_KWNULL";
-        case neon::AstToken::TOK_KWNEW: return "neon::AstToken::TOK_KWNEW";
-        case neon::AstToken::TOK_KWOR: return "neon::AstToken::TOK_KWOR";
-        case neon::AstToken::TOK_KWSUPER: return "neon::AstToken::TOK_KWSUPER";
-        case neon::AstToken::TOK_KWRETURN: return "neon::AstToken::TOK_KWRETURN";
-        case neon::AstToken::TOK_KWTHIS: return "neon::AstToken::TOK_KWTHIS";
-        case neon::AstToken::TOK_KWSTATIC: return "neon::AstToken::TOK_KWSTATIC";
-        case neon::AstToken::TOK_KWTRUE: return "neon::AstToken::TOK_KWTRUE";
-        case neon::AstToken::TOK_KWTRY: return "neon::AstToken::TOK_KWTRY";
-        case neon::AstToken::TOK_KWSWITCH: return "neon::AstToken::TOK_KWSWITCH";
-        case neon::AstToken::TOK_KWVAR: return "neon::AstToken::TOK_KWVAR";
-        case neon::AstToken::TOK_KWCASE: return "neon::AstToken::TOK_KWCASE";
-        case neon::AstToken::TOK_KWWHILE: return "neon::AstToken::TOK_KWWHILE";
-        case neon::AstToken::TOK_LITERAL: return "neon::AstToken::TOK_LITERAL";
-        case neon::AstToken::TOK_LITNUMREG: return "neon::AstToken::TOK_LITNUMREG";
-        case neon::AstToken::TOK_LITNUMBIN: return "neon::AstToken::TOK_LITNUMBIN";
-        case neon::AstToken::TOK_LITNUMOCT: return "neon::AstToken::TOK_LITNUMOCT";
-        case neon::AstToken::TOK_LITNUMHEX: return "neon::AstToken::TOK_LITNUMHEX";
-        case neon::AstToken::TOK_IDENTNORMAL: return "neon::AstToken::TOK_IDENTNORMAL";
-        case neon::AstToken::TOK_DECORATOR: return "neon::AstToken::TOK_DECORATOR";
-        case neon::AstToken::TOK_INTERPOLATION: return "neon::AstToken::TOK_INTERPOLATION";
-        case neon::AstToken::TOK_EOF: return "neon::AstToken::TOK_EOF";
-        case neon::AstToken::TOK_ERROR: return "neon::AstToken::TOK_ERROR";
-        case neon::AstToken::TOK_KWEMPTY: return "neon::AstToken::TOK_KWEMPTY";
-        case neon::AstToken::TOK_UNDEFINED: return "neon::AstToken::TOK_UNDEFINED";
-        case neon::AstToken::TOK_TOKCOUNT: return "neon::AstToken::TOK_TOKCOUNT";
+        case neon::Token::TOK_NEWLINE: return "neon::Token::TOK_NEWLINE";
+        case neon::Token::TOK_PARENOPEN: return "neon::Token::TOK_PARENOPEN";
+        case neon::Token::TOK_PARENCLOSE: return "neon::Token::TOK_PARENCLOSE";
+        case neon::Token::TOK_BRACKETOPEN: return "neon::Token::TOK_BRACKETOPEN";
+        case neon::Token::TOK_BRACKETCLOSE: return "neon::Token::TOK_BRACKETCLOSE";
+        case neon::Token::TOK_BRACEOPEN: return "neon::Token::TOK_BRACEOPEN";
+        case neon::Token::TOK_BRACECLOSE: return "neon::Token::TOK_BRACECLOSE";
+        case neon::Token::TOK_SEMICOLON: return "neon::Token::TOK_SEMICOLON";
+        case neon::Token::TOK_COMMA: return "neon::Token::TOK_COMMA";
+        case neon::Token::TOK_BACKSLASH: return "neon::Token::TOK_BACKSLASH";
+        case neon::Token::TOK_EXCLMARK: return "neon::Token::TOK_EXCLMARK";
+        case neon::Token::TOK_NOTEQUAL: return "neon::Token::TOK_NOTEQUAL";
+        case neon::Token::TOK_COLON: return "neon::Token::TOK_COLON";
+        case neon::Token::TOK_AT: return "neon::Token::TOK_AT";
+        case neon::Token::TOK_DOT: return "neon::Token::TOK_DOT";
+        case neon::Token::TOK_DOUBLEDOT: return "neon::Token::TOK_DOUBLEDOT";
+        case neon::Token::TOK_TRIPLEDOT: return "neon::Token::TOK_TRIPLEDOT";
+        case neon::Token::TOK_PLUS: return "neon::Token::TOK_PLUS";
+        case neon::Token::TOK_PLUSASSIGN: return "neon::Token::TOK_PLUSASSIGN";
+        case neon::Token::TOK_INCREMENT: return "neon::Token::TOK_INCREMENT";
+        case neon::Token::TOK_MINUS: return "neon::Token::TOK_MINUS";
+        case neon::Token::TOK_MINUSASSIGN: return "neon::Token::TOK_MINUSASSIGN";
+        case neon::Token::TOK_DECREMENT: return "neon::Token::TOK_DECREMENT";
+        case neon::Token::TOK_MULTIPLY: return "neon::Token::TOK_MULTIPLY";
+        case neon::Token::TOK_MULTASSIGN: return "neon::Token::TOK_MULTASSIGN";
+        case neon::Token::TOK_POWEROF: return "neon::Token::TOK_POWEROF";
+        case neon::Token::TOK_POWASSIGN: return "neon::Token::TOK_POWASSIGN";
+        case neon::Token::TOK_DIVIDE: return "neon::Token::TOK_DIVIDE";
+        case neon::Token::TOK_DIVASSIGN: return "neon::Token::TOK_DIVASSIGN";
+        case neon::Token::TOK_FLOOR: return "neon::Token::TOK_FLOOR";
+        case neon::Token::TOK_ASSIGN: return "neon::Token::TOK_ASSIGN";
+        case neon::Token::TOK_EQUAL: return "neon::Token::TOK_EQUAL";
+        case neon::Token::TOK_LESSTHAN: return "neon::Token::TOK_LESSTHAN";
+        case neon::Token::TOK_LESSEQUAL: return "neon::Token::TOK_LESSEQUAL";
+        case neon::Token::TOK_LEFTSHIFT: return "neon::Token::TOK_LEFTSHIFT";
+        case neon::Token::TOK_LEFTSHIFTASSIGN: return "neon::Token::TOK_LEFTSHIFTASSIGN";
+        case neon::Token::TOK_GREATERTHAN: return "neon::Token::TOK_GREATERTHAN";
+        case neon::Token::TOK_GREATER_EQ: return "neon::Token::TOK_GREATER_EQ";
+        case neon::Token::TOK_RIGHTSHIFT: return "neon::Token::TOK_RIGHTSHIFT";
+        case neon::Token::TOK_RIGHTSHIFTASSIGN: return "neon::Token::TOK_RIGHTSHIFTASSIGN";
+        case neon::Token::TOK_MODULO: return "neon::Token::TOK_MODULO";
+        case neon::Token::TOK_PERCENT_EQ: return "neon::Token::TOK_PERCENT_EQ";
+        case neon::Token::TOK_AMP: return "neon::Token::TOK_AMP";
+        case neon::Token::TOK_AMP_EQ: return "neon::Token::TOK_AMP_EQ";
+        case neon::Token::TOK_BAR: return "neon::Token::TOK_BAR";
+        case neon::Token::TOK_BAR_EQ: return "neon::Token::TOK_BAR_EQ";
+        case neon::Token::TOK_TILDE: return "neon::Token::TOK_TILDE";
+        case neon::Token::TOK_TILDE_EQ: return "neon::Token::TOK_TILDE_EQ";
+        case neon::Token::TOK_XOR: return "neon::Token::TOK_XOR";
+        case neon::Token::TOK_XOR_EQ: return "neon::Token::TOK_XOR_EQ";
+        case neon::Token::TOK_QUESTION: return "neon::Token::TOK_QUESTION";
+        case neon::Token::TOK_KWAND: return "neon::Token::TOK_KWAND";
+        case neon::Token::TOK_KWAS: return "neon::Token::TOK_KWAS";
+        case neon::Token::TOK_KWASSERT: return "neon::Token::TOK_KWASSERT";
+        case neon::Token::TOK_KWBREAK: return "neon::Token::TOK_KWBREAK";
+        case neon::Token::TOK_KWCATCH: return "neon::Token::TOK_KWCATCH";
+        case neon::Token::TOK_KWCLASS: return "neon::Token::TOK_KWCLASS";
+        case neon::Token::TOK_KWCONTINUE: return "neon::Token::TOK_KWCONTINUE";
+        case neon::Token::TOK_KWFUNCTION: return "neon::Token::TOK_KWFUNCTION";
+        case neon::Token::TOK_KWDEFAULT: return "neon::Token::TOK_KWDEFAULT";
+        case neon::Token::TOK_KWTHROW: return "neon::Token::TOK_KWTHROW";
+        case neon::Token::TOK_KWDO: return "neon::Token::TOK_KWDO";
+        case neon::Token::TOK_KWECHO: return "neon::Token::TOK_KWECHO";
+        case neon::Token::TOK_KWELSE: return "neon::Token::TOK_KWELSE";
+        case neon::Token::TOK_KWFALSE: return "neon::Token::TOK_KWFALSE";
+        case neon::Token::TOK_KWFINALLY: return "neon::Token::TOK_KWFINALLY";
+        case neon::Token::TOK_KWFOREACH: return "neon::Token::TOK_KWFOREACH";
+        case neon::Token::TOK_KWIF: return "neon::Token::TOK_KWIF";
+        case neon::Token::TOK_KWIMPORT: return "neon::Token::TOK_KWIMPORT";
+        case neon::Token::TOK_KWIN: return "neon::Token::TOK_KWIN";
+        case neon::Token::TOK_KWFOR: return "neon::Token::TOK_KWFOR";
+        case neon::Token::TOK_KWNULL: return "neon::Token::TOK_KWNULL";
+        case neon::Token::TOK_KWNEW: return "neon::Token::TOK_KWNEW";
+        case neon::Token::TOK_KWOR: return "neon::Token::TOK_KWOR";
+        case neon::Token::TOK_KWSUPER: return "neon::Token::TOK_KWSUPER";
+        case neon::Token::TOK_KWRETURN: return "neon::Token::TOK_KWRETURN";
+        case neon::Token::TOK_KWTHIS: return "neon::Token::TOK_KWTHIS";
+        case neon::Token::TOK_KWSTATIC: return "neon::Token::TOK_KWSTATIC";
+        case neon::Token::TOK_KWTRUE: return "neon::Token::TOK_KWTRUE";
+        case neon::Token::TOK_KWTRY: return "neon::Token::TOK_KWTRY";
+        case neon::Token::TOK_KWSWITCH: return "neon::Token::TOK_KWSWITCH";
+        case neon::Token::TOK_KWVAR: return "neon::Token::TOK_KWVAR";
+        case neon::Token::TOK_KWCASE: return "neon::Token::TOK_KWCASE";
+        case neon::Token::TOK_KWWHILE: return "neon::Token::TOK_KWWHILE";
+        case neon::Token::TOK_LITERAL: return "neon::Token::TOK_LITERAL";
+        case neon::Token::TOK_LITNUMREG: return "neon::Token::TOK_LITNUMREG";
+        case neon::Token::TOK_LITNUMBIN: return "neon::Token::TOK_LITNUMBIN";
+        case neon::Token::TOK_LITNUMOCT: return "neon::Token::TOK_LITNUMOCT";
+        case neon::Token::TOK_LITNUMHEX: return "neon::Token::TOK_LITNUMHEX";
+        case neon::Token::TOK_IDENTNORMAL: return "neon::Token::TOK_IDENTNORMAL";
+        case neon::Token::TOK_DECORATOR: return "neon::Token::TOK_DECORATOR";
+        case neon::Token::TOK_INTERPOLATION: return "neon::Token::TOK_INTERPOLATION";
+        case neon::Token::TOK_EOF: return "neon::Token::TOK_EOF";
+        case neon::Token::TOK_ERROR: return "neon::Token::TOK_ERROR";
+        case neon::Token::TOK_KWEMPTY: return "neon::Token::TOK_KWEMPTY";
+        case neon::Token::TOK_UNDEFINED: return "neon::Token::TOK_UNDEFINED";
+        case neon::Token::TOK_TOKCOUNT: return "neon::Token::TOK_TOKCOUNT";
     }
     return "?invalid?";
 }
 
-char nn_astlex_advance(neon::AstLexer* lex)
+char nn_astlex_advance(neon::Lexer* lex)
 {
     lex->m_sourceptr++;
     if(lex->m_sourceptr[-1] == '\n')
@@ -6571,7 +6568,7 @@ char nn_astlex_advance(neon::AstLexer* lex)
     return lex->m_sourceptr[-1];
 }
 
-bool nn_astlex_match(neon::AstLexer* lex, char expected)
+bool nn_astlex_match(neon::Lexer* lex, char expected)
 {
     if(lex->isAtEnd())
     {
@@ -6589,17 +6586,17 @@ bool nn_astlex_match(neon::AstLexer* lex, char expected)
     return true;
 }
 
-char nn_astlex_peekcurr(neon::AstLexer* lex)
+char nn_astlex_peekcurr(neon::Lexer* lex)
 {
     return *lex->m_sourceptr;
 }
 
-char nn_astlex_peekprev(neon::AstLexer* lex)
+char nn_astlex_peekprev(neon::Lexer* lex)
 {
     return lex->m_sourceptr[-1];
 }
 
-char nn_astlex_peeknext(neon::AstLexer* lex)
+char nn_astlex_peeknext(neon::Lexer* lex)
 {
     if(lex->isAtEnd())
     {
@@ -6608,7 +6605,7 @@ char nn_astlex_peeknext(neon::AstLexer* lex)
     return lex->m_sourceptr[1];
 }
 
-neon::AstToken nn_astlex_skipblockcomments(neon::AstLexer* lex)
+neon::Token nn_astlex_skipblockcomments(neon::Lexer* lex)
 {
     int nesting;
     nesting = 1;
@@ -6640,13 +6637,13 @@ neon::AstToken nn_astlex_skipblockcomments(neon::AstLexer* lex)
     #if defined(NEON_PLAT_ISWINDOWS)
     //nn_astlex_advance(lex);
     #endif
-    return lex->makeToken(neon::AstToken::TOK_UNDEFINED);
+    return lex->makeToken(neon::Token::TOK_UNDEFINED);
 }
 
-neon::AstToken nn_astlex_skipspace(neon::AstLexer* lex)
+neon::Token nn_astlex_skipspace(neon::Lexer* lex)
 {
     char c;
-    neon::AstToken result;
+    neon::Token result;
     result.isglobal = false;
     for(;;)
     {
@@ -6686,14 +6683,14 @@ neon::AstToken nn_astlex_skipspace(neon::AstLexer* lex)
                     {
                         nn_astlex_advance(lex);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_UNDEFINED);
+                    return lex->makeToken(neon::Token::TOK_UNDEFINED);
                 }
                 else if(nn_astlex_peeknext(lex) == '*')
                 {
                     nn_astlex_advance(lex);
                     nn_astlex_advance(lex);
                     result = nn_astlex_skipblockcomments(lex);
-                    if(result.type != neon::AstToken::TOK_UNDEFINED)
+                    if(result.type != neon::Token::TOK_UNDEFINED)
                     {
                         return result;
                     }
@@ -6701,7 +6698,7 @@ neon::AstToken nn_astlex_skipspace(neon::AstLexer* lex)
                 }
                 else
                 {
-                    return lex->makeToken(neon::AstToken::TOK_UNDEFINED);
+                    return lex->makeToken(neon::Token::TOK_UNDEFINED);
                 }
             }
             break;
@@ -6712,12 +6709,12 @@ neon::AstToken nn_astlex_skipspace(neon::AstLexer* lex)
         }
     }
     finished:
-    return lex->makeToken(neon::AstToken::TOK_UNDEFINED);
+    return lex->makeToken(neon::Token::TOK_UNDEFINED);
 }
 
-neon::AstToken nn_astlex_scanstring(neon::AstLexer* lex, char quote, bool withtemplate)
+neon::Token nn_astlex_scanstring(neon::Lexer* lex, char quote, bool withtemplate)
 {
-    neon::AstToken tkn;
+    neon::Token tkn;
     NEON_ASTDEBUG(lex->m_pvm, "quote=[%c] withtemplate=%d", quote, withtemplate);
     while(nn_astlex_peekcurr(lex) != quote && !lex->isAtEnd())
     {
@@ -6731,7 +6728,7 @@ neon::AstToken nn_astlex_scanstring(neon::AstLexer* lex, char quote, bool withte
                     lex->m_tplstringcount++;
                     lex->m_tplstringbuffer[lex->m_tplstringcount] = (int)quote;
                     lex->m_sourceptr++;
-                    tkn = lex->makeToken(neon::AstToken::TOK_INTERPOLATION);
+                    tkn = lex->makeToken(neon::Token::TOK_INTERPOLATION);
                     lex->m_sourceptr++;
                     return tkn;
                 }
@@ -6751,10 +6748,10 @@ neon::AstToken nn_astlex_scanstring(neon::AstLexer* lex, char quote, bool withte
     }
     /* the closing quote */
     nn_astlex_match(lex, quote);
-    return lex->makeToken(neon::AstToken::TOK_LITERAL);
+    return lex->makeToken(neon::Token::TOK_LITERAL);
 }
 
-neon::AstToken nn_astlex_scannumber(neon::AstLexer* lex)
+neon::Token nn_astlex_scannumber(neon::Lexer* lex)
 {
     NEON_ASTDEBUG(lex->m_pvm, "");
     /* handle binary, octal and hexadecimals */
@@ -6767,7 +6764,7 @@ neon::AstToken nn_astlex_scannumber(neon::AstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return lex->makeToken(neon::AstToken::TOK_LITNUMBIN);
+            return lex->makeToken(neon::Token::TOK_LITNUMBIN);
         }
         else if(nn_astlex_match(lex, 'c'))
         {
@@ -6775,7 +6772,7 @@ neon::AstToken nn_astlex_scannumber(neon::AstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return lex->makeToken(neon::AstToken::TOK_LITNUMOCT);
+            return lex->makeToken(neon::Token::TOK_LITNUMOCT);
         }
         else if(nn_astlex_match(lex, 'x'))
         {
@@ -6783,7 +6780,7 @@ neon::AstToken nn_astlex_scannumber(neon::AstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return lex->makeToken(neon::AstToken::TOK_LITNUMHEX);
+            return lex->makeToken(neon::Token::TOK_LITNUMHEX);
         }
     }
     while(nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
@@ -6811,10 +6808,10 @@ neon::AstToken nn_astlex_scannumber(neon::AstLexer* lex)
             }
         }
     }
-    return lex->makeToken(neon::AstToken::TOK_LITNUMREG);
+    return lex->makeToken(neon::Token::TOK_LITNUMREG);
 }
 
-neon::AstToken::Type nn_astlex_getidenttype(neon::AstLexer* lex)
+neon::Token::Type nn_astlex_getidenttype(neon::Lexer* lex)
 {
     static const struct
     {
@@ -6823,43 +6820,43 @@ neon::AstToken::Type nn_astlex_getidenttype(neon::AstLexer* lex)
     }
     keywords[] =
     {
-        { "and", neon::AstToken::TOK_KWAND },
-        { "assert", neon::AstToken::TOK_KWASSERT },
-        { "as", neon::AstToken::TOK_KWAS },
-        { "break", neon::AstToken::TOK_KWBREAK },
-        { "catch", neon::AstToken::TOK_KWCATCH },
-        { "class", neon::AstToken::TOK_KWCLASS },
-        { "continue", neon::AstToken::TOK_KWCONTINUE },
-        { "default", neon::AstToken::TOK_KWDEFAULT },
-        { "def", neon::AstToken::TOK_KWFUNCTION },
-        { "function", neon::AstToken::TOK_KWFUNCTION },
-        { "throw", neon::AstToken::TOK_KWTHROW },
-        { "do", neon::AstToken::TOK_KWDO },
-        { "echo", neon::AstToken::TOK_KWECHO },
-        { "else", neon::AstToken::TOK_KWELSE },
-        { "empty", neon::AstToken::TOK_KWEMPTY },
-        { "false", neon::AstToken::TOK_KWFALSE },
-        { "finally", neon::AstToken::TOK_KWFINALLY },
-        { "foreach", neon::AstToken::TOK_KWFOREACH },
-        { "if", neon::AstToken::TOK_KWIF },
-        { "import", neon::AstToken::TOK_KWIMPORT },
-        { "in", neon::AstToken::TOK_KWIN },
-        { "for", neon::AstToken::TOK_KWFOR },
-        { "null", neon::AstToken::TOK_KWNULL },
-        { "new", neon::AstToken::TOK_KWNEW },
-        { "or", neon::AstToken::TOK_KWOR },
-        { "super", neon::AstToken::TOK_KWSUPER },
-        { "return", neon::AstToken::TOK_KWRETURN },
-        { "this", neon::AstToken::TOK_KWTHIS },
-        { "static", neon::AstToken::TOK_KWSTATIC },
-        { "true", neon::AstToken::TOK_KWTRUE },
-        { "try", neon::AstToken::TOK_KWTRY },
-        { "typeof", neon::AstToken::TOK_KWTYPEOF },
-        { "switch", neon::AstToken::TOK_KWSWITCH },
-        { "case", neon::AstToken::TOK_KWCASE },
-        { "var", neon::AstToken::TOK_KWVAR },
-        { "while", neon::AstToken::TOK_KWWHILE },
-        { nullptr, (neon::AstToken::Type)0 }
+        { "and", neon::Token::TOK_KWAND },
+        { "assert", neon::Token::TOK_KWASSERT },
+        { "as", neon::Token::TOK_KWAS },
+        { "break", neon::Token::TOK_KWBREAK },
+        { "catch", neon::Token::TOK_KWCATCH },
+        { "class", neon::Token::TOK_KWCLASS },
+        { "continue", neon::Token::TOK_KWCONTINUE },
+        { "default", neon::Token::TOK_KWDEFAULT },
+        { "def", neon::Token::TOK_KWFUNCTION },
+        { "function", neon::Token::TOK_KWFUNCTION },
+        { "throw", neon::Token::TOK_KWTHROW },
+        { "do", neon::Token::TOK_KWDO },
+        { "echo", neon::Token::TOK_KWECHO },
+        { "else", neon::Token::TOK_KWELSE },
+        { "empty", neon::Token::TOK_KWEMPTY },
+        { "false", neon::Token::TOK_KWFALSE },
+        { "finally", neon::Token::TOK_KWFINALLY },
+        { "foreach", neon::Token::TOK_KWFOREACH },
+        { "if", neon::Token::TOK_KWIF },
+        { "import", neon::Token::TOK_KWIMPORT },
+        { "in", neon::Token::TOK_KWIN },
+        { "for", neon::Token::TOK_KWFOR },
+        { "null", neon::Token::TOK_KWNULL },
+        { "new", neon::Token::TOK_KWNEW },
+        { "or", neon::Token::TOK_KWOR },
+        { "super", neon::Token::TOK_KWSUPER },
+        { "return", neon::Token::TOK_KWRETURN },
+        { "this", neon::Token::TOK_KWTHIS },
+        { "static", neon::Token::TOK_KWSTATIC },
+        { "true", neon::Token::TOK_KWTRUE },
+        { "try", neon::Token::TOK_KWTRY },
+        { "typeof", neon::Token::TOK_KWTYPEOF },
+        { "switch", neon::Token::TOK_KWSWITCH },
+        { "case", neon::Token::TOK_KWCASE },
+        { "var", neon::Token::TOK_KWVAR },
+        { "while", neon::Token::TOK_KWWHILE },
+        { nullptr, (neon::Token::Type)0 }
     };
     size_t i;
     size_t kwlen;
@@ -6874,17 +6871,17 @@ neon::AstToken::Type nn_astlex_getidenttype(neon::AstLexer* lex)
         {
             if(memcmp(lex->m_plainsource, kwtext, kwlen) == 0)
             {
-                return (neon::AstToken::Type)keywords[i].tokid;
+                return (neon::Token::Type)keywords[i].tokid;
             }
         }
     }
-    return neon::AstToken::TOK_IDENTNORMAL;
+    return neon::Token::TOK_IDENTNORMAL;
 }
 
-neon::AstToken nn_astlex_scanident(neon::AstLexer* lex, bool isdollar)
+neon::Token nn_astlex_scanident(neon::Lexer* lex, bool isdollar)
 {
     int cur;
-    neon::AstToken tok;
+    neon::Token tok;
     cur = nn_astlex_peekcurr(lex);
     if(cur == '$')
     {
@@ -6907,30 +6904,30 @@ neon::AstToken nn_astlex_scanident(neon::AstLexer* lex, bool isdollar)
     return tok;
 }
 
-neon::AstToken nn_astlex_scandecorator(neon::AstLexer* lex)
+neon::Token nn_astlex_scandecorator(neon::Lexer* lex)
 {
     while(nn_astutil_isalpha(nn_astlex_peekcurr(lex)) || nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
     {
         nn_astlex_advance(lex);
     }
-    return lex->makeToken(neon::AstToken::TOK_DECORATOR);
+    return lex->makeToken(neon::Token::TOK_DECORATOR);
 }
 
-neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
+neon::Token nn_astlex_scantoken(neon::Lexer* lex)
 {
     char c;
     bool isdollar;
-    neon::AstToken tk;
-    neon::AstToken token;
+    neon::Token tk;
+    neon::Token token;
     tk = nn_astlex_skipspace(lex);
-    if(tk.type != neon::AstToken::TOK_UNDEFINED)
+    if(tk.type != neon::Token::TOK_UNDEFINED)
     {
         return tk;
     }
     lex->m_plainsource = lex->m_sourceptr;
     if(lex->isAtEnd())
     {
-        return lex->makeToken(neon::AstToken::TOK_EOF);
+        return lex->makeToken(neon::Token::TOK_EOF);
     }
     c = nn_astlex_advance(lex);
     if(nn_astutil_isdigit(c))
@@ -6946,27 +6943,27 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
     {
         case '(':
             {
-                return lex->makeToken(neon::AstToken::TOK_PARENOPEN);
+                return lex->makeToken(neon::Token::TOK_PARENOPEN);
             }
             break;
         case ')':
             {
-                return lex->makeToken(neon::AstToken::TOK_PARENCLOSE);
+                return lex->makeToken(neon::Token::TOK_PARENCLOSE);
             }
             break;
         case '[':
             {
-                return lex->makeToken(neon::AstToken::TOK_BRACKETOPEN);
+                return lex->makeToken(neon::Token::TOK_BRACKETOPEN);
             }
             break;
         case ']':
             {
-                return lex->makeToken(neon::AstToken::TOK_BRACKETCLOSE);
+                return lex->makeToken(neon::Token::TOK_BRACKETCLOSE);
             }
             break;
         case '{':
             {
-                return lex->makeToken(neon::AstToken::TOK_BRACEOPEN);
+                return lex->makeToken(neon::Token::TOK_BRACEOPEN);
             }
             break;
         case '}':
@@ -6977,34 +6974,34 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
                     lex->m_tplstringcount--;
                     return token;
                 }
-                return lex->makeToken(neon::AstToken::TOK_BRACECLOSE);
+                return lex->makeToken(neon::Token::TOK_BRACECLOSE);
             }
             break;
         case ';':
             {
-                return lex->makeToken(neon::AstToken::TOK_SEMICOLON);
+                return lex->makeToken(neon::Token::TOK_SEMICOLON);
             }
             break;
         case '\\':
             {
-                return lex->makeToken(neon::AstToken::TOK_BACKSLASH);
+                return lex->makeToken(neon::Token::TOK_BACKSLASH);
             }
             break;
         case ':':
             {
-                return lex->makeToken(neon::AstToken::TOK_COLON);
+                return lex->makeToken(neon::Token::TOK_COLON);
             }
             break;
         case ',':
             {
-                return lex->makeToken(neon::AstToken::TOK_COMMA);
+                return lex->makeToken(neon::Token::TOK_COMMA);
             }
             break;
         case '@':
             {
                 if(!nn_astutil_isalpha(nn_astlex_peekcurr(lex)))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_AT);
+                    return lex->makeToken(neon::Token::TOK_AT);
                 }
                 return nn_astlex_scandecorator(lex);
             }
@@ -7013,9 +7010,9 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_NOTEQUAL);
+                    return lex->makeToken(neon::Token::TOK_NOTEQUAL);
                 }
-                return lex->makeToken(neon::AstToken::TOK_EXCLMARK);
+                return lex->makeToken(neon::Token::TOK_EXCLMARK);
 
             }
             break;
@@ -7025,26 +7022,26 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '.'))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_TRIPLEDOT);
+                        return lex->makeToken(neon::Token::TOK_TRIPLEDOT);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_DOUBLEDOT);
+                    return lex->makeToken(neon::Token::TOK_DOUBLEDOT);
                 }
-                return lex->makeToken(neon::AstToken::TOK_DOT);
+                return lex->makeToken(neon::Token::TOK_DOT);
             }
             break;
         case '+':
         {
             if(nn_astlex_match(lex, '+'))
             {
-                return lex->makeToken(neon::AstToken::TOK_INCREMENT);
+                return lex->makeToken(neon::Token::TOK_INCREMENT);
             }
             if(nn_astlex_match(lex, '='))
             {
-                return lex->makeToken(neon::AstToken::TOK_PLUSASSIGN);
+                return lex->makeToken(neon::Token::TOK_PLUSASSIGN);
             }
             else
             {
-                return lex->makeToken(neon::AstToken::TOK_PLUS);
+                return lex->makeToken(neon::Token::TOK_PLUS);
             }
         }
         break;
@@ -7052,15 +7049,15 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
             {
                 if(nn_astlex_match(lex, '-'))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_DECREMENT);
+                    return lex->makeToken(neon::Token::TOK_DECREMENT);
                 }
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_MINUSASSIGN);
+                    return lex->makeToken(neon::Token::TOK_MINUSASSIGN);
                 }
                 else
                 {
-                    return lex->makeToken(neon::AstToken::TOK_MINUS);
+                    return lex->makeToken(neon::Token::TOK_MINUS);
                 }
             }
             break;
@@ -7070,17 +7067,17 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_POWASSIGN);
+                        return lex->makeToken(neon::Token::TOK_POWASSIGN);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_POWEROF);
+                    return lex->makeToken(neon::Token::TOK_POWEROF);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_MULTASSIGN);
+                        return lex->makeToken(neon::Token::TOK_MULTASSIGN);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_MULTIPLY);
+                    return lex->makeToken(neon::Token::TOK_MULTIPLY);
                 }
             }
             break;
@@ -7088,18 +7085,18 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_DIVASSIGN);
+                    return lex->makeToken(neon::Token::TOK_DIVASSIGN);
                 }
-                return lex->makeToken(neon::AstToken::TOK_DIVIDE);
+                return lex->makeToken(neon::Token::TOK_DIVIDE);
             }
             break;
         case '=':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_EQUAL);
+                    return lex->makeToken(neon::Token::TOK_EQUAL);
                 }
-                return lex->makeToken(neon::AstToken::TOK_ASSIGN);
+                return lex->makeToken(neon::Token::TOK_ASSIGN);
             }        
             break;
         case '<':
@@ -7108,17 +7105,17 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_LEFTSHIFTASSIGN);
+                        return lex->makeToken(neon::Token::TOK_LEFTSHIFTASSIGN);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_LEFTSHIFT);
+                    return lex->makeToken(neon::Token::TOK_LEFTSHIFT);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_LESSEQUAL);
+                        return lex->makeToken(neon::Token::TOK_LESSEQUAL);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_LESSTHAN);
+                    return lex->makeToken(neon::Token::TOK_LESSTHAN);
 
                 }
             }
@@ -7129,17 +7126,17 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_RIGHTSHIFTASSIGN);
+                        return lex->makeToken(neon::Token::TOK_RIGHTSHIFTASSIGN);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_RIGHTSHIFT);
+                    return lex->makeToken(neon::Token::TOK_RIGHTSHIFT);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return lex->makeToken(neon::AstToken::TOK_GREATER_EQ);
+                        return lex->makeToken(neon::Token::TOK_GREATER_EQ);
                     }
-                    return lex->makeToken(neon::AstToken::TOK_GREATERTHAN);
+                    return lex->makeToken(neon::Token::TOK_GREATERTHAN);
                 }
             }
             break;
@@ -7147,58 +7144,58 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_PERCENT_EQ);
+                    return lex->makeToken(neon::Token::TOK_PERCENT_EQ);
                 }
-                return lex->makeToken(neon::AstToken::TOK_MODULO);
+                return lex->makeToken(neon::Token::TOK_MODULO);
             }
             break;
         case '&':
             {
                 if(nn_astlex_match(lex, '&'))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_KWAND);
+                    return lex->makeToken(neon::Token::TOK_KWAND);
                 }
                 else if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_AMP_EQ);
+                    return lex->makeToken(neon::Token::TOK_AMP_EQ);
                 }
-                return lex->makeToken(neon::AstToken::TOK_AMP);
+                return lex->makeToken(neon::Token::TOK_AMP);
             }
             break;
         case '|':
             {
                 if(nn_astlex_match(lex, '|'))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_KWOR);
+                    return lex->makeToken(neon::Token::TOK_KWOR);
                 }
                 else if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_BAR_EQ);
+                    return lex->makeToken(neon::Token::TOK_BAR_EQ);
                 }
-                return lex->makeToken(neon::AstToken::TOK_BAR);
+                return lex->makeToken(neon::Token::TOK_BAR);
             }
             break;
         case '~':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_TILDE_EQ);
+                    return lex->makeToken(neon::Token::TOK_TILDE_EQ);
                 }
-                return lex->makeToken(neon::AstToken::TOK_TILDE);
+                return lex->makeToken(neon::Token::TOK_TILDE);
             }
             break;
         case '^':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return lex->makeToken(neon::AstToken::TOK_XOR_EQ);
+                    return lex->makeToken(neon::Token::TOK_XOR_EQ);
                 }
-                return lex->makeToken(neon::AstToken::TOK_XOR);
+                return lex->makeToken(neon::Token::TOK_XOR);
             }
             break;
         case '\n':
             {
-                return lex->makeToken(neon::AstToken::TOK_NEWLINE);
+                return lex->makeToken(neon::Token::TOK_NEWLINE);
             }
             break;
         case '"':
@@ -7213,7 +7210,7 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
             break;
         case '?':
             {
-                return lex->makeToken(neon::AstToken::TOK_QUESTION);
+                return lex->makeToken(neon::Token::TOK_QUESTION);
             }
             break;
         /*
@@ -7230,12 +7227,12 @@ neon::AstToken nn_astlex_scantoken(neon::AstLexer* lex)
 }
 
 
-neon::Blob* nn_astparser_currentblob(neon::AstParser* prs)
+neon::Blob* nn_astparser_currentblob(neon::Parser* prs)
 {
     return prs->m_currfunccompiler->targetfunc->blob;
 }
 
-bool nn_astparser_raiseerroratv(neon::AstParser* prs, neon::AstToken* t, const char* message, va_list args)
+bool nn_astparser_raiseerroratv(neon::Parser* prs, neon::Token* t, const char* message, va_list args)
 {
     fflush(stdout);
     /*
@@ -7248,11 +7245,11 @@ bool nn_astparser_raiseerroratv(neon::AstParser* prs, neon::AstToken* t, const c
     }
     prs->m_panicmode = true;
     fprintf(stderr, "SyntaxError");
-    if(t->type == neon::AstToken::TOK_EOF)
+    if(t->type == neon::Token::TOK_EOF)
     {
         fprintf(stderr, " at end");
     }
-    else if(t->type == neon::AstToken::TOK_ERROR)
+    else if(t->type == neon::Token::TOK_ERROR)
     {
         /* do nothing */
     }
@@ -7275,7 +7272,7 @@ bool nn_astparser_raiseerroratv(neon::AstParser* prs, neon::AstToken* t, const c
     return false;
 }
 
-bool nn_astparser_raiseerror(neon::AstParser* prs, const char* message, ...)
+bool nn_astparser_raiseerror(neon::Parser* prs, const char* message, ...)
 {
     va_list args;
     va_start(args, message);
@@ -7284,7 +7281,7 @@ bool nn_astparser_raiseerror(neon::AstParser* prs, const char* message, ...)
     return false;
 }
 
-bool nn_astparser_raiseerroratcurrent(neon::AstParser* prs, const char* message, ...)
+bool nn_astparser_raiseerroratcurrent(neon::Parser* prs, const char* message, ...)
 {
     va_list args;
     va_start(args, message);
@@ -7293,13 +7290,13 @@ bool nn_astparser_raiseerroratcurrent(neon::AstParser* prs, const char* message,
     return false;
 }
 
-void nn_astparser_advance(neon::AstParser* prs)
+void nn_astparser_advance(neon::Parser* prs)
 {
     prs->m_prevtoken = prs->m_currtoken;
     while(true)
     {
         prs->m_currtoken = nn_astlex_scantoken(prs->m_lexer);
-        if(prs->m_currtoken.type != neon::AstToken::TOK_ERROR)
+        if(prs->m_currtoken.type != neon::Token::TOK_ERROR)
         {
             break;
         }
@@ -7307,7 +7304,7 @@ void nn_astparser_advance(neon::AstParser* prs)
     }
 }
 
-bool nn_astparser_consume(neon::AstParser* prs, neon::AstToken::Type t, const char* message)
+bool nn_astparser_consume(neon::Parser* prs, neon::Token::Type t, const char* message)
 {
     if(prs->m_currtoken.type == t)
     {
@@ -7317,7 +7314,7 @@ bool nn_astparser_consume(neon::AstParser* prs, neon::AstToken::Type t, const ch
     return nn_astparser_raiseerroratcurrent(prs, message);
 }
 
-void nn_astparser_consumeor(neon::AstParser* prs, const char* message, const neon::AstToken::Type* ts, int count)
+void nn_astparser_consumeor(neon::Parser* prs, const char* message, const neon::Token::Type* ts, int count)
 {
     int i;
     for(i = 0; i < count; i++)
@@ -7331,23 +7328,23 @@ void nn_astparser_consumeor(neon::AstParser* prs, const char* message, const neo
     nn_astparser_raiseerroratcurrent(prs, message);
 }
 
-bool nn_astparser_checknumber(neon::AstParser* prs)
+bool nn_astparser_checknumber(neon::Parser* prs)
 {
-    neon::AstToken::Type t;
+    neon::Token::Type t;
     t = prs->m_prevtoken.type;
-    if(t == neon::AstToken::TOK_LITNUMREG || t == neon::AstToken::TOK_LITNUMOCT || t == neon::AstToken::TOK_LITNUMBIN || t == neon::AstToken::TOK_LITNUMHEX)
+    if(t == neon::Token::TOK_LITNUMREG || t == neon::Token::TOK_LITNUMOCT || t == neon::Token::TOK_LITNUMBIN || t == neon::Token::TOK_LITNUMHEX)
     {
         return true;
     }
     return false;
 }
 
-bool nn_astparser_check(neon::AstParser* prs, neon::AstToken::Type t)
+bool nn_astparser_check(neon::Parser* prs, neon::Token::Type t)
 {
     return prs->m_currtoken.type == t;
 }
 
-bool nn_astparser_match(neon::AstParser* prs, neon::AstToken::Type t)
+bool nn_astparser_match(neon::Parser* prs, neon::Token::Type t)
 {
     if(!nn_astparser_check(prs, t))
     {
@@ -7357,34 +7354,34 @@ bool nn_astparser_match(neon::AstParser* prs, neon::AstToken::Type t)
     return true;
 }
 
-void nn_astparser_runparser(neon::AstParser* parser)
+void nn_astparser_runparser(neon::Parser* parser)
 {
     nn_astparser_advance(parser);
     nn_astparser_ignorewhitespace(parser);
-    while(!nn_astparser_match(parser, neon::AstToken::TOK_EOF))
+    while(!nn_astparser_match(parser, neon::Token::TOK_EOF))
     {
         nn_astparser_parsedeclaration(parser);
     }
 }
 
-void nn_astparser_parsedeclaration(neon::AstParser* prs)
+void nn_astparser_parsedeclaration(neon::Parser* prs)
 {
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_KWCLASS))
+    if(nn_astparser_match(prs, neon::Token::TOK_KWCLASS))
     {
         nn_astparser_parseclassdeclaration(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWFUNCTION))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWFUNCTION))
     {
         nn_astparser_parsefuncdecl(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWVAR))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
     {
         nn_astparser_parsevardecl(prs, false);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_BRACEOPEN))
+    else if(nn_astparser_match(prs, neon::Token::TOK_BRACEOPEN))
     {
-        if(!nn_astparser_check(prs, neon::AstToken::TOK_NEWLINE) && prs->m_currfunccompiler->scopedepth == 0)
+        if(!nn_astparser_check(prs, neon::Token::TOK_NEWLINE) && prs->m_currfunccompiler->scopedepth == 0)
         {
             nn_astparser_parseexprstmt(prs, false, true);
         }
@@ -7407,65 +7404,65 @@ void nn_astparser_parsedeclaration(neon::AstParser* prs)
     nn_astparser_ignorewhitespace(prs);
 }
 
-void nn_astparser_parsestmt(neon::AstParser* prs)
+void nn_astparser_parsestmt(neon::Parser* prs)
 {
     prs->m_replcanecho = false;
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_KWECHO))
+    if(nn_astparser_match(prs, neon::Token::TOK_KWECHO))
     {
         nn_astparser_parseechostmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWIF))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWIF))
     {
         nn_astparser_parseifstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWDO))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWDO))
     {
         nn_astparser_parsedo_whilestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWWHILE))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWWHILE))
     {
         nn_astparser_parsewhilestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWFOR))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWFOR))
     {
         nn_astparser_parseforstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWFOREACH))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWFOREACH))
     {
         nn_astparser_parseforeachstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWSWITCH))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWSWITCH))
     {
         nn_astparser_parseswitchstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWCONTINUE))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWCONTINUE))
     {
         nn_astparser_parsecontinuestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWBREAK))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWBREAK))
     {
         nn_astparser_parsebreakstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWRETURN))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWRETURN))
     {
         nn_astparser_parsereturnstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWASSERT))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWASSERT))
     {
         nn_astparser_parseassertstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWTHROW))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWTHROW))
     {
         nn_astparser_parsethrowstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_BRACEOPEN))
+    else if(nn_astparser_match(prs, neon::Token::TOK_BRACEOPEN))
     {
         nn_astparser_scopebegin(prs);
         nn_astparser_parseblock(prs);
         nn_astparser_scopeend(prs);
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWTRY))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWTRY))
     {
         nn_astparser_parsetrystmt(prs);
     }
@@ -7476,35 +7473,35 @@ void nn_astparser_parsestmt(neon::AstParser* prs)
     nn_astparser_ignorewhitespace(prs);
 }
 
-void nn_astparser_consumestmtend(neon::AstParser* prs)
+void nn_astparser_consumestmtend(neon::Parser* prs)
 {
     /* allow block last statement to omit statement end */
-    if(prs->m_blockcount > 0 && nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE))
+    if(prs->m_blockcount > 0 && nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
     {
         return;
     }
-    if(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON))
+    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
     {
-        while(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON) || nn_astparser_match(prs, neon::AstToken::TOK_NEWLINE))
+        while(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
         {
         }
         return;
     }
-    if(nn_astparser_match(prs, neon::AstToken::TOK_EOF) || prs->m_prevtoken.type == neon::AstToken::TOK_EOF)
+    if(nn_astparser_match(prs, neon::Token::TOK_EOF) || prs->m_prevtoken.type == neon::Token::TOK_EOF)
     {
         return;
     }
-    /* nn_astparser_consume(prs, neon::AstToken::TOK_NEWLINE, "end of statement expected"); */
-    while(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON) || nn_astparser_match(prs, neon::AstToken::TOK_NEWLINE))
+    /* nn_astparser_consume(prs, neon::Token::TOK_NEWLINE, "end of statement expected"); */
+    while(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
     {
     }
 }
 
-void nn_astparser_ignorewhitespace(neon::AstParser* prs)
+void nn_astparser_ignorewhitespace(neon::Parser* prs)
 {
     while(true)
     {
-        if(nn_astparser_check(prs, neon::AstToken::TOK_NEWLINE))
+        if(nn_astparser_check(prs, neon::Token::TOK_NEWLINE))
         {
             nn_astparser_advance(prs);
         }
@@ -7614,7 +7611,7 @@ int nn_astparser_getcodeargscount(const neon::Instruction* bytecode, const neon:
     return 0;
 }
 
-void nn_astemit_emit(neon::AstParser* prs, uint8_t byte, int line, bool isop)
+void nn_astemit_emit(neon::Parser* prs, uint8_t byte, int line, bool isop)
 {
     neon::Instruction ins;
     ins.code = byte;
@@ -7623,41 +7620,41 @@ void nn_astemit_emit(neon::AstParser* prs, uint8_t byte, int line, bool isop)
     nn_astparser_currentblob(prs)->push(ins);
 }
 
-void nn_astemit_patchat(neon::AstParser* prs, size_t idx, uint8_t byte)
+void nn_astemit_patchat(neon::Parser* prs, size_t idx, uint8_t byte)
 {
     nn_astparser_currentblob(prs)->m_instrucs[idx].code = byte;
 }
 
-void nn_astemit_emitinstruc(neon::AstParser* prs, uint8_t byte)
+void nn_astemit_emitinstruc(neon::Parser* prs, uint8_t byte)
 {
     nn_astemit_emit(prs, byte, prs->m_prevtoken.line, true);
 }
 
-void nn_astemit_emit1byte(neon::AstParser* prs, uint8_t byte)
+void nn_astemit_emit1byte(neon::Parser* prs, uint8_t byte)
 {
     nn_astemit_emit(prs, byte, prs->m_prevtoken.line, false);
 }
 
-void nn_astemit_emit1short(neon::AstParser* prs, uint16_t byte)
+void nn_astemit_emit1short(neon::Parser* prs, uint16_t byte)
 {
     nn_astemit_emit(prs, (byte >> 8) & 0xff, prs->m_prevtoken.line, false);
     nn_astemit_emit(prs, byte & 0xff, prs->m_prevtoken.line, false);
 }
 
-void nn_astemit_emit2byte(neon::AstParser* prs, uint8_t byte, uint8_t byte2)
+void nn_astemit_emit2byte(neon::Parser* prs, uint8_t byte, uint8_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->m_prevtoken.line, false);
     nn_astemit_emit(prs, byte2, prs->m_prevtoken.line, false);
 }
 
-void nn_astemit_emitbyteandshort(neon::AstParser* prs, uint8_t byte, uint16_t byte2)
+void nn_astemit_emitbyteandshort(neon::Parser* prs, uint8_t byte, uint16_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->m_prevtoken.line, false);
     nn_astemit_emit(prs, (byte2 >> 8) & 0xff, prs->m_prevtoken.line, false);
     nn_astemit_emit(prs, byte2 & 0xff, prs->m_prevtoken.line, false);
 }
 
-void nn_astemit_emitloop(neon::AstParser* prs, int loopstart)
+void nn_astemit_emitloop(neon::Parser* prs, int loopstart)
 {
     int offset;
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_LOOP);
@@ -7670,7 +7667,7 @@ void nn_astemit_emitloop(neon::AstParser* prs, int loopstart)
     nn_astemit_emit1byte(prs, offset & 0xff);
 }
 
-void nn_astemit_emitreturn(neon::AstParser* prs)
+void nn_astemit_emitreturn(neon::Parser* prs)
 {
     if(prs->m_istrying)
     {
@@ -7697,7 +7694,7 @@ void nn_astemit_emitreturn(neon::AstParser* prs)
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_RETURN);
 }
 
-int nn_astparser_pushconst(neon::AstParser* prs, neon::Value value)
+int nn_astparser_pushconst(neon::Parser* prs, neon::Value value)
 {
     int constant;
     constant = nn_astparser_currentblob(prs)->pushConst(value);
@@ -7709,14 +7706,14 @@ int nn_astparser_pushconst(neon::AstParser* prs, neon::Value value)
     return constant;
 }
 
-void nn_astemit_emitconst(neon::AstParser* prs, neon::Value value)
+void nn_astemit_emitconst(neon::Parser* prs, neon::Value value)
 {
     int constant;
     constant = nn_astparser_pushconst(prs, value);
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_PUSHCONSTANT, (uint16_t)constant);
 }
 
-int nn_astemit_emitjump(neon::AstParser* prs, uint8_t instruction)
+int nn_astemit_emitjump(neon::Parser* prs, uint8_t instruction)
 {
     nn_astemit_emitinstruc(prs, instruction);
     /* placeholders */
@@ -7725,7 +7722,7 @@ int nn_astemit_emitjump(neon::AstParser* prs, uint8_t instruction)
     return nn_astparser_currentblob(prs)->m_count - 2;
 }
 
-int nn_astemit_emitswitch(neon::AstParser* prs)
+int nn_astemit_emitswitch(neon::Parser* prs)
 {
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_SWITCH);
     /* placeholders */
@@ -7734,7 +7731,7 @@ int nn_astemit_emitswitch(neon::AstParser* prs)
     return nn_astparser_currentblob(prs)->m_count - 2;
 }
 
-int nn_astemit_emittry(neon::AstParser* prs)
+int nn_astemit_emittry(neon::Parser* prs)
 {
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXTRY);
     /* type placeholders */
@@ -7749,13 +7746,13 @@ int nn_astemit_emittry(neon::AstParser* prs)
     return nn_astparser_currentblob(prs)->m_count - 6;
 }
 
-void nn_astemit_patchswitch(neon::AstParser* prs, int offset, int constant)
+void nn_astemit_patchswitch(neon::Parser* prs, int offset, int constant)
 {
     nn_astemit_patchat(prs, offset, (constant >> 8) & 0xff);
     nn_astemit_patchat(prs, offset + 1, constant & 0xff);
 }
 
-void nn_astemit_patchtry(neon::AstParser* prs, int offset, int type, int address, int finally)
+void nn_astemit_patchtry(neon::Parser* prs, int offset, int type, int address, int finally)
 {
     /* patch type */
     nn_astemit_patchat(prs, offset, (type >> 8) & 0xff);
@@ -7768,7 +7765,7 @@ void nn_astemit_patchtry(neon::AstParser* prs, int offset, int type, int address
     nn_astemit_patchat(prs, offset + 5, finally & 0xff);
 }
 
-void nn_astemit_patchjump(neon::AstParser* prs, int offset)
+void nn_astemit_patchjump(neon::Parser* prs, int offset)
 {
     /* -2 to adjust the bytecode for the offset itself */
     int jump;
@@ -7781,10 +7778,10 @@ void nn_astemit_patchjump(neon::AstParser* prs, int offset)
     nn_astemit_patchat(prs, offset + 1, jump & 0xff);
 }
 
-void nn_astfunccompiler_init(neon::AstParser* prs, neon::AstFuncCompiler* compiler, neon::FuncCommon::Type type, bool isanon)
+void nn_astfunccompiler_init(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::FuncCommon::Type type, bool isanon)
 {
     bool candeclthis;
-    neon::AstFuncCompiler::CompiledLocal* local;
+    neon::Parser::CompiledLocal* local;
     neon::String* fname;
     compiler->enclosing = prs->m_pvm->m_activeparser->m_currfunccompiler;
     compiler->targetfunc = nullptr;
@@ -7818,9 +7815,9 @@ void nn_astfunccompiler_init(neon::AstParser* prs, neon::AstFuncCompiler* compil
     local->iscaptured = false;
     candeclthis = (
         (type != neon::FuncCommon::FUNCTYPE_FUNCTION) &&
-        (prs->m_compcontext == neon::AstParser::COMPCONTEXT_CLASS)
+        (prs->m_compcontext == neon::Parser::COMPCONTEXT_CLASS)
     );
-    if(candeclthis || (/*(type == neon::FuncCommon::FUNCTYPE_ANONYMOUS) &&*/ (prs->m_compcontext != neon::AstParser::COMPCONTEXT_CLASS)))
+    if(candeclthis || (/*(type == neon::FuncCommon::FUNCTYPE_ANONYMOUS) &&*/ (prs->m_compcontext != neon::Parser::COMPCONTEXT_CLASS)))
     {
         local->name.start = neon::g_strthis;
         local->name.length = 4;
@@ -7832,7 +7829,7 @@ void nn_astfunccompiler_init(neon::AstParser* prs, neon::AstFuncCompiler* compil
     }
 }
 
-int nn_astparser_makeidentconst(neon::AstParser* prs, neon::AstToken* name)
+int nn_astparser_makeidentconst(neon::Parser* prs, neon::Token* name)
 {
     int rawlen;
     const char* rawstr;
@@ -7848,15 +7845,15 @@ int nn_astparser_makeidentconst(neon::AstParser* prs, neon::AstToken* name)
     return nn_astparser_pushconst(prs, neon::Value::fromObject(str));
 }
 
-bool nn_astparser_identsequal(neon::AstToken* a, neon::AstToken* b)
+bool nn_astparser_identsequal(neon::Token* a, neon::Token* b)
 {
     return a->length == b->length && memcmp(a->start, b->start, a->length) == 0;
 }
 
-int nn_astfunccompiler_resolvelocal(neon::AstParser* prs, neon::AstFuncCompiler* compiler, neon::AstToken* name)
+int nn_astfunccompiler_resolvelocal(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::Token* name)
 {
     int i;
-    neon::AstFuncCompiler::CompiledLocal* local;
+    neon::Parser::CompiledLocal* local;
     for(i = compiler->localcount - 1; i >= 0; i--)
     {
         local = &compiler->locals[i];
@@ -7872,11 +7869,11 @@ int nn_astfunccompiler_resolvelocal(neon::AstParser* prs, neon::AstFuncCompiler*
     return -1;
 }
 
-int nn_astfunccompiler_addupvalue(neon::AstParser* prs, neon::AstFuncCompiler* compiler, uint16_t index, bool islocal)
+int nn_astfunccompiler_addupvalue(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, uint16_t index, bool islocal)
 {
     int i;
     int upcnt;
-    neon::AstFuncCompiler::CompiledUpvalue* upvalue;
+    neon::Parser::CompiledUpvalue* upvalue;
     upcnt = compiler->targetfunc->upvalcount;
     for(i = 0; i < upcnt; i++)
     {
@@ -7896,7 +7893,7 @@ int nn_astfunccompiler_addupvalue(neon::AstParser* prs, neon::AstFuncCompiler* c
     return compiler->targetfunc->upvalcount++;
 }
 
-int nn_astfunccompiler_resolveupvalue(neon::AstParser* prs, neon::AstFuncCompiler* compiler, neon::AstToken* name)
+int nn_astfunccompiler_resolveupvalue(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::Token* name)
 {
     int local;
     int upvalue;
@@ -7918,9 +7915,9 @@ int nn_astfunccompiler_resolveupvalue(neon::AstParser* prs, neon::AstFuncCompile
     return -1;
 }
 
-int nn_astparser_addlocal(neon::AstParser* prs, neon::AstToken name)
+int nn_astparser_addlocal(neon::Parser* prs, neon::Token name)
 {
-    neon::AstFuncCompiler::CompiledLocal* local;
+    neon::Parser::CompiledLocal* local;
     if(prs->m_currfunccompiler->localcount == NEON_CFG_ASTMAXLOCALS)
     {
         /* we've reached maximum local variables per scope */
@@ -7934,11 +7931,11 @@ int nn_astparser_addlocal(neon::AstParser* prs, neon::AstToken name)
     return prs->m_currfunccompiler->localcount;
 }
 
-void nn_astparser_declarevariable(neon::AstParser* prs)
+void nn_astparser_declarevariable(neon::Parser* prs)
 {
     int i;
-    neon::AstToken* name;
-    neon::AstFuncCompiler::CompiledLocal* local;
+    neon::Token* name;
+    neon::Parser::CompiledLocal* local;
     /* global variables are implicitly declared... */
     if(prs->m_currfunccompiler->scopedepth == 0)
     {
@@ -7960,9 +7957,9 @@ void nn_astparser_declarevariable(neon::AstParser* prs)
     nn_astparser_addlocal(prs, *name);
 }
 
-int nn_astparser_parsevariable(neon::AstParser* prs, const char* message)
+int nn_astparser_parsevariable(neon::Parser* prs, const char* message)
 {
-    if(!nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, message))
+    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, message))
     {
         /* what to do here? */
     }
@@ -7975,7 +7972,7 @@ int nn_astparser_parsevariable(neon::AstParser* prs, const char* message)
     return nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
 }
 
-void nn_astparser_markinitialized(neon::AstParser* prs)
+void nn_astparser_markinitialized(neon::Parser* prs)
 {
     if(prs->m_currfunccompiler->scopedepth == 0)
     {
@@ -7984,7 +7981,7 @@ void nn_astparser_markinitialized(neon::AstParser* prs)
     prs->m_currfunccompiler->locals[prs->m_currfunccompiler->localcount - 1].depth = prs->m_currfunccompiler->scopedepth;
 }
 
-void nn_astparser_definevariable(neon::AstParser* prs, int global)
+void nn_astparser_definevariable(neon::Parser* prs, int global)
 {
     /* we are in a local scope... */
     if(prs->m_currfunccompiler->scopedepth > 0)
@@ -7995,18 +7992,18 @@ void nn_astparser_definevariable(neon::AstParser* prs, int global)
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_GLOBALDEFINE, global);
 }
 
-neon::AstToken nn_astparser_synthtoken(const char* name)
+neon::Token nn_astparser_synthtoken(const char* name)
 {
-    neon::AstToken token;
+    neon::Token token;
     token.isglobal = false;
     token.line = 0;
-    token.type = (neon::AstToken::Type)0;
+    token.type = (neon::Token::Type)0;
     token.start = name;
     token.length = (int)strlen(name);
     return token;
 }
 
-neon::FuncScript* nn_astparser_endcompiler(neon::AstParser* prs)
+neon::FuncScript* nn_astparser_endcompiler(neon::Parser* prs)
 {
     const char* fname;
     neon::FuncScript* function;
@@ -8030,13 +8027,13 @@ neon::FuncScript* nn_astparser_endcompiler(neon::AstParser* prs)
     return function;
 }
 
-void nn_astparser_scopebegin(neon::AstParser* prs)
+void nn_astparser_scopebegin(neon::Parser* prs)
 {
     NEON_ASTDEBUG(prs->m_pvm, "current depth=%d", prs->m_currfunccompiler->scopedepth);
     prs->m_currfunccompiler->scopedepth++;
 }
 
-bool nn_astutil_scopeendcancontinue(neon::AstParser* prs)
+bool nn_astutil_scopeendcancontinue(neon::Parser* prs)
 {
     int lopos;
     int locount;
@@ -8054,7 +8051,7 @@ bool nn_astutil_scopeendcancontinue(neon::AstParser* prs)
     return false;
 }
 
-void nn_astparser_scopeend(neon::AstParser* prs)
+void nn_astparser_scopeend(neon::Parser* prs)
 {
     NEON_ASTDEBUG(prs->m_pvm, "current scope depth=%d", prs->m_currfunccompiler->scopedepth);
     prs->m_currfunccompiler->scopedepth--;
@@ -8079,7 +8076,7 @@ void nn_astparser_scopeend(neon::AstParser* prs)
     }
 }
 
-int nn_astparser_discardlocals(neon::AstParser* prs, int depth)
+int nn_astparser_discardlocals(neon::Parser* prs, int depth)
 {
     int local;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -8107,7 +8104,7 @@ int nn_astparser_discardlocals(neon::AstParser* prs, int depth)
     return prs->m_currfunccompiler->localcount - local - 1;
 }
 
-void nn_astparser_endloop(neon::AstParser* prs)
+void nn_astparser_endloop(neon::Parser* prs)
 {
     int i;
     neon::Instruction* bcode;
@@ -8134,78 +8131,78 @@ void nn_astparser_endloop(neon::AstParser* prs)
     }
 }
 
-bool nn_astparser_rulebinary(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_rulebinary(neon::Parser* prs, neon::Token previous, bool canassign)
 {
-    neon::AstToken::Type op;
-    neon::AstParser::Rule* rule;
+    neon::Token::Type op;
+    neon::Parser::Rule* rule;
     (void)previous;
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
     op = prs->m_prevtoken.type;
     /* compile the right operand */
     rule = nn_astparser_getrule(op);
-    nn_astparser_parseprecedence(prs, (neon::AstParser::Rule::Precedence)(rule->precedence + 1));
+    nn_astparser_parseprecedence(prs, (neon::Parser::Rule::Precedence)(rule->precedence + 1));
     /* emit the operator instruction */
     switch(op)
     {
-        case neon::AstToken::TOK_PLUS:
+        case neon::Token::TOK_PLUS:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMADD);
             break;
-        case neon::AstToken::TOK_MINUS:
+        case neon::Token::TOK_MINUS:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMSUBTRACT);
             break;
-        case neon::AstToken::TOK_MULTIPLY:
+        case neon::Token::TOK_MULTIPLY:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMMULTIPLY);
             break;
-        case neon::AstToken::TOK_DIVIDE:
+        case neon::Token::TOK_DIVIDE:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMDIVIDE);
             break;
-        case neon::AstToken::TOK_MODULO:
+        case neon::Token::TOK_MODULO:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMMODULO);
             break;
-        case neon::AstToken::TOK_POWEROF:
+        case neon::Token::TOK_POWEROF:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMPOW);
             break;
-        case neon::AstToken::TOK_FLOOR:
+        case neon::Token::TOK_FLOOR:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMFLOORDIVIDE);
             break;
             /* equality */
-        case neon::AstToken::TOK_EQUAL:
+        case neon::Token::TOK_EQUAL:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_EQUAL);
             break;
-        case neon::AstToken::TOK_NOTEQUAL:
+        case neon::Token::TOK_NOTEQUAL:
             nn_astemit_emit2byte(prs, neon::Instruction::OP_EQUAL, neon::Instruction::OP_PRIMNOT);
             break;
-        case neon::AstToken::TOK_GREATERTHAN:
+        case neon::Token::TOK_GREATERTHAN:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMGREATER);
             break;
-        case neon::AstToken::TOK_GREATER_EQ:
+        case neon::Token::TOK_GREATER_EQ:
             nn_astemit_emit2byte(prs, neon::Instruction::OP_PRIMLESSTHAN, neon::Instruction::OP_PRIMNOT);
             break;
-        case neon::AstToken::TOK_LESSTHAN:
+        case neon::Token::TOK_LESSTHAN:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMLESSTHAN);
             break;
-        case neon::AstToken::TOK_LESSEQUAL:
+        case neon::Token::TOK_LESSEQUAL:
             nn_astemit_emit2byte(prs, neon::Instruction::OP_PRIMGREATER, neon::Instruction::OP_PRIMNOT);
             break;
             /* bitwise */
-        case neon::AstToken::TOK_AMP:
+        case neon::Token::TOK_AMP:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMAND);
             break;
-        case neon::AstToken::TOK_BAR:
+        case neon::Token::TOK_BAR:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMOR);
             break;
-        case neon::AstToken::TOK_XOR:
+        case neon::Token::TOK_XOR:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMBITXOR);
             break;
-        case neon::AstToken::TOK_LEFTSHIFT:
+        case neon::Token::TOK_LEFTSHIFT:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMSHIFTLEFT);
             break;
-        case neon::AstToken::TOK_RIGHTSHIFT:
+        case neon::Token::TOK_RIGHTSHIFT:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMSHIFTRIGHT);
             break;
             /* range */
-        case neon::AstToken::TOK_DOUBLEDOT:
+        case neon::Token::TOK_DOUBLEDOT:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_MAKERANGE);
             break;
         default:
@@ -8214,7 +8211,7 @@ bool nn_astparser_rulebinary(neon::AstParser* prs, neon::AstToken previous, bool
     return true;
 }
 
-bool nn_astparser_rulecall(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_rulecall(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     uint8_t argcount;
     (void)previous;
@@ -8225,19 +8222,19 @@ bool nn_astparser_rulecall(neon::AstParser* prs, neon::AstToken previous, bool c
     return true;
 }
 
-bool nn_astparser_ruleliteral(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruleliteral(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
     switch(prs->m_prevtoken.type)
     {
-        case neon::AstToken::TOK_KWNULL:
+        case neon::Token::TOK_KWNULL:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
             break;
-        case neon::AstToken::TOK_KWTRUE:
+        case neon::Token::TOK_KWTRUE:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHTRUE);
             break;
-        case neon::AstToken::TOK_KWFALSE:
+        case neon::Token::TOK_KWFALSE:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHFALSE);
             break;
         default:
@@ -8247,7 +8244,7 @@ bool nn_astparser_ruleliteral(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-void nn_astparser_parseassign(neon::AstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+void nn_astparser_parseassign(neon::Parser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
     prs->m_replcanecho = false;
@@ -8275,10 +8272,10 @@ void nn_astparser_parseassign(neon::AstParser* prs, uint8_t realop, uint8_t geto
     }
 }
 
-void nn_astparser_assignment(neon::AstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
+void nn_astparser_assignment(neon::Parser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_ASSIGN))
+    if(canassign && nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
     {
         prs->m_replcanecho = false;
         nn_astparser_parseexpression(prs);
@@ -8291,55 +8288,55 @@ void nn_astparser_assignment(neon::AstParser* prs, uint8_t getop, uint8_t setop,
             nn_astemit_emitinstruc(prs, setop);
         }
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_PLUSASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_PLUSASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMADD, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_MINUSASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_MINUSASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSUBTRACT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_MULTASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_MULTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMULTIPLY, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_DIVASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_DIVASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMDIVIDE, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_POWASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_POWASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMPOW, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_PERCENT_EQ))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_PERCENT_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMODULO, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_AMP_EQ))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_AMP_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMAND, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_BAR_EQ))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_BAR_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMOR, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_TILDE_EQ))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_TILDE_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITNOT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_XOR_EQ))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_XOR_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITXOR, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_LEFTSHIFTASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_LEFTSHIFTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTLEFT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_RIGHTSHIFTASSIGN))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_RIGHTSHIFTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTRIGHT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_INCREMENT))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_INCREMENT))
     {
         prs->m_replcanecho = false;
         if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
@@ -8359,7 +8356,7 @@ void nn_astparser_assignment(neon::AstParser* prs, uint8_t getop, uint8_t setop,
         nn_astemit_emit2byte(prs, neon::Instruction::OP_PUSHONE, neon::Instruction::OP_PRIMADD);
         nn_astemit_emitbyteandshort(prs, setop, (uint16_t)arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_DECREMENT))
+    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_DECREMENT))
     {
         prs->m_replcanecho = false;
         if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
@@ -8399,7 +8396,7 @@ void nn_astparser_assignment(neon::AstParser* prs, uint8_t getop, uint8_t setop,
     }
 }
 
-bool nn_astparser_ruledot(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     int name;
     bool caninvoke;
@@ -8408,18 +8405,18 @@ bool nn_astparser_ruledot(neon::AstParser* prs, neon::AstToken previous, bool ca
     neon::Instruction::OpCode setop;
     NEON_ASTDEBUG(prs->m_pvm, "");
     nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "expected property name after '.'"))
+    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected property name after '.'"))
     {
         return false;
     }
     name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_PARENOPEN))
+    if(nn_astparser_match(prs, neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
         caninvoke = (
             (prs->m_currclasscompiler != nullptr) &&
             (
-                (previous.type == neon::AstToken::TOK_KWTHIS) ||
+                (previous.type == neon::Token::TOK_KWTHIS) ||
                 (nn_astparser_identsequal(&prs->m_prevtoken, &prs->m_currclasscompiler->name))
             )
         );
@@ -8437,7 +8434,7 @@ bool nn_astparser_ruledot(neon::AstParser* prs, neon::AstToken previous, bool ca
     {
         getop = neon::Instruction::OP_PROPERTYGET;
         setop = neon::Instruction::OP_PROPERTYSET;
-        if(prs->m_currclasscompiler != nullptr && (previous.type == neon::AstToken::TOK_KWTHIS || nn_astparser_identsequal(&prs->m_prevtoken, &prs->m_currclasscompiler->name)))
+        if(prs->m_currclasscompiler != nullptr && (previous.type == neon::Token::TOK_KWTHIS || nn_astparser_identsequal(&prs->m_prevtoken, &prs->m_currclasscompiler->name)))
         {
             getop = neon::Instruction::OP_PROPERTYGETSELF;
         }
@@ -8446,7 +8443,7 @@ bool nn_astparser_ruledot(neon::AstParser* prs, neon::AstToken previous, bool ca
     return true;
 }
 
-void nn_astparser_namedvar(neon::AstParser* prs, neon::AstToken name, bool canassign)
+void nn_astparser_namedvar(neon::Parser* prs, neon::Token name, bool canassign)
 {
     bool fromclass;
     uint8_t getop;
@@ -8487,7 +8484,7 @@ void nn_astparser_namedvar(neon::AstParser* prs, neon::AstToken name, bool canas
     nn_astparser_assignment(prs, getop, setop, arg, canassign);
 }
 
-void nn_astparser_createdvar(neon::AstParser* prs, neon::AstToken name)
+void nn_astparser_createdvar(neon::Parser* prs, neon::Token name)
 {
     int local;
     NEON_ASTDEBUG(prs->m_pvm, "name=%.*s", name.length, name.start);
@@ -8503,7 +8500,7 @@ void nn_astparser_createdvar(neon::AstParser* prs, neon::AstToken name)
     }
 }
 
-bool nn_astparser_rulearray(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulearray(neon::Parser* prs, bool canassign)
 {
     int count;
     (void)canassign;
@@ -8512,12 +8509,12 @@ bool nn_astparser_rulearray(neon::AstParser* prs, bool canassign)
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     count = 0;
     nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_BRACKETCLOSE))
+    if(!nn_astparser_check(prs, neon::Token::TOK_BRACKETCLOSE))
     {
         do
         {
             nn_astparser_ignorewhitespace(prs);
-            if(!nn_astparser_check(prs, neon::AstToken::TOK_BRACKETCLOSE))
+            if(!nn_astparser_check(prs, neon::Token::TOK_BRACKETCLOSE))
             {
                 /* allow comma to end lists */
                 nn_astparser_parseexpression(prs);
@@ -8525,19 +8522,19 @@ bool nn_astparser_rulearray(neon::AstParser* prs, bool canassign)
                 count++;
             }
             nn_astparser_ignorewhitespace(prs);
-        } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
     }
     nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACKETCLOSE, "expected ']' at end of list");
+    nn_astparser_consume(prs, neon::Token::TOK_BRACKETCLOSE, "expected ']' at end of list");
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKEARRAY, count);
     return true;
 }
 
-bool nn_astparser_ruledictionary(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruledictionary(neon::Parser* prs, bool canassign)
 {
     bool usedexpression;
     int itemcount;
-    neon::AstParser::CompContext oldctx;
+    neon::Parser::CompContext oldctx;
     (void)canassign;
     (void)oldctx;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -8545,18 +8542,18 @@ bool nn_astparser_ruledictionary(neon::AstParser* prs, bool canassign)
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     itemcount = 0;
     nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE))
+    if(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
     {
         do
         {
             nn_astparser_ignorewhitespace(prs);
-            if(!nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE))
+            if(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
             {
                 /* allow last pair to end with a comma */
                 usedexpression = false;
-                if(nn_astparser_check(prs, neon::AstToken::TOK_IDENTNORMAL))
+                if(nn_astparser_check(prs, neon::Token::TOK_IDENTNORMAL))
                 {
-                    nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "");
+                    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "");
                     nn_astemit_emitconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length)));
                 }
                 else
@@ -8565,9 +8562,9 @@ bool nn_astparser_ruledictionary(neon::AstParser* prs, bool canassign)
                     usedexpression = true;
                 }
                 nn_astparser_ignorewhitespace(prs);
-                if(!nn_astparser_check(prs, neon::AstToken::TOK_COMMA) && !nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE))
+                if(!nn_astparser_check(prs, neon::Token::TOK_COMMA) && !nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
                 {
-                    nn_astparser_consume(prs, neon::AstToken::TOK_COLON, "expected ':' after dictionary key");
+                    nn_astparser_consume(prs, neon::Token::TOK_COLON, "expected ':' after dictionary key");
                     nn_astparser_ignorewhitespace(prs);
 
                     nn_astparser_parseexpression(prs);
@@ -8586,15 +8583,15 @@ bool nn_astparser_ruledictionary(neon::AstParser* prs, bool canassign)
                 }
                 itemcount++;
             }
-        } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
     }
     nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACECLOSE, "expected '}' after dictionary");
+    nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after dictionary");
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKEDICT, itemcount);
     return true;
 }
 
-bool nn_astparser_ruleindexing(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_ruleindexing(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     bool assignable;
     bool commamatch;
@@ -8605,7 +8602,7 @@ bool nn_astparser_ruleindexing(neon::AstParser* prs, neon::AstToken previous, bo
     assignable = true;
     commamatch = false;
     getop = neon::Instruction::OP_INDEXGET;
-    if(nn_astparser_match(prs, neon::AstToken::TOK_COMMA))
+    if(nn_astparser_match(prs, neon::Token::TOK_COMMA))
     {
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
         commamatch = true;
@@ -8615,21 +8612,21 @@ bool nn_astparser_ruleindexing(neon::AstParser* prs, neon::AstToken previous, bo
     {
         nn_astparser_parseexpression(prs);
     }
-    if(!nn_astparser_match(prs, neon::AstToken::TOK_BRACKETCLOSE))
+    if(!nn_astparser_match(prs, neon::Token::TOK_BRACKETCLOSE))
     {
         getop = neon::Instruction::OP_INDEXGETRANGED;
         if(!commamatch)
         {
-            nn_astparser_consume(prs, neon::AstToken::TOK_COMMA, "expecting ',' or ']'");
+            nn_astparser_consume(prs, neon::Token::TOK_COMMA, "expecting ',' or ']'");
         }
-        if(nn_astparser_match(prs, neon::AstToken::TOK_BRACKETCLOSE))
+        if(nn_astparser_match(prs, neon::Token::TOK_BRACKETCLOSE))
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
         }
         else
         {
             nn_astparser_parseexpression(prs);
-            nn_astparser_consume(prs, neon::AstToken::TOK_BRACKETCLOSE, "expected ']' after indexing");
+            nn_astparser_consume(prs, neon::Token::TOK_BRACKETCLOSE, "expected ']' after indexing");
         }
         assignable = false;
     }
@@ -8644,21 +8641,21 @@ bool nn_astparser_ruleindexing(neon::AstParser* prs, neon::AstToken previous, bo
     return true;
 }
 
-bool nn_astparser_rulevarnormal(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulevarnormal(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
     nn_astparser_namedvar(prs, prs->m_prevtoken, canassign);
     return true;
 }
 
-bool nn_astparser_rulevarglobal(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulevarglobal(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
     nn_astparser_namedvar(prs, prs->m_prevtoken, canassign);
     return true;
 }
 
-bool nn_astparser_rulethis(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulethis(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -8677,7 +8674,7 @@ bool nn_astparser_rulethis(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
 {
     int name;
     bool invokeself;
@@ -8696,10 +8693,10 @@ bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
     }
     name = -1;
     invokeself = false;
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_PARENOPEN))
+    if(!nn_astparser_check(prs, neon::Token::TOK_PARENOPEN))
     {
-        nn_astparser_consume(prs, neon::AstToken::TOK_DOT, "expected '.' or '(' after super");
-        nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "expected super class method name after .");
+        nn_astparser_consume(prs, neon::Token::TOK_DOT, "expected '.' or '(' after super");
+        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected super class method name after .");
         name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
     }
     else
@@ -8707,7 +8704,7 @@ bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
         invokeself = true;
     }
     nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_PARENOPEN))
+    if(nn_astparser_match(prs, neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
         nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
@@ -8729,38 +8726,38 @@ bool nn_astparser_rulesuper(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulegrouping(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulegrouping(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_parseexpression(prs);
-    while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA))
+    while(nn_astparser_match(prs, neon::Token::TOK_COMMA))
     {
         nn_astparser_parseexpression(prs);
     }
     nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after grouped expression");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after grouped expression");
     return true;
 }
 
-neon::Value nn_astparser_compilenumber(neon::AstParser* prs)
+neon::Value nn_astparser_compilenumber(neon::Parser* prs)
 {
     double dbval;
     long longval;
     long long llval;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    if(prs->m_prevtoken.type == neon::AstToken::TOK_LITNUMBIN)
+    if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMBIN)
     {
         llval = strtoll(prs->m_prevtoken.start + 2, nullptr, 2);
         return neon::Value::makeNumber(llval);
     }
-    else if(prs->m_prevtoken.type == neon::AstToken::TOK_LITNUMOCT)
+    else if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMOCT)
     {
         longval = strtol(prs->m_prevtoken.start + 2, nullptr, 8);
         return neon::Value::makeNumber(longval);
     }
-    else if(prs->m_prevtoken.type == neon::AstToken::TOK_LITNUMHEX)
+    else if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMHEX)
     {
         longval = strtol(prs->m_prevtoken.start, nullptr, 16);
         return neon::Value::makeNumber(longval);
@@ -8772,7 +8769,7 @@ neon::Value nn_astparser_compilenumber(neon::AstParser* prs)
     }
 }
 
-bool nn_astparser_rulenumber(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulenumber(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -8804,7 +8801,7 @@ int nn_astparser_readhexdigit(char c)
 /*
 // Reads [digits] hex digits in a string literal and returns their number value.
 */
-int nn_astparser_readhexescape(neon::AstParser* prs, const char* str, int index, int count)
+int nn_astparser_readhexescape(neon::Parser* prs, const char* str, int index, int count)
 {
     size_t pos;
     int i;
@@ -8832,7 +8829,7 @@ int nn_astparser_readhexescape(neon::AstParser* prs, const char* str, int index,
     return value;
 }
 
-int nn_astparser_readunicodeescape(neon::AstParser* prs, char* string, const char* realstring, int numberbytes, int realindex, int index)
+int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, const char* realstring, int numberbytes, int realindex, int index)
 {
     int value;
     int count;
@@ -8873,7 +8870,7 @@ int nn_astparser_readunicodeescape(neon::AstParser* prs, char* string, const cha
     return count;
 }
 
-char* nn_astparser_compilestring(neon::AstParser* prs, int* length)
+char* nn_astparser_compilestring(neon::Parser* prs, int* length)
 {
     int k;
     int i;
@@ -8980,8 +8977,8 @@ char* nn_astparser_compilestring(neon::AstParser* prs, int* length)
                     break;
                 case 'x':
                     {
-                        //int nn_astparser_readunicodeescape(neon::AstParser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
-                        //int nn_astparser_readhexescape(neon::AstParser* prs, const char* str, int index, int count)
+                        //int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
+                        //int nn_astparser_readhexescape(neon::Parser* prs, const char* str, int index, int count)
                         //k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
                         //k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
                         c = nn_astparser_readhexescape(prs, realstr, i, 2) - 0;
@@ -9039,7 +9036,7 @@ char* nn_astparser_compilestring(neon::AstParser* prs, int* length)
     return deststr;
 }
 
-bool nn_astparser_rulestring(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulestring(neon::Parser* prs, bool canassign)
 {
     int length;
     char* str;
@@ -9050,7 +9047,7 @@ bool nn_astparser_rulestring(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleinterpolstring(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruleinterpolstring(neon::Parser* prs, bool canassign)
 {
     int count;
     bool doadd;
@@ -9078,8 +9075,8 @@ bool nn_astparser_ruleinterpolstring(neon::AstParser* prs, bool canassign)
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMADD);
         }
         count++;
-    } while(nn_astparser_match(prs, neon::AstToken::TOK_INTERPOLATION));
-    nn_astparser_consume(prs, neon::AstToken::TOK_LITERAL, "unterminated string interpolation");
+    } while(nn_astparser_match(prs, neon::Token::TOK_INTERPOLATION));
+    nn_astparser_consume(prs, neon::Token::TOK_LITERAL, "unterminated string interpolation");
     if(prs->m_prevtoken.length - 2 > 0)
     {
         nn_astparser_rulestring(prs, canassign);
@@ -9088,24 +9085,24 @@ bool nn_astparser_ruleinterpolstring(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleunary(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruleunary(neon::Parser* prs, bool canassign)
 {
-    neon::AstToken::Type op;
+    neon::Token::Type op;
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
     op = prs->m_prevtoken.type;
     /* compile the expression */
-    nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_UNARY);
+    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_UNARY);
     /* emit instruction */
     switch(op)
     {
-        case neon::AstToken::TOK_MINUS:
+        case neon::Token::TOK_MINUS:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMNEGATE);
             break;
-        case neon::AstToken::TOK_EXCLMARK:
+        case neon::Token::TOK_EXCLMARK:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMNOT);
             break;
-        case neon::AstToken::TOK_TILDE:
+        case neon::Token::TOK_TILDE:
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMBITNOT);
             break;
         default:
@@ -9114,7 +9111,7 @@ bool nn_astparser_ruleunary(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleand(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_ruleand(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     int endjump;
     (void)previous;
@@ -9122,12 +9119,12 @@ bool nn_astparser_ruleand(neon::AstParser* prs, neon::AstToken previous, bool ca
     NEON_ASTDEBUG(prs->m_pvm, "");
     endjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_AND);
+    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_AND);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
 
-bool nn_astparser_ruleor(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_ruleor(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     int endjump;
     int elsejump;
@@ -9138,12 +9135,12 @@ bool nn_astparser_ruleor(neon::AstParser* prs, neon::AstToken previous, bool can
     endjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, elsejump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_OR);
+    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_OR);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
 
-bool nn_astparser_ruleconditional(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_ruleconditional(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     int thenjump;
     int elsejump;
@@ -9154,24 +9151,24 @@ bool nn_astparser_ruleconditional(neon::AstParser* prs, neon::AstToken previous,
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     nn_astparser_ignorewhitespace(prs);
     /* compile the then expression */
-    nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_CONDITIONAL);
+    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_CONDITIONAL);
     nn_astparser_ignorewhitespace(prs);
     elsejump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_consume(prs, neon::AstToken::TOK_COLON, "expected matching ':' after '?' conditional");
+    nn_astparser_consume(prs, neon::Token::TOK_COLON, "expected matching ':' after '?' conditional");
     nn_astparser_ignorewhitespace(prs);
     /*
     // compile the else expression
-    // here we parse at neon::AstParser::Rule::PREC_ASSIGNMENT precedence as
+    // here we parse at neon::Parser::Rule::PREC_ASSIGNMENT precedence as
     // linear conditionals can be nested.
     */
-    nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_ASSIGNMENT);
+    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
     nn_astemit_patchjump(prs, elsejump);
     return true;
 }
 
-bool nn_astparser_ruleimport(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruleimport(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -9180,26 +9177,26 @@ bool nn_astparser_ruleimport(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulenew(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulenew(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "class name after 'new'");
+    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
     //return nn_astparser_rulecall(prs, prs->m_prevtoken, canassign);
 }
 
-bool nn_astparser_ruletypeof(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruletypeof(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after 'typeof'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'typeof'");
     nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after 'typeof'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'typeof'");
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_TYPEOF);
     return true;
 }
 
-bool nn_astparser_rulenothingprefix(neon::AstParser* prs, bool canassign)
+bool nn_astparser_rulenothingprefix(neon::Parser* prs, bool canassign)
 {
     (void)prs;
     (void)canassign;
@@ -9207,7 +9204,7 @@ bool nn_astparser_rulenothingprefix(neon::AstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulenothinginfix(neon::AstParser* prs, neon::AstToken previous, bool canassign)
+bool nn_astparser_rulenothinginfix(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     (void)prs;
     (void)previous;
@@ -9215,7 +9212,7 @@ bool nn_astparser_rulenothinginfix(neon::AstParser* prs, neon::AstToken previous
     return true;
 }
 
-neon::AstParser::Rule* nn_astparser_putrule(neon::AstParser::Rule* dest, neon::AstParser::Rule::PrefixFN prefix, neon::AstParser::Rule::InfixFN infix, neon::AstParser::Rule::Precedence precedence)
+neon::Parser::Rule* nn_astparser_putrule(neon::Parser::Rule* dest, neon::Parser::Rule::PrefixFN prefix, neon::Parser::Rule::InfixFN infix, neon::Parser::Rule::Precedence precedence)
 {
     dest->prefix = prefix;
     dest->infix = infix;
@@ -9226,107 +9223,107 @@ neon::AstParser::Rule* nn_astparser_putrule(neon::AstParser::Rule* dest, neon::A
 #define dorule(tok, prefix, infix, precedence) \
     case tok: return nn_astparser_putrule(&dest, prefix, infix, precedence);
 
-neon::AstParser::Rule* nn_astparser_getrule(neon::AstToken::Type type)
+neon::Parser::Rule* nn_astparser_getrule(neon::Token::Type type)
 {
-    static neon::AstParser::Rule dest;
+    static neon::Parser::Rule dest;
     switch(type)
     {
-        dorule(neon::AstToken::TOK_NEWLINE, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_PARENOPEN, nn_astparser_rulegrouping, nn_astparser_rulecall, neon::AstParser::Rule::PREC_CALL );
-        dorule(neon::AstToken::TOK_PARENCLOSE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_BRACKETOPEN, nn_astparser_rulearray, nn_astparser_ruleindexing, neon::AstParser::Rule::PREC_CALL );
-        dorule(neon::AstToken::TOK_BRACKETCLOSE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_BRACEOPEN, nn_astparser_ruledictionary, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_BRACECLOSE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_SEMICOLON, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_COMMA, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_BACKSLASH, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_EXCLMARK, nn_astparser_ruleunary, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_NOTEQUAL, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_EQUALITY );
-        dorule(neon::AstToken::TOK_COLON, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_AT, nn_astparser_ruleanonfunc, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_DOT, nullptr, nn_astparser_ruledot, neon::AstParser::Rule::PREC_CALL );
-        dorule(neon::AstToken::TOK_DOUBLEDOT, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_RANGE );
-        dorule(neon::AstToken::TOK_TRIPLEDOT, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_PLUS, nn_astparser_ruleunary, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_TERM );
-        dorule(neon::AstToken::TOK_PLUSASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_INCREMENT, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_MINUS, nn_astparser_ruleunary, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_TERM );
-        dorule(neon::AstToken::TOK_MINUSASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_DECREMENT, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_MULTIPLY, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_FACTOR );
-        dorule(neon::AstToken::TOK_MULTASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_POWEROF, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_FACTOR );
-        dorule(neon::AstToken::TOK_POWASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_DIVIDE, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_FACTOR );
-        dorule(neon::AstToken::TOK_DIVASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_FLOOR, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_FACTOR );
-        dorule(neon::AstToken::TOK_ASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_EQUAL, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_EQUALITY );
-        dorule(neon::AstToken::TOK_LESSTHAN, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_COMPARISON );
-        dorule(neon::AstToken::TOK_LESSEQUAL, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_COMPARISON );
-        dorule(neon::AstToken::TOK_LEFTSHIFT, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_SHIFT );
-        dorule(neon::AstToken::TOK_LEFTSHIFTASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_GREATERTHAN, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_COMPARISON );
-        dorule(neon::AstToken::TOK_GREATER_EQ, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_COMPARISON );
-        dorule(neon::AstToken::TOK_RIGHTSHIFT, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_SHIFT );
-        dorule(neon::AstToken::TOK_RIGHTSHIFTASSIGN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_MODULO, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_FACTOR );
-        dorule(neon::AstToken::TOK_PERCENT_EQ, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_AMP, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_BITAND );
-        dorule(neon::AstToken::TOK_AMP_EQ, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_BAR, /*nn_astparser_ruleanoncompat*/ nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_BITOR );
-        dorule(neon::AstToken::TOK_BAR_EQ, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_TILDE, nn_astparser_ruleunary, nullptr, neon::AstParser::Rule::PREC_UNARY );
-        dorule(neon::AstToken::TOK_TILDE_EQ, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_XOR, nullptr, nn_astparser_rulebinary, neon::AstParser::Rule::PREC_BITXOR );
-        dorule(neon::AstToken::TOK_XOR_EQ, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_QUESTION, nullptr, nn_astparser_ruleconditional, neon::AstParser::Rule::PREC_CONDITIONAL );
-        dorule(neon::AstToken::TOK_KWAND, nullptr, nn_astparser_ruleand, neon::AstParser::Rule::PREC_AND );
-        dorule(neon::AstToken::TOK_KWAS, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWASSERT, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWBREAK, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWCLASS, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWCONTINUE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWFUNCTION, nn_astparser_ruleanonfunc, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWDEFAULT, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWTHROW, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWDO, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWECHO, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWELSE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWFALSE, nn_astparser_ruleliteral, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWFOREACH, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWIF, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWIMPORT, nn_astparser_ruleimport, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWIN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWFOR, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWVAR, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWNULL, nn_astparser_ruleliteral, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWNEW, nn_astparser_rulenew, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWTYPEOF, nn_astparser_ruletypeof, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWOR, nullptr, nn_astparser_ruleor, neon::AstParser::Rule::PREC_OR );
-        dorule(neon::AstToken::TOK_KWSUPER, nn_astparser_rulesuper, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWRETURN, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWTHIS, nn_astparser_rulethis, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWSTATIC, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWTRUE, nn_astparser_ruleliteral, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWSWITCH, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWCASE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWWHILE, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWTRY, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWCATCH, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWFINALLY, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_LITERAL, nn_astparser_rulestring, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_LITNUMREG, nn_astparser_rulenumber, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_LITNUMBIN, nn_astparser_rulenumber, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_LITNUMOCT, nn_astparser_rulenumber, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_LITNUMHEX, nn_astparser_rulenumber, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_IDENTNORMAL, nn_astparser_rulevarnormal, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_INTERPOLATION, nn_astparser_ruleinterpolstring, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_EOF, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_ERROR, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_KWEMPTY, nn_astparser_ruleliteral, nullptr, neon::AstParser::Rule::PREC_NONE );
-        dorule(neon::AstToken::TOK_UNDEFINED, nullptr, nullptr, neon::AstParser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_NEWLINE, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_PARENOPEN, nn_astparser_rulegrouping, nn_astparser_rulecall, neon::Parser::Rule::PREC_CALL );
+        dorule(neon::Token::TOK_PARENCLOSE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_BRACKETOPEN, nn_astparser_rulearray, nn_astparser_ruleindexing, neon::Parser::Rule::PREC_CALL );
+        dorule(neon::Token::TOK_BRACKETCLOSE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_BRACEOPEN, nn_astparser_ruledictionary, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_BRACECLOSE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_SEMICOLON, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_COMMA, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_BACKSLASH, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_EXCLMARK, nn_astparser_ruleunary, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_NOTEQUAL, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_EQUALITY );
+        dorule(neon::Token::TOK_COLON, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_AT, nn_astparser_ruleanonfunc, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_DOT, nullptr, nn_astparser_ruledot, neon::Parser::Rule::PREC_CALL );
+        dorule(neon::Token::TOK_DOUBLEDOT, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_RANGE );
+        dorule(neon::Token::TOK_TRIPLEDOT, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_PLUS, nn_astparser_ruleunary, nn_astparser_rulebinary, neon::Parser::Rule::PREC_TERM );
+        dorule(neon::Token::TOK_PLUSASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_INCREMENT, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_MINUS, nn_astparser_ruleunary, nn_astparser_rulebinary, neon::Parser::Rule::PREC_TERM );
+        dorule(neon::Token::TOK_MINUSASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_DECREMENT, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_MULTIPLY, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_FACTOR );
+        dorule(neon::Token::TOK_MULTASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_POWEROF, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_FACTOR );
+        dorule(neon::Token::TOK_POWASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_DIVIDE, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_FACTOR );
+        dorule(neon::Token::TOK_DIVASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_FLOOR, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_FACTOR );
+        dorule(neon::Token::TOK_ASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_EQUAL, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_EQUALITY );
+        dorule(neon::Token::TOK_LESSTHAN, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_COMPARISON );
+        dorule(neon::Token::TOK_LESSEQUAL, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_COMPARISON );
+        dorule(neon::Token::TOK_LEFTSHIFT, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_SHIFT );
+        dorule(neon::Token::TOK_LEFTSHIFTASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_GREATERTHAN, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_COMPARISON );
+        dorule(neon::Token::TOK_GREATER_EQ, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_COMPARISON );
+        dorule(neon::Token::TOK_RIGHTSHIFT, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_SHIFT );
+        dorule(neon::Token::TOK_RIGHTSHIFTASSIGN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_MODULO, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_FACTOR );
+        dorule(neon::Token::TOK_PERCENT_EQ, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_AMP, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_BITAND );
+        dorule(neon::Token::TOK_AMP_EQ, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_BAR, /*nn_astparser_ruleanoncompat*/ nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_BITOR );
+        dorule(neon::Token::TOK_BAR_EQ, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_TILDE, nn_astparser_ruleunary, nullptr, neon::Parser::Rule::PREC_UNARY );
+        dorule(neon::Token::TOK_TILDE_EQ, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_XOR, nullptr, nn_astparser_rulebinary, neon::Parser::Rule::PREC_BITXOR );
+        dorule(neon::Token::TOK_XOR_EQ, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_QUESTION, nullptr, nn_astparser_ruleconditional, neon::Parser::Rule::PREC_CONDITIONAL );
+        dorule(neon::Token::TOK_KWAND, nullptr, nn_astparser_ruleand, neon::Parser::Rule::PREC_AND );
+        dorule(neon::Token::TOK_KWAS, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWASSERT, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWBREAK, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWCLASS, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWCONTINUE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWFUNCTION, nn_astparser_ruleanonfunc, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWDEFAULT, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWTHROW, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWDO, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWECHO, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWELSE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWFALSE, nn_astparser_ruleliteral, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWFOREACH, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWIF, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWIMPORT, nn_astparser_ruleimport, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWIN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWFOR, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWVAR, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWNULL, nn_astparser_ruleliteral, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWNEW, nn_astparser_rulenew, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWTYPEOF, nn_astparser_ruletypeof, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWOR, nullptr, nn_astparser_ruleor, neon::Parser::Rule::PREC_OR );
+        dorule(neon::Token::TOK_KWSUPER, nn_astparser_rulesuper, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWRETURN, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWTHIS, nn_astparser_rulethis, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWSTATIC, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWTRUE, nn_astparser_ruleliteral, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWSWITCH, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWCASE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWWHILE, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWTRY, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWCATCH, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWFINALLY, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_LITERAL, nn_astparser_rulestring, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_LITNUMREG, nn_astparser_rulenumber, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_LITNUMBIN, nn_astparser_rulenumber, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_LITNUMOCT, nn_astparser_rulenumber, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_LITNUMHEX, nn_astparser_rulenumber, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_IDENTNORMAL, nn_astparser_rulevarnormal, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_INTERPOLATION, nn_astparser_ruleinterpolstring, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_EOF, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_ERROR, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_KWEMPTY, nn_astparser_ruleliteral, nullptr, neon::Parser::Rule::PREC_NONE );
+        dorule(neon::Token::TOK_UNDEFINED, nullptr, nullptr, neon::Parser::Rule::PREC_NONE );
         default:
             fprintf(stderr, "missing rule?\n");
             break;
@@ -9335,19 +9332,19 @@ neon::AstParser::Rule* nn_astparser_getrule(neon::AstToken::Type type)
 }
 #undef dorule
 
-bool nn_astparser_doparseprecedence(neon::AstParser* prs, neon::AstParser::Rule::Precedence precedence/*, neon::AstExpression* dest*/)
+bool nn_astparser_doparseprecedence(neon::Parser* prs, neon::Parser::Rule::Precedence precedence/*, neon::AstExpression* dest*/)
 {
     bool canassign;
-    neon::AstToken previous;
-    neon::AstParser::Rule::InfixFN infixrule;
-    neon::AstParser::Rule::PrefixFN prefixrule;
+    neon::Token previous;
+    neon::Parser::Rule::InfixFN infixrule;
+    neon::Parser::Rule::PrefixFN prefixrule;
     prefixrule = nn_astparser_getrule(prs->m_prevtoken.type)->prefix;
     if(prefixrule == nullptr)
     {
         nn_astparser_raiseerror(prs, "expected expression");
         return false;
     }
-    canassign = precedence <= neon::AstParser::Rule::PREC_ASSIGNMENT;
+    canassign = precedence <= neon::Parser::Rule::PREC_ASSIGNMENT;
     prefixrule(prs, canassign);
     while(precedence <= nn_astparser_getrule(prs->m_currtoken.type)->precedence)
     {
@@ -9357,7 +9354,7 @@ bool nn_astparser_doparseprecedence(neon::AstParser* prs, neon::AstParser::Rule:
         infixrule = nn_astparser_getrule(prs->m_prevtoken.type)->infix;
         infixrule(prs, previous, canassign);
     }
-    if(canassign && nn_astparser_match(prs, neon::AstToken::TOK_ASSIGN))
+    if(canassign && nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
     {
         nn_astparser_raiseerror(prs, "invalid assignment target");
         return false;
@@ -9365,7 +9362,7 @@ bool nn_astparser_doparseprecedence(neon::AstParser* prs, neon::AstParser::Rule:
     return true;
 }
 
-bool nn_astparser_parseprecedence(neon::AstParser* prs, neon::AstParser::Rule::Precedence precedence)
+bool nn_astparser_parseprecedence(neon::Parser* prs, neon::Parser::Rule::Precedence precedence)
 {
     if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
     {
@@ -9380,7 +9377,7 @@ bool nn_astparser_parseprecedence(neon::AstParser* prs, neon::AstParser::Rule::P
     return nn_astparser_doparseprecedence(prs, precedence);
 }
 
-bool nn_astparser_parseprecnoadvance(neon::AstParser* prs, neon::AstParser::Rule::Precedence precedence)
+bool nn_astparser_parseprecnoadvance(neon::Parser* prs, neon::Parser::Rule::Precedence precedence)
 {
     if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
     {
@@ -9394,35 +9391,35 @@ bool nn_astparser_parseprecnoadvance(neon::AstParser* prs, neon::AstParser::Rule
     return nn_astparser_doparseprecedence(prs, precedence);
 }
 
-bool nn_astparser_parseexpression(neon::AstParser* prs)
+bool nn_astparser_parseexpression(neon::Parser* prs)
 {
-    return nn_astparser_parseprecedence(prs, neon::AstParser::Rule::PREC_ASSIGNMENT);
+    return nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
 }
 
-bool nn_astparser_parseblock(neon::AstParser* prs)
+bool nn_astparser_parseblock(neon::Parser* prs)
 {
     prs->m_blockcount++;
     nn_astparser_ignorewhitespace(prs);
-    while(!nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::AstToken::TOK_EOF))
+    while(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
     {
         nn_astparser_parsedeclaration(prs);
     }
     prs->m_blockcount--;
-    if(!nn_astparser_consume(prs, neon::AstToken::TOK_BRACECLOSE, "expected '}' after block"))
+    if(!nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after block"))
     {
         return false;
     }
-    if(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON))
+    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
     {
     }
     return true;
 }
 
-void nn_astparser_declarefuncargvar(neon::AstParser* prs)
+void nn_astparser_declarefuncargvar(neon::Parser* prs)
 {
     int i;
-    neon::AstToken* name;
-    neon::AstFuncCompiler::CompiledLocal* local;
+    neon::Token* name;
+    neon::Parser::CompiledLocal* local;
     /* global variables are implicitly declared... */
     if(prs->m_currfunccompiler->scopedepth == 0)
     {
@@ -9445,9 +9442,9 @@ void nn_astparser_declarefuncargvar(neon::AstParser* prs)
 }
 
 
-int nn_astparser_parsefuncparamvar(neon::AstParser* prs, const char* message)
+int nn_astparser_parsefuncparamvar(neon::Parser* prs, const char* message)
 {
-    if(!nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, message))
+    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, message))
     {
         /* what to do here? */
     }
@@ -9460,11 +9457,11 @@ int nn_astparser_parsefuncparamvar(neon::AstParser* prs, const char* message)
     return nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
 }
 
-uint8_t nn_astparser_parsefunccallargs(neon::AstParser* prs)
+uint8_t nn_astparser_parsefunccallargs(neon::Parser* prs)
 {
     uint8_t argcount;
     argcount = 0;
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_PARENCLOSE))
+    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
     {
         do
         {
@@ -9475,17 +9472,17 @@ uint8_t nn_astparser_parsefunccallargs(neon::AstParser* prs)
                 nn_astparser_raiseerror(prs, "cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
             }
             argcount++;
-        } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
     }
     nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after argument list"))
+    if(!nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after argument list"))
     {
         /* TODO: handle this, somehow. */
     }
     return argcount;
 }
 
-void nn_astparser_parsefuncparamlist(neon::AstParser* prs)
+void nn_astparser_parsefuncparamlist(neon::Parser* prs)
 {
     int paramconstant;
     /* compile argument list... */
@@ -9497,7 +9494,7 @@ void nn_astparser_parsefuncparamlist(neon::AstParser* prs)
         {
             nn_astparser_raiseerroratcurrent(prs, "cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
         }
-        if(nn_astparser_match(prs, neon::AstToken::TOK_TRIPLEDOT))
+        if(nn_astparser_match(prs, neon::Token::TOK_TRIPLEDOT))
         {
             prs->m_currfunccompiler->targetfunc->isvariadic = true;
             nn_astparser_addlocal(prs, nn_astparser_synthtoken("__args__"));
@@ -9507,17 +9504,17 @@ void nn_astparser_parsefuncparamlist(neon::AstParser* prs)
         paramconstant = nn_astparser_parsefuncparamvar(prs, "expected parameter name");
         nn_astparser_definevariable(prs, paramconstant);
         nn_astparser_ignorewhitespace(prs);
-    } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+    } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
 }
 
-void nn_astfunccompiler_compilebody(neon::AstParser* prs, neon::AstFuncCompiler* compiler, bool closescope, bool isanon)
+void nn_astfunccompiler_compilebody(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, bool closescope, bool isanon)
 {
     int i;
     neon::FuncScript* function;
     (void)isanon;
     /* compile the body */
     nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACEOPEN, "expected '{' before function body");
+    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' before function body");
     nn_astparser_parseblock(prs);
     /* create the function object */
     if(closescope)
@@ -9535,30 +9532,30 @@ void nn_astfunccompiler_compilebody(neon::AstParser* prs, neon::AstFuncCompiler*
     prs->m_pvm->stackPop();
 }
 
-void nn_astparser_parsefuncfull(neon::AstParser* prs, neon::FuncCommon::Type type, bool isanon)
+void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, bool isanon)
 {
-    neon::AstFuncCompiler compiler;
+    neon::Parser::FuncCompiler compiler;
     prs->m_infunction = true;
     nn_astfunccompiler_init(prs, &compiler, type, isanon);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after function name");
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_PARENCLOSE))
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after function name");
+    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
     {
         nn_astparser_parsefuncparamlist(prs);
     }
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after function parameters");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after function parameters");
     nn_astfunccompiler_compilebody(prs, &compiler, false, isanon);
     prs->m_infunction = false;
 }
 
-void nn_astparser_parsemethod(neon::AstParser* prs, neon::AstToken classname, bool isstatic)
+void nn_astparser_parsemethod(neon::Parser* prs, neon::Token classname, bool isstatic)
 {
     size_t sn;
     int constant;
     const char* sc;
     neon::FuncCommon::Type type;
-    static neon::AstToken::Type tkns[] = { neon::AstToken::TOK_IDENTNORMAL, neon::AstToken::TOK_DECORATOR };
+    static neon::Token::Type tkns[] = { neon::Token::TOK_IDENTNORMAL, neon::Token::TOK_DECORATOR };
     (void)classname;
     (void)isstatic;
     sc = "constructor";
@@ -9578,29 +9575,29 @@ void nn_astparser_parsemethod(neon::AstParser* prs, neon::AstToken classname, bo
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKEMETHOD, constant);
 }
 
-bool nn_astparser_ruleanonfunc(neon::AstParser* prs, bool canassign)
+bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
 {
-    neon::AstFuncCompiler compiler;
+    neon::Parser::FuncCompiler compiler;
     (void)canassign;
     nn_astfunccompiler_init(prs, &compiler, neon::FuncCommon::FUNCTYPE_FUNCTION, true);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' at start of anonymous function");
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_PARENCLOSE))
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
+    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
     {
         nn_astparser_parsefuncparamlist(prs);
     }
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
     nn_astfunccompiler_compilebody(prs, &compiler, true, true);
     return true;
 }
 
-void nn_astparser_parsefield(neon::AstParser* prs, bool isstatic)
+void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
 {
     int fieldconstant;
-    nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "class property name expected");
+    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class property name expected");
     fieldconstant = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_ASSIGN))
+    if(nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
     {
         nn_astparser_parseexpression(prs);
     }
@@ -9614,7 +9611,7 @@ void nn_astparser_parsefield(neon::AstParser* prs, bool isstatic)
     nn_astparser_ignorewhitespace(prs);
 }
 
-void nn_astparser_parsefuncdecl(neon::AstParser* prs)
+void nn_astparser_parsefuncdecl(neon::Parser* prs)
 {
     int global;
     global = nn_astparser_parsevariable(prs, "function name expected");
@@ -9623,14 +9620,14 @@ void nn_astparser_parsefuncdecl(neon::AstParser* prs)
     nn_astparser_definevariable(prs, global);
 }
 
-void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
+void nn_astparser_parseclassdeclaration(neon::Parser* prs)
 {
     bool isstatic;
     int nameconst;
-    neon::AstParser::CompContext oldctx;
-    neon::AstToken classname;
-    neon::AstClassCompiler classcompiler;
-    nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "class name expected");
+    neon::Parser::CompContext oldctx;
+    neon::Token classname;
+    neon::Parser::ClassCompiler classcompiler;
+    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class name expected");
     nameconst = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
     classname = prs->m_prevtoken;
     nn_astparser_declarevariable(prs);
@@ -9641,10 +9638,10 @@ void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
     classcompiler.enclosing = prs->m_currclasscompiler;
     prs->m_currclasscompiler = &classcompiler;
     oldctx = prs->m_compcontext;
-    prs->m_compcontext = neon::AstParser::COMPCONTEXT_CLASS;
-    if(nn_astparser_match(prs, neon::AstToken::TOK_LESSTHAN))
+    prs->m_compcontext = neon::Parser::COMPCONTEXT_CLASS;
+    if(nn_astparser_match(prs, neon::Token::TOK_LESSTHAN))
     {
-        nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "name of superclass expected");
+        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "name of superclass expected");
         nn_astparser_rulevarnormal(prs, false);
         if(nn_astparser_identsequal(&classname, &prs->m_prevtoken))
         {
@@ -9659,17 +9656,17 @@ void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
     }
     nn_astparser_namedvar(prs, classname, false);
     nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACEOPEN, "expected '{' before class body");
+    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' before class body");
     nn_astparser_ignorewhitespace(prs);
-    while(!nn_astparser_check(prs, neon::AstToken::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::AstToken::TOK_EOF))
+    while(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
     {
         isstatic = false;
-        if(nn_astparser_match(prs, neon::AstToken::TOK_KWSTATIC))
+        if(nn_astparser_match(prs, neon::Token::TOK_KWSTATIC))
         {
             isstatic = true;
         }
 
-        if(nn_astparser_match(prs, neon::AstToken::TOK_KWVAR))
+        if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
         {
             nn_astparser_parsefield(prs, isstatic);
         }
@@ -9679,8 +9676,8 @@ void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
             nn_astparser_ignorewhitespace(prs);
         }
     }
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACECLOSE, "expected '}' after class body");
-    if(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON))
+    nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after class body");
+    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
     {
     }
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
@@ -9692,7 +9689,7 @@ void nn_astparser_parseclassdeclaration(neon::AstParser* prs)
     prs->m_compcontext = oldctx;
 }
 
-void nn_astparser_parsevardecl(neon::AstParser* prs, bool isinitializer)
+void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
 {
     int global;
     int totalparsed;
@@ -9704,7 +9701,7 @@ void nn_astparser_parsevardecl(neon::AstParser* prs, bool isinitializer)
             nn_astparser_ignorewhitespace(prs);
         }
         global = nn_astparser_parsevariable(prs, "variable name expected");
-        if(nn_astparser_match(prs, neon::AstToken::TOK_ASSIGN))
+        if(nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
         {
             nn_astparser_parseexpression(prs);
         }
@@ -9714,7 +9711,7 @@ void nn_astparser_parsevardecl(neon::AstParser* prs, bool isinitializer)
         }
         nn_astparser_definevariable(prs, global);
         totalparsed++;
-    } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+    } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
 
     if(!isinitializer)
     {
@@ -9722,12 +9719,12 @@ void nn_astparser_parsevardecl(neon::AstParser* prs, bool isinitializer)
     }
     else
     {
-        nn_astparser_consume(prs, neon::AstToken::TOK_SEMICOLON, "expected ';' after initializer");
+        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
         nn_astparser_ignorewhitespace(prs);
     }
 }
 
-void nn_astparser_parseexprstmt(neon::AstParser* prs, bool isinitializer, bool semi)
+void nn_astparser_parseexprstmt(neon::Parser* prs, bool isinitializer, bool semi)
 {
     if(prs->m_pvm->m_isreplmode && prs->m_currfunccompiler->scopedepth == 0)
     {
@@ -9739,7 +9736,7 @@ void nn_astparser_parseexprstmt(neon::AstParser* prs, bool isinitializer, bool s
     }
     else
     {
-        nn_astparser_parseprecnoadvance(prs, neon::AstParser::Rule::PREC_ASSIGNMENT);
+        nn_astparser_parseprecnoadvance(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
     }
     if(!isinitializer)
     {
@@ -9759,7 +9756,7 @@ void nn_astparser_parseexprstmt(neon::AstParser* prs, bool isinitializer, bool s
     }
     else
     {
-        nn_astparser_consume(prs, neon::AstToken::TOK_SEMICOLON, "expected ';' after initializer");
+        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
         nn_astparser_ignorewhitespace(prs);
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     }
@@ -9783,7 +9780,7 @@ void nn_astparser_parseexprstmt(neon::AstParser* prs, bool isinitializer, bool s
  *    i = i + 1
  * }
  */
-void nn_astparser_parseforstmt(neon::AstParser* prs)
+void nn_astparser_parseforstmt(neon::Parser* prs)
 {
     int exitjump;
     int bodyjump;
@@ -9791,13 +9788,13 @@ void nn_astparser_parseforstmt(neon::AstParser* prs)
     int surroundingloopstart;
     int surroundingscopedepth;
     nn_astparser_scopebegin(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after 'for'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'for'");
     /* parse initializer... */
-    if(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON))
+    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
     {
         /* no initializer */
     }
-    else if(nn_astparser_match(prs, neon::AstToken::TOK_KWVAR))
+    else if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
     {
         nn_astparser_parsevardecl(prs, true);
     }
@@ -9812,11 +9809,11 @@ void nn_astparser_parseforstmt(neon::AstParser* prs)
     prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
     prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
     exitjump = -1;
-    if(!nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON))
+    if(!nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
     {
         /* the condition is optional */
         nn_astparser_parseexpression(prs);
-        nn_astparser_consume(prs, neon::AstToken::TOK_SEMICOLON, "expected ';' after condition");
+        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after condition");
         nn_astparser_ignorewhitespace(prs);
         /* jump out of the loop if the condition is false... */
         exitjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
@@ -9824,7 +9821,7 @@ void nn_astparser_parseforstmt(neon::AstParser* prs)
         /* pop the condition */
     }
     /* the iterator... */
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_BRACEOPEN))
+    if(!nn_astparser_check(prs, neon::Token::TOK_BRACEOPEN))
     {
         bodyjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
         incrstart = nn_astparser_currentblob(prs)->m_count;
@@ -9835,7 +9832,7 @@ void nn_astparser_parseforstmt(neon::AstParser* prs)
         prs->m_innermostloopstart = incrstart;
         nn_astemit_patchjump(prs, bodyjump);
     }
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after 'for'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'for'");
     nn_astparser_parsestmt(prs);
     nn_astemit_emitloop(prs, prs->m_innermostloopstart);
     if(exitjump != -1)
@@ -9897,7 +9894,7 @@ void nn_astparser_parseforstmt(neon::AstParser* prs)
  * @itern(x) function returns a false value. so the @iter(x) never needs
  * to return a false value
  */
-void nn_astparser_parseforeachstmt(neon::AstParser* prs)
+void nn_astparser_parseforeachstmt(neon::Parser* prs)
 {
     int citer;
     int citern;
@@ -9907,16 +9904,16 @@ void nn_astparser_parseforeachstmt(neon::AstParser* prs)
     int iteratorslot;
     int surroundingloopstart;
     int surroundingscopedepth;
-    neon::AstToken iteratortoken;
-    neon::AstToken keytoken;
-    neon::AstToken valuetoken;
+    neon::Token iteratortoken;
+    neon::Token keytoken;
+    neon::Token valuetoken;
     nn_astparser_scopebegin(prs);
     /* define @iter and @itern constant */
     citer = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@iter")));
     citern = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@itern")));
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after 'foreach'");
-    nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "expected variable name after 'foreach'");
-    if(!nn_astparser_check(prs, neon::AstToken::TOK_COMMA))
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'foreach'");
+    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected variable name after 'foreach'");
+    if(!nn_astparser_check(prs, neon::Token::TOK_COMMA))
     {
         keytoken = nn_astparser_synthtoken(" _ ");
         valuetoken = prs->m_prevtoken;
@@ -9924,11 +9921,11 @@ void nn_astparser_parseforeachstmt(neon::AstParser* prs)
     else
     {
         keytoken = prs->m_prevtoken;
-        nn_astparser_consume(prs, neon::AstToken::TOK_COMMA, "");
-        nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "expected variable name after ','");
+        nn_astparser_consume(prs, neon::Token::TOK_COMMA, "");
+        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected variable name after ','");
         valuetoken = prs->m_prevtoken;
     }
-    nn_astparser_consume(prs, neon::AstToken::TOK_KWIN, "expected 'in' after for loop variable(s)");
+    nn_astparser_consume(prs, neon::Token::TOK_KWIN, "expected 'in' after for loop variable(s)");
     nn_astparser_ignorewhitespace(prs);
     /*
     // The space in the variable name ensures it won't collide with a user-defined
@@ -9937,7 +9934,7 @@ void nn_astparser_parseforeachstmt(neon::AstParser* prs)
     iteratortoken = nn_astparser_synthtoken(" iterator ");
     /* Evaluate the sequence expression and store it in a hidden local variable. */
     nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after 'foreach'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'foreach'");
     if(prs->m_currfunccompiler->localcount + 3 > NEON_CFG_ASTMAXLOCALS)
     {
         nn_astparser_raiseerror(prs, "cannot declare more than %d variables in one scope", NEON_CFG_ASTMAXLOCALS);
@@ -10005,7 +10002,7 @@ void nn_astparser_parseforeachstmt(neon::AstParser* prs)
  *    ...
  * }
  */
-void nn_astparser_parseswitchstmt(neon::AstParser* prs)
+void nn_astparser_parseswitchstmt(neon::Parser* prs)
 {
     int i;
     int length;
@@ -10016,12 +10013,12 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
     int caseends[NEON_CFG_ASTMAXSWITCHCASES];
     char* str;
     neon::Value jump;
-    neon::AstToken::Type casetype;
+    neon::Token::Type casetype;
     neon::VarSwitch* sw;
     neon::String* string;
     /* the expression */
     nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
+    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
     nn_astparser_ignorewhitespace(prs);
     /* 0: before all cases, 1: before default, 2: after default */
     swstate = 0;
@@ -10031,9 +10028,9 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
     switchcode = nn_astemit_emitswitch(prs);
     /* nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_SWITCH, nn_astparser_pushconst(prs, neon::Value::fromObject(sw))); */
     startoffset = nn_astparser_currentblob(prs)->m_count;
-    while(!nn_astparser_match(prs, neon::AstToken::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::AstToken::TOK_EOF))
+    while(!nn_astparser_match(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
     {
-        if(nn_astparser_match(prs, neon::AstToken::TOK_KWCASE) || nn_astparser_match(prs, neon::AstToken::TOK_KWDEFAULT))
+        if(nn_astparser_match(prs, neon::Token::TOK_KWCASE) || nn_astparser_match(prs, neon::Token::TOK_KWDEFAULT))
         {
             casetype = prs->m_prevtoken.type;
             if(swstate == 2)
@@ -10045,7 +10042,7 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
                 /* at the end of the previous case, jump over the others... */
                 caseends[casecount++] = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
             }
-            if(casetype == neon::AstToken::TOK_KWCASE)
+            if(casetype == neon::Token::TOK_KWCASE)
             {
                 swstate = 1;
                 do
@@ -10053,15 +10050,15 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
                     nn_astparser_ignorewhitespace(prs);
                     nn_astparser_advance(prs);
                     jump = neon::Value::makeNumber((double)nn_astparser_currentblob(prs)->m_count - (double)startoffset);
-                    if(prs->m_prevtoken.type == neon::AstToken::TOK_KWTRUE)
+                    if(prs->m_prevtoken.type == neon::Token::TOK_KWTRUE)
                     {
                         sw->m_jumppositions->set(neon::Value::makeBool(true), jump);
                     }
-                    else if(prs->m_prevtoken.type == neon::AstToken::TOK_KWFALSE)
+                    else if(prs->m_prevtoken.type == neon::Token::TOK_KWFALSE)
                     {
                         sw->m_jumppositions->set(neon::Value::makeBool(false), jump);
                     }
-                    else if(prs->m_prevtoken.type == neon::AstToken::TOK_LITERAL)
+                    else if(prs->m_prevtoken.type == neon::Token::TOK_LITERAL)
                     {
                         str = nn_astparser_compilestring(prs, &length);
                         string = neon::String::take(prs->m_pvm, str, length);
@@ -10082,7 +10079,7 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
                         nn_astparser_raiseerror(prs, "only constants can be used in 'when' expressions");
                         return;
                     }
-                } while(nn_astparser_match(prs, neon::AstToken::TOK_COMMA));
+                } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
             }
             else
             {
@@ -10116,7 +10113,7 @@ void nn_astparser_parseswitchstmt(neon::AstParser* prs)
     prs->m_pvm->stackPop();
 }
 
-void nn_astparser_parseifstmt(neon::AstParser* prs)
+void nn_astparser_parseifstmt(neon::Parser* prs)
 {
     int elsejump;
     int thenjump;
@@ -10127,21 +10124,21 @@ void nn_astparser_parseifstmt(neon::AstParser* prs)
     elsejump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_KWELSE))
+    if(nn_astparser_match(prs, neon::Token::TOK_KWELSE))
     {
         nn_astparser_parsestmt(prs);
     }
     nn_astemit_patchjump(prs, elsejump);
 }
 
-void nn_astparser_parseechostmt(neon::AstParser* prs)
+void nn_astparser_parseechostmt(neon::Parser* prs)
 {
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_ECHO);
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsethrowstmt(neon::AstParser* prs)
+void nn_astparser_parsethrowstmt(neon::Parser* prs)
 {
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXTHROW);
@@ -10149,11 +10146,11 @@ void nn_astparser_parsethrowstmt(neon::AstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parseassertstmt(neon::AstParser* prs)
+void nn_astparser_parseassertstmt(neon::Parser* prs)
 {
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after 'assert'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'assert'");
     nn_astparser_parseexpression(prs);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_COMMA))
+    if(nn_astparser_match(prs, neon::Token::TOK_COMMA))
     {
         nn_astparser_ignorewhitespace(prs);
         nn_astparser_parseexpression(prs);
@@ -10163,11 +10160,11 @@ void nn_astparser_parseassertstmt(neon::AstParser* prs)
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     }
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_ASSERT);
-    nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after 'assert'");
+    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'assert'");
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsetrystmt(neon::AstParser* prs)
+void nn_astparser_parsetrystmt(neon::Parser* prs)
 {
     int address;
     int type;
@@ -10200,15 +10197,15 @@ void nn_astparser_parsetrystmt(neon::AstParser* prs)
     catchexists = false;
     finalexists= false;
     /* catch body must maintain its own scope */
-    if(nn_astparser_match(prs, neon::AstToken::TOK_KWCATCH))
+    if(nn_astparser_match(prs, neon::Token::TOK_KWCATCH))
     {
         catchexists = true;
         nn_astparser_scopebegin(prs);
-        nn_astparser_consume(prs, neon::AstToken::TOK_PARENOPEN, "expected '(' after 'catch'");
-        nn_astparser_consume(prs, neon::AstToken::TOK_IDENTNORMAL, "missing exception class name");
+        nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'catch'");
+        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "missing exception class name");
         type = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
         address = nn_astparser_currentblob(prs)->m_count;
-        if(nn_astparser_match(prs, neon::AstToken::TOK_IDENTNORMAL))
+        if(nn_astparser_match(prs, neon::Token::TOK_IDENTNORMAL))
         {
             nn_astparser_createdvar(prs, prs->m_prevtoken);
         }
@@ -10216,7 +10213,7 @@ void nn_astparser_parsetrystmt(neon::AstParser* prs)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
         }
-          nn_astparser_consume(prs, neon::AstToken::TOK_PARENCLOSE, "expected ')' after 'catch'");
+          nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'catch'");
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXPOPTRY);
         nn_astparser_ignorewhitespace(prs);
         nn_astparser_parsestmt(prs);
@@ -10227,7 +10224,7 @@ void nn_astparser_parsetrystmt(neon::AstParser* prs)
         type = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "Exception")));
     }
     nn_astemit_patchjump(prs, exitjump);
-    if(nn_astparser_match(prs, neon::AstToken::TOK_KWFINALLY))
+    if(nn_astparser_match(prs, neon::Token::TOK_KWFINALLY))
     {
         finalexists = true;
         /*
@@ -10252,7 +10249,7 @@ void nn_astparser_parsetrystmt(neon::AstParser* prs)
     nn_astemit_patchtry(prs, trybegins, type, address, finally);
 }
 
-void nn_astparser_parsereturnstmt(neon::AstParser* prs)
+void nn_astparser_parsereturnstmt(neon::Parser* prs)
 {
     prs->m_isreturning = true;
     /*
@@ -10261,7 +10258,7 @@ void nn_astparser_parsereturnstmt(neon::AstParser* prs)
         nn_astparser_raiseerror(prs, "cannot return from top-level code");
     }
     */
-    if(nn_astparser_match(prs, neon::AstToken::TOK_SEMICOLON) || nn_astparser_match(prs, neon::AstToken::TOK_NEWLINE))
+    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
     {
         nn_astemit_emitreturn(prs);
     }
@@ -10282,7 +10279,7 @@ void nn_astparser_parsereturnstmt(neon::AstParser* prs)
     prs->m_isreturning = false;
 }
 
-void nn_astparser_parsewhilestmt(neon::AstParser* prs)
+void nn_astparser_parsewhilestmt(neon::Parser* prs)
 {
     int exitjump;
     int surroundingloopstart;
@@ -10307,7 +10304,7 @@ void nn_astparser_parsewhilestmt(neon::AstParser* prs)
     prs->m_innermostloopscopedepth = surroundingscopedepth;
 }
 
-void nn_astparser_parsedo_whilestmt(neon::AstParser* prs)
+void nn_astparser_parsedo_whilestmt(neon::Parser* prs)
 {
     int exitjump;
     int surroundingloopstart;
@@ -10321,7 +10318,7 @@ void nn_astparser_parsedo_whilestmt(neon::AstParser* prs)
     prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
     prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
     nn_astparser_parsestmt(prs);
-    nn_astparser_consume(prs, neon::AstToken::TOK_KWWHILE, "expecting 'while' statement");
+    nn_astparser_consume(prs, neon::Token::TOK_KWWHILE, "expecting 'while' statement");
     nn_astparser_parseexpression(prs);
     exitjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
@@ -10333,7 +10330,7 @@ void nn_astparser_parsedo_whilestmt(neon::AstParser* prs)
     prs->m_innermostloopscopedepth = surroundingscopedepth;
 }
 
-void nn_astparser_parsecontinuestmt(neon::AstParser* prs)
+void nn_astparser_parsecontinuestmt(neon::Parser* prs)
 {
     if(prs->m_innermostloopstart == -1)
     {
@@ -10349,7 +10346,7 @@ void nn_astparser_parsecontinuestmt(neon::AstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsebreakstmt(neon::AstParser* prs)
+void nn_astparser_parsebreakstmt(neon::Parser* prs)
 {
     if(prs->m_innermostloopstart == -1)
     {
@@ -10375,40 +10372,40 @@ void nn_astparser_parsebreakstmt(neon::AstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_synchronize(neon::AstParser* prs)
+void nn_astparser_synchronize(neon::Parser* prs)
 {
     prs->m_panicmode = false;
-    while(prs->m_currtoken.type != neon::AstToken::TOK_EOF)
+    while(prs->m_currtoken.type != neon::Token::TOK_EOF)
     {
-        if(prs->m_currtoken.type == neon::AstToken::TOK_NEWLINE || prs->m_currtoken.type == neon::AstToken::TOK_SEMICOLON)
+        if(prs->m_currtoken.type == neon::Token::TOK_NEWLINE || prs->m_currtoken.type == neon::Token::TOK_SEMICOLON)
         {
             return;
         }
         switch(prs->m_currtoken.type)
         {
-            case neon::AstToken::TOK_KWCLASS:
-            case neon::AstToken::TOK_KWFUNCTION:
-            case neon::AstToken::TOK_KWVAR:
-            case neon::AstToken::TOK_KWFOREACH:
-            case neon::AstToken::TOK_KWIF:
-            case neon::AstToken::TOK_KWSWITCH:
-            case neon::AstToken::TOK_KWCASE:
-            case neon::AstToken::TOK_KWFOR:
-            case neon::AstToken::TOK_KWDO:
-            case neon::AstToken::TOK_KWWHILE:
-            case neon::AstToken::TOK_KWECHO:
-            case neon::AstToken::TOK_KWASSERT:
-            case neon::AstToken::TOK_KWTRY:
-            case neon::AstToken::TOK_KWCATCH:
-            case neon::AstToken::TOK_KWTHROW:
-            case neon::AstToken::TOK_KWRETURN:
-            case neon::AstToken::TOK_KWSTATIC:
-            case neon::AstToken::TOK_KWTHIS:
-            case neon::AstToken::TOK_KWSUPER:
-            case neon::AstToken::TOK_KWFINALLY:
-            case neon::AstToken::TOK_KWIN:
-            case neon::AstToken::TOK_KWIMPORT:
-            case neon::AstToken::TOK_KWAS:
+            case neon::Token::TOK_KWCLASS:
+            case neon::Token::TOK_KWFUNCTION:
+            case neon::Token::TOK_KWVAR:
+            case neon::Token::TOK_KWFOREACH:
+            case neon::Token::TOK_KWIF:
+            case neon::Token::TOK_KWSWITCH:
+            case neon::Token::TOK_KWCASE:
+            case neon::Token::TOK_KWFOR:
+            case neon::Token::TOK_KWDO:
+            case neon::Token::TOK_KWWHILE:
+            case neon::Token::TOK_KWECHO:
+            case neon::Token::TOK_KWASSERT:
+            case neon::Token::TOK_KWTRY:
+            case neon::Token::TOK_KWCATCH:
+            case neon::Token::TOK_KWTHROW:
+            case neon::Token::TOK_KWRETURN:
+            case neon::Token::TOK_KWSTATIC:
+            case neon::Token::TOK_KWTHIS:
+            case neon::Token::TOK_KWSUPER:
+            case neon::Token::TOK_KWFINALLY:
+            case neon::Token::TOK_KWIN:
+            case neon::Token::TOK_KWIMPORT:
+            case neon::Token::TOK_KWAS:
                 return;
             default:
                 /* do nothing */
@@ -10424,14 +10421,14 @@ void nn_astparser_synchronize(neon::AstParser* prs)
 */
 neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* module, const char* source, neon::Blob* blob, bool fromimport, bool keeplast)
 {
-    neon::AstFuncCompiler compiler;
-    neon::AstLexer* lexer;
-    neon::AstParser* parser;
+    neon::Parser::FuncCompiler compiler;
+    neon::Lexer* lexer;
+    neon::Parser* parser;
     neon::FuncScript* function;
     (void)blob;
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
-    lexer = new neon::AstLexer(state, source);
-    parser = new neon::AstParser(state, lexer, module, keeplast);
+    lexer = new neon::Lexer(state, source);
+    parser = new neon::Parser(state, lexer, module, keeplast);
     nn_astfunccompiler_init(parser, &compiler, neon::FuncCommon::FUNCTYPE_SCRIPT, true);
     compiler.fromimport = fromimport;
     nn_astparser_runparser(parser);
@@ -10448,7 +10445,7 @@ neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* m
 
 void nn_gcmem_markcompilerroots(neon::State* state)
 {
-    neon::AstFuncCompiler* compiler;
+    neon::Parser::FuncCompiler* compiler;
     if(state->m_activeparser != nullptr)
     {
         compiler = state->m_activeparser->m_currfunccompiler;
@@ -10546,13 +10543,13 @@ neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
 {
     const char* cstr;
     neon::String* insrc;
-    neon::AstLexer* lex;
+    neon::Lexer* lex;
     neon::Array* arr;
     neon::Dictionary* itm;
-    neon::AstToken token;
+    neon::Token token;
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     insrc = args->argv[0].asString();
-    lex = new neon::AstLexer(state, insrc->data());
+    lex = new neon::Lexer(state, insrc->data());
     arr = neon::Array::make(state);
     while(!lex->isAtEnd())
     {
@@ -17823,14 +17820,14 @@ void nn_cli_printtypesizes()
     ptyp(neon::State::ExceptionFrame);
     ptyp(neon::State::CallFrame);
     ptyp(neon::State);
-    ptyp(neon::AstToken);
-    ptyp(neon::AstLexer);
-    ptyp(neon::AstFuncCompiler::CompiledLocal);
-    ptyp(neon::AstFuncCompiler::CompiledUpvalue);
-    ptyp(neon::AstFuncCompiler);
-    ptyp(neon::AstClassCompiler);
-    ptyp(neon::AstParser);
-    ptyp(neon::AstParser::Rule);
+    ptyp(neon::Token);
+    ptyp(neon::Lexer);
+    ptyp(neon::Parser::CompiledLocal);
+    ptyp(neon::Parser::CompiledUpvalue);
+    ptyp(neon::Parser::FuncCompiler);
+    ptyp(neon::Parser::ClassCompiler);
+    ptyp(neon::Parser);
+    ptyp(neon::Parser::Rule);
     ptyp(neon::RegModule::FuncInfo);
     ptyp(neon::RegModule::FieldInfo);
     ptyp(neon::RegModule::ClassInfo);
