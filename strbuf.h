@@ -29,7 +29,7 @@
 #endif
 
 
-#if defined(__STRICT_ANSI__)
+#if defined(__STRICT_ANSI__) && !defined(__cplusplus)
     #define va_copy(...)
 #endif
 

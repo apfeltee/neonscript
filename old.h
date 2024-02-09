@@ -13692,11 +13692,13 @@ void nn_state_initbuiltinmethods(neon::State* state)
         state->m_classprimstring->defStaticNativeMethod("utf8Decode", nn_memberfunc_string_utf8decode);
         state->m_classprimstring->defStaticNativeMethod("utf8Encode", nn_memberfunc_string_utf8encode);
         state->m_classprimstring->defStaticNativeMethod("utf8NumBytes", nn_memberfunc_string_utf8numbytes);
+        
         state->m_classprimstring->defNativeMethod("@iter", nn_memberfunc_string_iter);
         state->m_classprimstring->defNativeMethod("@itern", nn_memberfunc_string_itern);
         state->m_classprimstring->defNativeMethod("utf8Chars", nn_memberfunc_string_utf8chars);
         state->m_classprimstring->defNativeMethod("utf8Codepoints", nn_memberfunc_string_utf8codepoints);
         state->m_classprimstring->defNativeMethod("utf8Bytes", nn_memberfunc_string_utf8codepoints);
+
         state->m_classprimstring->defNativeMethod("size", nn_memberfunc_string_length);
         state->m_classprimstring->defNativeMethod("substr", nn_memberfunc_string_substring);
         state->m_classprimstring->defNativeMethod("substring", nn_memberfunc_string_substring);

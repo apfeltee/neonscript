@@ -3,7 +3,7 @@
 $sources = {}
 
 def initsources()
-  ["main.cpp", "optparse.h", "os.h", "strbuf.h", "utf8.h"].each do |file|
+  ["main.cpp", "optparse.h", "os.h", "strbuf.h"].each do |file|
     $sources[file] = File.read(file)
   end
 end
@@ -20,12 +20,25 @@ end
 
 begin
   initsources()
+  lines = []
+  oldlines = []
   File.foreach("prot.inc") do |line|
+    oldlines.push(line.strip)
+  end
+  oldlines.each do |line|
     m = line.match(/\b(?<n>\w+)\b\s*\(/)
     next unless m
     n = m["n"]
     if insources(n) then
-      print(line)
+      lines.push(line)
+    end
+  end
+  $stderr.printf("old line count: %d, new line count: %d\n", oldlines.length, lines.length)
+  if lines.length != oldlines.length then
+    File.open("prot.inc", "wb") do |ofh|
+      lines.each do |line|
+        ofh.print(line, "\n")
+      end
     end
   end
 end
