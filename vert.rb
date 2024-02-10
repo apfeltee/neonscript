@@ -50,7 +50,7 @@ begin
     "neon::Lexer" => "NeonAstLexer",
     "neon::Parser::CompiledLocal" => "NeonAstLocal",
     "neon::Parser::CompiledUpvalue" => "NeonAstUpvalue",
-    "neon::AstFuncCompiler" => "NeonAstFuncCompiler",
+    "neon::Parser::FuncCompiler" => "NeonAstFuncCompiler",
     "neon::Parser::ClassCompiler" => "NeonAstClassCompiler",
     "neon::Parser" => "NeonAstParser",
     "neon::Parser::Rule" => "NeonAstRule",
@@ -65,7 +65,9 @@ begin
   res = []
   cmdcpp.each do |tn, sz|
     oldk = mapping[tn]
-    if oldk != nil then
+    if oldk == nil then
+      $stderr.printf("!!!!!!!!!!!! cannot find mapping for %p\n", tn)
+    else
       res.push([[oldk, cmdold[oldk]], [tn, sz]])
     end
   end

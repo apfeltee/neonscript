@@ -83,12 +83,6 @@
 /* initial amount of stack values (will grow dynamically if needed) */
 #define NEON_CFG_INITSTACKCOUNT (32 * 1)
 
-/* how many locals per function can be compiled */
-#define NEON_CFG_ASTMAXLOCALS 64
-
-/* how many upvalues per function can be compiled */
-#define NEON_CFG_ASTMAXUPVALS 64
-
 /* how many switch cases per switch statement */
 #define NEON_CFG_ASTMAXSWITCHCASES 32
 
@@ -127,7 +121,7 @@
 // at least one call to clearProtect() before exiting the function/block
 // otherwise, expected unexpected behavior
 // 2. The call to clearProtect() will be automatic for native functions.
-// 3. $thisval must be retrieved before any call to nn_gcmem_protect in a
+// 3. $thisval must be retrieved before any call to State::gcProtect in a
 // native function.
 */
 #define GROW_CAPACITY(capacity) \
@@ -273,7 +267,11 @@ namespace neon
     struct /**/Dictionary;
     struct /**/Array;
     struct /**/FuncScript;
-
+    struct /**/FuncNative;
+    struct /**/Range;
+    struct /**/Userdata;
+    struct /**/FuncBound;
+    struct /**/VarSwitch;
 
     namespace Util
     {
@@ -729,7 +727,7 @@ namespace neon
             {
                 return nullptr;
             }
-            //buf = (char*)neon::State::GC::allocate(state, sizeof(char), toldlen + 1);
+            //buf = (char*)State::GC::allocate(state, sizeof(char), toldlen + 1);
             buf = (char*)malloc(sizeof(char)*(toldlen+1));
             memset(buf, 0, toldlen+1);
             if(buf != nullptr)
@@ -893,6 +891,8 @@ int nn_fileobject_close(neon::File *file);
 bool nn_fileobject_open(neon::File *file);
 bool nn_vm_callvaluewithobject(neon::State *state, neon::Value callable, neon::Value thisval, int argcount);
 neon::Status nn_vm_runvm(neon::State *state, int exitframe, neon::Value *rv);
+
+void nn_astparser_parsedeclaration(neon::Parser* prs);
 
 
 static NEON_ALWAYSINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...);
@@ -1277,6 +1277,50 @@ namespace neon
                 return ((FuncClosure*)asObject());
             }
 
+            NEON_ALWAYSINLINE bool asBool() const
+            {
+                return (m_valunion.boolean);
+            }
+
+            NEON_ALWAYSINLINE FuncNative* asFuncNative() const
+            {
+                return ((FuncNative*)asObject());
+            }
+
+            NEON_ALWAYSINLINE ClassObject* asClass() const
+            {
+                return ((ClassObject*)asObject());
+            }
+
+            NEON_ALWAYSINLINE FuncBound* asFuncBound() const
+            {
+                return ((FuncBound*)asObject());
+            }
+
+            NEON_ALWAYSINLINE VarSwitch* asSwitch() const
+            {
+                return ((VarSwitch*)asObject());
+            }
+
+            NEON_ALWAYSINLINE Userdata* asUserdata() const
+            {
+                return ((Userdata*)asObject());
+            }
+
+            NEON_ALWAYSINLINE Dictionary* asDict() const
+            {
+                return ((Dictionary*)asObject());
+            }
+
+            NEON_ALWAYSINLINE File* asFile() const
+            {
+                return ((File*)asObject());
+            }
+
+            NEON_ALWAYSINLINE Range* asRange() const
+            {
+                return ((Range*)asObject());
+            }
     };
 
     struct State final
@@ -1710,7 +1754,8 @@ namespace neon
             }
     };
 
-    struct ValArray final
+    template<typename ValType>
+    struct GenericArray
     {
         public:
             State* m_pvm;
@@ -1720,7 +1765,7 @@ namespace neon
             int m_count;
             /* how many entries can be stored before growing? */
             int m_capacity;
-            Value* m_values;
+            ValType* m_values;
 
         private:
             void makeSize(State* state, size_t size)
@@ -1746,57 +1791,48 @@ namespace neon
             }
 
         public:
-            ValArray(State* state, size_t size)
+            GenericArray(State* state, size_t size)
             {
                 makeSize(state, size);
             }
 
-            ValArray(State* state)
+            GenericArray(State* state)
             {
-                makeSize(state, sizeof(Value));
+                makeSize(state, sizeof(ValType));
             }
 
-            ~ValArray()
+            ~GenericArray()
             {
                 destroy();
             }
 
-            void gcMark()
-            {
-                int i;
-                for(i = 0; i < m_count; i++)
-                {
-                    nn_gcmem_markvalue(m_pvm, m_values[i]);
-                }
-            }
-
-            void push(Value value)
+            void push(ValType value)
             {
                 int oldcapacity;
                 if(m_capacity < m_count + 1)
                 {
                     oldcapacity = m_capacity;
                     m_capacity = GROW_CAPACITY(oldcapacity);
-                    m_values = (Value*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, oldcapacity, m_capacity);
+                    m_values = (ValType*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, oldcapacity, m_capacity);
                 }
                 m_values[m_count] = value;
                 m_count++;
             }
 
-            void insert(Value value, int index)
+            void insertDefault(ValType value, int index, ValType defaultvalue)
             {
                 int i;
                 int oldcap;
                 if(m_capacity <= index)
                 {
                     m_capacity = GROW_CAPACITY(index);
-                    m_values = (Value*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, m_count, m_capacity);
+                    m_values = (ValType*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, m_count, m_capacity);
                 }
                 else if(m_capacity < m_count + 2)
                 {
                     oldcap = m_capacity;
                     m_capacity = GROW_CAPACITY(oldcap);
-                    m_values = (Value*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, oldcap, m_capacity);
+                    m_values = (ValType*)nn_gcmem_growarray(m_pvm, m_typsize, m_values, oldcap, m_capacity);
                 }
                 if(index <= m_count)
                 {
@@ -1810,12 +1846,32 @@ namespace neon
                     for(i = m_count; i < index; i++)
                     {
                         /* null out overflow indices */
-                        m_values[i] = Value::makeNull();
+                        m_values[i] = defaultvalue;
                         m_count++;
                     }
                 }
                 m_values[index] = value;
                 m_count++;
+            }
+    };
+
+    struct ValArray: public GenericArray<Value>
+    {
+        public:
+            using GenericArray::GenericArray;
+
+            void gcMark()
+            {
+                int i;
+                for(i = 0; i < m_count; i++)
+                {
+                    nn_gcmem_markvalue(m_pvm, m_values[i]);
+                }
+            }
+
+            void insert(Value value, int index)
+            {
+                insertDefault(value, index, Value::makeNull());
             }
     };
 
@@ -2819,7 +2875,7 @@ namespace neon
                 Userdata* rt;
                 rt = Object::make<Userdata>(state, Value::OBJTYPE_USERDATA);
                 rt->pointer = pointer;
-                rt->name = neon::Util::strCopy(state, name);
+                rt->name = Util::strCopy(state, name);
                 rt->ondestroyfn = nullptr;
                 return rt;
             }
@@ -3022,7 +3078,7 @@ namespace neon
                 }
                 else if(callable.isFuncNative())
                 {
-                    //arity = nn_value_asfuncnative(callable);
+                    //arity = callable.asFuncNative();
                 }
                 if(arity > 0)
                 {
@@ -3267,15 +3323,15 @@ namespace neon
 
             bool destroyThisObject()
             {
-                delete this->m_properties;
-                this->m_properties = nullptr;
+                delete m_properties;
+                m_properties = nullptr;
                 m_active = false;
                 return true;
             }
 
             void defProperty(const char *cstrname, Value val)
             {
-                this->m_properties->setCStr(cstrname, val);
+                m_properties->setCStr(cstrname, val);
             }
     };
 
@@ -4161,6 +4217,32 @@ namespace neon
     struct Lexer
     {
         public:
+            static bool charIsDigit(char c)
+            {
+                return c >= '0' && c <= '9';
+            }
+
+            static bool charIsBinary(char c)
+            {
+                return c == '0' || c == '1';
+            }
+
+            static bool charIsAlpha(char c)
+            {
+                return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+            }
+
+            static bool charIsOctal(char c)
+            {
+                return c >= '0' && c <= '7';
+            }
+
+            static bool charIsHexadecimal(char c)
+            {
+                return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            }
+
+        public:
             State* m_pvm;
             const char* m_plainsource;
             const char* m_sourceptr;
@@ -4226,6 +4308,676 @@ namespace neon
                 return t;
             }
 
+
+            char advance()
+            {
+                m_sourceptr++;
+                if(m_sourceptr[-1] == '\n')
+                {
+                    m_currentline++;
+                }
+                return m_sourceptr[-1];
+            }
+
+            bool match(char expected)
+            {
+                if(isAtEnd())
+                {
+                    return false;
+                }
+                if(*m_sourceptr != expected)
+                {
+                    return false;
+                }
+                m_sourceptr++;
+                if(m_sourceptr[-1] == '\n')
+                {
+                    m_currentline++;
+                }
+                return true;
+            }
+
+            char peekCurrent()
+            {
+                return *m_sourceptr;
+            }
+
+            char peekPrevious()
+            {
+                return m_sourceptr[-1];
+            }
+
+            char peekNext()
+            {
+                if(isAtEnd())
+                {
+                    return '\0';
+                }
+                return m_sourceptr[1];
+            }
+
+            Token skipBlockComments()
+            {
+                int nesting;
+                nesting = 1;
+                while(nesting > 0)
+                {
+                    if(isAtEnd())
+                    {
+                        return errorToken("unclosed block comment");
+                    }
+                    /* internal comment open */
+                    if(peekCurrent() == '/' && peekNext() == '*')
+                    {
+                        advance();
+                        advance();
+                        nesting++;
+                        continue;
+                    }
+                    /* comment close */
+                    if(peekCurrent() == '*' && peekNext() == '/')
+                    {
+                        advance();
+                        advance();
+                        nesting--;
+                        continue;
+                    }
+                    /* regular comment body */
+                    advance();
+                }
+                #if defined(NEON_PLAT_ISWINDOWS)
+                //advance();
+                #endif
+                return makeToken(Token::TOK_UNDEFINED);
+            }
+
+            Token skipSpace()
+            {
+                char c;
+                Token result;
+                result.isglobal = false;
+                for(;;)
+                {
+                    c = peekCurrent();
+                    switch(c)
+                    {
+                        case ' ':
+                        case '\r':
+                        case '\t':
+                        {
+                            advance();
+                        }
+                        break;
+                        /*
+                        case '\n':
+                            {
+                                m_currentline++;
+                                advance();
+                            }
+                            break;
+                        */
+                        /*
+                        case '#':
+                            // single line comment
+                            {
+                                while(peekCurrent() != '\n' && !isAtEnd())
+                                    advance();
+
+                            }
+                            break;
+                        */
+                        case '/':
+                        {
+                            if(peekNext() == '/')
+                            {
+                                while(peekCurrent() != '\n' && !isAtEnd())
+                                {
+                                    advance();
+                                }
+                                return makeToken(Token::TOK_UNDEFINED);
+                            }
+                            else if(peekNext() == '*')
+                            {
+                                advance();
+                                advance();
+                                result = skipBlockComments();
+                                if(result.type != Token::TOK_UNDEFINED)
+                                {
+                                    return result;
+                                }
+                                break;
+                            }
+                            else
+                            {
+                                return makeToken(Token::TOK_UNDEFINED);
+                            }
+                        }
+                        break;
+                        /* exit as soon as we see a non-whitespace... */
+                        default:
+                            goto finished;
+                            break;
+                    }
+                }
+                finished:
+                return makeToken(Token::TOK_UNDEFINED);
+            }
+
+            Token scanString(char quote, bool withtemplate)
+            {
+                Token tkn;
+                NEON_ASTDEBUG(m_pvm, "quote=[%c] withtemplate=%d", quote, withtemplate);
+                while(peekCurrent() != quote && !isAtEnd())
+                {
+                    if(withtemplate)
+                    {
+                        /* interpolation started */
+                        if(peekCurrent() == '$' && peekNext() == '{' && peekPrevious() != '\\')
+                        {
+                            if(m_tplstringcount - 1 < NEON_CFG_ASTMAXSTRTPLDEPTH)
+                            {
+                                m_tplstringcount++;
+                                m_tplstringbuffer[m_tplstringcount] = (int)quote;
+                                m_sourceptr++;
+                                tkn = makeToken(Token::TOK_INTERPOLATION);
+                                m_sourceptr++;
+                                return tkn;
+                            }
+                            return errorToken("maximum interpolation nesting of %d exceeded by %d", NEON_CFG_ASTMAXSTRTPLDEPTH,
+                                NEON_CFG_ASTMAXSTRTPLDEPTH - m_tplstringcount + 1);
+                        }
+                    }
+                    if(peekCurrent() == '\\' && (peekNext() == quote || peekNext() == '\\'))
+                    {
+                        advance();
+                    }
+                    advance();
+                }
+                if(isAtEnd())
+                {
+                    return errorToken("unterminated string (opening quote not matched)");
+                }
+                /* the closing quote */
+                match(quote);
+                return makeToken(Token::TOK_LITERAL);
+            }
+
+            Token scanNumber()
+            {
+                NEON_ASTDEBUG(m_pvm, "");
+                /* handle binary, octal and hexadecimals */
+                if(peekPrevious() == '0')
+                {
+                    /* binary number */
+                    if(match('b'))
+                    {
+                        while(charIsBinary(peekCurrent()))
+                        {
+                            advance();
+                        }
+                        return makeToken(Token::TOK_LITNUMBIN);
+                    }
+                    else if(match('c'))
+                    {
+                        while(charIsOctal(peekCurrent()))
+                        {
+                            advance();
+                        }
+                        return makeToken(Token::TOK_LITNUMOCT);
+                    }
+                    else if(match('x'))
+                    {
+                        while(charIsHexadecimal(peekCurrent()))
+                        {
+                            advance();
+                        }
+                        return makeToken(Token::TOK_LITNUMHEX);
+                    }
+                }
+                while(charIsDigit(peekCurrent()))
+                {
+                    advance();
+                }
+                /* dots(.) are only valid here when followed by a digit */
+                if(peekCurrent() == '.' && charIsDigit(peekNext()))
+                {
+                    advance();
+                    while(charIsDigit(peekCurrent()))
+                    {
+                        advance();
+                    }
+                    /*
+                    // E or e are only valid here when followed by a digit and occurring after a dot
+                    */
+                    if((peekCurrent() == 'e' || peekCurrent() == 'E') && (peekNext() == '+' || peekNext() == '-'))
+                    {
+                        advance();
+                        advance();
+                        while(charIsDigit(peekCurrent()))
+                        {
+                            advance();
+                        }
+                    }
+                }
+                return makeToken(Token::TOK_LITNUMREG);
+            }
+
+            Token::Type getIdentType()
+            {
+                static const struct
+                {
+                    const char* str;
+                    int tokid;
+                }
+                keywords[] =
+                {
+                    { "and", Token::TOK_KWAND },
+                    { "assert", Token::TOK_KWASSERT },
+                    { "as", Token::TOK_KWAS },
+                    { "break", Token::TOK_KWBREAK },
+                    { "catch", Token::TOK_KWCATCH },
+                    { "class", Token::TOK_KWCLASS },
+                    { "continue", Token::TOK_KWCONTINUE },
+                    { "default", Token::TOK_KWDEFAULT },
+                    { "def", Token::TOK_KWFUNCTION },
+                    { "function", Token::TOK_KWFUNCTION },
+                    { "throw", neon::Token::TOK_KWTHROW },
+                    { "do", Token::TOK_KWDO },
+                    { "echo", Token::TOK_KWECHO },
+                    { "else", Token::TOK_KWELSE },
+                    { "empty", Token::TOK_KWEMPTY },
+                    { "false", Token::TOK_KWFALSE },
+                    { "finally", Token::TOK_KWFINALLY },
+                    { "foreach", Token::TOK_KWFOREACH },
+                    { "if", Token::TOK_KWIF },
+                    { "import", Token::TOK_KWIMPORT },
+                    { "in", Token::TOK_KWIN },
+                    { "for", Token::TOK_KWFOR },
+                    { "null", Token::TOK_KWNULL },
+                    { "new", Token::TOK_KWNEW },
+                    { "or", Token::TOK_KWOR },
+                    { "super", Token::TOK_KWSUPER },
+                    { "return", Token::TOK_KWRETURN },
+                    { "this", Token::TOK_KWTHIS },
+                    { "static", Token::TOK_KWSTATIC },
+                    { "true", Token::TOK_KWTRUE },
+                    { "try", Token::TOK_KWTRY },
+                    { "typeof", Token::TOK_KWTYPEOF },
+                    { "switch", Token::TOK_KWSWITCH },
+                    { "case", Token::TOK_KWCASE },
+                    { "var", Token::TOK_KWVAR },
+                    { "while", Token::TOK_KWWHILE },
+                    { nullptr, (Token::Type)0 }
+                };
+                size_t i;
+                size_t kwlen;
+                size_t ofs;
+                const char* kwtext;
+                for(i = 0; keywords[i].str != nullptr; i++)
+                {
+                    kwtext = keywords[i].str;
+                    kwlen = strlen(kwtext);
+                    ofs = (m_sourceptr - m_plainsource);
+                    if(ofs == kwlen)
+                    {
+                        if(memcmp(m_plainsource, kwtext, kwlen) == 0)
+                        {
+                            return (Token::Type)keywords[i].tokid;
+                        }
+                    }
+                }
+                return Token::TOK_IDENTNORMAL;
+            }
+
+            Token scanIdent(bool isdollar)
+            {
+                int cur;
+                Token tok;
+                cur = peekCurrent();
+                if(cur == '$')
+                {
+                    advance();
+                }
+                while(true)
+                {
+                    cur = peekCurrent();
+                    if(charIsAlpha(cur) || charIsDigit(cur))
+                    {
+                        advance();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+                tok = makeToken(getIdentType());
+                tok.isglobal = isdollar;
+                return tok;
+            }
+
+            Token scanDecorator()
+            {
+                while(charIsAlpha(peekCurrent()) || charIsDigit(peekCurrent()))
+                {
+                    advance();
+                }
+                return makeToken(Token::TOK_DECORATOR);
+            }
+
+            Token scanToken()
+            {
+                char c;
+                bool isdollar;
+                Token tk;
+                Token token;
+                tk = skipSpace();
+                if(tk.type != Token::TOK_UNDEFINED)
+                {
+                    return tk;
+                }
+                m_plainsource = m_sourceptr;
+                if(isAtEnd())
+                {
+                    return makeToken(Token::TOK_EOF);
+                }
+                c = advance();
+                if(charIsDigit(c))
+                {
+                    return scanNumber();
+                }
+                else if(charIsAlpha(c) || (c == '$'))
+                {
+                    isdollar = (c == '$');
+                    return scanIdent(isdollar);
+                }
+                switch(c)
+                {
+                    case '(':
+                        {
+                            return makeToken(Token::TOK_PARENOPEN);
+                        }
+                        break;
+                    case ')':
+                        {
+                            return makeToken(Token::TOK_PARENCLOSE);
+                        }
+                        break;
+                    case '[':
+                        {
+                            return makeToken(Token::TOK_BRACKETOPEN);
+                        }
+                        break;
+                    case ']':
+                        {
+                            return makeToken(Token::TOK_BRACKETCLOSE);
+                        }
+                        break;
+                    case '{':
+                        {
+                            return makeToken(Token::TOK_BRACEOPEN);
+                        }
+                        break;
+                    case '}':
+                        {
+                            if(m_tplstringcount > -1)
+                            {
+                                token = scanString((char)m_tplstringbuffer[m_tplstringcount], true);
+                                m_tplstringcount--;
+                                return token;
+                            }
+                            return makeToken(Token::TOK_BRACECLOSE);
+                        }
+                        break;
+                    case ';':
+                        {
+                            return makeToken(Token::TOK_SEMICOLON);
+                        }
+                        break;
+                    case '\\':
+                        {
+                            return makeToken(Token::TOK_BACKSLASH);
+                        }
+                        break;
+                    case ':':
+                        {
+                            return makeToken(Token::TOK_COLON);
+                        }
+                        break;
+                    case ',':
+                        {
+                            return makeToken(Token::TOK_COMMA);
+                        }
+                        break;
+                    case '@':
+                        {
+                            if(!charIsAlpha(peekCurrent()))
+                            {
+                                return makeToken(Token::TOK_AT);
+                            }
+                            return scanDecorator();
+                        }
+                        break;
+                    case '!':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_NOTEQUAL);
+                            }
+                            return makeToken(Token::TOK_EXCLMARK);
+
+                        }
+                        break;
+                    case '.':
+                        {
+                            if(match('.'))
+                            {
+                                if(match('.'))
+                                {
+                                    return makeToken(Token::TOK_TRIPLEDOT);
+                                }
+                                return makeToken(Token::TOK_DOUBLEDOT);
+                            }
+                            return makeToken(Token::TOK_DOT);
+                        }
+                        break;
+                    case '+':
+                    {
+                        if(match('+'))
+                        {
+                            return makeToken(Token::TOK_INCREMENT);
+                        }
+                        if(match('='))
+                        {
+                            return makeToken(Token::TOK_PLUSASSIGN);
+                        }
+                        else
+                        {
+                            return makeToken(Token::TOK_PLUS);
+                        }
+                    }
+                    break;
+                    case '-':
+                        {
+                            if(match('-'))
+                            {
+                                return makeToken(Token::TOK_DECREMENT);
+                            }
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_MINUSASSIGN);
+                            }
+                            else
+                            {
+                                return makeToken(Token::TOK_MINUS);
+                            }
+                        }
+                        break;
+                    case '*':
+                        {
+                            if(match('*'))
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_POWASSIGN);
+                                }
+                                return makeToken(Token::TOK_POWEROF);
+                            }
+                            else
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_MULTASSIGN);
+                                }
+                                return makeToken(Token::TOK_MULTIPLY);
+                            }
+                        }
+                        break;
+                    case '/':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_DIVASSIGN);
+                            }
+                            return makeToken(Token::TOK_DIVIDE);
+                        }
+                        break;
+                    case '=':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_EQUAL);
+                            }
+                            return makeToken(Token::TOK_ASSIGN);
+                        }        
+                        break;
+                    case '<':
+                        {
+                            if(match('<'))
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_LEFTSHIFTASSIGN);
+                                }
+                                return makeToken(Token::TOK_LEFTSHIFT);
+                            }
+                            else
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_LESSEQUAL);
+                                }
+                                return makeToken(Token::TOK_LESSTHAN);
+
+                            }
+                        }
+                        break;
+                    case '>':
+                        {
+                            if(match('>'))
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_RIGHTSHIFTASSIGN);
+                                }
+                                return makeToken(Token::TOK_RIGHTSHIFT);
+                            }
+                            else
+                            {
+                                if(match('='))
+                                {
+                                    return makeToken(Token::TOK_GREATER_EQ);
+                                }
+                                return makeToken(Token::TOK_GREATERTHAN);
+                            }
+                        }
+                        break;
+                    case '%':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_PERCENT_EQ);
+                            }
+                            return makeToken(Token::TOK_MODULO);
+                        }
+                        break;
+                    case '&':
+                        {
+                            if(match('&'))
+                            {
+                                return makeToken(Token::TOK_KWAND);
+                            }
+                            else if(match('='))
+                            {
+                                return makeToken(Token::TOK_AMP_EQ);
+                            }
+                            return makeToken(Token::TOK_AMP);
+                        }
+                        break;
+                    case '|':
+                        {
+                            if(match('|'))
+                            {
+                                return makeToken(Token::TOK_KWOR);
+                            }
+                            else if(match('='))
+                            {
+                                return makeToken(Token::TOK_BAR_EQ);
+                            }
+                            return makeToken(Token::TOK_BAR);
+                        }
+                        break;
+                    case '~':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_TILDE_EQ);
+                            }
+                            return makeToken(Token::TOK_TILDE);
+                        }
+                        break;
+                    case '^':
+                        {
+                            if(match('='))
+                            {
+                                return makeToken(Token::TOK_XOR_EQ);
+                            }
+                            return makeToken(Token::TOK_XOR);
+                        }
+                        break;
+                    case '\n':
+                        {
+                            return makeToken(Token::TOK_NEWLINE);
+                        }
+                        break;
+                    case '"':
+                        {
+                            return scanString('"', true);
+                        }
+                        break;
+                    case '\'':
+                        {
+                            return scanString('\'', false);
+                        }
+                        break;
+                    case '?':
+                        {
+                            return makeToken(Token::TOK_QUESTION);
+                        }
+                        break;
+                    /*
+                    // --- DO NOT MOVE ABOVE OR BELOW THE DEFAULT CASE ---
+                    // fall-through tokens goes here... this tokens are only valid
+                    // when the carry another token with them...
+                    // be careful not to add break after them so that they may use the default
+                    // case.
+                    */
+                    default:
+                        break;
+                }
+                return errorToken("unexpected character %c", c);
+            }
+
+
     };
 
     struct Parser
@@ -4283,6 +5035,15 @@ namespace neon
                     using InfixFN = bool (*)(Parser*, Token, bool);
 
                 public:
+                    static Rule* make(Rule* dest, PrefixFN prefix, InfixFN infix, Precedence precedence)
+                    {
+                        dest->prefix = prefix;
+                        dest->infix = infix;
+                        dest->precedence = precedence;
+                        return dest;
+                    }
+                
+                public:
                     PrefixFN prefix;
                     InfixFN infix;
                     Precedence precedence;
@@ -4303,26 +5064,161 @@ namespace neon
 
             struct FuncCompiler
             {
+                public:
+                    enum
+                    {
+                        /* how many locals per function can be compiled */
+                        MaxLocals = (64 / 1),
+    
+                        /* how many upvalues per function can be compiled */
+                        MaxUpvalues = (64 / 1),
+                    };
 
                 public:
-                    int localcount;
-                    int scopedepth;
-                    int handlercount;
-                    bool fromimport;
-                    FuncCompiler* enclosing;
+                    Parser* m_prs;
+                    int m_localcount;
+                    int m_scopedepth;
+                    int m_compiledexcepthandlercount;
+                    bool m_fromimport;
+                    FuncCompiler* m_enclosing;
                     /* current function */
-                    FuncScript* targetfunc;
-                    FuncCommon::Type type;
-                    CompiledLocal locals[NEON_CFG_ASTMAXLOCALS];
-                    CompiledUpvalue upvalues[NEON_CFG_ASTMAXUPVALS];
+                    FuncScript* m_targetfunc;
+                    FuncCommon::Type m_type;
+                    CompiledLocal m_compiledlocals[MaxLocals];
+                    CompiledUpvalue m_compiledupvals[MaxUpvalues];
+
+                public:
+                    FuncCompiler(Parser* prs, FuncCommon::Type t, bool isanon)
+                    {
+                        bool candeclthis;
+                        CompiledLocal* local;
+                        String* fname;
+                        m_prs = prs;
+                        m_enclosing = prs->m_pvm->m_activeparser->m_currfunccompiler;
+                        m_targetfunc = nullptr;
+                        m_type = t;
+                        m_localcount = 0;
+                        m_scopedepth = 0;
+                        m_compiledexcepthandlercount = 0;
+                        m_fromimport = false;
+                        m_targetfunc = FuncScript::make(prs->m_pvm, prs->m_currmodule, t);
+                        prs->m_currfunccompiler = this;
+                        if(t != FuncCommon::FUNCTYPE_SCRIPT)
+                        {
+                            prs->m_pvm->stackPush(Value::fromObject(m_targetfunc));
+                            if(isanon)
+                            {
+                                Printer ptmp(prs->m_pvm);
+                                ptmp.putformat("anonymous@[%s:%d]", prs->m_currentphysfile, prs->m_prevtoken.line);
+                                fname = ptmp.takeString();
+                            }
+                            else
+                            {
+                                fname = String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length);
+                            }
+                            prs->m_currfunccompiler->m_targetfunc->name = fname;
+                            prs->m_pvm->stackPop();
+                        }
+                        /* claiming slot zero for use in class methods */
+                        local = &prs->m_currfunccompiler->m_compiledlocals[0];
+                        prs->m_currfunccompiler->m_localcount++;
+                        local->depth = 0;
+                        local->iscaptured = false;
+                        candeclthis = (
+                            (t != FuncCommon::FUNCTYPE_FUNCTION) &&
+                            (prs->m_compcontext == COMPCONTEXT_CLASS)
+                        );
+                        if(candeclthis || (/*(t == FuncCommon::FUNCTYPE_ANONYMOUS) &&*/ (prs->m_compcontext != COMPCONTEXT_CLASS)))
+                        {
+                            local->name.start = g_strthis;
+                            local->name.length = 4;
+                        }
+                        else
+                        {
+                            local->name.start = "";
+                            local->name.length = 0;
+                        }
+                    }
+
+                    int resolveLocal(Token* name)
+                    {
+                        int i;
+                        CompiledLocal* local;
+                        for(i = m_localcount - 1; i >= 0; i--)
+                        {
+                            local = &m_compiledlocals[i];
+                            if(Parser::identsEqual(&local->name, name))
+                            {
+                                if(local->depth == -1)
+                                {
+                                    m_prs->raiseError("cannot read local variable in it's own initializer");
+                                }
+                                return i;
+                            }
+                        }
+                        return -1;
+                    }
+
+                    int addUpvalue(uint16_t index, bool islocal)
+                    {
+                        int i;
+                        int upcnt;
+                        CompiledUpvalue* upvalue;
+                        upcnt = m_targetfunc->upvalcount;
+                        for(i = 0; i < upcnt; i++)
+                        {
+                            upvalue = &m_compiledupvals[i];
+                            if(upvalue->index == index && upvalue->islocal == islocal)
+                            {
+                                return i;
+                            }
+                        }
+                        if(upcnt == neon::Parser::FuncCompiler::MaxUpvalues)
+                        {
+                            m_prs->raiseError("too many closure variables in function");
+                            return 0;
+                        }
+                        m_compiledupvals[upcnt].islocal = islocal;
+                        m_compiledupvals[upcnt].index = index;
+                        return m_targetfunc->upvalcount++;
+                    }
+
+                    int resolveUpvalue(Token* name)
+                    {
+                        int local;
+                        int upvalue;
+                        if(m_enclosing == nullptr)
+                        {
+                            return -1;
+                        }
+                        local = m_enclosing->resolveLocal(name);
+                        if(local != -1)
+                        {
+                            m_enclosing->m_compiledlocals[local].iscaptured = true;
+                            return addUpvalue((uint16_t)local, true);
+                        }
+                        upvalue = m_enclosing->resolveUpvalue(name);
+                        if(upvalue != -1)
+                        {
+                            return addUpvalue((uint16_t)upvalue, false);
+                        }
+                        return -1;
+                    }
+
             };
 
             struct ClassCompiler
             {
                 bool hassuperclass;
-                ClassCompiler* enclosing;
+                ClassCompiler* m_enclosing;
                 Token name;
             };
+
+        public:
+            static bool identsEqual(Token* a, Token* b)
+            {
+                return a->length == b->length && memcmp(a->start, b->start, a->length) == 0;
+            }
 
         public:
             bool m_haderror;
@@ -4362,7 +5258,7 @@ namespace neon
                 m_replcanecho = false;
                 m_isreturning = false;
                 m_istrying = false;
-                m_compcontext = Parser::COMPCONTEXT_NONE;
+                m_compcontext = COMPCONTEXT_NONE;
                 m_innermostloopstart = -1;
                 m_innermostloopscopedepth = 0;
                 m_currclasscompiler = nullptr;
@@ -4376,6 +5272,223 @@ namespace neon
             ~Parser()
             {
             }
+
+            template<typename... ArgsT>
+            bool raiseErrorAt(Token* t, const char* message, ArgsT&&... args)
+            {
+                static auto fn_fprintf = fprintf;
+                fflush(stdout);
+                /*
+                // do not cascade error
+                // suppress error if already in panic mode
+                */
+                if(m_panicmode)
+                {
+                    return false;
+                }
+                m_panicmode = true;
+                fprintf(stderr, "SyntaxError");
+                if(t->type == Token::TOK_EOF)
+                {
+                    fprintf(stderr, " at end");
+                }
+                else if(t->type == Token::TOK_ERROR)
+                {
+                    /* do nothing */
+                }
+                else
+                {
+                    if(t->length == 1 && *t->start == '\n')
+                    {
+                        fprintf(stderr, " at newline");
+                    }
+                    else
+                    {
+                        fprintf(stderr, " at '%.*s'", t->length, t->start);
+                    }
+                }
+                fprintf(stderr, ": ");
+                fn_fprintf(stderr, message, args...);
+                fputs("\n", stderr);
+                fprintf(stderr, "  %s:%d\n", m_currmodule->physicalpath->data(), t->line);
+                m_haderror = true;
+                return false;
+            }
+
+            template<typename... ArgsT>
+            bool raiseError(const char* message, ArgsT&&... args)
+            {
+                raiseErrorAt(&m_prevtoken, message, args...);
+                return false;
+            }
+
+            template<typename... ArgsT>
+            bool raiseErrorAtCurrent(const char* message, ArgsT&&... args)
+            {
+                raiseErrorAt(&m_currtoken, message, args...);
+                return false;
+            }
+
+            Blob* currentBlob()
+            {
+                return m_currfunccompiler->m_targetfunc->blob;
+            }
+
+            void advance()
+            {
+                m_prevtoken = m_currtoken;
+                while(true)
+                {
+                    m_currtoken = m_lexer->scanToken();
+                    if(m_currtoken.type != Token::TOK_ERROR)
+                    {
+                        break;
+                    }
+                    raiseErrorAtCurrent(m_currtoken.start);
+                }
+            }
+
+            bool consume(Token::Type t, const char* message)
+            {
+                if(m_currtoken.type == t)
+                {
+                    advance();
+                    return true;
+                }
+                return raiseErrorAtCurrent(message);
+            }
+
+            void consumeOr(const char* message, const Token::Type* ts, int count)
+            {
+                int i;
+                for(i = 0; i < count; i++)
+                {
+                    if(m_currtoken.type == ts[i])
+                    {
+                        advance();
+                        return;
+                    }
+                }
+                raiseErrorAtCurrent(message);
+            }
+
+            bool checkNumber()
+            {
+                Token::Type t;
+                t = m_prevtoken.type;
+                if(t == Token::TOK_LITNUMREG || t == Token::TOK_LITNUMOCT || t == Token::TOK_LITNUMBIN || t == Token::TOK_LITNUMHEX)
+                {
+                    return true;
+                }
+                return false;
+            }
+
+            bool check(Token::Type t)
+            {
+                return m_currtoken.type == t;
+            }
+
+            bool match(Token::Type t)
+            {
+                if(!check(t))
+                {
+                    return false;
+                }
+                advance();
+                return true;
+            }
+
+            void ignoreSpace()
+            {
+                while(true)
+                {
+                    if(check(Token::TOK_NEWLINE))
+                    {
+                        advance();
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+            }
+
+            bool doParsePrecedence(Rule::Precedence precedence/*, AstExpression* dest*/)
+            {
+                bool canassign;
+                Token previous;
+                Rule::InfixFN infixrule;
+                Rule::PrefixFN prefixrule;
+                prefixrule = getRule(m_prevtoken.type)->prefix;
+                if(prefixrule == nullptr)
+                {
+                    raiseError("expected expression");
+                    return false;
+                }
+                canassign = precedence <= Rule::PREC_ASSIGNMENT;
+                prefixrule(this, canassign);
+                while(precedence <= getRule(m_currtoken.type)->precedence)
+                {
+                    previous = m_prevtoken;
+                    ignoreSpace();
+                    advance();
+                    infixrule = getRule(m_prevtoken.type)->infix;
+                    infixrule(this, previous, canassign);
+                }
+                if(canassign && match(Token::TOK_ASSIGN))
+                {
+                    raiseError("invalid assignment target");
+                    return false;
+                }
+                return true;
+            }
+
+            bool parsePrecedence(Rule::Precedence precedence)
+            {
+                if(m_lexer->isAtEnd() && m_pvm->m_isreplmode)
+                {
+                    return false;
+                }
+                ignoreSpace();
+                if(m_lexer->isAtEnd() && m_pvm->m_isreplmode)
+                {
+                    return false;
+                }
+                advance();
+                return doParsePrecedence(precedence);
+            }
+
+            bool parsePrecNoAdvance(Rule::Precedence precedence)
+            {
+                if(m_lexer->isAtEnd() && m_pvm->m_isreplmode)
+                {
+                    return false;
+                }
+                ignoreSpace();
+                if(m_lexer->isAtEnd() && m_pvm->m_isreplmode)
+                {
+                    return false;
+                }
+                return doParsePrecedence(precedence);
+            }
+
+            bool parseExpression()
+            {
+                return parsePrecedence(Rule::PREC_ASSIGNMENT);
+            }
+
+            neon::Parser::Rule* getRule(neon::Token::Type type);
+
+            void runParser()
+            {
+                advance();
+                ignoreSpace();
+                while(!match(Token::TOK_EOF))
+                {
+                    nn_astparser_parsedeclaration(this);
+                }
+            }
+
     };
 
     struct Arguments
@@ -4763,52 +5876,6 @@ static NEON_ALWAYSINLINE neon::Value::ObjType nn_value_objtype(neon::Value v)
     return v.asObject()->m_objtype;
 }
 
-static NEON_ALWAYSINLINE bool nn_value_asbool(neon::Value v)
-{
-    return (v.m_valunion.boolean);
-}
-
-
-static NEON_ALWAYSINLINE neon::FuncNative* nn_value_asfuncnative(neon::Value v)
-{
-    return ((neon::FuncNative*)v.asObject());
-}
-
-
-static NEON_ALWAYSINLINE neon::ClassObject* nn_value_asclass(neon::Value v)
-{
-    return ((neon::ClassObject*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::FuncBound* nn_value_asfuncbound(neon::Value v)
-{
-    return ((neon::FuncBound*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::VarSwitch* nn_value_asswitch(neon::Value v)
-{
-    return ((neon::VarSwitch*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::Userdata* nn_value_asuserdata(neon::Value v)
-{
-    return ((neon::Userdata*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::Dictionary* nn_value_asdict(neon::Value v)
-{
-    return ((neon::Dictionary*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::File* nn_value_asfile(neon::Value v)
-{
-    return ((neon::File*)v.asObject());
-}
-
-static NEON_ALWAYSINLINE neon::Range* nn_value_asrange(neon::Value v)
-{
-    return ((neon::Range*)v.asObject());
-}
 
 
 static NEON_ALWAYSINLINE void nn_state_apidebugv(neon::State* state, const char* funcname, const char* format, va_list va)
@@ -5712,7 +6779,7 @@ void nn_printer_printdict(neon::Printer* pd, neon::Dictionary* dict)
         val = dict->m_keynames->m_values[i];
         if(val.isDict())
         {
-            subdict = nn_value_asdict(val);
+            subdict = val.asDict();
             if(subdict == dict)
             {
                 valisrecur = true;
@@ -5732,7 +6799,7 @@ void nn_printer_printdict(neon::Printer* pd, neon::Dictionary* dict)
         {
             if(field->value.isDict())
             {
-                subdict = nn_value_asdict(field->value);
+                subdict = field->value.asDict();
                 if(subdict == dict)
                 {
                     keyisrecur = true;
@@ -5817,24 +6884,24 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
             break;
         case neon::Value::OBJTYPE_USERDATA:
             {
-                pd->putformat("<userdata %s>", nn_value_asuserdata(value)->name);
+                pd->putformat("<userdata %s>", value.asUserdata()->name);
             }
             break;
         case neon::Value::OBJTYPE_RANGE:
             {
                 neon::Range* range;
-                range = nn_value_asrange(value);
+                range = value.asRange();
                 pd->putformat("<range %d .. %d>", range->m_lower, range->m_upper);
             }
             break;
         case neon::Value::OBJTYPE_FILE:
             {
-                nn_printer_printfile(pd, nn_value_asfile(value));
+                nn_printer_printfile(pd, value.asFile());
             }
             break;
         case neon::Value::OBJTYPE_DICT:
             {
-                nn_printer_printdict(pd, nn_value_asdict(value));
+                nn_printer_printdict(pd, value.asDict());
             }
             break;
         case neon::Value::OBJTYPE_ARRAY:
@@ -5845,7 +6912,7 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
         case neon::Value::OBJTYPE_FUNCBOUND:
             {
                 neon::FuncBound* bn;
-                bn = nn_value_asfuncbound(value);
+                bn = value.asFuncBound();
                 nn_printer_printfunction(pd, bn->method->scriptfunc);
             }
             break;
@@ -5859,7 +6926,7 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
         case neon::Value::OBJTYPE_CLASS:
             {
                 neon::ClassObject* klass;
-                klass = nn_value_asclass(value);
+                klass = value.asClass();
                 pd->putformat("<class %s at %p>", klass->m_classname->data(), (void*)klass);
             }
             break;
@@ -5888,7 +6955,7 @@ void nn_printer_printobject(neon::Printer* pd, neon::Value value, bool fixstring
         case neon::Value::OBJTYPE_FUNCNATIVE:
             {
                 neon::FuncNative* native;
-                native = nn_value_asfuncnative(value);
+                native = value.asFuncNative();
                 pd->putformat("<function %s(native) at %p>", native->name, (void*)native);
             }
             break;
@@ -5930,7 +6997,7 @@ void nn_printer_printvalue(neon::Printer* pd, neon::Value value, bool fixstring,
             break;
         case neon::Value::VALTYPE_BOOL:
             {
-                pd->put(nn_value_asbool(value) ? "true" : "false");
+                pd->put(value.asBool() ? "true" : "false");
             }
             break;
         case neon::Value::VALTYPE_NUMBER:
@@ -6076,7 +7143,7 @@ bool nn_value_compare_actual(neon::State* state, neon::Value a, neon::Value b)
             break;
         case neon::Value::VALTYPE_BOOL:
             {
-                return nn_value_asbool(a) == nn_value_asbool(b);
+                return a.asBool() == b.asBool();
             }
             break;
         case neon::Value::VALTYPE_NUMBER:
@@ -6185,7 +7252,7 @@ uint32_t nn_value_hashvalue(neon::Value value)
     switch(value.type())
     {
         case neon::Value::VALTYPE_BOOL:
-            return nn_value_asbool(value) ? 3 : 5;
+            return value.asBool() ? 3 : 5;
         case neon::Value::VALTYPE_NULL:
             return 7;
         case neon::Value::VALTYPE_NUMBER:
@@ -6214,7 +7281,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
     }
     else if(a.isBool())
     {
-        if(b.isNull() || (b.isBool() && nn_value_asbool(b) == false))
+        if(b.isNull() || (b.isBool() && b.asBool() == false))
         {
             /* only null, false and false are lower than numbers */
             return a;
@@ -6274,7 +7341,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
         }
         else if(a.isRange() && b.isRange())
         {
-            if(nn_value_asrange(a)->m_lower >= nn_value_asrange(b)->m_lower)
+            if(a.asRange()->m_lower >= b.asRange()->m_lower)
             {
                 return a;
             }
@@ -6282,7 +7349,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
         }
         else if(a.isClass() && b.isClass())
         {
-            if(nn_value_asclass(a)->m_methods->m_count >= nn_value_asclass(b)->m_methods->m_count)
+            if(a.asClass()->m_methods->m_count >= b.asClass()->m_methods->m_count)
             {
                 return a;
             }
@@ -6298,7 +7365,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
         }
         else if(a.isDict() && b.isDict())
         {
-            if(nn_value_asdict(a)->m_keynames->m_count >= nn_value_asdict(b)->m_keynames->m_count)
+            if(a.asDict()->m_keynames->m_count >= b.asDict()->m_keynames->m_count)
             {
                 return a;
             }
@@ -6306,7 +7373,7 @@ neon::Value nn_value_findgreater(neon::Value a, neon::Value b)
         }
         else if(a.isFile() && b.isFile())
         {
-            if(strcmp(nn_value_asfile(a)->m_filepath->data(), nn_value_asfile(b)->m_filepath->data()) >= 0)
+            if(strcmp(a.asFile()->m_filepath->data(), b.asFile()->m_filepath->data()) >= 0)
             {
                 return a;
             }
@@ -6392,7 +7459,7 @@ neon::Value nn_value_copyvalue(neon::State* state, neon::Value value)
                 {
                     neon::Dictionary *dict;
                     neon::Dictionary *newdict;
-                    dict = nn_value_asdict(value);
+                    dict = value.asDict();
                     newdict = neon::Dictionary::make(state);
                     // @TODO: Figure out how to handle dictionary values correctly
                     // remember that copying keys is redundant and unnecessary
@@ -6428,30 +7495,6 @@ void nn_instance_mark(neon::State* state, neon::ClassInstance* instance)
 }
 
 
-bool nn_astutil_isdigit(char c)
-{
-    return c >= '0' && c <= '9';
-}
-
-bool nn_astutil_isbinary(char c)
-{
-    return c == '0' || c == '1';
-}
-
-bool nn_astutil_isalpha(char c)
-{
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
-}
-
-bool nn_astutil_isoctal(char c)
-{
-    return c >= '0' && c <= '7';
-}
-
-bool nn_astutil_ishexadecimal(char c)
-{
-    return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-}
 
 const char* nn_astutil_toktype2str(int t)
 {
@@ -6558,830 +7601,24 @@ const char* nn_astutil_toktype2str(int t)
     return "?invalid?";
 }
 
-char nn_astlex_advance(neon::Lexer* lex)
-{
-    lex->m_sourceptr++;
-    if(lex->m_sourceptr[-1] == '\n')
-    {
-        lex->m_currentline++;
-    }
-    return lex->m_sourceptr[-1];
-}
-
-bool nn_astlex_match(neon::Lexer* lex, char expected)
-{
-    if(lex->isAtEnd())
-    {
-        return false;
-    }
-    if(*lex->m_sourceptr != expected)
-    {
-        return false;
-    }
-    lex->m_sourceptr++;
-    if(lex->m_sourceptr[-1] == '\n')
-    {
-        lex->m_currentline++;
-    }
-    return true;
-}
-
-char nn_astlex_peekcurr(neon::Lexer* lex)
-{
-    return *lex->m_sourceptr;
-}
-
-char nn_astlex_peekprev(neon::Lexer* lex)
-{
-    return lex->m_sourceptr[-1];
-}
-
-char nn_astlex_peeknext(neon::Lexer* lex)
-{
-    if(lex->isAtEnd())
-    {
-        return '\0';
-    }
-    return lex->m_sourceptr[1];
-}
-
-neon::Token nn_astlex_skipblockcomments(neon::Lexer* lex)
-{
-    int nesting;
-    nesting = 1;
-    while(nesting > 0)
-    {
-        if(lex->isAtEnd())
-        {
-            return lex->errorToken("unclosed block comment");
-        }
-        /* internal comment open */
-        if(nn_astlex_peekcurr(lex) == '/' && nn_astlex_peeknext(lex) == '*')
-        {
-            nn_astlex_advance(lex);
-            nn_astlex_advance(lex);
-            nesting++;
-            continue;
-        }
-        /* comment close */
-        if(nn_astlex_peekcurr(lex) == '*' && nn_astlex_peeknext(lex) == '/')
-        {
-            nn_astlex_advance(lex);
-            nn_astlex_advance(lex);
-            nesting--;
-            continue;
-        }
-        /* regular comment body */
-        nn_astlex_advance(lex);
-    }
-    #if defined(NEON_PLAT_ISWINDOWS)
-    //nn_astlex_advance(lex);
-    #endif
-    return lex->makeToken(neon::Token::TOK_UNDEFINED);
-}
-
-neon::Token nn_astlex_skipspace(neon::Lexer* lex)
-{
-    char c;
-    neon::Token result;
-    result.isglobal = false;
-    for(;;)
-    {
-        c = nn_astlex_peekcurr(lex);
-        switch(c)
-        {
-            case ' ':
-            case '\r':
-            case '\t':
-            {
-                nn_astlex_advance(lex);
-            }
-            break;
-            /*
-            case '\n':
-                {
-                    lex->m_currentline++;
-                    nn_astlex_advance(lex);
-                }
-                break;
-            */
-            /*
-            case '#':
-                // single line comment
-                {
-                    while(nn_astlex_peekcurr(lex) != '\n' && !lex->isAtEnd())
-                        nn_astlex_advance(lex);
-
-                }
-                break;
-            */
-            case '/':
-            {
-                if(nn_astlex_peeknext(lex) == '/')
-                {
-                    while(nn_astlex_peekcurr(lex) != '\n' && !lex->isAtEnd())
-                    {
-                        nn_astlex_advance(lex);
-                    }
-                    return lex->makeToken(neon::Token::TOK_UNDEFINED);
-                }
-                else if(nn_astlex_peeknext(lex) == '*')
-                {
-                    nn_astlex_advance(lex);
-                    nn_astlex_advance(lex);
-                    result = nn_astlex_skipblockcomments(lex);
-                    if(result.type != neon::Token::TOK_UNDEFINED)
-                    {
-                        return result;
-                    }
-                    break;
-                }
-                else
-                {
-                    return lex->makeToken(neon::Token::TOK_UNDEFINED);
-                }
-            }
-            break;
-            /* exit as soon as we see a non-whitespace... */
-            default:
-                goto finished;
-                break;
-        }
-    }
-    finished:
-    return lex->makeToken(neon::Token::TOK_UNDEFINED);
-}
-
-neon::Token nn_astlex_scanstring(neon::Lexer* lex, char quote, bool withtemplate)
-{
-    neon::Token tkn;
-    NEON_ASTDEBUG(lex->m_pvm, "quote=[%c] withtemplate=%d", quote, withtemplate);
-    while(nn_astlex_peekcurr(lex) != quote && !lex->isAtEnd())
-    {
-        if(withtemplate)
-        {
-            /* interpolation started */
-            if(nn_astlex_peekcurr(lex) == '$' && nn_astlex_peeknext(lex) == '{' && nn_astlex_peekprev(lex) != '\\')
-            {
-                if(lex->m_tplstringcount - 1 < NEON_CFG_ASTMAXSTRTPLDEPTH)
-                {
-                    lex->m_tplstringcount++;
-                    lex->m_tplstringbuffer[lex->m_tplstringcount] = (int)quote;
-                    lex->m_sourceptr++;
-                    tkn = lex->makeToken(neon::Token::TOK_INTERPOLATION);
-                    lex->m_sourceptr++;
-                    return tkn;
-                }
-                return lex->errorToken("maximum interpolation nesting of %d exceeded by %d", NEON_CFG_ASTMAXSTRTPLDEPTH,
-                    NEON_CFG_ASTMAXSTRTPLDEPTH - lex->m_tplstringcount + 1);
-            }
-        }
-        if(nn_astlex_peekcurr(lex) == '\\' && (nn_astlex_peeknext(lex) == quote || nn_astlex_peeknext(lex) == '\\'))
-        {
-            nn_astlex_advance(lex);
-        }
-        nn_astlex_advance(lex);
-    }
-    if(lex->isAtEnd())
-    {
-        return lex->errorToken("unterminated string (opening quote not matched)");
-    }
-    /* the closing quote */
-    nn_astlex_match(lex, quote);
-    return lex->makeToken(neon::Token::TOK_LITERAL);
-}
-
-neon::Token nn_astlex_scannumber(neon::Lexer* lex)
-{
-    NEON_ASTDEBUG(lex->m_pvm, "");
-    /* handle binary, octal and hexadecimals */
-    if(nn_astlex_peekprev(lex) == '0')
-    {
-        /* binary number */
-        if(nn_astlex_match(lex, 'b'))
-        {
-            while(nn_astutil_isbinary(nn_astlex_peekcurr(lex)))
-            {
-                nn_astlex_advance(lex);
-            }
-            return lex->makeToken(neon::Token::TOK_LITNUMBIN);
-        }
-        else if(nn_astlex_match(lex, 'c'))
-        {
-            while(nn_astutil_isoctal(nn_astlex_peekcurr(lex)))
-            {
-                nn_astlex_advance(lex);
-            }
-            return lex->makeToken(neon::Token::TOK_LITNUMOCT);
-        }
-        else if(nn_astlex_match(lex, 'x'))
-        {
-            while(nn_astutil_ishexadecimal(nn_astlex_peekcurr(lex)))
-            {
-                nn_astlex_advance(lex);
-            }
-            return lex->makeToken(neon::Token::TOK_LITNUMHEX);
-        }
-    }
-    while(nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
-    {
-        nn_astlex_advance(lex);
-    }
-    /* dots(.) are only valid here when followed by a digit */
-    if(nn_astlex_peekcurr(lex) == '.' && nn_astutil_isdigit(nn_astlex_peeknext(lex)))
-    {
-        nn_astlex_advance(lex);
-        while(nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
-        {
-            nn_astlex_advance(lex);
-        }
-        /*
-        // E or e are only valid here when followed by a digit and occurring after a dot
-        */
-        if((nn_astlex_peekcurr(lex) == 'e' || nn_astlex_peekcurr(lex) == 'E') && (nn_astlex_peeknext(lex) == '+' || nn_astlex_peeknext(lex) == '-'))
-        {
-            nn_astlex_advance(lex);
-            nn_astlex_advance(lex);
-            while(nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
-            {
-                nn_astlex_advance(lex);
-            }
-        }
-    }
-    return lex->makeToken(neon::Token::TOK_LITNUMREG);
-}
-
-neon::Token::Type nn_astlex_getidenttype(neon::Lexer* lex)
-{
-    static const struct
-    {
-        const char* str;
-        int tokid;
-    }
-    keywords[] =
-    {
-        { "and", neon::Token::TOK_KWAND },
-        { "assert", neon::Token::TOK_KWASSERT },
-        { "as", neon::Token::TOK_KWAS },
-        { "break", neon::Token::TOK_KWBREAK },
-        { "catch", neon::Token::TOK_KWCATCH },
-        { "class", neon::Token::TOK_KWCLASS },
-        { "continue", neon::Token::TOK_KWCONTINUE },
-        { "default", neon::Token::TOK_KWDEFAULT },
-        { "def", neon::Token::TOK_KWFUNCTION },
-        { "function", neon::Token::TOK_KWFUNCTION },
-        { "throw", neon::Token::TOK_KWTHROW },
-        { "do", neon::Token::TOK_KWDO },
-        { "echo", neon::Token::TOK_KWECHO },
-        { "else", neon::Token::TOK_KWELSE },
-        { "empty", neon::Token::TOK_KWEMPTY },
-        { "false", neon::Token::TOK_KWFALSE },
-        { "finally", neon::Token::TOK_KWFINALLY },
-        { "foreach", neon::Token::TOK_KWFOREACH },
-        { "if", neon::Token::TOK_KWIF },
-        { "import", neon::Token::TOK_KWIMPORT },
-        { "in", neon::Token::TOK_KWIN },
-        { "for", neon::Token::TOK_KWFOR },
-        { "null", neon::Token::TOK_KWNULL },
-        { "new", neon::Token::TOK_KWNEW },
-        { "or", neon::Token::TOK_KWOR },
-        { "super", neon::Token::TOK_KWSUPER },
-        { "return", neon::Token::TOK_KWRETURN },
-        { "this", neon::Token::TOK_KWTHIS },
-        { "static", neon::Token::TOK_KWSTATIC },
-        { "true", neon::Token::TOK_KWTRUE },
-        { "try", neon::Token::TOK_KWTRY },
-        { "typeof", neon::Token::TOK_KWTYPEOF },
-        { "switch", neon::Token::TOK_KWSWITCH },
-        { "case", neon::Token::TOK_KWCASE },
-        { "var", neon::Token::TOK_KWVAR },
-        { "while", neon::Token::TOK_KWWHILE },
-        { nullptr, (neon::Token::Type)0 }
-    };
-    size_t i;
-    size_t kwlen;
-    size_t ofs;
-    const char* kwtext;
-    for(i = 0; keywords[i].str != nullptr; i++)
-    {
-        kwtext = keywords[i].str;
-        kwlen = strlen(kwtext);
-        ofs = (lex->m_sourceptr - lex->m_plainsource);
-        if(ofs == kwlen)
-        {
-            if(memcmp(lex->m_plainsource, kwtext, kwlen) == 0)
-            {
-                return (neon::Token::Type)keywords[i].tokid;
-            }
-        }
-    }
-    return neon::Token::TOK_IDENTNORMAL;
-}
-
-neon::Token nn_astlex_scanident(neon::Lexer* lex, bool isdollar)
-{
-    int cur;
-    neon::Token tok;
-    cur = nn_astlex_peekcurr(lex);
-    if(cur == '$')
-    {
-        nn_astlex_advance(lex);
-    }
-    while(true)
-    {
-        cur = nn_astlex_peekcurr(lex);
-        if(nn_astutil_isalpha(cur) || nn_astutil_isdigit(cur))
-        {
-            nn_astlex_advance(lex);
-        }
-        else
-        {
-            break;
-        }
-    }
-    tok = lex->makeToken(nn_astlex_getidenttype(lex));
-    tok.isglobal = isdollar;
-    return tok;
-}
-
-neon::Token nn_astlex_scandecorator(neon::Lexer* lex)
-{
-    while(nn_astutil_isalpha(nn_astlex_peekcurr(lex)) || nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
-    {
-        nn_astlex_advance(lex);
-    }
-    return lex->makeToken(neon::Token::TOK_DECORATOR);
-}
-
-neon::Token nn_astlex_scantoken(neon::Lexer* lex)
-{
-    char c;
-    bool isdollar;
-    neon::Token tk;
-    neon::Token token;
-    tk = nn_astlex_skipspace(lex);
-    if(tk.type != neon::Token::TOK_UNDEFINED)
-    {
-        return tk;
-    }
-    lex->m_plainsource = lex->m_sourceptr;
-    if(lex->isAtEnd())
-    {
-        return lex->makeToken(neon::Token::TOK_EOF);
-    }
-    c = nn_astlex_advance(lex);
-    if(nn_astutil_isdigit(c))
-    {
-        return nn_astlex_scannumber(lex);
-    }
-    else if(nn_astutil_isalpha(c) || (c == '$'))
-    {
-        isdollar = (c == '$');
-        return nn_astlex_scanident(lex, isdollar);
-    }
-    switch(c)
-    {
-        case '(':
-            {
-                return lex->makeToken(neon::Token::TOK_PARENOPEN);
-            }
-            break;
-        case ')':
-            {
-                return lex->makeToken(neon::Token::TOK_PARENCLOSE);
-            }
-            break;
-        case '[':
-            {
-                return lex->makeToken(neon::Token::TOK_BRACKETOPEN);
-            }
-            break;
-        case ']':
-            {
-                return lex->makeToken(neon::Token::TOK_BRACKETCLOSE);
-            }
-            break;
-        case '{':
-            {
-                return lex->makeToken(neon::Token::TOK_BRACEOPEN);
-            }
-            break;
-        case '}':
-            {
-                if(lex->m_tplstringcount > -1)
-                {
-                    token = nn_astlex_scanstring(lex, (char)lex->m_tplstringbuffer[lex->m_tplstringcount], true);
-                    lex->m_tplstringcount--;
-                    return token;
-                }
-                return lex->makeToken(neon::Token::TOK_BRACECLOSE);
-            }
-            break;
-        case ';':
-            {
-                return lex->makeToken(neon::Token::TOK_SEMICOLON);
-            }
-            break;
-        case '\\':
-            {
-                return lex->makeToken(neon::Token::TOK_BACKSLASH);
-            }
-            break;
-        case ':':
-            {
-                return lex->makeToken(neon::Token::TOK_COLON);
-            }
-            break;
-        case ',':
-            {
-                return lex->makeToken(neon::Token::TOK_COMMA);
-            }
-            break;
-        case '@':
-            {
-                if(!nn_astutil_isalpha(nn_astlex_peekcurr(lex)))
-                {
-                    return lex->makeToken(neon::Token::TOK_AT);
-                }
-                return nn_astlex_scandecorator(lex);
-            }
-            break;
-        case '!':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_NOTEQUAL);
-                }
-                return lex->makeToken(neon::Token::TOK_EXCLMARK);
-
-            }
-            break;
-        case '.':
-            {
-                if(nn_astlex_match(lex, '.'))
-                {
-                    if(nn_astlex_match(lex, '.'))
-                    {
-                        return lex->makeToken(neon::Token::TOK_TRIPLEDOT);
-                    }
-                    return lex->makeToken(neon::Token::TOK_DOUBLEDOT);
-                }
-                return lex->makeToken(neon::Token::TOK_DOT);
-            }
-            break;
-        case '+':
-        {
-            if(nn_astlex_match(lex, '+'))
-            {
-                return lex->makeToken(neon::Token::TOK_INCREMENT);
-            }
-            if(nn_astlex_match(lex, '='))
-            {
-                return lex->makeToken(neon::Token::TOK_PLUSASSIGN);
-            }
-            else
-            {
-                return lex->makeToken(neon::Token::TOK_PLUS);
-            }
-        }
-        break;
-        case '-':
-            {
-                if(nn_astlex_match(lex, '-'))
-                {
-                    return lex->makeToken(neon::Token::TOK_DECREMENT);
-                }
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_MINUSASSIGN);
-                }
-                else
-                {
-                    return lex->makeToken(neon::Token::TOK_MINUS);
-                }
-            }
-            break;
-        case '*':
-            {
-                if(nn_astlex_match(lex, '*'))
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_POWASSIGN);
-                    }
-                    return lex->makeToken(neon::Token::TOK_POWEROF);
-                }
-                else
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_MULTASSIGN);
-                    }
-                    return lex->makeToken(neon::Token::TOK_MULTIPLY);
-                }
-            }
-            break;
-        case '/':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_DIVASSIGN);
-                }
-                return lex->makeToken(neon::Token::TOK_DIVIDE);
-            }
-            break;
-        case '=':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_EQUAL);
-                }
-                return lex->makeToken(neon::Token::TOK_ASSIGN);
-            }        
-            break;
-        case '<':
-            {
-                if(nn_astlex_match(lex, '<'))
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_LEFTSHIFTASSIGN);
-                    }
-                    return lex->makeToken(neon::Token::TOK_LEFTSHIFT);
-                }
-                else
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_LESSEQUAL);
-                    }
-                    return lex->makeToken(neon::Token::TOK_LESSTHAN);
-
-                }
-            }
-            break;
-        case '>':
-            {
-                if(nn_astlex_match(lex, '>'))
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_RIGHTSHIFTASSIGN);
-                    }
-                    return lex->makeToken(neon::Token::TOK_RIGHTSHIFT);
-                }
-                else
-                {
-                    if(nn_astlex_match(lex, '='))
-                    {
-                        return lex->makeToken(neon::Token::TOK_GREATER_EQ);
-                    }
-                    return lex->makeToken(neon::Token::TOK_GREATERTHAN);
-                }
-            }
-            break;
-        case '%':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_PERCENT_EQ);
-                }
-                return lex->makeToken(neon::Token::TOK_MODULO);
-            }
-            break;
-        case '&':
-            {
-                if(nn_astlex_match(lex, '&'))
-                {
-                    return lex->makeToken(neon::Token::TOK_KWAND);
-                }
-                else if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_AMP_EQ);
-                }
-                return lex->makeToken(neon::Token::TOK_AMP);
-            }
-            break;
-        case '|':
-            {
-                if(nn_astlex_match(lex, '|'))
-                {
-                    return lex->makeToken(neon::Token::TOK_KWOR);
-                }
-                else if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_BAR_EQ);
-                }
-                return lex->makeToken(neon::Token::TOK_BAR);
-            }
-            break;
-        case '~':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_TILDE_EQ);
-                }
-                return lex->makeToken(neon::Token::TOK_TILDE);
-            }
-            break;
-        case '^':
-            {
-                if(nn_astlex_match(lex, '='))
-                {
-                    return lex->makeToken(neon::Token::TOK_XOR_EQ);
-                }
-                return lex->makeToken(neon::Token::TOK_XOR);
-            }
-            break;
-        case '\n':
-            {
-                return lex->makeToken(neon::Token::TOK_NEWLINE);
-            }
-            break;
-        case '"':
-            {
-                return nn_astlex_scanstring(lex, '"', true);
-            }
-            break;
-        case '\'':
-            {
-                return nn_astlex_scanstring(lex, '\'', false);
-            }
-            break;
-        case '?':
-            {
-                return lex->makeToken(neon::Token::TOK_QUESTION);
-            }
-            break;
-        /*
-        // --- DO NOT MOVE ABOVE OR BELOW THE DEFAULT CASE ---
-        // fall-through tokens goes here... this tokens are only valid
-        // when the carry another token with them...
-        // be careful not to add break after them so that they may use the default
-        // case.
-        */
-        default:
-            break;
-    }
-    return lex->errorToken("unexpected character %c", c);
-}
-
-
-neon::Blob* nn_astparser_currentblob(neon::Parser* prs)
-{
-    return prs->m_currfunccompiler->targetfunc->blob;
-}
-
-bool nn_astparser_raiseerroratv(neon::Parser* prs, neon::Token* t, const char* message, va_list args)
-{
-    fflush(stdout);
-    /*
-    // do not cascade error
-    // suppress error if already in panic mode
-    */
-    if(prs->m_panicmode)
-    {
-        return false;
-    }
-    prs->m_panicmode = true;
-    fprintf(stderr, "SyntaxError");
-    if(t->type == neon::Token::TOK_EOF)
-    {
-        fprintf(stderr, " at end");
-    }
-    else if(t->type == neon::Token::TOK_ERROR)
-    {
-        /* do nothing */
-    }
-    else
-    {
-        if(t->length == 1 && *t->start == '\n')
-        {
-            fprintf(stderr, " at newline");
-        }
-        else
-        {
-            fprintf(stderr, " at '%.*s'", t->length, t->start);
-        }
-    }
-    fprintf(stderr, ": ");
-    vfprintf(stderr, message, args);
-    fputs("\n", stderr);
-    fprintf(stderr, "  %s:%d\n", prs->m_currmodule->physicalpath->data(), t->line);
-    prs->m_haderror = true;
-    return false;
-}
-
-bool nn_astparser_raiseerror(neon::Parser* prs, const char* message, ...)
-{
-    va_list args;
-    va_start(args, message);
-    nn_astparser_raiseerroratv(prs, &prs->m_prevtoken, message, args);
-    va_end(args);
-    return false;
-}
-
-bool nn_astparser_raiseerroratcurrent(neon::Parser* prs, const char* message, ...)
-{
-    va_list args;
-    va_start(args, message);
-    nn_astparser_raiseerroratv(prs, &prs->m_currtoken, message, args);
-    va_end(args);
-    return false;
-}
-
-void nn_astparser_advance(neon::Parser* prs)
-{
-    prs->m_prevtoken = prs->m_currtoken;
-    while(true)
-    {
-        prs->m_currtoken = nn_astlex_scantoken(prs->m_lexer);
-        if(prs->m_currtoken.type != neon::Token::TOK_ERROR)
-        {
-            break;
-        }
-        nn_astparser_raiseerroratcurrent(prs, prs->m_currtoken.start);
-    }
-}
-
-bool nn_astparser_consume(neon::Parser* prs, neon::Token::Type t, const char* message)
-{
-    if(prs->m_currtoken.type == t)
-    {
-        nn_astparser_advance(prs);
-        return true;
-    }
-    return nn_astparser_raiseerroratcurrent(prs, message);
-}
-
-void nn_astparser_consumeor(neon::Parser* prs, const char* message, const neon::Token::Type* ts, int count)
-{
-    int i;
-    for(i = 0; i < count; i++)
-    {
-        if(prs->m_currtoken.type == ts[i])
-        {
-            nn_astparser_advance(prs);
-            return;
-        }
-    }
-    nn_astparser_raiseerroratcurrent(prs, message);
-}
-
-bool nn_astparser_checknumber(neon::Parser* prs)
-{
-    neon::Token::Type t;
-    t = prs->m_prevtoken.type;
-    if(t == neon::Token::TOK_LITNUMREG || t == neon::Token::TOK_LITNUMOCT || t == neon::Token::TOK_LITNUMBIN || t == neon::Token::TOK_LITNUMHEX)
-    {
-        return true;
-    }
-    return false;
-}
-
-bool nn_astparser_check(neon::Parser* prs, neon::Token::Type t)
-{
-    return prs->m_currtoken.type == t;
-}
-
-bool nn_astparser_match(neon::Parser* prs, neon::Token::Type t)
-{
-    if(!nn_astparser_check(prs, t))
-    {
-        return false;
-    }
-    nn_astparser_advance(prs);
-    return true;
-}
-
-void nn_astparser_runparser(neon::Parser* parser)
-{
-    nn_astparser_advance(parser);
-    nn_astparser_ignorewhitespace(parser);
-    while(!nn_astparser_match(parser, neon::Token::TOK_EOF))
-    {
-        nn_astparser_parsedeclaration(parser);
-    }
-}
-
 void nn_astparser_parsedeclaration(neon::Parser* prs)
 {
-    nn_astparser_ignorewhitespace(prs);
-    if(nn_astparser_match(prs, neon::Token::TOK_KWCLASS))
+    prs->ignoreSpace();
+    if(prs->match(neon::Token::TOK_KWCLASS))
     {
         nn_astparser_parseclassdeclaration(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWFUNCTION))
+    else if(prs->match(neon::Token::TOK_KWFUNCTION))
     {
         nn_astparser_parsefuncdecl(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
+    else if(prs->match(neon::Token::TOK_KWVAR))
     {
         nn_astparser_parsevardecl(prs, false);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_BRACEOPEN))
+    else if(prs->match(neon::Token::TOK_BRACEOPEN))
     {
-        if(!nn_astparser_check(prs, neon::Token::TOK_NEWLINE) && prs->m_currfunccompiler->scopedepth == 0)
+        if(!prs->check(neon::Token::TOK_NEWLINE) && prs->m_currfunccompiler->m_scopedepth == 0)
         {
             nn_astparser_parseexprstmt(prs, false, true);
         }
@@ -7396,73 +7633,73 @@ void nn_astparser_parsedeclaration(neon::Parser* prs)
     {
         nn_astparser_parsestmt(prs);
     }
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
     if(prs->m_panicmode)
     {
         nn_astparser_synchronize(prs);
     }
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
 }
 
 void nn_astparser_parsestmt(neon::Parser* prs)
 {
     prs->m_replcanecho = false;
-    nn_astparser_ignorewhitespace(prs);
-    if(nn_astparser_match(prs, neon::Token::TOK_KWECHO))
+    prs->ignoreSpace();
+    if(prs->match(neon::Token::TOK_KWECHO))
     {
         nn_astparser_parseechostmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWIF))
+    else if(prs->match(neon::Token::TOK_KWIF))
     {
         nn_astparser_parseifstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWDO))
+    else if(prs->match(neon::Token::TOK_KWDO))
     {
         nn_astparser_parsedo_whilestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWWHILE))
+    else if(prs->match(neon::Token::TOK_KWWHILE))
     {
         nn_astparser_parsewhilestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWFOR))
+    else if(prs->match(neon::Token::TOK_KWFOR))
     {
         nn_astparser_parseforstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWFOREACH))
+    else if(prs->match(neon::Token::TOK_KWFOREACH))
     {
         nn_astparser_parseforeachstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWSWITCH))
+    else if(prs->match(neon::Token::TOK_KWSWITCH))
     {
         nn_astparser_parseswitchstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWCONTINUE))
+    else if(prs->match(neon::Token::TOK_KWCONTINUE))
     {
         nn_astparser_parsecontinuestmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWBREAK))
+    else if(prs->match(neon::Token::TOK_KWBREAK))
     {
         nn_astparser_parsebreakstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWRETURN))
+    else if(prs->match(neon::Token::TOK_KWRETURN))
     {
         nn_astparser_parsereturnstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWASSERT))
+    else if(prs->match(neon::Token::TOK_KWASSERT))
     {
         nn_astparser_parseassertstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWTHROW))
+    else if(prs->match(neon::Token::TOK_KWTHROW))
     {
         nn_astparser_parsethrowstmt(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_BRACEOPEN))
+    else if(prs->match(neon::Token::TOK_BRACEOPEN))
     {
         nn_astparser_scopebegin(prs);
         nn_astparser_parseblock(prs);
         nn_astparser_scopeend(prs);
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWTRY))
+    else if(prs->match(neon::Token::TOK_KWTRY))
     {
         nn_astparser_parsetrystmt(prs);
     }
@@ -7470,47 +7707,33 @@ void nn_astparser_parsestmt(neon::Parser* prs)
     {
         nn_astparser_parseexprstmt(prs, false, false);
     }
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
 }
 
 void nn_astparser_consumestmtend(neon::Parser* prs)
 {
     /* allow block last statement to omit statement end */
-    if(prs->m_blockcount > 0 && nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
+    if(prs->m_blockcount > 0 && prs->check(neon::Token::TOK_BRACECLOSE))
     {
         return;
     }
-    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
+    if(prs->match(neon::Token::TOK_SEMICOLON))
     {
-        while(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
+        while(prs->match(neon::Token::TOK_SEMICOLON) || prs->match(neon::Token::TOK_NEWLINE))
         {
         }
         return;
     }
-    if(nn_astparser_match(prs, neon::Token::TOK_EOF) || prs->m_prevtoken.type == neon::Token::TOK_EOF)
+    if(prs->match(neon::Token::TOK_EOF) || prs->m_prevtoken.type == neon::Token::TOK_EOF)
     {
         return;
     }
-    /* nn_astparser_consume(prs, neon::Token::TOK_NEWLINE, "end of statement expected"); */
-    while(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
+    /* prs->consume(neon::Token::TOK_NEWLINE, "end of statement expected"); */
+    while(prs->match(neon::Token::TOK_SEMICOLON) || prs->match(neon::Token::TOK_NEWLINE))
     {
     }
 }
 
-void nn_astparser_ignorewhitespace(neon::Parser* prs)
-{
-    while(true)
-    {
-        if(nn_astparser_check(prs, neon::Token::TOK_NEWLINE))
-        {
-            nn_astparser_advance(prs);
-        }
-        else
-        {
-            break;
-        }
-    }
-}
 
 int nn_astparser_getcodeargscount(const neon::Instruction* bytecode, const neon::Value* constants, int ip)
 {
@@ -7617,12 +7840,12 @@ void nn_astemit_emit(neon::Parser* prs, uint8_t byte, int line, bool isop)
     ins.code = byte;
     ins.srcline = line;
     ins.isop = isop;
-    nn_astparser_currentblob(prs)->push(ins);
+    prs->currentBlob()->push(ins);
 }
 
 void nn_astemit_patchat(neon::Parser* prs, size_t idx, uint8_t byte)
 {
-    nn_astparser_currentblob(prs)->m_instrucs[idx].code = byte;
+    prs->currentBlob()->m_instrucs[idx].code = byte;
 }
 
 void nn_astemit_emitinstruc(neon::Parser* prs, uint8_t byte)
@@ -7658,10 +7881,10 @@ void nn_astemit_emitloop(neon::Parser* prs, int loopstart)
 {
     int offset;
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_LOOP);
-    offset = nn_astparser_currentblob(prs)->m_count - loopstart + 2;
+    offset = prs->currentBlob()->m_count - loopstart + 2;
     if(offset > UINT16_MAX)
     {
-        nn_astparser_raiseerror(prs, "loop body too large");
+        prs->raiseError("loop body too large");
     }
     nn_astemit_emit1byte(prs, (offset >> 8) & 0xff);
     nn_astemit_emit1byte(prs, offset & 0xff);
@@ -7673,7 +7896,7 @@ void nn_astemit_emitreturn(neon::Parser* prs)
     {
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXPOPTRY);
     }
-    if(prs->m_currfunccompiler->type == neon::FuncCommon::FUNCTYPE_INITIALIZER)
+    if(prs->m_currfunccompiler->m_type == neon::FuncCommon::FUNCTYPE_INITIALIZER)
     {
         nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_LOCALGET, 0);
     }
@@ -7681,7 +7904,7 @@ void nn_astemit_emitreturn(neon::Parser* prs)
     {
         if(!prs->m_keeplastvalue || prs->m_lastwasstatement)
         {
-            if(prs->m_currfunccompiler->fromimport)
+            if(prs->m_currfunccompiler->m_fromimport)
             {
                 nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
             }
@@ -7697,10 +7920,10 @@ void nn_astemit_emitreturn(neon::Parser* prs)
 int nn_astparser_pushconst(neon::Parser* prs, neon::Value value)
 {
     int constant;
-    constant = nn_astparser_currentblob(prs)->pushConst(value);
+    constant = prs->currentBlob()->pushConst(value);
     if(constant >= UINT16_MAX)
     {
-        nn_astparser_raiseerror(prs, "too many constants in current scope");
+        prs->raiseError("too many constants in current scope");
         return 0;
     }
     return constant;
@@ -7719,7 +7942,7 @@ int nn_astemit_emitjump(neon::Parser* prs, uint8_t instruction)
     /* placeholders */
     nn_astemit_emit1byte(prs, 0xff);
     nn_astemit_emit1byte(prs, 0xff);
-    return nn_astparser_currentblob(prs)->m_count - 2;
+    return prs->currentBlob()->m_count - 2;
 }
 
 int nn_astemit_emitswitch(neon::Parser* prs)
@@ -7728,7 +7951,7 @@ int nn_astemit_emitswitch(neon::Parser* prs)
     /* placeholders */
     nn_astemit_emit1byte(prs, 0xff);
     nn_astemit_emit1byte(prs, 0xff);
-    return nn_astparser_currentblob(prs)->m_count - 2;
+    return prs->currentBlob()->m_count - 2;
 }
 
 int nn_astemit_emittry(neon::Parser* prs)
@@ -7743,7 +7966,7 @@ int nn_astemit_emittry(neon::Parser* prs)
     /* finally placeholders */
     nn_astemit_emit1byte(prs, 0xff);
     nn_astemit_emit1byte(prs, 0xff);
-    return nn_astparser_currentblob(prs)->m_count - 6;
+    return prs->currentBlob()->m_count - 6;
 }
 
 void nn_astemit_patchswitch(neon::Parser* prs, int offset, int constant)
@@ -7769,65 +7992,15 @@ void nn_astemit_patchjump(neon::Parser* prs, int offset)
 {
     /* -2 to adjust the bytecode for the offset itself */
     int jump;
-    jump = nn_astparser_currentblob(prs)->m_count - offset - 2;
+    jump = prs->currentBlob()->m_count - offset - 2;
     if(jump > UINT16_MAX)
     {
-        nn_astparser_raiseerror(prs, "body of conditional block too large");
+        prs->raiseError("body of conditional block too large");
     }
     nn_astemit_patchat(prs, offset, (jump >> 8) & 0xff);
     nn_astemit_patchat(prs, offset + 1, jump & 0xff);
 }
 
-void nn_astfunccompiler_init(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::FuncCommon::Type type, bool isanon)
-{
-    bool candeclthis;
-    neon::Parser::CompiledLocal* local;
-    neon::String* fname;
-    compiler->enclosing = prs->m_pvm->m_activeparser->m_currfunccompiler;
-    compiler->targetfunc = nullptr;
-    compiler->type = type;
-    compiler->localcount = 0;
-    compiler->scopedepth = 0;
-    compiler->handlercount = 0;
-    compiler->fromimport = false;
-    compiler->targetfunc = neon::FuncScript::make(prs->m_pvm, prs->m_currmodule, type);
-    prs->m_currfunccompiler = compiler;
-    if(type != neon::FuncCommon::FUNCTYPE_SCRIPT)
-    {
-        prs->m_pvm->stackPush(neon::Value::fromObject(compiler->targetfunc));
-        if(isanon)
-        {
-            neon::Printer ptmp(prs->m_pvm);
-            ptmp.putformat("anonymous@[%s:%d]", prs->m_currentphysfile, prs->m_prevtoken.line);
-            fname = ptmp.takeString();
-        }
-        else
-        {
-            fname = neon::String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length);
-        }
-        prs->m_currfunccompiler->targetfunc->name = fname;
-        prs->m_pvm->stackPop();
-    }
-    /* claiming slot zero for use in class methods */
-    local = &prs->m_currfunccompiler->locals[0];
-    prs->m_currfunccompiler->localcount++;
-    local->depth = 0;
-    local->iscaptured = false;
-    candeclthis = (
-        (type != neon::FuncCommon::FUNCTYPE_FUNCTION) &&
-        (prs->m_compcontext == neon::Parser::COMPCONTEXT_CLASS)
-    );
-    if(candeclthis || (/*(type == neon::FuncCommon::FUNCTYPE_ANONYMOUS) &&*/ (prs->m_compcontext != neon::Parser::COMPCONTEXT_CLASS)))
-    {
-        local->name.start = neon::g_strthis;
-        local->name.length = 4;
-    }
-    else
-    {
-        local->name.start = "";
-        local->name.length = 0;
-    }
-}
 
 int nn_astparser_makeidentconst(neon::Parser* prs, neon::Token* name)
 {
@@ -7845,90 +8018,21 @@ int nn_astparser_makeidentconst(neon::Parser* prs, neon::Token* name)
     return nn_astparser_pushconst(prs, neon::Value::fromObject(str));
 }
 
-bool nn_astparser_identsequal(neon::Token* a, neon::Token* b)
-{
-    return a->length == b->length && memcmp(a->start, b->start, a->length) == 0;
-}
-
-int nn_astfunccompiler_resolvelocal(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::Token* name)
-{
-    int i;
-    neon::Parser::CompiledLocal* local;
-    for(i = compiler->localcount - 1; i >= 0; i--)
-    {
-        local = &compiler->locals[i];
-        if(nn_astparser_identsequal(&local->name, name))
-        {
-            if(local->depth == -1)
-            {
-                nn_astparser_raiseerror(prs, "cannot read local variable in it's own initializer");
-            }
-            return i;
-        }
-    }
-    return -1;
-}
-
-int nn_astfunccompiler_addupvalue(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, uint16_t index, bool islocal)
-{
-    int i;
-    int upcnt;
-    neon::Parser::CompiledUpvalue* upvalue;
-    upcnt = compiler->targetfunc->upvalcount;
-    for(i = 0; i < upcnt; i++)
-    {
-        upvalue = &compiler->upvalues[i];
-        if(upvalue->index == index && upvalue->islocal == islocal)
-        {
-            return i;
-        }
-    }
-    if(upcnt == NEON_CFG_ASTMAXUPVALS)
-    {
-        nn_astparser_raiseerror(prs, "too many closure variables in function");
-        return 0;
-    }
-    compiler->upvalues[upcnt].islocal = islocal;
-    compiler->upvalues[upcnt].index = index;
-    return compiler->targetfunc->upvalcount++;
-}
-
-int nn_astfunccompiler_resolveupvalue(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, neon::Token* name)
-{
-    int local;
-    int upvalue;
-    if(compiler->enclosing == nullptr)
-    {
-        return -1;
-    }
-    local = nn_astfunccompiler_resolvelocal(prs, compiler->enclosing, name);
-    if(local != -1)
-    {
-        compiler->enclosing->locals[local].iscaptured = true;
-        return nn_astfunccompiler_addupvalue(prs, compiler, (uint16_t)local, true);
-    }
-    upvalue = nn_astfunccompiler_resolveupvalue(prs, compiler->enclosing, name);
-    if(upvalue != -1)
-    {
-        return nn_astfunccompiler_addupvalue(prs, compiler, (uint16_t)upvalue, false);
-    }
-    return -1;
-}
 
 int nn_astparser_addlocal(neon::Parser* prs, neon::Token name)
 {
     neon::Parser::CompiledLocal* local;
-    if(prs->m_currfunccompiler->localcount == NEON_CFG_ASTMAXLOCALS)
+    if(prs->m_currfunccompiler->m_localcount == neon::Parser::FuncCompiler::MaxLocals)
     {
         /* we've reached maximum local variables per scope */
-        nn_astparser_raiseerror(prs, "too many local variables in scope");
+        prs->raiseError("too many local variables in scope");
         return -1;
     }
-    local = &prs->m_currfunccompiler->locals[prs->m_currfunccompiler->localcount++];
+    local = &prs->m_currfunccompiler->m_compiledlocals[prs->m_currfunccompiler->m_localcount++];
     local->name = name;
     local->depth = -1;
     local->iscaptured = false;
-    return prs->m_currfunccompiler->localcount;
+    return prs->m_currfunccompiler->m_localcount;
 }
 
 void nn_astparser_declarevariable(neon::Parser* prs)
@@ -7937,21 +8041,21 @@ void nn_astparser_declarevariable(neon::Parser* prs)
     neon::Token* name;
     neon::Parser::CompiledLocal* local;
     /* global variables are implicitly declared... */
-    if(prs->m_currfunccompiler->scopedepth == 0)
+    if(prs->m_currfunccompiler->m_scopedepth == 0)
     {
         return;
     }
     name = &prs->m_prevtoken;
-    for(i = prs->m_currfunccompiler->localcount - 1; i >= 0; i--)
+    for(i = prs->m_currfunccompiler->m_localcount - 1; i >= 0; i--)
     {
-        local = &prs->m_currfunccompiler->locals[i];
-        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->scopedepth)
+        local = &prs->m_currfunccompiler->m_compiledlocals[i];
+        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->m_scopedepth)
         {
             break;
         }
-        if(nn_astparser_identsequal(name, &local->name))
+        if(neon::Parser::identsEqual(name, &local->name))
         {
-            nn_astparser_raiseerror(prs, "%.*s already declared in current scope", name->length, name->start);
+            prs->raiseError("%.*s already declared in current scope", name->length, name->start);
         }
     }
     nn_astparser_addlocal(prs, *name);
@@ -7959,13 +8063,13 @@ void nn_astparser_declarevariable(neon::Parser* prs)
 
 int nn_astparser_parsevariable(neon::Parser* prs, const char* message)
 {
-    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, message))
+    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, message))
     {
         /* what to do here? */
     }
     nn_astparser_declarevariable(prs);
     /* we are in a local scope... */
-    if(prs->m_currfunccompiler->scopedepth > 0)
+    if(prs->m_currfunccompiler->m_scopedepth > 0)
     {
         return 0;
     }
@@ -7974,17 +8078,17 @@ int nn_astparser_parsevariable(neon::Parser* prs, const char* message)
 
 void nn_astparser_markinitialized(neon::Parser* prs)
 {
-    if(prs->m_currfunccompiler->scopedepth == 0)
+    if(prs->m_currfunccompiler->m_scopedepth == 0)
     {
         return;
     }
-    prs->m_currfunccompiler->locals[prs->m_currfunccompiler->localcount - 1].depth = prs->m_currfunccompiler->scopedepth;
+    prs->m_currfunccompiler->m_compiledlocals[prs->m_currfunccompiler->m_localcount - 1].depth = prs->m_currfunccompiler->m_scopedepth;
 }
 
 void nn_astparser_definevariable(neon::Parser* prs, int global)
 {
     /* we are in a local scope... */
-    if(prs->m_currfunccompiler->scopedepth > 0)
+    if(prs->m_currfunccompiler->m_scopedepth > 0)
     {
         nn_astparser_markinitialized(prs);
         return;
@@ -8008,7 +8112,7 @@ neon::FuncScript* nn_astparser_endcompiler(neon::Parser* prs)
     const char* fname;
     neon::FuncScript* function;
     nn_astemit_emitreturn(prs);
-    function = prs->m_currfunccompiler->targetfunc;
+    function = prs->m_currfunccompiler->m_targetfunc;
     fname = nullptr;
     if(function->name == nullptr)
     {
@@ -8020,17 +8124,17 @@ neon::FuncScript* nn_astparser_endcompiler(neon::Parser* prs)
     }
     if(!prs->m_haderror && prs->m_pvm->m_conf.dumpbytecode)
     {
-        nn_dbg_disasmblob(prs->m_pvm->m_debugprinter, nn_astparser_currentblob(prs), fname);
+        nn_dbg_disasmblob(prs->m_pvm->m_debugprinter, prs->currentBlob(), fname);
     }
     NEON_ASTDEBUG(prs->m_pvm, "for function '%s'", fname);
-    prs->m_currfunccompiler = prs->m_currfunccompiler->enclosing;
+    prs->m_currfunccompiler = prs->m_currfunccompiler->m_enclosing;
     return function;
 }
 
 void nn_astparser_scopebegin(neon::Parser* prs)
 {
-    NEON_ASTDEBUG(prs->m_pvm, "current depth=%d", prs->m_currfunccompiler->scopedepth);
-    prs->m_currfunccompiler->scopedepth++;
+    NEON_ASTDEBUG(prs->m_pvm, "current depth=%d", prs->m_currfunccompiler->m_scopedepth);
+    prs->m_currfunccompiler->m_scopedepth++;
 }
 
 bool nn_astutil_scopeendcancontinue(neon::Parser* prs)
@@ -8040,10 +8144,10 @@ bool nn_astutil_scopeendcancontinue(neon::Parser* prs)
     int lodepth;
     int scodepth;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    locount = prs->m_currfunccompiler->localcount;
-    lopos = prs->m_currfunccompiler->localcount - 1;
-    lodepth = prs->m_currfunccompiler->locals[lopos].depth;
-    scodepth = prs->m_currfunccompiler->scopedepth;
+    locount = prs->m_currfunccompiler->m_localcount;
+    lopos = prs->m_currfunccompiler->m_localcount - 1;
+    lodepth = prs->m_currfunccompiler->m_compiledlocals[lopos].depth;
+    scodepth = prs->m_currfunccompiler->m_scopedepth;
     if(locount > 0 && lodepth > scodepth)
     {
         return true;
@@ -8053,8 +8157,8 @@ bool nn_astutil_scopeendcancontinue(neon::Parser* prs)
 
 void nn_astparser_scopeend(neon::Parser* prs)
 {
-    NEON_ASTDEBUG(prs->m_pvm, "current scope depth=%d", prs->m_currfunccompiler->scopedepth);
-    prs->m_currfunccompiler->scopedepth--;
+    NEON_ASTDEBUG(prs->m_pvm, "current scope depth=%d", prs->m_currfunccompiler->m_scopedepth);
+    prs->m_currfunccompiler->m_scopedepth--;
     /*
     // remove all variables declared in scope while exiting...
     */
@@ -8064,7 +8168,7 @@ void nn_astparser_scopeend(neon::Parser* prs)
     }
     while(nn_astutil_scopeendcancontinue(prs))
     {
-        if(prs->m_currfunccompiler->locals[prs->m_currfunccompiler->localcount - 1].iscaptured)
+        if(prs->m_currfunccompiler->m_compiledlocals[prs->m_currfunccompiler->m_localcount - 1].iscaptured)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_UPVALUECLOSE);
         }
@@ -8072,7 +8176,7 @@ void nn_astparser_scopeend(neon::Parser* prs)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
         }
-        prs->m_currfunccompiler->localcount--;
+        prs->m_currfunccompiler->m_localcount--;
     }
 }
 
@@ -8084,14 +8188,14 @@ int nn_astparser_discardlocals(neon::Parser* prs, int depth)
     {
         //return 0;
     }
-    if(prs->m_currfunccompiler->scopedepth == -1)
+    if(prs->m_currfunccompiler->m_scopedepth == -1)
     {
-        nn_astparser_raiseerror(prs, "cannot exit top-level scope");
+        prs->raiseError("cannot exit top-level scope");
     }
-    local = prs->m_currfunccompiler->localcount - 1;
-    while(local >= 0 && prs->m_currfunccompiler->locals[local].depth >= depth)
+    local = prs->m_currfunccompiler->m_localcount - 1;
+    while(local >= 0 && prs->m_currfunccompiler->m_compiledlocals[local].depth >= depth)
     {
-        if(prs->m_currfunccompiler->locals[local].iscaptured)
+        if(prs->m_currfunccompiler->m_compiledlocals[local].iscaptured)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_UPVALUECLOSE);
         }
@@ -8101,7 +8205,7 @@ int nn_astparser_discardlocals(neon::Parser* prs, int depth)
         }
         local--;
     }
-    return prs->m_currfunccompiler->localcount - local - 1;
+    return prs->m_currfunccompiler->m_localcount - local - 1;
 }
 
 void nn_astparser_endloop(neon::Parser* prs)
@@ -8114,18 +8218,18 @@ void nn_astparser_endloop(neon::Parser* prs)
     // find all neon::Instruction::OP_BREAK_PL placeholder and replace with the appropriate jump...
     */
     i = prs->m_innermostloopstart;
-    while(i < prs->m_currfunccompiler->targetfunc->blob->m_count)
+    while(i < prs->m_currfunccompiler->m_targetfunc->blob->m_count)
     {
-        if(prs->m_currfunccompiler->targetfunc->blob->m_instrucs[i].code == neon::Instruction::OP_BREAK_PL)
+        if(prs->m_currfunccompiler->m_targetfunc->blob->m_instrucs[i].code == neon::Instruction::OP_BREAK_PL)
         {
-            prs->m_currfunccompiler->targetfunc->blob->m_instrucs[i].code = neon::Instruction::OP_JUMPNOW;
+            prs->m_currfunccompiler->m_targetfunc->blob->m_instrucs[i].code = neon::Instruction::OP_JUMPNOW;
             nn_astemit_patchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            bcode = prs->m_currfunccompiler->targetfunc->blob->m_instrucs;
-            cvals = prs->m_currfunccompiler->targetfunc->blob->m_constants->m_values;
+            bcode = prs->m_currfunccompiler->m_targetfunc->blob->m_instrucs;
+            cvals = prs->m_currfunccompiler->m_targetfunc->blob->m_constants->m_values;
             i += 1 + nn_astparser_getcodeargscount(bcode, cvals, i);
         }
     }
@@ -8140,8 +8244,8 @@ bool nn_astparser_rulebinary(neon::Parser* prs, neon::Token previous, bool canas
     NEON_ASTDEBUG(prs->m_pvm, "");
     op = prs->m_prevtoken.type;
     /* compile the right operand */
-    rule = nn_astparser_getrule(op);
-    nn_astparser_parseprecedence(prs, (neon::Parser::Rule::Precedence)(rule->precedence + 1));
+    rule = prs->getRule(op);
+    prs->parsePrecedence((neon::Parser::Rule::Precedence)(rule->precedence + 1));
     /* emit the operator instruction */
     switch(op)
     {
@@ -8260,7 +8364,7 @@ void nn_astparser_parseassign(neon::Parser* prs, uint8_t realop, uint8_t getop, 
     {
         nn_astemit_emit2byte(prs, getop, 1);
     }
-    nn_astparser_parseexpression(prs);
+    prs->parseExpression();
     nn_astemit_emitinstruc(prs, realop);
     if(arg != -1)
     {
@@ -8275,10 +8379,10 @@ void nn_astparser_parseassign(neon::Parser* prs, uint8_t realop, uint8_t getop, 
 void nn_astparser_assignment(neon::Parser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    if(canassign && nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
+    if(canassign && prs->match(neon::Token::TOK_ASSIGN))
     {
         prs->m_replcanecho = false;
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
         if(arg != -1)
         {
             nn_astemit_emitbyteandshort(prs, setop, (uint16_t)arg);
@@ -8288,55 +8392,55 @@ void nn_astparser_assignment(neon::Parser* prs, uint8_t getop, uint8_t setop, in
             nn_astemit_emitinstruc(prs, setop);
         }
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_PLUSASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_PLUSASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMADD, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_MINUSASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_MINUSASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSUBTRACT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_MULTASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_MULTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMULTIPLY, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_DIVASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_DIVASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMDIVIDE, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_POWASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_POWASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMPOW, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_PERCENT_EQ))
+    else if(canassign && prs->match(neon::Token::TOK_PERCENT_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMODULO, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_AMP_EQ))
+    else if(canassign && prs->match(neon::Token::TOK_AMP_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMAND, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_BAR_EQ))
+    else if(canassign && prs->match(neon::Token::TOK_BAR_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMOR, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_TILDE_EQ))
+    else if(canassign && prs->match(neon::Token::TOK_TILDE_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITNOT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_XOR_EQ))
+    else if(canassign && prs->match(neon::Token::TOK_XOR_EQ))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITXOR, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_LEFTSHIFTASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_LEFTSHIFTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTLEFT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_RIGHTSHIFTASSIGN))
+    else if(canassign && prs->match(neon::Token::TOK_RIGHTSHIFTASSIGN))
     {
         nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTRIGHT, getop, setop, arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_INCREMENT))
+    else if(canassign && prs->match(neon::Token::TOK_INCREMENT))
     {
         prs->m_replcanecho = false;
         if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
@@ -8356,7 +8460,7 @@ void nn_astparser_assignment(neon::Parser* prs, uint8_t getop, uint8_t setop, in
         nn_astemit_emit2byte(prs, neon::Instruction::OP_PUSHONE, neon::Instruction::OP_PRIMADD);
         nn_astemit_emitbyteandshort(prs, setop, (uint16_t)arg);
     }
-    else if(canassign && nn_astparser_match(prs, neon::Token::TOK_DECREMENT))
+    else if(canassign && prs->match(neon::Token::TOK_DECREMENT))
     {
         prs->m_replcanecho = false;
         if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
@@ -8404,20 +8508,20 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
     neon::Instruction::OpCode getop;
     neon::Instruction::OpCode setop;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected property name after '.'"))
+    prs->ignoreSpace();
+    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, "expected property name after '.'"))
     {
         return false;
     }
     name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
-    if(nn_astparser_match(prs, neon::Token::TOK_PARENOPEN))
+    if(prs->match(neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
         caninvoke = (
             (prs->m_currclasscompiler != nullptr) &&
             (
                 (previous.type == neon::Token::TOK_KWTHIS) ||
-                (nn_astparser_identsequal(&prs->m_prevtoken, &prs->m_currclasscompiler->name))
+                (neon::Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->name))
             )
         );
         if(caninvoke)
@@ -8434,7 +8538,7 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
     {
         getop = neon::Instruction::OP_PROPERTYGET;
         setop = neon::Instruction::OP_PROPERTYSET;
-        if(prs->m_currclasscompiler != nullptr && (previous.type == neon::Token::TOK_KWTHIS || nn_astparser_identsequal(&prs->m_prevtoken, &prs->m_currclasscompiler->name)))
+        if(prs->m_currclasscompiler != nullptr && (previous.type == neon::Token::TOK_KWTHIS || neon::Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->name)))
         {
             getop = neon::Instruction::OP_PROPERTYGETSELF;
         }
@@ -8452,7 +8556,7 @@ void nn_astparser_namedvar(neon::Parser* prs, neon::Token name, bool canassign)
     (void)fromclass;
     NEON_ASTDEBUG(prs->m_pvm, " name=%.*s", name.length, name.start);
     fromclass = prs->m_currclasscompiler != nullptr;
-    arg = nn_astfunccompiler_resolvelocal(prs, prs->m_currfunccompiler, &name);
+    arg = prs->m_currfunccompiler->resolveLocal(&name);
     if(arg != -1)
     {
         if(prs->m_infunction)
@@ -8468,7 +8572,7 @@ void nn_astparser_namedvar(neon::Parser* prs, neon::Token name, bool canassign)
     }
     else
     {
-        arg = nn_astfunccompiler_resolveupvalue(prs, prs->m_currfunccompiler, &name);
+        arg = prs->m_currfunccompiler->resolveUpvalue(&name);
         if((arg != -1) && (name.isglobal == false))
         {
             getop = neon::Instruction::OP_UPVALUEGET;
@@ -8488,7 +8592,7 @@ void nn_astparser_createdvar(neon::Parser* prs, neon::Token name)
 {
     int local;
     NEON_ASTDEBUG(prs->m_pvm, "name=%.*s", name.length, name.start);
-    if(prs->m_currfunccompiler->targetfunc->name != nullptr)
+    if(prs->m_currfunccompiler->m_targetfunc->name != nullptr)
     {
         local = nn_astparser_addlocal(prs, name) - 1;
         nn_astparser_markinitialized(prs);
@@ -8508,24 +8612,24 @@ bool nn_astparser_rulearray(neon::Parser* prs, bool canassign)
     /* placeholder for the list */
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     count = 0;
-    nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_check(prs, neon::Token::TOK_BRACKETCLOSE))
+    prs->ignoreSpace();
+    if(!prs->check(neon::Token::TOK_BRACKETCLOSE))
     {
         do
         {
-            nn_astparser_ignorewhitespace(prs);
-            if(!nn_astparser_check(prs, neon::Token::TOK_BRACKETCLOSE))
+            prs->ignoreSpace();
+            if(!prs->check(neon::Token::TOK_BRACKETCLOSE))
             {
                 /* allow comma to end lists */
-                nn_astparser_parseexpression(prs);
-                nn_astparser_ignorewhitespace(prs);
+                prs->parseExpression();
+                prs->ignoreSpace();
                 count++;
             }
-            nn_astparser_ignorewhitespace(prs);
-        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+            prs->ignoreSpace();
+        } while(prs->match(neon::Token::TOK_COMMA));
     }
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_BRACKETCLOSE, "expected ']' at end of list");
+    prs->ignoreSpace();
+    prs->consume(neon::Token::TOK_BRACKETCLOSE, "expected ']' at end of list");
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKEARRAY, count);
     return true;
 }
@@ -8541,39 +8645,38 @@ bool nn_astparser_ruledictionary(neon::Parser* prs, bool canassign)
     /* placeholder for the dictionary */
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     itemcount = 0;
-    nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
+    prs->ignoreSpace();
+    if(!prs->check(neon::Token::TOK_BRACECLOSE))
     {
         do
         {
-            nn_astparser_ignorewhitespace(prs);
-            if(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
+            prs->ignoreSpace();
+            if(!prs->check(neon::Token::TOK_BRACECLOSE))
             {
                 /* allow last pair to end with a comma */
                 usedexpression = false;
-                if(nn_astparser_check(prs, neon::Token::TOK_IDENTNORMAL))
+                if(prs->check(neon::Token::TOK_IDENTNORMAL))
                 {
-                    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "");
+                    prs->consume(neon::Token::TOK_IDENTNORMAL, "");
                     nn_astemit_emitconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length)));
                 }
                 else
                 {
-                    nn_astparser_parseexpression(prs);
+                    prs->parseExpression();
                     usedexpression = true;
                 }
-                nn_astparser_ignorewhitespace(prs);
-                if(!nn_astparser_check(prs, neon::Token::TOK_COMMA) && !nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE))
+                prs->ignoreSpace();
+                if(!prs->check(neon::Token::TOK_COMMA) && !prs->check(neon::Token::TOK_BRACECLOSE))
                 {
-                    nn_astparser_consume(prs, neon::Token::TOK_COLON, "expected ':' after dictionary key");
-                    nn_astparser_ignorewhitespace(prs);
-
-                    nn_astparser_parseexpression(prs);
+                    prs->consume(neon::Token::TOK_COLON, "expected ':' after dictionary key");
+                    prs->ignoreSpace();
+                    prs->parseExpression();
                 }
                 else
                 {
                     if(usedexpression)
                     {
-                        nn_astparser_raiseerror(prs, "cannot infer dictionary values from expressions");
+                        prs->raiseError("cannot infer dictionary values from expressions");
                         return false;
                     }
                     else
@@ -8583,10 +8686,10 @@ bool nn_astparser_ruledictionary(neon::Parser* prs, bool canassign)
                 }
                 itemcount++;
             }
-        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+        } while(prs->match(neon::Token::TOK_COMMA));
     }
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after dictionary");
+    prs->ignoreSpace();
+    prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after dictionary");
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKEDICT, itemcount);
     return true;
 }
@@ -8602,7 +8705,7 @@ bool nn_astparser_ruleindexing(neon::Parser* prs, neon::Token previous, bool can
     assignable = true;
     commamatch = false;
     getop = neon::Instruction::OP_INDEXGET;
-    if(nn_astparser_match(prs, neon::Token::TOK_COMMA))
+    if(prs->match(neon::Token::TOK_COMMA))
     {
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
         commamatch = true;
@@ -8610,23 +8713,23 @@ bool nn_astparser_ruleindexing(neon::Parser* prs, neon::Token previous, bool can
     }
     else
     {
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
     }
-    if(!nn_astparser_match(prs, neon::Token::TOK_BRACKETCLOSE))
+    if(!prs->match(neon::Token::TOK_BRACKETCLOSE))
     {
         getop = neon::Instruction::OP_INDEXGETRANGED;
         if(!commamatch)
         {
-            nn_astparser_consume(prs, neon::Token::TOK_COMMA, "expecting ',' or ']'");
+            prs->consume(neon::Token::TOK_COMMA, "expecting ',' or ']'");
         }
-        if(nn_astparser_match(prs, neon::Token::TOK_BRACKETCLOSE))
+        if(prs->match(neon::Token::TOK_BRACKETCLOSE))
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
         }
         else
         {
-            nn_astparser_parseexpression(prs);
-            nn_astparser_consume(prs, neon::Token::TOK_BRACKETCLOSE, "expected ']' after indexing");
+            prs->parseExpression();
+            prs->consume(neon::Token::TOK_BRACKETCLOSE, "expected ']' after indexing");
         }
         assignable = false;
     }
@@ -8662,7 +8765,7 @@ bool nn_astparser_rulethis(neon::Parser* prs, bool canassign)
     #if 0
     if(prs->m_currclasscompiler == nullptr)
     {
-        nn_astparser_raiseerror(prs, "cannot use keyword 'this' outside of a class");
+        prs->raiseError("cannot use keyword 'this' outside of a class");
         return false;
     }
     #endif
@@ -8683,20 +8786,20 @@ bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
     (void)canassign;
     if(prs->m_currclasscompiler == nullptr)
     {
-        nn_astparser_raiseerror(prs, "cannot use keyword 'super' outside of a class");
+        prs->raiseError("cannot use keyword 'super' outside of a class");
         return false;
     }
     else if(!prs->m_currclasscompiler->hassuperclass)
     {
-        nn_astparser_raiseerror(prs, "cannot use keyword 'super' in a class without a superclass");
+        prs->raiseError("cannot use keyword 'super' in a class without a superclass");
         return false;
     }
     name = -1;
     invokeself = false;
-    if(!nn_astparser_check(prs, neon::Token::TOK_PARENOPEN))
+    if(!prs->check(neon::Token::TOK_PARENOPEN))
     {
-        nn_astparser_consume(prs, neon::Token::TOK_DOT, "expected '.' or '(' after super");
-        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected super class method name after .");
+        prs->consume(neon::Token::TOK_DOT, "expected '.' or '(' after super");
+        prs->consume(neon::Token::TOK_IDENTNORMAL, "expected super class method name after .");
         name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
     }
     else
@@ -8704,7 +8807,7 @@ bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
         invokeself = true;
     }
     nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
-    if(nn_astparser_match(prs, neon::Token::TOK_PARENOPEN))
+    if(prs->match(neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
         nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
@@ -8730,14 +8833,14 @@ bool nn_astparser_rulegrouping(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_parseexpression(prs);
-    while(nn_astparser_match(prs, neon::Token::TOK_COMMA))
+    prs->ignoreSpace();
+    prs->parseExpression();
+    while(prs->match(neon::Token::TOK_COMMA))
     {
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
     }
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after grouped expression");
+    prs->ignoreSpace();
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after grouped expression");
     return true;
 }
 
@@ -8818,7 +8921,7 @@ int nn_astparser_readhexescape(neon::Parser* prs, const char* str, int index, in
         digit = nn_astparser_readhexdigit(cval);
         if(digit == -1)
         {
-            nn_astparser_raiseerror(prs, "invalid hex escape sequence at #%d of \"%s\": '%c' (%d)", pos, str, cval, cval);
+            prs->raiseError("invalid hex escape sequence at #%d of \"%s\": '%c' (%d)", pos, str, cval, cval);
         }
         value = (value * 16) | digit;
     }
@@ -8840,7 +8943,7 @@ int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, const char* 
     count = neon::Util::utf8NumBytes(value);
     if(count == -1)
     {
-        nn_astparser_raiseerror(prs, "cannot encode a negative unicode value");
+        prs->raiseError("cannot encode a negative unicode value");
     }
     /* check for greater that \uffff */
     if(value > 65535)
@@ -8857,7 +8960,7 @@ int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, const char* 
         }
         else
         {
-            nn_astparser_raiseerror(prs, "cannot decode unicode escape at index %d", realindex);
+            prs->raiseError("cannot decode unicode escape at index %d", realindex);
         }
     }
     /* but greater than \uffff doesn't occupy any extra byte */
@@ -9068,15 +9171,15 @@ bool nn_astparser_ruleinterpolstring(neon::Parser* prs, bool canassign)
                 nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMADD);
             }
         }
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_STRINGIFY);
         if(doadd || (count >= 1 && stringmatched == false))
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_PRIMADD);
         }
         count++;
-    } while(nn_astparser_match(prs, neon::Token::TOK_INTERPOLATION));
-    nn_astparser_consume(prs, neon::Token::TOK_LITERAL, "unterminated string interpolation");
+    } while(prs->match(neon::Token::TOK_INTERPOLATION));
+    prs->consume(neon::Token::TOK_LITERAL, "unterminated string interpolation");
     if(prs->m_prevtoken.length - 2 > 0)
     {
         nn_astparser_rulestring(prs, canassign);
@@ -9092,7 +9195,7 @@ bool nn_astparser_ruleunary(neon::Parser* prs, bool canassign)
     NEON_ASTDEBUG(prs->m_pvm, "");
     op = prs->m_prevtoken.type;
     /* compile the expression */
-    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_UNARY);
+    prs->parsePrecedence(neon::Parser::Rule::PREC_UNARY);
     /* emit instruction */
     switch(op)
     {
@@ -9119,7 +9222,7 @@ bool nn_astparser_ruleand(neon::Parser* prs, neon::Token previous, bool canassig
     NEON_ASTDEBUG(prs->m_pvm, "");
     endjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_AND);
+    prs->parsePrecedence(neon::Parser::Rule::PREC_AND);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
@@ -9135,7 +9238,7 @@ bool nn_astparser_ruleor(neon::Parser* prs, neon::Token previous, bool canassign
     endjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, elsejump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_OR);
+    prs->parsePrecedence(neon::Parser::Rule::PREC_OR);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
@@ -9149,21 +9252,21 @@ bool nn_astparser_ruleconditional(neon::Parser* prs, neon::Token previous, bool 
     NEON_ASTDEBUG(prs->m_pvm, "");
     thenjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
     /* compile the then expression */
-    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_CONDITIONAL);
-    nn_astparser_ignorewhitespace(prs);
+    prs->parsePrecedence(neon::Parser::Rule::PREC_CONDITIONAL);
+    prs->ignoreSpace();
     elsejump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    nn_astparser_consume(prs, neon::Token::TOK_COLON, "expected matching ':' after '?' conditional");
-    nn_astparser_ignorewhitespace(prs);
+    prs->consume(neon::Token::TOK_COLON, "expected matching ':' after '?' conditional");
+    prs->ignoreSpace();
     /*
     // compile the else expression
     // here we parse at neon::Parser::Rule::PREC_ASSIGNMENT precedence as
     // linear conditionals can be nested.
     */
-    nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
+    prs->parsePrecedence(neon::Parser::Rule::PREC_ASSIGNMENT);
     nn_astemit_patchjump(prs, elsejump);
     return true;
 }
@@ -9172,7 +9275,7 @@ bool nn_astparser_ruleimport(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_parseexpression(prs);
+    prs->parseExpression();
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_IMPORTIMPORT);
     return true;
 }
@@ -9180,7 +9283,7 @@ bool nn_astparser_ruleimport(neon::Parser* prs, bool canassign)
 bool nn_astparser_rulenew(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class name after 'new'");
+    prs->consume(neon::Token::TOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
     //return nn_astparser_rulecall(prs, prs->m_prevtoken, canassign);
 }
@@ -9189,9 +9292,9 @@ bool nn_astparser_ruletypeof(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'typeof'");
-    nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'typeof'");
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'typeof'");
+    prs->parseExpression();
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'typeof'");
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_TYPEOF);
     return true;
 }
@@ -9212,18 +9315,10 @@ bool nn_astparser_rulenothinginfix(neon::Parser* prs, neon::Token previous, bool
     return true;
 }
 
-neon::Parser::Rule* nn_astparser_putrule(neon::Parser::Rule* dest, neon::Parser::Rule::PrefixFN prefix, neon::Parser::Rule::InfixFN infix, neon::Parser::Rule::Precedence precedence)
-{
-    dest->prefix = prefix;
-    dest->infix = infix;
-    dest->precedence = precedence;
-    return dest;
-}
-
 #define dorule(tok, prefix, infix, precedence) \
-    case tok: return nn_astparser_putrule(&dest, prefix, infix, precedence);
+    case tok: return neon::Parser::Rule::make(&dest, prefix, infix, precedence);
 
-neon::Parser::Rule* nn_astparser_getrule(neon::Token::Type type)
+neon::Parser::Rule* neon::Parser::getRule(neon::Token::Type type)
 {
     static neon::Parser::Rule dest;
     switch(type)
@@ -9332,84 +9427,22 @@ neon::Parser::Rule* nn_astparser_getrule(neon::Token::Type type)
 }
 #undef dorule
 
-bool nn_astparser_doparseprecedence(neon::Parser* prs, neon::Parser::Rule::Precedence precedence/*, neon::AstExpression* dest*/)
-{
-    bool canassign;
-    neon::Token previous;
-    neon::Parser::Rule::InfixFN infixrule;
-    neon::Parser::Rule::PrefixFN prefixrule;
-    prefixrule = nn_astparser_getrule(prs->m_prevtoken.type)->prefix;
-    if(prefixrule == nullptr)
-    {
-        nn_astparser_raiseerror(prs, "expected expression");
-        return false;
-    }
-    canassign = precedence <= neon::Parser::Rule::PREC_ASSIGNMENT;
-    prefixrule(prs, canassign);
-    while(precedence <= nn_astparser_getrule(prs->m_currtoken.type)->precedence)
-    {
-        previous = prs->m_prevtoken;
-        nn_astparser_ignorewhitespace(prs);
-        nn_astparser_advance(prs);
-        infixrule = nn_astparser_getrule(prs->m_prevtoken.type)->infix;
-        infixrule(prs, previous, canassign);
-    }
-    if(canassign && nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
-    {
-        nn_astparser_raiseerror(prs, "invalid assignment target");
-        return false;
-    }
-    return true;
-}
 
-bool nn_astparser_parseprecedence(neon::Parser* prs, neon::Parser::Rule::Precedence precedence)
-{
-    if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
-    {
-        return false;
-    }
-    nn_astparser_ignorewhitespace(prs);
-    if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
-    {
-        return false;
-    }
-    nn_astparser_advance(prs);
-    return nn_astparser_doparseprecedence(prs, precedence);
-}
-
-bool nn_astparser_parseprecnoadvance(neon::Parser* prs, neon::Parser::Rule::Precedence precedence)
-{
-    if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
-    {
-        return false;
-    }
-    nn_astparser_ignorewhitespace(prs);
-    if(prs->m_lexer->isAtEnd() && prs->m_pvm->m_isreplmode)
-    {
-        return false;
-    }
-    return nn_astparser_doparseprecedence(prs, precedence);
-}
-
-bool nn_astparser_parseexpression(neon::Parser* prs)
-{
-    return nn_astparser_parseprecedence(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
-}
 
 bool nn_astparser_parseblock(neon::Parser* prs)
 {
     prs->m_blockcount++;
-    nn_astparser_ignorewhitespace(prs);
-    while(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
+    prs->ignoreSpace();
+    while(!prs->check(neon::Token::TOK_BRACECLOSE) && !prs->check(neon::Token::TOK_EOF))
     {
         nn_astparser_parsedeclaration(prs);
     }
     prs->m_blockcount--;
-    if(!nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after block"))
+    if(!prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after block"))
     {
         return false;
     }
-    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
+    if(prs->match(neon::Token::TOK_SEMICOLON))
     {
     }
     return true;
@@ -9421,21 +9454,21 @@ void nn_astparser_declarefuncargvar(neon::Parser* prs)
     neon::Token* name;
     neon::Parser::CompiledLocal* local;
     /* global variables are implicitly declared... */
-    if(prs->m_currfunccompiler->scopedepth == 0)
+    if(prs->m_currfunccompiler->m_scopedepth == 0)
     {
         return;
     }
     name = &prs->m_prevtoken;
-    for(i = prs->m_currfunccompiler->localcount - 1; i >= 0; i--)
+    for(i = prs->m_currfunccompiler->m_localcount - 1; i >= 0; i--)
     {
-        local = &prs->m_currfunccompiler->locals[i];
-        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->scopedepth)
+        local = &prs->m_currfunccompiler->m_compiledlocals[i];
+        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->m_scopedepth)
         {
             break;
         }
-        if(nn_astparser_identsequal(name, &local->name))
+        if(neon::Parser::identsEqual(name, &local->name))
         {
-            nn_astparser_raiseerror(prs, "%.*s already declared in current scope", name->length, name->start);
+            prs->raiseError("%.*s already declared in current scope", name->length, name->start);
         }
     }
     nn_astparser_addlocal(prs, *name);
@@ -9444,13 +9477,13 @@ void nn_astparser_declarefuncargvar(neon::Parser* prs)
 
 int nn_astparser_parsefuncparamvar(neon::Parser* prs, const char* message)
 {
-    if(!nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, message))
+    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, message))
     {
         /* what to do here? */
     }
     nn_astparser_declarefuncargvar(prs);
     /* we are in a local scope... */
-    if(prs->m_currfunccompiler->scopedepth > 0)
+    if(prs->m_currfunccompiler->m_scopedepth > 0)
     {
         return 0;
     }
@@ -9461,21 +9494,21 @@ uint8_t nn_astparser_parsefunccallargs(neon::Parser* prs)
 {
     uint8_t argcount;
     argcount = 0;
-    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
+    if(!prs->check(neon::Token::TOK_PARENCLOSE))
     {
         do
         {
-            nn_astparser_ignorewhitespace(prs);
-            nn_astparser_parseexpression(prs);
+            prs->ignoreSpace();
+            prs->parseExpression();
             if(argcount == NEON_CFG_ASTMAXFUNCPARAMS)
             {
-                nn_astparser_raiseerror(prs, "cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
+                prs->raiseError("cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
             }
             argcount++;
-        } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+        } while(prs->match(neon::Token::TOK_COMMA));
     }
-    nn_astparser_ignorewhitespace(prs);
-    if(!nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after argument list"))
+    prs->ignoreSpace();
+    if(!prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after argument list"))
     {
         /* TODO: handle this, somehow. */
     }
@@ -9488,23 +9521,23 @@ void nn_astparser_parsefuncparamlist(neon::Parser* prs)
     /* compile argument list... */
     do
     {
-        nn_astparser_ignorewhitespace(prs);
-        prs->m_currfunccompiler->targetfunc->arity++;
-        if(prs->m_currfunccompiler->targetfunc->arity > NEON_CFG_ASTMAXFUNCPARAMS)
+        prs->ignoreSpace();
+        prs->m_currfunccompiler->m_targetfunc->arity++;
+        if(prs->m_currfunccompiler->m_targetfunc->arity > NEON_CFG_ASTMAXFUNCPARAMS)
         {
-            nn_astparser_raiseerroratcurrent(prs, "cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
+            prs->raiseErrorAtCurrent("cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
         }
-        if(nn_astparser_match(prs, neon::Token::TOK_TRIPLEDOT))
+        if(prs->match(neon::Token::TOK_TRIPLEDOT))
         {
-            prs->m_currfunccompiler->targetfunc->isvariadic = true;
+            prs->m_currfunccompiler->m_targetfunc->isvariadic = true;
             nn_astparser_addlocal(prs, nn_astparser_synthtoken("__args__"));
             nn_astparser_definevariable(prs, 0);
             break;
         }
         paramconstant = nn_astparser_parsefuncparamvar(prs, "expected parameter name");
         nn_astparser_definevariable(prs, paramconstant);
-        nn_astparser_ignorewhitespace(prs);
-    } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+        prs->ignoreSpace();
+    } while(prs->match(neon::Token::TOK_COMMA));
 }
 
 void nn_astfunccompiler_compilebody(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, bool closescope, bool isanon)
@@ -9513,8 +9546,8 @@ void nn_astfunccompiler_compilebody(neon::Parser* prs, neon::Parser::FuncCompile
     neon::FuncScript* function;
     (void)isanon;
     /* compile the body */
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' before function body");
+    prs->ignoreSpace();
+    prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' before function body");
     nn_astparser_parseblock(prs);
     /* create the function object */
     if(closescope)
@@ -9526,25 +9559,24 @@ void nn_astfunccompiler_compilebody(neon::Parser* prs, neon::Parser::FuncCompile
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_MAKECLOSURE, nn_astparser_pushconst(prs, neon::Value::fromObject(function)));
     for(i = 0; i < function->upvalcount; i++)
     {
-        nn_astemit_emit1byte(prs, compiler->upvalues[i].islocal ? 1 : 0);
-        nn_astemit_emit1short(prs, compiler->upvalues[i].index);
+        nn_astemit_emit1byte(prs, compiler->m_compiledupvals[i].islocal ? 1 : 0);
+        nn_astemit_emit1short(prs, compiler->m_compiledupvals[i].index);
     }
     prs->m_pvm->stackPop();
 }
 
 void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, bool isanon)
 {
-    neon::Parser::FuncCompiler compiler;
     prs->m_infunction = true;
-    nn_astfunccompiler_init(prs, &compiler, type, isanon);
+    neon::Parser::FuncCompiler compiler(prs, type, isanon);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after function name");
-    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after function name");
+    if(!prs->check(neon::Token::TOK_PARENCLOSE))
     {
         nn_astparser_parsefuncparamlist(prs);
     }
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after function parameters");
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after function parameters");
     nn_astfunccompiler_compilebody(prs, &compiler, false, isanon);
     prs->m_infunction = false;
 }
@@ -9560,7 +9592,7 @@ void nn_astparser_parsemethod(neon::Parser* prs, neon::Token classname, bool iss
     (void)isstatic;
     sc = "constructor";
     sn = strlen(sc);
-    nn_astparser_consumeor(prs, "method name expected", tkns, 2);
+    prs->consumeOr("method name expected", tkns, 2);
     constant = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
     type = neon::FuncCommon::FUNCTYPE_METHOD;
     if((prs->m_prevtoken.length == (int)sn) && (memcmp(prs->m_prevtoken.start, sc, sn) == 0))
@@ -9577,17 +9609,16 @@ void nn_astparser_parsemethod(neon::Parser* prs, neon::Token classname, bool iss
 
 bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
 {
-    neon::Parser::FuncCompiler compiler;
     (void)canassign;
-    nn_astfunccompiler_init(prs, &compiler, neon::FuncCommon::FUNCTYPE_FUNCTION, true);
+    neon::Parser::FuncCompiler compiler(prs, neon::FuncCommon::FUNCTYPE_FUNCTION, true);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
-    if(!nn_astparser_check(prs, neon::Token::TOK_PARENCLOSE))
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
+    if(!prs->check(neon::Token::TOK_PARENCLOSE))
     {
         nn_astparser_parsefuncparamlist(prs);
     }
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
     nn_astfunccompiler_compilebody(prs, &compiler, true, true);
     return true;
 }
@@ -9595,11 +9626,11 @@ bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
 void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
 {
     int fieldconstant;
-    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class property name expected");
+    prs->consume(neon::Token::TOK_IDENTNORMAL, "class property name expected");
     fieldconstant = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
-    if(nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
+    if(prs->match(neon::Token::TOK_ASSIGN))
     {
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
     }
     else
     {
@@ -9608,7 +9639,7 @@ void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_CLASSPROPERTYDEFINE, fieldconstant);
     nn_astemit_emit1byte(prs, isstatic ? 1 : 0);
     nn_astparser_consumestmtend(prs);
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
 }
 
 void nn_astparser_parsefuncdecl(neon::Parser* prs)
@@ -9627,7 +9658,7 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
     neon::Parser::CompContext oldctx;
     neon::Token classname;
     neon::Parser::ClassCompiler classcompiler;
-    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "class name expected");
+    prs->consume(neon::Token::TOK_IDENTNORMAL, "class name expected");
     nameconst = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
     classname = prs->m_prevtoken;
     nn_astparser_declarevariable(prs);
@@ -9635,17 +9666,17 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
     nn_astparser_definevariable(prs, nameconst);
     classcompiler.name = prs->m_prevtoken;
     classcompiler.hassuperclass = false;
-    classcompiler.enclosing = prs->m_currclasscompiler;
+    classcompiler.m_enclosing = prs->m_currclasscompiler;
     prs->m_currclasscompiler = &classcompiler;
     oldctx = prs->m_compcontext;
     prs->m_compcontext = neon::Parser::COMPCONTEXT_CLASS;
-    if(nn_astparser_match(prs, neon::Token::TOK_LESSTHAN))
+    if(prs->match(neon::Token::TOK_LESSTHAN))
     {
-        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "name of superclass expected");
+        prs->consume(neon::Token::TOK_IDENTNORMAL, "name of superclass expected");
         nn_astparser_rulevarnormal(prs, false);
-        if(nn_astparser_identsequal(&classname, &prs->m_prevtoken))
+        if(neon::Parser::identsEqual(&classname, &prs->m_prevtoken))
         {
-            nn_astparser_raiseerror(prs, "class %.*s cannot inherit from itself", classname.length, classname.start);
+            prs->raiseError("class %.*s cannot inherit from itself", classname.length, classname.start);
         }
         nn_astparser_scopebegin(prs);
         nn_astparser_addlocal(prs, nn_astparser_synthtoken(neon::g_strsuper));
@@ -9655,29 +9686,29 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
         classcompiler.hassuperclass = true;
     }
     nn_astparser_namedvar(prs, classname, false);
-    nn_astparser_ignorewhitespace(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' before class body");
-    nn_astparser_ignorewhitespace(prs);
-    while(!nn_astparser_check(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
+    prs->ignoreSpace();
+    prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' before class body");
+    prs->ignoreSpace();
+    while(!prs->check(neon::Token::TOK_BRACECLOSE) && !prs->check(neon::Token::TOK_EOF))
     {
         isstatic = false;
-        if(nn_astparser_match(prs, neon::Token::TOK_KWSTATIC))
+        if(prs->match(neon::Token::TOK_KWSTATIC))
         {
             isstatic = true;
         }
 
-        if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
+        if(prs->match(neon::Token::TOK_KWVAR))
         {
             nn_astparser_parsefield(prs, isstatic);
         }
         else
         {
             nn_astparser_parsemethod(prs, classname, isstatic);
-            nn_astparser_ignorewhitespace(prs);
+            prs->ignoreSpace();
         }
     }
-    nn_astparser_consume(prs, neon::Token::TOK_BRACECLOSE, "expected '}' after class body");
-    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
+    prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after class body");
+    if(prs->match(neon::Token::TOK_SEMICOLON))
     {
     }
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
@@ -9685,7 +9716,7 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
     {
         nn_astparser_scopeend(prs);
     }
-    prs->m_currclasscompiler = prs->m_currclasscompiler->enclosing;
+    prs->m_currclasscompiler = prs->m_currclasscompiler->m_enclosing;
     prs->m_compcontext = oldctx;
 }
 
@@ -9698,12 +9729,12 @@ void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
     {
         if(totalparsed > 0)
         {
-            nn_astparser_ignorewhitespace(prs);
+            prs->ignoreSpace();
         }
         global = nn_astparser_parsevariable(prs, "variable name expected");
-        if(nn_astparser_match(prs, neon::Token::TOK_ASSIGN))
+        if(prs->match(neon::Token::TOK_ASSIGN))
         {
-            nn_astparser_parseexpression(prs);
+            prs->parseExpression();
         }
         else
         {
@@ -9711,7 +9742,7 @@ void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
         }
         nn_astparser_definevariable(prs, global);
         totalparsed++;
-    } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+    } while(prs->match(neon::Token::TOK_COMMA));
 
     if(!isinitializer)
     {
@@ -9719,24 +9750,24 @@ void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
     }
     else
     {
-        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
-        nn_astparser_ignorewhitespace(prs);
+        prs->consume(neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
+        prs->ignoreSpace();
     }
 }
 
 void nn_astparser_parseexprstmt(neon::Parser* prs, bool isinitializer, bool semi)
 {
-    if(prs->m_pvm->m_isreplmode && prs->m_currfunccompiler->scopedepth == 0)
+    if(prs->m_pvm->m_isreplmode && prs->m_currfunccompiler->m_scopedepth == 0)
     {
         prs->m_replcanecho = true;
     }
     if(!semi)
     {
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
     }
     else
     {
-        nn_astparser_parseprecnoadvance(prs, neon::Parser::Rule::PREC_ASSIGNMENT);
+        prs->parsePrecNoAdvance(neon::Parser::Rule::PREC_ASSIGNMENT);
     }
     if(!isinitializer)
     {
@@ -9756,8 +9787,8 @@ void nn_astparser_parseexprstmt(neon::Parser* prs, bool isinitializer, bool semi
     }
     else
     {
-        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
-        nn_astparser_ignorewhitespace(prs);
+        prs->consume(neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
+        prs->ignoreSpace();
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     }
 }
@@ -9788,13 +9819,13 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
     int surroundingloopstart;
     int surroundingscopedepth;
     nn_astparser_scopebegin(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'for'");
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'for'");
     /* parse initializer... */
-    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
+    if(prs->match(neon::Token::TOK_SEMICOLON))
     {
         /* no initializer */
     }
-    else if(nn_astparser_match(prs, neon::Token::TOK_KWVAR))
+    else if(prs->match(neon::Token::TOK_KWVAR))
     {
         nn_astparser_parsevardecl(prs, true);
     }
@@ -9806,33 +9837,33 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
     surroundingloopstart = prs->m_innermostloopstart;
     surroundingscopedepth = prs->m_innermostloopscopedepth;
     /* update the parser's loop start and depth to the current */
-    prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
-    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
+    prs->m_innermostloopstart = prs->currentBlob()->m_count;
+    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->m_scopedepth;
     exitjump = -1;
-    if(!nn_astparser_match(prs, neon::Token::TOK_SEMICOLON))
+    if(!prs->match(neon::Token::TOK_SEMICOLON))
     {
         /* the condition is optional */
-        nn_astparser_parseexpression(prs);
-        nn_astparser_consume(prs, neon::Token::TOK_SEMICOLON, "expected ';' after condition");
-        nn_astparser_ignorewhitespace(prs);
+        prs->parseExpression();
+        prs->consume(neon::Token::TOK_SEMICOLON, "expected ';' after condition");
+        prs->ignoreSpace();
         /* jump out of the loop if the condition is false... */
         exitjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
         /* pop the condition */
     }
     /* the iterator... */
-    if(!nn_astparser_check(prs, neon::Token::TOK_BRACEOPEN))
+    if(!prs->check(neon::Token::TOK_BRACEOPEN))
     {
         bodyjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
-        incrstart = nn_astparser_currentblob(prs)->m_count;
-        nn_astparser_parseexpression(prs);
-        nn_astparser_ignorewhitespace(prs);
+        incrstart = prs->currentBlob()->m_count;
+        prs->parseExpression();
+        prs->ignoreSpace();
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
         nn_astemit_emitloop(prs, prs->m_innermostloopstart);
         prs->m_innermostloopstart = incrstart;
         nn_astemit_patchjump(prs, bodyjump);
     }
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'for'");
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'for'");
     nn_astparser_parsestmt(prs);
     nn_astemit_emitloop(prs, prs->m_innermostloopstart);
     if(exitjump != -1)
@@ -9911,9 +9942,9 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     /* define @iter and @itern constant */
     citer = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@iter")));
     citern = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@itern")));
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'foreach'");
-    nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected variable name after 'foreach'");
-    if(!nn_astparser_check(prs, neon::Token::TOK_COMMA))
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'foreach'");
+    prs->consume(neon::Token::TOK_IDENTNORMAL, "expected variable name after 'foreach'");
+    if(!prs->check(neon::Token::TOK_COMMA))
     {
         keytoken = nn_astparser_synthtoken(" _ ");
         valuetoken = prs->m_prevtoken;
@@ -9921,23 +9952,23 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     else
     {
         keytoken = prs->m_prevtoken;
-        nn_astparser_consume(prs, neon::Token::TOK_COMMA, "");
-        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "expected variable name after ','");
+        prs->consume(neon::Token::TOK_COMMA, "");
+        prs->consume(neon::Token::TOK_IDENTNORMAL, "expected variable name after ','");
         valuetoken = prs->m_prevtoken;
     }
-    nn_astparser_consume(prs, neon::Token::TOK_KWIN, "expected 'in' after for loop variable(s)");
-    nn_astparser_ignorewhitespace(prs);
+    prs->consume(neon::Token::TOK_KWIN, "expected 'in' after for loop variable(s)");
+    prs->ignoreSpace();
     /*
     // The space in the variable name ensures it won't collide with a user-defined
     // variable.
     */
     iteratortoken = nn_astparser_synthtoken(" iterator ");
     /* Evaluate the sequence expression and store it in a hidden local variable. */
-    nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'foreach'");
-    if(prs->m_currfunccompiler->localcount + 3 > NEON_CFG_ASTMAXLOCALS)
+    prs->parseExpression();
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'foreach'");
+    if(prs->m_currfunccompiler->m_localcount + 3 > neon::Parser::FuncCompiler::MaxLocals)
     {
-        nn_astparser_raiseerror(prs, "cannot declare more than %d variables in one scope", NEON_CFG_ASTMAXLOCALS);
+        prs->raiseError("cannot declare more than %d variables in one scope", neon::Parser::FuncCompiler::MaxLocals);
         return;
     }
     /* add the iterator to the local scope */
@@ -9957,8 +9988,8 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     // we'll be jumping back to right before the
     // expression after the loop body
     */
-    prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
-    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
+    prs->m_innermostloopstart = prs->currentBlob()->m_count;
+    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->m_scopedepth;
     /* key = iterable.iter_n__(key) */
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_LOCALGET, iteratorslot);
     nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_LOCALGET, keyslot);
@@ -10017,9 +10048,9 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
     neon::VarSwitch* sw;
     neon::String* string;
     /* the expression */
-    nn_astparser_parseexpression(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
-    nn_astparser_ignorewhitespace(prs);
+    prs->parseExpression();
+    prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
+    prs->ignoreSpace();
     /* 0: before all cases, 1: before default, 2: after default */
     swstate = 0;
     casecount = 0;
@@ -10027,15 +10058,15 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
     prs->m_pvm->stackPush(neon::Value::fromObject(sw));
     switchcode = nn_astemit_emitswitch(prs);
     /* nn_astemit_emitbyteandshort(prs, neon::Instruction::OP_SWITCH, nn_astparser_pushconst(prs, neon::Value::fromObject(sw))); */
-    startoffset = nn_astparser_currentblob(prs)->m_count;
-    while(!nn_astparser_match(prs, neon::Token::TOK_BRACECLOSE) && !nn_astparser_check(prs, neon::Token::TOK_EOF))
+    startoffset = prs->currentBlob()->m_count;
+    while(!prs->match(neon::Token::TOK_BRACECLOSE) && !prs->check(neon::Token::TOK_EOF))
     {
-        if(nn_astparser_match(prs, neon::Token::TOK_KWCASE) || nn_astparser_match(prs, neon::Token::TOK_KWDEFAULT))
+        if(prs->match(neon::Token::TOK_KWCASE) || prs->match(neon::Token::TOK_KWDEFAULT))
         {
             casetype = prs->m_prevtoken.type;
             if(swstate == 2)
             {
-                nn_astparser_raiseerror(prs, "cannot have another case after a default case");
+                prs->raiseError("cannot have another case after a default case");
             }
             if(swstate == 1)
             {
@@ -10047,9 +10078,9 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
                 swstate = 1;
                 do
                 {
-                    nn_astparser_ignorewhitespace(prs);
-                    nn_astparser_advance(prs);
-                    jump = neon::Value::makeNumber((double)nn_astparser_currentblob(prs)->m_count - (double)startoffset);
+                    prs->ignoreSpace();
+                    prs->advance();
+                    jump = neon::Value::makeNumber((double)prs->currentBlob()->m_count - (double)startoffset);
                     if(prs->m_prevtoken.type == neon::Token::TOK_KWTRUE)
                     {
                         sw->m_jumppositions->set(neon::Value::makeBool(true), jump);
@@ -10068,7 +10099,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
                         /* gc fix */
                         prs->m_pvm->stackPop();
                     }
-                    else if(nn_astparser_checknumber(prs))
+                    else if(prs->checkNumber())
                     {
                         sw->m_jumppositions->set(nn_astparser_compilenumber(prs), jump);
                     }
@@ -10076,15 +10107,15 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
                     {
                         /* pop the switch */
                         prs->m_pvm->stackPop();
-                        nn_astparser_raiseerror(prs, "only constants can be used in 'when' expressions");
+                        prs->raiseError("only constants can be used in 'when' expressions");
                         return;
                     }
-                } while(nn_astparser_match(prs, neon::Token::TOK_COMMA));
+                } while(prs->match(neon::Token::TOK_COMMA));
             }
             else
             {
                 swstate = 2;
-                sw->m_defaultjump = nn_astparser_currentblob(prs)->m_count - startoffset;
+                sw->m_defaultjump = prs->currentBlob()->m_count - startoffset;
             }
         }
         else
@@ -10092,7 +10123,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
             /* otherwise, it's a statement inside the current case */
             if(swstate == 0)
             {
-                nn_astparser_raiseerror(prs, "cannot have statements before any case");
+                prs->raiseError("cannot have statements before any case");
             }
             nn_astparser_parsestmt(prs);
         }
@@ -10107,7 +10138,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
     {
         nn_astemit_patchjump(prs, caseends[i]);
     }
-    sw->m_exitjump = nn_astparser_currentblob(prs)->m_count - startoffset;
+    sw->m_exitjump = prs->currentBlob()->m_count - startoffset;
     nn_astemit_patchswitch(prs, switchcode, nn_astparser_pushconst(prs, neon::Value::fromObject(sw)));
     /* pop the switch */
     prs->m_pvm->stackPop();
@@ -10117,14 +10148,14 @@ void nn_astparser_parseifstmt(neon::Parser* prs)
 {
     int elsejump;
     int thenjump;
-    nn_astparser_parseexpression(prs);
+    prs->parseExpression();
     thenjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     nn_astparser_parsestmt(prs);
     elsejump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
-    if(nn_astparser_match(prs, neon::Token::TOK_KWELSE))
+    if(prs->match(neon::Token::TOK_KWELSE))
     {
         nn_astparser_parsestmt(prs);
     }
@@ -10133,34 +10164,34 @@ void nn_astparser_parseifstmt(neon::Parser* prs)
 
 void nn_astparser_parseechostmt(neon::Parser* prs)
 {
-    nn_astparser_parseexpression(prs);
+    prs->parseExpression();
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_ECHO);
     nn_astparser_consumestmtend(prs);
 }
 
 void nn_astparser_parsethrowstmt(neon::Parser* prs)
 {
-    nn_astparser_parseexpression(prs);
+    prs->parseExpression();
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXTHROW);
-    nn_astparser_discardlocals(prs, prs->m_currfunccompiler->scopedepth - 1);
+    nn_astparser_discardlocals(prs, prs->m_currfunccompiler->m_scopedepth - 1);
     nn_astparser_consumestmtend(prs);
 }
 
 void nn_astparser_parseassertstmt(neon::Parser* prs)
 {
-    nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'assert'");
-    nn_astparser_parseexpression(prs);
-    if(nn_astparser_match(prs, neon::Token::TOK_COMMA))
+    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'assert'");
+    prs->parseExpression();
+    if(prs->match(neon::Token::TOK_COMMA))
     {
-        nn_astparser_ignorewhitespace(prs);
-        nn_astparser_parseexpression(prs);
+        prs->ignoreSpace();
+        prs->parseExpression();
     }
     else
     {
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHNULL);
     }
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_ASSERT);
-    nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'assert'");
+    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'assert'");
     nn_astparser_consumestmtend(prs);
 }
 
@@ -10174,13 +10205,13 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
     int continueexecutionaddress;
     bool catchexists;
     bool finalexists;
-    if(prs->m_currfunccompiler->handlercount == NEON_CFG_MAXEXCEPTHANDLERS)
+    if(prs->m_currfunccompiler->m_compiledexcepthandlercount == NEON_CFG_MAXEXCEPTHANDLERS)
     {
-        nn_astparser_raiseerror(prs, "maximum exception handler in scope exceeded");
+        prs->raiseError("maximum exception handler in scope exceeded");
     }
-    prs->m_currfunccompiler->handlercount++;
+    prs->m_currfunccompiler->m_compiledexcepthandlercount++;
     prs->m_istrying = true;
-    nn_astparser_ignorewhitespace(prs);
+    prs->ignoreSpace();
     trybegins = nn_astemit_emittry(prs);
     /* compile the try body */
     nn_astparser_parsestmt(prs);
@@ -10197,15 +10228,15 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
     catchexists = false;
     finalexists= false;
     /* catch body must maintain its own scope */
-    if(nn_astparser_match(prs, neon::Token::TOK_KWCATCH))
+    if(prs->match(neon::Token::TOK_KWCATCH))
     {
         catchexists = true;
         nn_astparser_scopebegin(prs);
-        nn_astparser_consume(prs, neon::Token::TOK_PARENOPEN, "expected '(' after 'catch'");
-        nn_astparser_consume(prs, neon::Token::TOK_IDENTNORMAL, "missing exception class name");
+        prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'catch'");
+        prs->consume(neon::Token::TOK_IDENTNORMAL, "missing exception class name");
         type = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
-        address = nn_astparser_currentblob(prs)->m_count;
-        if(nn_astparser_match(prs, neon::Token::TOK_IDENTNORMAL))
+        address = prs->currentBlob()->m_count;
+        if(prs->match(neon::Token::TOK_IDENTNORMAL))
         {
             nn_astparser_createdvar(prs, prs->m_prevtoken);
         }
@@ -10213,9 +10244,9 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
         }
-          nn_astparser_consume(prs, neon::Token::TOK_PARENCLOSE, "expected ')' after 'catch'");
+          prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'catch'");
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXPOPTRY);
-        nn_astparser_ignorewhitespace(prs);
+        prs->ignoreSpace();
         nn_astparser_parsestmt(prs);
         nn_astparser_scopeend(prs);
     }
@@ -10224,7 +10255,7 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
         type = nn_astparser_pushconst(prs, neon::Value::fromObject(neon::String::copy(prs->m_pvm, "Exception")));
     }
     nn_astemit_patchjump(prs, exitjump);
-    if(nn_astparser_match(prs, neon::Token::TOK_KWFINALLY))
+    if(prs->match(neon::Token::TOK_KWFINALLY))
     {
         finalexists = true;
         /*
@@ -10232,8 +10263,8 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
         // we don't want to continue propagating the exception
         */
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_PUSHFALSE);
-        finally = nn_astparser_currentblob(prs)->m_count;
-        nn_astparser_ignorewhitespace(prs);
+        finally = prs->currentBlob()->m_count;
+        prs->ignoreSpace();
         nn_astparser_parsestmt(prs);
         continueexecutionaddress = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
         /* pop the bool off the stack */
@@ -10244,7 +10275,7 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
     }
     if(!finalexists && !catchexists)
     {
-        nn_astparser_raiseerror(prs, "try block must contain at least one of catch or finally");
+        prs->raiseError("try block must contain at least one of catch or finally");
     }
     nn_astemit_patchtry(prs, trybegins, type, address, finally);
 }
@@ -10255,24 +10286,24 @@ void nn_astparser_parsereturnstmt(neon::Parser* prs)
     /*
     if(prs->m_currfunccompiler->type == neon::FuncCommon::FUNCTYPE_SCRIPT)
     {
-        nn_astparser_raiseerror(prs, "cannot return from top-level code");
+        prs->raiseError("cannot return from top-level code");
     }
     */
-    if(nn_astparser_match(prs, neon::Token::TOK_SEMICOLON) || nn_astparser_match(prs, neon::Token::TOK_NEWLINE))
+    if(prs->match(neon::Token::TOK_SEMICOLON) || prs->match(neon::Token::TOK_NEWLINE))
     {
         nn_astemit_emitreturn(prs);
     }
     else
     {
-        if(prs->m_currfunccompiler->type == neon::FuncCommon::FUNCTYPE_INITIALIZER)
+        if(prs->m_currfunccompiler->m_type == neon::FuncCommon::FUNCTYPE_INITIALIZER)
         {
-            nn_astparser_raiseerror(prs, "cannot return value from constructor");
+            prs->raiseError("cannot return value from constructor");
         }
         if(prs->m_istrying)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_EXPOPTRY);
         }
-        nn_astparser_parseexpression(prs);
+        prs->parseExpression();
         nn_astemit_emitinstruc(prs, neon::Instruction::OP_RETURN);
         nn_astparser_consumestmtend(prs);
     }
@@ -10290,9 +10321,9 @@ void nn_astparser_parsewhilestmt(neon::Parser* prs)
     // we'll be jumping back to right before the
     // expression after the loop body
     */
-    prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
-    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
-    nn_astparser_parseexpression(prs);
+    prs->m_innermostloopstart = prs->currentBlob()->m_count;
+    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->m_scopedepth;
+    prs->parseExpression();
     exitjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     nn_astparser_parsestmt(prs);
@@ -10315,11 +10346,11 @@ void nn_astparser_parsedo_whilestmt(neon::Parser* prs)
     // we'll be jumping back to right before the
     // statements after the loop body
     */
-    prs->m_innermostloopstart = nn_astparser_currentblob(prs)->m_count;
-    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->scopedepth;
+    prs->m_innermostloopstart = prs->currentBlob()->m_count;
+    prs->m_innermostloopscopedepth = prs->m_currfunccompiler->m_scopedepth;
     nn_astparser_parsestmt(prs);
-    nn_astparser_consume(prs, neon::Token::TOK_KWWHILE, "expecting 'while' statement");
-    nn_astparser_parseexpression(prs);
+    prs->consume(neon::Token::TOK_KWWHILE, "expecting 'while' statement");
+    prs->parseExpression();
     exitjump = nn_astemit_emitjump(prs, neon::Instruction::OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, neon::Instruction::OP_POPONE);
     nn_astemit_emitloop(prs, prs->m_innermostloopstart);
@@ -10334,7 +10365,7 @@ void nn_astparser_parsecontinuestmt(neon::Parser* prs)
 {
     if(prs->m_innermostloopstart == -1)
     {
-        nn_astparser_raiseerror(prs, "'continue' can only be used in a loop");
+        prs->raiseError("'continue' can only be used in a loop");
     }
     /*
     // discard local variables created in the loop
@@ -10350,14 +10381,14 @@ void nn_astparser_parsebreakstmt(neon::Parser* prs)
 {
     if(prs->m_innermostloopstart == -1)
     {
-        nn_astparser_raiseerror(prs, "'break' can only be used in a loop");
+        prs->raiseError("'break' can only be used in a loop");
     }
     /* discard local variables created in the loop */
     /*
     int i;
-    for(i = prs->m_currfunccompiler->localcount - 1; i >= 0 && prs->m_currfunccompiler->locals[i].depth >= prs->m_currfunccompiler->scopedepth; i--)
+    for(i = prs->m_currfunccompiler->m_localcount - 1; i >= 0 && prs->m_currfunccompiler->m_compiledlocals[i].depth >= prs->m_currfunccompiler->m_scopedepth; i--)
     {
-        if(prs->m_currfunccompiler->locals[i].iscaptured)
+        if(prs->m_currfunccompiler->m_compiledlocals[i].iscaptured)
         {
             nn_astemit_emitinstruc(prs, neon::Instruction::OP_UPVALUECLOSE);
         }
@@ -10411,7 +10442,7 @@ void nn_astparser_synchronize(neon::Parser* prs)
                 /* do nothing */
             ;
         }
-        nn_astparser_advance(prs);
+        prs->advance();
     }
 }
 
@@ -10421,7 +10452,6 @@ void nn_astparser_synchronize(neon::Parser* prs)
 */
 neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* module, const char* source, neon::Blob* blob, bool fromimport, bool keeplast)
 {
-    neon::Parser::FuncCompiler compiler;
     neon::Lexer* lexer;
     neon::Parser* parser;
     neon::FuncScript* function;
@@ -10429,9 +10459,9 @@ neon::FuncScript* nn_astparser_compilesource(neon::State* state, neon::Module* m
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
     lexer = new neon::Lexer(state, source);
     parser = new neon::Parser(state, lexer, module, keeplast);
-    nn_astfunccompiler_init(parser, &compiler, neon::FuncCommon::FUNCTYPE_SCRIPT, true);
-    compiler.fromimport = fromimport;
-    nn_astparser_runparser(parser);
+    neon::Parser::FuncCompiler compiler(parser, neon::FuncCommon::FUNCTYPE_SCRIPT, true);
+    compiler.m_fromimport = fromimport;
+    parser->runParser();
     function = nn_astparser_endcompiler(parser);
     if(parser->m_haderror)
     {
@@ -10451,8 +10481,8 @@ void nn_gcmem_markcompilerroots(neon::State* state)
         compiler = state->m_activeparser->m_currfunccompiler;
         while(compiler != nullptr)
         {
-            nn_gcmem_markobject(state, (neon::Object*)compiler->targetfunc);
-            compiler = compiler->enclosing;
+            nn_gcmem_markobject(state, (neon::Object*)compiler->m_targetfunc);
+            compiler = compiler->m_enclosing;
         }
     }
 }
@@ -10554,7 +10584,7 @@ neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
     while(!lex->isAtEnd())
     {
         itm = neon::Dictionary::make(state);
-        token = nn_astlex_scantoken(lex);
+        token = lex->scanToken();
         itm->addEntryCStr("line", neon::Value::makeNumber(token.line));
         cstr = nn_astutil_toktype2str(token.type);
         itm->addEntryCStr("type", neon::Value::fromObject(neon::String::copy(state, cstr + 12)));
@@ -10657,7 +10687,7 @@ neon::Value nn_memberfunc_dict_length(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(nn_value_asdict(args->thisval)->m_keynames->m_count);
+    return neon::Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
 }
 
 neon::Value nn_memberfunc_dict_add(neon::State* state, neon::Arguments* args)
@@ -10666,7 +10696,7 @@ neon::Value nn_memberfunc_dict_add(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 2);
     ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     if(dict->m_valtable->get(args->argv[0], &tempvalue))
     {
         NEON_RETURNERROR("duplicate key %s at add()", neon::Value::toString(state, args->argv[0])->data());
@@ -10682,7 +10712,7 @@ neon::Value nn_memberfunc_dict_set(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 2);
     ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     if(!dict->m_valtable->get(args->argv[0], &value))
     {
         dict->addEntry(args->argv[0], args->argv[1]);
@@ -10699,7 +10729,7 @@ neon::Value nn_memberfunc_dict_clear(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     delete dict->m_keynames;
     delete dict->m_valtable;
     return neon::Value::makeEmpty();
@@ -10711,7 +10741,7 @@ neon::Value nn_memberfunc_dict_clone(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     neon::Dictionary* newdict;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     newdict = state->gcProtect(neon::Dictionary::make(state));
     neon::HashTable::addAll(dict->m_valtable, newdict->m_valtable);
     for(i = 0; i < dict->m_keynames->m_count; i++)
@@ -10728,7 +10758,7 @@ neon::Value nn_memberfunc_dict_compact(neon::State* state, neon::Arguments* args
     neon::Dictionary* newdict;
     neon::Value tmpvalue;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     newdict = state->gcProtect(neon::Dictionary::make(state));
     for(i = 0; i < dict->m_keynames->m_count; i++)
     {
@@ -10748,7 +10778,7 @@ neon::Value nn_memberfunc_dict_contains(neon::State* state, neon::Arguments* arg
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 1);
     ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     return neon::Value::makeBool(dict->m_valtable->get(args->argv[0], &value));
 }
 
@@ -10761,8 +10791,8 @@ neon::Value nn_memberfunc_dict_extend(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isDict);
-    dict = nn_value_asdict(args->thisval);
-    dictcpy = nn_value_asdict(args->argv[0]);
+    dict = args->thisval.asDict();
+    dictcpy = args->argv[0].asDict();
     for(i = 0; i < dictcpy->m_keynames->m_count; i++)
     {
         if(!dict->m_valtable->get(dictcpy->m_keynames->m_values[i], &tmp))
@@ -10781,7 +10811,7 @@ neon::Value nn_memberfunc_dict_get(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
     ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     field = dict->getEntry(args->argv[0]);
     if(field == nullptr)
     {
@@ -10803,7 +10833,7 @@ neon::Value nn_memberfunc_dict_keys(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     list = state->gcProtect(neon::Array::make(state));
     for(i = 0; i < dict->m_keynames->m_count; i++)
     {
@@ -10819,7 +10849,7 @@ neon::Value nn_memberfunc_dict_values(neon::State* state, neon::Arguments* args)
     neon::Array* list;
     neon::Property* field;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     list = state->gcProtect(neon::Array::make(state));
     for(i = 0; i < dict->m_keynames->m_count; i++)
     {
@@ -10837,7 +10867,7 @@ neon::Value nn_memberfunc_dict_remove(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 1);
     ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     if(dict->m_valtable->get(args->argv[0], &value))
     {
         dict->m_valtable->removeByKey(args->argv[0]);
@@ -10864,14 +10894,14 @@ neon::Value nn_memberfunc_dict_isempty(neon::State* state, neon::Arguments* args
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeBool(nn_value_asdict(args->thisval)->m_keynames->m_count == 0);
+    return neon::Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
 }
 
 neon::Value nn_memberfunc_dict_findkey(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    return nn_value_asdict(args->thisval)->m_valtable->findKey(args->argv[0]);
+    return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
 }
 
 neon::Value nn_memberfunc_dict_tolist(neon::State* state, neon::Arguments* args)
@@ -10882,7 +10912,7 @@ neon::Value nn_memberfunc_dict_tolist(neon::State* state, neon::Arguments* args)
     neon::Array* namelist;
     neon::Array* valuelist;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     namelist = state->gcProtect(neon::Array::make(state));
     valuelist = state->gcProtect(neon::Array::make(state));
     for(i = 0; i < dict->m_keynames->m_count; i++)
@@ -10911,7 +10941,7 @@ neon::Value nn_memberfunc_dict_iter(neon::State* state, neon::Arguments* args)
     neon::Dictionary* dict;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     if(dict->m_valtable->get(args->argv[0], &result))
     {
         return result;
@@ -10924,7 +10954,7 @@ neon::Value nn_memberfunc_dict_itern(neon::State* state, neon::Arguments* args)
     int i;
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     if(args->argv[0].isNull())
     {
         if(dict->m_keynames->m_count == 0)
@@ -10954,7 +10984,7 @@ neon::Value nn_memberfunc_dict_each(neon::State* state, neon::Arguments* args)
     neon::Array* nestargs;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     callable = args->argv[0];
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
@@ -10990,7 +11020,7 @@ neon::Value nn_memberfunc_dict_filter(neon::State* state, neon::Arguments* args)
     neon::Dictionary* resultdict;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     callable = args->argv[0];
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
@@ -11030,7 +11060,7 @@ neon::Value nn_memberfunc_dict_some(neon::State* state, neon::Arguments* args)
     neon::Array* nestargs;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     callable = args->argv[0];
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
@@ -11072,7 +11102,7 @@ neon::Value nn_memberfunc_dict_every(neon::State* state, neon::Arguments* args)
     neon::Array* nestargs;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     callable = args->argv[0];
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
@@ -11114,7 +11144,7 @@ neon::Value nn_memberfunc_dict_reduce(neon::State* state, neon::Arguments* args)
     neon::Array* nestargs;
     NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = nn_value_asdict(args->thisval);
+    dict = args->thisval.asDict();
     callable = args->argv[0];
     startindex = 0;
     accumulator = neon::Value::makeNull();
@@ -11282,7 +11312,7 @@ neon::Value nn_memberfunc_file_close(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    nn_fileobject_close(nn_value_asfile(args->thisval));
+    nn_fileobject_close(args->thisval.asFile());
     return neon::Value::makeEmpty();
 }
 
@@ -11290,7 +11320,7 @@ neon::Value nn_memberfunc_file_open(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    nn_fileobject_open(nn_value_asfile(args->thisval));
+    nn_fileobject_open(args->thisval.asFile());
     return neon::Value::makeEmpty();
 }
 
@@ -11298,7 +11328,7 @@ neon::Value nn_memberfunc_file_isopen(neon::State* state, neon::Arguments* args)
 {
     neon::File* file;
     (void)state;
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     return neon::Value::makeBool(file->m_isstd || file->m_isopen);
 }
 
@@ -11306,7 +11336,7 @@ neon::Value nn_memberfunc_file_isclosed(neon::State* state, neon::Arguments* arg
 {
     neon::File* file;
     (void)state;
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     return neon::Value::makeBool(!file->m_isstd && !file->m_isopen);
 }
 
@@ -11398,7 +11428,7 @@ neon::Value nn_memberfunc_file_read(neon::State* state, neon::Arguments* args)
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         readhowmuch = (size_t)args->argv[0].asNumber();
     }
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     if(!nn_file_read(state, file, readhowmuch, &res))
     {
         FILE_ERROR(NotFound, strerror(errno));
@@ -11412,7 +11442,7 @@ neon::Value nn_memberfunc_file_get(neon::State* state, neon::Arguments* args)
     neon::File* file;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     ch = fgetc(file->m_filehandle);
     if(ch == EOF)
     {
@@ -11436,7 +11466,7 @@ neon::Value nn_memberfunc_file_gets(neon::State* state, neon::Arguments* args)
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         length = (size_t)args->argv[0].asNumber();
     }
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     if(!file->m_isstd)
     {
         if(!nn_util_fsfileexists(state, file->m_filepath->data()))
@@ -11504,7 +11534,7 @@ neon::Value nn_memberfunc_file_write(neon::State* state, neon::Arguments* args)
     neon::File* file;
     neon::String* string;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     string = args->argv[0].asString();
     data = (unsigned char*)string->data();
@@ -11552,7 +11582,7 @@ neon::Value nn_memberfunc_file_puts(neon::State* state, neon::Arguments* args)
     neon::File* file;
     neon::String* string;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     string = args->argv[0].asString();
     data = (unsigned char*)string->data();
@@ -11595,7 +11625,7 @@ neon::Value nn_memberfunc_file_printf(neon::State* state, neon::Arguments* args)
 {
     neon::File* file;
     neon::String* ofmt;
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     NEON_ARGS_CHECKMINARG(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     ofmt = args->argv[0].asString();
@@ -11611,7 +11641,7 @@ neon::Value nn_memberfunc_file_number(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(nn_value_asfile(args->thisval)->m_filedesc);
+    return neon::Value::makeNumber(args->thisval.asFile()->m_filedesc);
 }
 
 neon::Value nn_memberfunc_file_istty(neon::State* state, neon::Arguments* args)
@@ -11619,7 +11649,7 @@ neon::Value nn_memberfunc_file_istty(neon::State* state, neon::Arguments* args)
     neon::File* file;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     return neon::Value::makeBool(file->m_istty);
 }
 
@@ -11627,7 +11657,7 @@ neon::Value nn_memberfunc_file_flush(neon::State* state, neon::Arguments* args)
 {
     neon::File* file;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     if(!file->m_isopen)
     {
         FILE_ERROR(Unsupported, "I/O operation on closed file");
@@ -11655,7 +11685,7 @@ neon::Value nn_memberfunc_file_stats(neon::State* state, neon::Arguments* args)
     neon::File* file;
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     dict = state->gcProtect(neon::Dictionary::make(state));
     if(!file->m_isstd)
     {
@@ -11715,7 +11745,7 @@ neon::Value nn_memberfunc_file_path(neon::State* state, neon::Arguments* args)
 {
     neon::File* file;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     DENY_STD();
     return neon::Value::fromObject(file->m_filepath);
 }
@@ -11725,7 +11755,7 @@ neon::Value nn_memberfunc_file_mode(neon::State* state, neon::Arguments* args)
     neon::File* file;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     return neon::Value::fromObject(file->m_filemode);
 }
 
@@ -11734,7 +11764,7 @@ neon::Value nn_memberfunc_file_name(neon::State* state, neon::Arguments* args)
     char* name;
     neon::File* file;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     if(!file->m_isstd)
     {
         name = nn_util_fsgetbasename(state, file->m_filepath->data());
@@ -11760,7 +11790,7 @@ neon::Value nn_memberfunc_file_seek(neon::State* state, neon::Arguments* args)
     NEON_ARGS_CHECKCOUNT(args, 2);
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
     NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     DENY_STD();
     position = (long)args->argv[0].asNumber();
     seektype = args->argv[1].asNumber();
@@ -11771,7 +11801,7 @@ neon::Value nn_memberfunc_file_tell(neon::State* state, neon::Arguments* args)
 {
     neon::File* file;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    file = nn_value_asfile(args->thisval);
+    file = args->thisval.asFile();
     DENY_STD();
     return neon::Value::makeNumber(ftell(file->m_filehandle));
 }
@@ -12592,21 +12622,21 @@ neon::Value nn_memberfunc_range_lower(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(nn_value_asrange(args->thisval)->m_lower);
+    return neon::Value::makeNumber(args->thisval.asRange()->m_lower);
 }
 
 neon::Value nn_memberfunc_range_upper(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(nn_value_asrange(args->thisval)->m_upper);
+    return neon::Value::makeNumber(args->thisval.asRange()->m_upper);
 }
 
 neon::Value nn_memberfunc_range_range(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(nn_value_asrange(args->thisval)->m_range);
+    return neon::Value::makeNumber(args->thisval.asRange()->m_range);
 }
 
 neon::Value nn_memberfunc_range_iter(neon::State* state, neon::Arguments* args)
@@ -12617,7 +12647,7 @@ neon::Value nn_memberfunc_range_iter(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    range = nn_value_asrange(args->thisval);
+    range = args->thisval.asRange();
     index = args->argv[0].asNumber();
     if(index >= 0 && index < range->m_range)
     {
@@ -12643,7 +12673,7 @@ neon::Value nn_memberfunc_range_itern(neon::State* state, neon::Arguments* args)
     int index;
     neon::Range* range;
     NEON_ARGS_CHECKCOUNT(args, 1);
-    range = nn_value_asrange(args->thisval);
+    range = args->thisval.asRange();
     if(args->argv[0].isNull())
     {
         if(range->m_range == 0)
@@ -12674,7 +12704,7 @@ neon::Value nn_memberfunc_range_loop(neon::State* state, neon::Arguments* args)
     neon::Array* nestargs;
     NEON_ARGS_CHECKCOUNT(args, 1);
     NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    range = nn_value_asrange(args->thisval);
+    range = args->thisval.asRange();
     callable = args->argv[0];
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
@@ -12702,7 +12732,7 @@ neon::Value nn_memberfunc_range_expand(neon::State* state, neon::Arguments* args
     neon::Value val;
     neon::Range* range;
     neon::Array* oa;
-    range = nn_value_asrange(args->thisval);
+    range = args->thisval.asRange();
     oa = neon::Array::make(state);
     for(i = 0; i < range->m_range; i++)
     {
@@ -14209,7 +14239,7 @@ neon::Value nn_nativefn_instanceof(neon::State* state, neon::Arguments* args)
     NEON_ARGS_CHECKCOUNT(args, 2);
     NEON_ARGS_CHECKTYPE(args, 0, isInstance);
     NEON_ARGS_CHECKTYPE(args, 1, isClass);
-    return neon::Value::makeBool(nn_util_isinstanceof(args->argv[0].asInstance()->m_fromclass, nn_value_asclass(args->argv[1])));
+    return neon::Value::makeBool(nn_util_isinstanceof(args->argv[0].asInstance()->m_fromclass, args->argv[1].asClass()));
 }
 
 
@@ -14718,7 +14748,7 @@ bool nn_vm_callvaluewithobject(neon::State* state, neon::Value callable, neon::V
             case neon::Value::OBJTYPE_FUNCBOUND:
                 {
                     neon::FuncBound* bound;
-                    bound = nn_value_asfuncbound(callable);
+                    bound = callable.asFuncBound();
                     spos = (state->m_vmstate.stackidx + (-argcount - 1));
                     state->m_vmstate.stackvalues[spos] = thisval;
                     return nn_vm_callclosure(state, bound->method, thisval, argcount);
@@ -14727,7 +14757,7 @@ bool nn_vm_callvaluewithobject(neon::State* state, neon::Value callable, neon::V
             case neon::Value::OBJTYPE_CLASS:
                 {
                     neon::ClassObject* klass;
-                    klass = nn_value_asclass(callable);
+                    klass = callable.asClass();
                     spos = (state->m_vmstate.stackidx + (-argcount - 1));
                     state->m_vmstate.stackvalues[spos] = thisval;
                     if(!klass->m_constructor.isEmpty())
@@ -14765,7 +14795,7 @@ bool nn_vm_callvaluewithobject(neon::State* state, neon::Value callable, neon::V
                 break;
             case neon::Value::OBJTYPE_FUNCNATIVE:
                 {
-                    return nn_vm_callnative(state, nn_value_asfuncnative(callable), thisval, argcount);
+                    return nn_vm_callnative(state, callable.asFuncNative(), thisval, argcount);
                 }
                 break;
             default:
@@ -14785,7 +14815,7 @@ bool nn_vm_callvalue(neon::State* state, neon::Value callable, neon::Value thisv
             case neon::Value::OBJTYPE_FUNCBOUND:
                 {
                     neon::FuncBound* bound;
-                    bound = nn_value_asfuncbound(callable);
+                    bound = callable.asFuncBound();
                     actualthisval = bound->receiver;
                     if(!thisval.isEmpty())
                     {
@@ -14799,7 +14829,7 @@ bool nn_vm_callvalue(neon::State* state, neon::Value callable, neon::Value thisv
                 {
                     neon::ClassObject* klass;
                     neon::ClassInstance* instance;
-                    klass = nn_value_asclass(callable);
+                    klass = callable.asClass();
                     instance = neon::ClassInstance::make(state, klass);
                     actualthisval = neon::Value::fromObject(instance);
                     if(!thisval.isEmpty())
@@ -14825,7 +14855,7 @@ neon::FuncCommon::Type nn_value_getmethodtype(neon::Value method)
     switch(nn_value_objtype(method))
     {
         case neon::Value::OBJTYPE_FUNCNATIVE:
-            return nn_value_asfuncnative(method)->type;
+            return method.asFuncNative()->type;
         case neon::Value::OBJTYPE_FUNCCLOSURE:
             return method.asFuncClosure()->scriptfunc->type;
         default:
@@ -14963,7 +14993,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neo
     }
     else if(receiver.isClass())
     {
-        field = nn_value_asclass(receiver)->m_methods->getFieldByObjStr(name);
+        field = receiver.asClass()->m_methods->getFieldByObjStr(name);
         if(field != nullptr)
         {
             if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_STATIC)
@@ -15010,7 +15040,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
             case neon::Value::OBJTYPE_CLASS:
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
-                    klass = nn_value_asclass(receiver);
+                    klass = receiver.asClass();
                     field = klass->m_methods->getFieldByObjStr(name);
                     if(field != nullptr)
                     {
@@ -15056,12 +15086,12 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
                     field = state->m_classprimdict->getMethodField(name);
                     if(field != nullptr)
                     {
-                        return nn_vm_callnative(state, nn_value_asfuncnative(field->value), receiver, argcount);
+                        return nn_vm_callnative(state, field->value.asFuncNative(), receiver, argcount);
                     }
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
                     {
-                        field = nn_value_asdict(receiver)->m_valtable->getFieldByObjStr(name);
+                        field = receiver.asDict()->m_valtable->getFieldByObjStr(name);
                         if(field != nullptr)
                         {
                             if(field->value.isCallable())
@@ -15159,7 +15189,7 @@ static NEON_ALWAYSINLINE void nn_vmutil_definemethod(neon::State* state, neon::S
     neon::Value method;
     neon::ClassObject* klass;
     method = state->stackPeek(0);
-    klass = nn_value_asclass(state->stackPeek(1));
+    klass = state->stackPeek(1).asClass();
     klass->m_methods->set(neon::Value::fromObject(name), method);
     if(nn_value_getmethodtype(method) == neon::FuncCommon::FUNCTYPE_INITIALIZER)
     {
@@ -15173,7 +15203,7 @@ static NEON_ALWAYSINLINE void nn_vmutil_defineproperty(neon::State* state, neon:
     neon::Value property;
     neon::ClassObject* klass;
     property = state->stackPeek(0);
-    klass = nn_value_asclass(state->stackPeek(1));
+    klass = state->stackPeek(1).asClass();
     if(!isstatic)
     {
         klass->defProperty(name->data(), property);
@@ -15189,7 +15219,7 @@ bool nn_value_isfalse(neon::Value value)
 {
     if(value.isBool())
     {
-        return value.isBool() && !nn_value_asbool(value);
+        return value.isBool() && !value.asBool();
     }
     if(value.isNull() || value.isEmpty())
     {
@@ -15213,7 +15243,7 @@ bool nn_value_isfalse(neon::Value value)
     /* Non-empty dicts are true, empty dicts are false. */
     if(value.isDict())
     {
-        return nn_value_asdict(value)->m_keynames->m_count == 0;
+        return value.asDict()->m_keynames->m_count == 0;
     }
     /*
     // All classes are true
@@ -15526,7 +15556,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetstring(neon::State* state, neo
     {
         if(vindex.isRange())
         {
-            rng = nn_value_asrange(vindex);
+            rng = vindex.asRange();
             state->stackPop();
             state->stackPush(neon::Value::makeNumber(rng->m_lower));
             state->stackPush(neon::Value::makeNumber(rng->m_upper));
@@ -15573,7 +15603,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetarray(neon::State* state, neon
     {
         if(vindex.isRange())
         {
-            rng = nn_value_asrange(vindex);
+            rng = vindex.asRange();
             state->stackPop();
             state->stackPush(neon::Value::makeNumber(rng->m_lower));
             state->stackPush(neon::Value::makeNumber(rng->m_upper));
@@ -15637,7 +15667,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexget(neon::State* state)
             }
             case neon::Value::OBJTYPE_DICT:
             {
-                if(!nn_vmutil_doindexgetdict(state, nn_value_asdict(peeked), willassign))
+                if(!nn_vmutil_doindexgetdict(state, peeked.asDict(), willassign))
                 {
                     return false;
                 }
@@ -15848,7 +15878,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexset(neon::State* state)
                 break;
             case neon::Value::OBJTYPE_DICT:
                 {
-                    return nn_vmutil_dosetindexdict(state, nn_value_asdict(target), index, value);
+                    return nn_vmutil_dosetindexdict(state, target.asDict(), index, value);
                 }
                 break;
             case neon::Value::OBJTYPE_MODULE:
@@ -15933,7 +15963,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_CLASS:
             {
-                field = nn_value_asclass(peeked)->m_methods->getFieldByObjStr(name);
+                field = peeked.asClass()->m_methods->getFieldByObjStr(name);
                 if(field != nullptr)
                 {
                     if(nn_value_getmethodtype(field->value) == neon::FuncCommon::FUNCTYPE_STATIC)
@@ -15941,7 +15971,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                         if(nn_util_methodisprivate(name))
                         {
                             nn_exceptions_throwException(state, "cannot call private property '%s' of class %s", name->data(),
-                                nn_value_asclass(peeked)->m_classname->data());
+                                peeked.asClass()->m_classname->data());
                             return nullptr;
                         }
                         return field;
@@ -15949,20 +15979,20 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
                 }
                 else
                 {
-                    field = nn_value_asclass(peeked)->getStaticProperty(name);
+                    field = peeked.asClass()->getStaticProperty(name);
                     if(field != nullptr)
                     {
                         if(nn_util_methodisprivate(name))
                         {
                             nn_exceptions_throwException(state, "cannot call private property '%s' of class %s", name->data(),
-                                nn_value_asclass(peeked)->m_classname->data());
+                                peeked.asClass()->m_classname->data());
                             return nullptr;
                         }
                         return field;
                     }
                 }
                 nn_exceptions_throwException(state, "class %s does not have a static property or method named '%s'",
-                    nn_value_asclass(peeked)->m_classname->data(), name->data());
+                    peeked.asClass()->m_classname->data(), name->data());
                 return nullptr;
             }
             break;
@@ -16029,7 +16059,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
             break;
         case neon::Value::OBJTYPE_DICT:
             {
-                field = nn_value_asdict(peeked)->m_valtable->getFieldByObjStr(name);
+                field = peeked.asDict()->m_valtable->getFieldByObjStr(name);
                 if(field == nullptr)
                 {
                     field = state->m_classprimdict->getPropertyField(name);
@@ -16130,7 +16160,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
     }
     else if(peeked.isClass())
     {
-        klass = nn_value_asclass(peeked);
+        klass = peeked.asClass();
         field = klass->m_methods->getFieldByObjStr(name);
         if(field != nullptr)
         {
@@ -16199,7 +16229,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
     vpeek = state->stackPeek(0);
     if(vtarget.isClass())
     {
-        klass = nn_value_asclass(vtarget);
+        klass = vtarget.asClass();
         if(vpeek.isCallable())
         {
             //fprintf(stderr, "setting '%s' as method\n", name->data());
@@ -16225,7 +16255,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
     }
     else
     {
-        dict = nn_value_asdict(vtarget);
+        dict = vtarget.asDict();
         dict->setEntry(neon::Value::fromObject(name), vpeek);
         value = state->stackPop();
         /* removing the dictionary object */
@@ -16243,7 +16273,7 @@ static NEON_ALWAYSINLINE double nn_vmutil_valtonum(neon::Value v)
     }
     if(v.isBool())
     {
-        if(nn_value_asbool(v))
+        if(v.asBool())
         {
             return 1;
         }
@@ -16261,7 +16291,7 @@ static NEON_ALWAYSINLINE uint32_t nn_vmutil_valtouint(neon::Value v)
     }
     if(v.isBool())
     {
-        if(nn_value_asbool(v))
+        if(v.asBool())
         {
             return 1;
         }
@@ -16627,9 +16657,9 @@ static NEON_ALWAYSINLINE bool nn_vmdo_makedict(neon::State* state)
             break; \
         } \
         binvalright = state->stackPop(); \
-        dbinright = binvalright.isBool() ? (nn_value_asbool(binvalright) ? 1 : 0) : binvalright.asNumber(); \
+        dbinright = binvalright.isBool() ? (binvalright.asBool() ? 1 : 0) : binvalright.asNumber(); \
         binvalleft = state->stackPop(); \
-        dbinleft = binvalleft.isBool() ? (nn_value_asbool(binvalleft) ? 1 : 0) : binvalleft.asNumber(); \
+        dbinleft = binvalleft.isBool() ? (binvalleft.asBool() ? 1 : 0) : binvalleft.asNumber(); \
         state->stackPush(type(op(dbinleft, dbinright))); \
     } while(false)
 
@@ -17196,8 +17226,8 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                         nn_vmmac_tryraise(state, neon::Status::FAIL_RUNTIME, "cannot inherit from non-class object");
                         break;
                     }
-                    superclass = nn_value_asclass(state->stackPeek(1));
-                    subclass = nn_value_asclass(state->stackPeek(0));
+                    superclass = state->stackPeek(1).asClass();
+                    subclass = state->stackPeek(0).asClass();
                     subclass->inheritFrom(superclass);
                     /* pop the subclass */
                     state->stackPop();
@@ -17208,7 +17238,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     neon::ClassObject* klass;
                     neon::String* name;
                     name = nn_vmbits_readstring(state);
-                    klass = nn_value_asclass(state->stackPeek(0));
+                    klass = state->stackPeek(0).asClass();
                     if(!nn_vmutil_bindmethod(state, klass->m_superclass, name))
                     {
                         nn_vmmac_tryraise(state, neon::Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname->data(), name->data());
@@ -17222,7 +17252,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     neon::String* method;
                     method = nn_vmbits_readstring(state);
                     argcount = nn_vmbits_readbyte(state);
-                    klass = nn_value_asclass(state->stackPop());
+                    klass = state->stackPop().asClass();
                     if(!nn_vmutil_invokemethodfromclass(state, klass, method, argcount))
                     {
                         nn_vmmac_exitvm(state);
@@ -17235,7 +17265,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     int argcount;
                     neon::ClassObject* klass;
                     argcount = nn_vmbits_readbyte(state);
-                    klass = nn_value_asclass(state->stackPop());
+                    klass = state->stackPop().asClass();
                     if(!nn_vmutil_invokemethodfromclass(state, klass, state->m_constructorname, argcount))
                     {
                         nn_vmmac_exitvm(state);
@@ -17397,7 +17427,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                                 break;
                             }
                         }
-                        state->exceptionPushHandler(nn_value_asclass(value), addr, finaddr);
+                        state->exceptionPushHandler(value.asClass(), addr, finaddr);
                     }
                     else
                     {
@@ -17426,7 +17456,7 @@ neon::Status nn_vm_runvm(neon::State* state, int exitframe, neon::Value* rv)
                     neon::Value expr;
                     neon::Value value;
                     neon::VarSwitch* sw;
-                    sw = nn_value_asswitch(nn_vmbits_readconst(state));
+                    sw = nn_vmbits_readconst(state).asSwitch();
                     expr = state->stackPeek(0);
                     if(sw->m_jumppositions->get(expr, &value))
                     {
