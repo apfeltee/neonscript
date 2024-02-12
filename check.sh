@@ -1,5 +1,5 @@
 #!/bin/zsh
 
 cd ..
-./check.sh cpp/run
+./check.rb cpp/run
 

@@ -1,0 +1,25 @@
+==5441== Memcheck, a memory error detector
+==5441== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==5441== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==5441== Command: ./cpp/run ctest.nn
+==5441== 
+arg="ctest.nn" nargc=0
+nargv[0]=ctest.nn
+IMPORTIMPORT: name='colors'
+import: trying 'mods/colors.nn' ... found!
+loading module from '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'
+*** resizing stack: needed 64 (32), from 32 to 96, allocating 1552 ***
+oldcap=32 newsz=96
+IMPORTIMPORT: mod='0x546d290'
+colors=<module 'colors' at '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'>
+v=32
+v=0
+[32mSuccessful![00m==5441== 
+==5441== HEAP SUMMARY:
+==5441==     in use at exit: 0 bytes in 0 blocks
+==5441==   total heap usage: 2,446 allocs, 2,446 frees, 566,442 bytes allocated
+==5441== 
+==5441== All heap blocks were freed -- no leaks are possible
+==5441== 
+==5441== For lists of detected and suppressed errors, rerun with: -s
+==5441== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

@@ -151,23 +151,22 @@ size_t dyn_strutil_inpreplace(char* target, size_t tgtlen, int findme, const cha
 struct StringBuffer
 {
     public:
-        bool isborrowed = false;
 
-        char* data = nullptr;
+        char* m_data = nullptr;
 
         /* total length of this buffer */
-        size_t length = 0;
+        size_t m_length = 0;
 
         /* capacity should be >= length+1 to allow for \0 */
-        size_t capacity = 0;
+        size_t m_capacity = 0;
 
     public:
         void callBoundsCheckInsert(size_t pos, const char* file, int line, const char* func) const
         {
-            if(pos > this->length)
+            if(pos > this->m_length)
             {
                 fprintf(stderr, "%s:%i:%s() - out of bounds error [index: %zu, num_of_bits: %zu]\n",
-                        file, line, func, pos, this->length);
+                        file, line, func, pos, this->m_length);
                 errno = EDOM;
                 dyn_strbuf_exitonerror();
             }
@@ -176,10 +175,10 @@ struct StringBuffer
         /* Bounds check when reading a range (start+len < strlen is valid) */
         void callBoundsCheckReadRange(size_t start, size_t len, const char* file, int line, const char* func) const
         {
-            if(start + len > this->length)
+            if(start + len > this->m_length)
             {
                 fprintf(stderr,"%s:%i:%s() - out of bounds error [start: %zu; length: %zu; strlen: %zu; buf:%.*s%s]\n",
-                        file, line, func, start, len, this->length, (int)STRBUF_MIN(5, this->length), this->data, this->length > 5 ? "..." : "");
+                        file, line, func, start, len, this->m_length, (int)STRBUF_MIN(5, this->m_length), this->m_data, this->m_length > 5 ? "..." : "");
                 errno = EDOM;
                 dyn_strbuf_exitonerror();
             }
@@ -188,25 +187,24 @@ struct StringBuffer
         /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
         void ensureCapacity(size_t len)
         {
-            dyn_strutil_cbufcapacity(&this->data, &this->capacity, len);
+            dyn_strutil_cbufcapacity(&this->m_data, &this->m_capacity, len);
         }
 
     private:
         void resetVars()
         {
-            this->length = 0;
-            this->capacity = 0;
-            this->isborrowed = false;
-            this->data = nullptr;
+            this->m_length = 0;
+            this->m_capacity = 0;
+            this->m_data = nullptr;
         }
 
         void initEmpty(size_t len)
         {
             resetVars();
-            this->length = len;
-            this->capacity = ROUNDUP2POW(len + 1);
-            this->data = (char*)malloc(this->capacity);
-            this->data[0] = '\0';
+            this->m_length = len;
+            this->m_capacity = ROUNDUP2POW(len + 1);
+            this->m_data = (char*)malloc(this->m_capacity);
+            this->m_data[0] = '\0';
         }
 
 
@@ -229,9 +227,9 @@ struct StringBuffer
         StringBuffer(const char* str, size_t slen)
         {
             initEmpty(slen + 1);
-            memcpy(this->data, str, slen);
-            this->length = slen;
-            this->data[slen] = '\0';
+            memcpy(this->m_data, str, slen);
+            this->m_length = slen;
+            this->m_data[slen] = '\0';
         }
 
         ~StringBuffer()
@@ -239,12 +237,27 @@ struct StringBuffer
             destroy();
         }
 
+        inline size_t size() const
+        {
+            return m_length;
+        }
+
+        inline size_t length() const
+        {
+            return m_length;
+        }
+
+        inline const char* data() const
+        {
+            return m_data;
+        }
+
         bool destroy()
         {
-            if(this->data != nullptr)
+            if(this->m_data != nullptr)
             {
-                free(this->data);
-                this->data = nullptr;
+                free(this->m_data);
+                this->m_data = nullptr;
                 resetVars();
             }
             return true;
@@ -254,13 +267,13 @@ struct StringBuffer
         StringBuffer* dyn_strbuf_makeclone(const StringBuffer* sbuf)
         {
             StringBuffer* cpy;
-            cpy = dyn_strbuf_makeempty(sbuf->length + 1);
+            cpy = dyn_strbuf_makeempty(sbuf->m_length + 1);
             if(!cpy)
             {
                 return NULL;
             }
-            memcpy(cpy->data, sbuf->data, sbuf->length);
-            cpy->data[cpy->length = sbuf->length] = '\0';
+            memcpy(cpy->m_data, sbuf->m_data, sbuf->m_length);
+            cpy->m_data[cpy->m_length = sbuf->m_length] = '\0';
             return cpy;
         }
         */
@@ -272,17 +285,17 @@ struct StringBuffer
         void reset()
         {
             size_t olen;
-            if(this->data != nullptr)
+            if(this->m_data != nullptr)
             {
-                olen = this->length;
-                this->length = 0;
-                memset(this->data, 0, olen);
-                this->data[0] = '\0';
+                olen = this->m_length;
+                this->m_length = 0;
+                memset(this->m_data, 0, olen);
+                this->m_data[0] = '\0';
             }
         }
 
         /*
-        // Resize the buffer to have capacity to hold a string of length newlen
+        // Resize the buffer to have capacity to hold a string of m_length newlen
         // (+ a null terminating character).  Can also be used to downsize the buffer's
         // memory usage.  Returns 1 on success, 0 on failure.
         */
@@ -291,18 +304,18 @@ struct StringBuffer
             size_t ncap;
             char* newbuf;
             ncap = ROUNDUP2POW(newlen + 1);
-            newbuf = (char*)realloc(this->data, ncap * sizeof(char));
+            newbuf = (char*)realloc(this->m_data, ncap * sizeof(char));
             if(newbuf == NULL)
             {
                 return false;
             }
-            this->data = newbuf;
-            this->capacity = ncap;
-            if(this->length > newlen)
+            this->m_data = newbuf;
+            this->m_capacity = ncap;
+            if(this->m_length > newlen)
             {
                 /* Buffer was shrunk - re-add null byte */
-                this->length = newlen;
-                this->data[this->length] = '\0';
+                this->m_length = newlen;
+                this->m_data[this->m_length] = '\0';
             }
             return true;
         }
@@ -312,22 +325,22 @@ struct StringBuffer
         {
             size_t oldcap;
             char* oldbuf;
-            if(this->capacity <= size + 1)
+            if(this->m_capacity <= size + 1)
             {
-                oldcap = this->capacity;
-                oldbuf = this->data;
+                oldcap = this->m_capacity;
+                oldbuf = this->m_data;
                 if(!resize(size))
                 {
                     fprintf(stderr,
                             "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
                             "buffer. [requested %zu bytes; capacity: %zu bytes]\n",
-                            __FILE__, __LINE__, size, this->capacity);
+                            __FILE__, __LINE__, size, this->m_capacity);
                     dyn_strbuf_exitonerror();
                 }
                 /* ptr may have pointed to sbuf, which has now moved */
                 if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
                 {
-                    *ptr = this->data + (*ptr - oldbuf);
+                    *ptr = this->m_data + (*ptr - oldbuf);
                 }
             }
         }
@@ -338,9 +351,9 @@ struct StringBuffer
         */
         bool append(const char* str, size_t len)
         {
-            ensureCapacityUpdatePtr(this->length + len, &str);
-            memcpy(this->data + this->length, str, len);
-            this->data[this->length = this->length + len] = '\0';
+            ensureCapacityUpdatePtr(this->m_length + len, &str);
+            memcpy(this->m_data + this->m_length, str, len);
+            this->m_data[this->m_length = this->m_length + len] = '\0';
             return true;
         }
 
@@ -352,15 +365,15 @@ struct StringBuffer
 
         bool append(const StringBuffer* sb2)
         {
-            return append(sb2->data, sb2->length);
+            return append(sb2->m_data, sb2->m_length);
         }
 
         /* Add a character to the end of this StringBuffer */
         bool append(int c)
         {
-            this->ensureCapacity(this->length + 1);
-            this->data[this->length] = c;
-            this->data[++this->length] = '\0';
+            this->ensureCapacity(this->m_length + 1);
+            this->m_data[this->m_length] = c;
+            this->m_data[++this->m_length] = '\0';
             return true;
         }
 
@@ -374,15 +387,15 @@ struct StringBuffer
             va_list vacpy;
             dyn_strbuf_boundscheckinsert(this, pos);
             /* Length of remaining buffer */
-            buflen = this->capacity - pos;
-            if(buflen == 0 && !this->resize(this->capacity << 1))
+            buflen = this->m_capacity - pos;
+            if(buflen == 0 && !this->resize(this->m_capacity << 1))
             {
                 fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
                 dyn_strbuf_exitonerror();
             }
             /* Make a copy of the list of args incase we need to resize buff and try again */
             va_copy(vacpy, argptr);
-            numchars = vsnprintf(this->data + pos, buflen, fmt, argptr);
+            numchars = vsnprintf(this->m_data + pos, buflen, fmt, argptr);
             va_end(argptr);
             /*
             // numchars is the number of chars that would be written (not including '\0')
@@ -401,7 +414,7 @@ struct StringBuffer
                 // now use the argptr copy we made earlier
                 // Don't need to use vsnprintf now, vsprintf will do since we know it'll fit
                 */
-                numchars = vsprintf(this->data + pos, fmt, vacpy);
+                numchars = vsprintf(this->m_data + pos, fmt, vacpy);
                 if(numchars < 0)
                 {
                     fprintf(stderr, "Warning: appendFormatv something went wrong..\n");
@@ -411,9 +424,9 @@ struct StringBuffer
             va_end(vacpy);
             /*
             // Don't need to NUL terminate, vsprintf/vnsprintf does that for us
-            // Update length
+            // Update m_length
             */
-            this->length = pos + (size_t)numchars;
+            this->m_length = pos + (size_t)numchars;
             return numchars;
         }
 
@@ -423,7 +436,7 @@ struct StringBuffer
             int numchars;
             va_list argptr;
             va_start(argptr, fmt);
-            numchars = this->appendFormatv(this->length, fmt, argptr);
+            numchars = this->appendFormatv(this->m_length, fmt, argptr);
             va_end(argptr);
             return numchars;
         }
@@ -453,8 +466,8 @@ struct StringBuffer
             int nchars;
             char lastchar;
             dyn_strbuf_boundscheckinsert(this, pos);
-            len = this->length;
-            /* Call vsnprintf with NULL, 0 to get resulting string length without writing */
+            len = this->m_length;
+            /* Call vsnprintf with NULL, 0 to get resulting string m_length without writing */
             va_list argptr;
             va_start(argptr, fmt);
             nchars = vsnprintf(NULL, 0, fmt, argptr);
@@ -465,7 +478,7 @@ struct StringBuffer
                 dyn_strbuf_exitonerror();
             }
             /* Save overwritten char */
-            lastchar = (pos + (size_t)nchars < this->length) ? this->data[pos + (size_t)nchars] : 0;
+            lastchar = (pos + (size_t)nchars < this->m_length) ? this->m_data[pos + (size_t)nchars] : 0;
             va_start(argptr, fmt);
             nchars = this->appendFormatv(pos, fmt, argptr);
             va_end(argptr);
@@ -474,26 +487,26 @@ struct StringBuffer
                 fprintf(stderr, "Warning: appendFormatNoTerm something went wrong..\n");
                 dyn_strbuf_exitonerror();
             }
-            /* Restore length if shrunk, null terminate if extended */
-            if(this->length < len)
+            /* Restore m_length if shrunk, null terminate if extended */
+            if(this->m_length < len)
             {
-                this->length = len;
+                this->m_length = len;
             }
             else
             {
-                this->data[this->length] = '\0';
+                this->m_data[this->m_length] = '\0';
             }
             /* Re-instate overwritten character */
-            this->data[pos + (size_t)nchars] = lastchar;
+            this->m_data[pos + (size_t)nchars] = lastchar;
             return nchars;
         }
 
         bool contains(char ch)
         {
             size_t i;
-            for(i=0; i<this->length; i++)
+            for(i=0; i<this->m_length; i++)
             {
-                if(this->data[i] == ch)
+                if(this->m_data[i] == ch)
                 {
                     return true;
                 }
@@ -506,10 +519,10 @@ struct StringBuffer
             size_t i;
             size_t nlen;
             size_t needed;
-            needed = this->capacity;
-            for(i=0; i<this->length; i++)
+            needed = this->m_capacity;
+            for(i=0; i<this->m_length; i++)
             {
-                if(this->data[i] == findme)
+                if(this->m_data[i] == findme)
                 {
                     needed += sublen;
                 }
@@ -518,8 +531,8 @@ struct StringBuffer
             {
                 return false;
             }
-            nlen = dyn_strutil_inpreplace(this->data, this->length, findme, substr, sublen, this->capacity);
-            this->length = nlen;
+            nlen = dyn_strutil_inpreplace(this->m_data, this->m_length, findme, substr, sublen, this->m_capacity);
+            this->m_length = nlen;
             return true;
         }
 
@@ -901,19 +914,19 @@ bool dyn_strbuf_fullreplace(StringBuffer* sb, const char* findstr, size_t findle
 {
     size_t needed;
     StringBuffer* nbuf;
-    needed = dyn_strutil_strrepcount(sb->data, sb->length, findstr, findlen, sublen);
+    needed = dyn_strutil_strrepcount(sb->m_data, sb->m_length, findstr, findlen, sublen);
     if(needed == 0)
     {
         return false;
     }
     nbuf = new StringBuffer(needed);
-    nbuf->append(sb->data, sb->length);
-    dyn_strutil_strreplace2(nbuf->data, nbuf->length, findstr, findlen, substr, sublen);
-    nbuf->length = needed;
-    free(sb->data);
-    sb->data = nbuf->data;
-    sb->length = nbuf->length;
-    sb->capacity = nbuf->capacity;
+    nbuf->append(sb->m_data, sb->m_length);
+    dyn_strutil_strreplace2(nbuf->m_data, nbuf->m_length, findstr, findlen, substr, sublen);
+    nbuf->m_length = needed;
+    free(sb->m_data);
+    sb->m_data = nbuf->m_data;
+    sb->m_length = nbuf->m_length;
+    sb->m_capacity = nbuf->m_capacity;
     return true;
 }
 
@@ -925,17 +938,17 @@ void dyn_strbuf_set(StringBuffer* sb, const char* str)
     size_t len;
     len = strlen(str);
     sb->ensureCapacity(len);
-    memcpy(sb->data, str, len);
-    sb->data[sb->length = len] = '\0';
+    memcpy(sb->m_data, str, len);
+    sb->m_data[sb->m_length = len] = '\0';
 }
 
 
 /* Set string buffer to match existing string buffer */
 void dyn_strbuf_setbuff(StringBuffer* dest, StringBuffer* from)
 {
-    dest->ensureCapacity(from->length);
-    memmove(dest->data, from->data, from->length);
-    dest->data[dest->length = from->length] = '\0';
+    dest->ensureCapacity(from->m_length);
+    memmove(dest->m_data, from->m_data, from->m_length);
+    dest->m_data[dest->m_length = from->m_length] = '\0';
 }
 
 /*
@@ -1020,8 +1033,8 @@ bool dyn_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
     );
     numdigits = dyn_strutil_numofdigits(value);
     pos = numdigits - 1;
-    buf->ensureCapacity(buf->length + numdigits);
-    dst = buf->data + buf->length;
+    buf->ensureCapacity(buf->m_length + numdigits);
+    dst = buf->m_data + buf->m_length;
     while(value >= 100)
     {
         v = value % 100;
@@ -1040,8 +1053,8 @@ bool dyn_strbuf_appendnumulong(StringBuffer* buf, unsigned long value)
         dst[pos] = digits[value * 2 + 1];
         dst[pos - 1] = digits[value * 2];
     }
-    buf->length += numdigits;
-    buf->data[buf->length] = '\0';
+    buf->m_length += numdigits;
+    buf->m_data[buf->m_length] = '\0';
     return true;
 }
 
@@ -1067,16 +1080,16 @@ bool dyn_strbuf_appendnumint(StringBuffer* buf, int value)
 /* Append char `c` `n` times */
 bool dyn_strbuf_appendcharn(StringBuffer* buf, char c, size_t n)
 {
-    buf->ensureCapacity(buf->length + n);
-    memset(buf->data + buf->length, c, n);
-    buf->length += n;
-    buf->data[buf->length] = '\0';
+    buf->ensureCapacity(buf->m_length + n);
+    memset(buf->m_data + buf->m_length, c, n);
+    buf->m_length += n;
+    buf->m_data[buf->m_length] = '\0';
     return true;
 }
 
 void dyn_strbuf_shrink(StringBuffer* sb, size_t len)
 {
-    sb->data[sb->length = (len)] = 0;
+    sb->m_data[sb->m_length = (len)] = 0;
 }
 
 /*
@@ -1086,15 +1099,15 @@ void dyn_strbuf_shrink(StringBuffer* sb, size_t len)
 size_t dyn_strbuf_chomp(StringBuffer* sbuf)
 {
     size_t oldlen;
-    oldlen = sbuf->length;
-    sbuf->length = dyn_strutil_chomp(sbuf->data, sbuf->length);
-    return oldlen - sbuf->length;
+    oldlen = sbuf->m_length;
+    sbuf->m_length = dyn_strutil_chomp(sbuf->m_data, sbuf->m_length);
+    return oldlen - sbuf->m_length;
 }
 
 /* Reverse a string */
 void dyn_strbuf_reverse(StringBuffer* sbuf)
 {
-    dyn_strutil_reverseregion(sbuf->data, sbuf->length);
+    dyn_strutil_reverseregion(sbuf->m_data, sbuf->m_length);
 }
 
 /*
@@ -1106,7 +1119,7 @@ char* dyn_strbuf_substr(const StringBuffer* sbuf, size_t start, size_t len)
     char* newstr;
     dyn_strbuf_boundscheckreadrange(sbuf, start, len);
     newstr = (char*)malloc((len + 1) * sizeof(char));
-    strncpy(newstr, sbuf->data + start, len);
+    strncpy(newstr, sbuf->m_data + start, len);
     newstr[len] = '\0';
     return newstr;
 }
@@ -1115,8 +1128,8 @@ void dyn_strbuf_touppercase(StringBuffer* sbuf)
 {
     char* pos;
     char* end;
-    end = sbuf->data + sbuf->length;
-    for(pos = sbuf->data; pos < end; pos++)
+    end = sbuf->m_data + sbuf->m_length;
+    for(pos = sbuf->m_data; pos < end; pos++)
     {
         *pos = (char)toupper(*pos);
     }
@@ -1127,8 +1140,8 @@ void dyn_strbuf_tolowercase(StringBuffer* sbuf)
 {
     char* pos;
     char* end;
-    end = sbuf->data + sbuf->length;
-    for(pos = sbuf->data; pos < end; pos++)
+    end = sbuf->m_data + sbuf->m_length;
+    for(pos = sbuf->m_data; pos < end; pos++)
     {
         *pos = (char)tolower(*pos);
     }
@@ -1150,15 +1163,15 @@ void dyn_strbuf_copyover(StringBuffer* dst, size_t dstpos, const char* src, size
     // Check if dst buffer can handle string
     // src may have pointed to dst, which has now moved
     */
-    newlen = STRBUF_MAX(dstpos + len, dst->length);
+    newlen = STRBUF_MAX(dstpos + len, dst->m_length);
     dst->ensureCapacityUpdatePtr(newlen, &src);
     /* memmove instead of strncpy, as it can handle overlapping regions */
-    memmove(dst->data + dstpos, src, len * sizeof(char));
-    if(dstpos + len > dst->length)
+    memmove(dst->m_data + dstpos, src, len * sizeof(char));
+    if(dstpos + len > dst->m_length)
     {
         /* Extended string - add '\0' char */
-        dst->length = dstpos + len;
-        dst->data[dst->length] = '\0';
+        dst->m_length = dstpos + len;
+        dst->m_data[dst->m_length] = '\0';
     }
 }
 
@@ -1176,14 +1189,14 @@ void dyn_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t
     // src may have pointed to dst, which will be moved in realloc when
     // calling ensure capacity
     */
-    dst->ensureCapacityUpdatePtr(dst->length + len, &src);
-    insert = dst->data + dstpos;
-    /* dstpos could be at the end (== dst->length) */
-    if(dstpos < dst->length)
+    dst->ensureCapacityUpdatePtr(dst->m_length + len, &src);
+    insert = dst->m_data + dstpos;
+    /* dstpos could be at the end (== dst->m_length) */
+    if(dstpos < dst->m_length)
     {
         /* Shift some characters up */
-        memmove(insert + len, insert, (dst->length - dstpos) * sizeof(char));
-        if(src >= dst->data && src < dst->data + dst->capacity)
+        memmove(insert + len, insert, (dst->m_length - dstpos) * sizeof(char));
+        if(src >= dst->m_data && src < dst->m_data + dst->m_capacity)
         {
             /* src/dst strings point to the same string in memory */
             if(src < insert)
@@ -1205,8 +1218,8 @@ void dyn_strbuf_insert(StringBuffer* dst, size_t dstpos, const char* src, size_t
         memmove(insert, src, len * sizeof(char));
     }
     /* Update size */
-    dst->length += len;
-    dst->data[dst->length] = '\0';
+    dst->m_length += len;
+    dst->m_data[dst->m_length] = '\0';
 }
 
 /*
@@ -1235,16 +1248,16 @@ void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const
     {
         dyn_strbuf_copyover(dst, dstpos, src, srclen);
     }
-    newlen = dst->length + srclen - dstlen;
+    newlen = dst->m_length + srclen - dstlen;
     dst->ensureCapacityUpdatePtr(newlen, &src);
-    if(src >= dst->data && src < dst->data + dst->capacity)
+    if(src >= dst->m_data && src < dst->m_data + dst->m_capacity)
     {
         if(srclen < dstlen)
         {
             /* copy */
-            memmove(dst->data + dstpos, src, srclen * sizeof(char));
+            memmove(dst->m_data + dstpos, src, srclen * sizeof(char));
             /* resize (shrink) */
-            memmove(dst->data + dstpos + srclen, dst->data + dstpos + dstlen, (dst->length - dstpos - dstlen) * sizeof(char));
+            memmove(dst->m_data + dstpos + srclen, dst->m_data + dstpos + dstlen, (dst->m_length - dstpos - dstlen) * sizeof(char));
         }
         else
         {
@@ -1252,9 +1265,9 @@ void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const
             // Buffer is going to grow and src points to this buffer
             // resize (grow)
             */
-            memmove(dst->data + dstpos + srclen, dst->data + dstpos + dstlen, (dst->length - dstpos - dstlen) * sizeof(char));
-            tgt = dst->data + dstpos;
-            end = dst->data + dstpos + srclen;
+            memmove(dst->m_data + dstpos + srclen, dst->m_data + dstpos + dstlen, (dst->m_length - dstpos - dstlen) * sizeof(char));
+            tgt = dst->m_data + dstpos;
+            end = dst->m_data + dstpos + srclen;
             if(src < tgt + dstlen)
             {
                 len = STRBUF_MIN((size_t)(end - src), srclen);
@@ -1274,12 +1287,12 @@ void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const
     else
     {
         /* resize */
-        memmove(dst->data + dstpos + srclen, dst->data + dstpos + dstlen, (dst->length - dstpos - dstlen) * sizeof(char));
+        memmove(dst->m_data + dstpos + srclen, dst->m_data + dstpos + dstlen, (dst->m_length - dstpos - dstlen) * sizeof(char));
         /* copy */
-        memcpy(dst->data + dstpos, src, srclen * sizeof(char));
+        memcpy(dst->m_data + dstpos, src, srclen * sizeof(char));
     }
-    dst->length = newlen;
-    dst->data[dst->length] = '\0';
+    dst->m_length = newlen;
+    dst->m_data[dst->m_length] = '\0';
 }
 
 /*
@@ -1291,39 +1304,39 @@ void dyn_strbuf_overwrite(StringBuffer* dst, size_t dstpos, size_t dstlen, const
 void dyn_strbuf_erase(StringBuffer* sbuf, size_t pos, size_t len)
 {
     dyn_strbuf_boundscheckreadrange(sbuf, pos, len);
-    memmove(sbuf->data + pos, sbuf->data + pos + len, sbuf->length - pos - len);
-    sbuf->length -= len;
-    sbuf->data[sbuf->length] = '\0';
+    memmove(sbuf->m_data + pos, sbuf->m_data + pos + len, sbuf->m_length - pos - len);
+    sbuf->m_length -= len;
+    sbuf->m_data[sbuf->m_length] = '\0';
 }
 
 /* Trim whitespace characters from the start and end of a string */
 void dyn_strbuf_triminplace(StringBuffer* sbuf)
 {
     size_t start;
-    if(sbuf->length == 0)
+    if(sbuf->m_length == 0)
     {
         return;
     }
     /* Trim end first */
-    while(sbuf->length > 0 && isspace((int)sbuf->data[sbuf->length - 1]))
+    while(sbuf->m_length > 0 && isspace((int)sbuf->m_data[sbuf->m_length - 1]))
     {
-        sbuf->length--;
+        sbuf->m_length--;
     }
-    sbuf->data[sbuf->length] = '\0';
-    if(sbuf->length == 0)
+    sbuf->m_data[sbuf->m_length] = '\0';
+    if(sbuf->m_length == 0)
     {
         return;
     }
     start = 0;
-    while(start < sbuf->length && isspace((int)sbuf->data[start]))
+    while(start < sbuf->m_length && isspace((int)sbuf->m_data[start]))
     {
         start++;
     }
     if(start != 0)
     {
-        sbuf->length -= start;
-        memmove(sbuf->data, sbuf->data + start, sbuf->length * sizeof(char));
-        sbuf->data[sbuf->length] = '\0';
+        sbuf->m_length -= start;
+        memmove(sbuf->m_data, sbuf->m_data + start, sbuf->m_length * sizeof(char));
+        sbuf->m_data[sbuf->m_length] = '\0';
     }
 }
 
@@ -1336,15 +1349,15 @@ void dyn_strbuf_trimleftinplace(StringBuffer* sbuf, const char* list)
     size_t start;
     start = 0;
 
-    while(start < sbuf->length && (strchr(list, sbuf->data[start]) != NULL))
+    while(start < sbuf->m_length && (strchr(list, sbuf->m_data[start]) != NULL))
     {
         start++;
     }
     if(start != 0)
     {
-        sbuf->length -= start;
-        memmove(sbuf->data, sbuf->data + start, sbuf->length * sizeof(char));
-        sbuf->data[sbuf->length] = '\0';
+        sbuf->m_length -= start;
+        memmove(sbuf->m_data, sbuf->m_data + start, sbuf->m_length * sizeof(char));
+        sbuf->m_data[sbuf->m_length] = '\0';
     }
 }
 
@@ -1354,15 +1367,15 @@ void dyn_strbuf_trimleftinplace(StringBuffer* sbuf, const char* list)
 */
 void dyn_strbuf_trimrightinplace(StringBuffer* sbuf, const char* list)
 {
-    if(sbuf->length == 0)
+    if(sbuf->m_length == 0)
     {
         return;
     }
-    while(sbuf->length > 0 && strchr(list, sbuf->data[sbuf->length - 1]) != NULL)
+    while(sbuf->m_length > 0 && strchr(list, sbuf->m_data[sbuf->m_length - 1]) != NULL)
     {
-        sbuf->length--;
+        sbuf->m_length--;
     }
-    sbuf->data[sbuf->length] = '\0';
+    sbuf->m_data[sbuf->m_length] = '\0';
 }
 
 

@@ -1,0 +1,30 @@
+==5494== Memcheck, a memory error detector
+==5494== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==5494== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==5494== Command: ./cpp/run sha256.nn
+==5494== 
+arg="sha256.nn" nargc=0
+nargv[0]=sha256.nn
+*** resizing stack: needed 64 (32), from 32 to 96, allocating 1552 ***
+oldcap=32 newsz=96
+setting value at position 15 (array count: 16)
+FAIL: 'foo' => '778b3b32ce2f80e8915f0cfda0dce548f55e383e49ca24f6c497f0aae6a3b2d4' (expected: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae)
+setting value at position 15 (array count: 16)
+FAIL: 'bar' => '1d440e7b675043c8efbbc5eed09bd30ad6d0470d6998cf0e719eee8ee87990c7' (expected: fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9)
+setting value at position 15 (array count: 16)
+FAIL: 'hello world' => 'e359657c960f6ab92deddb35043daf1e7a149b35a1a8e6499701d9b4fd97527a' (expected: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9)
+setting value at position 15 (array count: 16)
+FAIL: 'javascript' => '08db8b1989dbb49afd1a6c0be47e58b3392d4ff2435fdf0faaa2be53959dc5d9' (expected: eda71746c01c3f465ffd02b6da15a6518e6fbc8f06f1ac525be193be5507069d)
+setting value at position 15 (array count: 16)
+FAIL: 'ecmascript' => '56764d341da6404feca289f1fb40dad1332a53e6ece49944a39565feffde804f' (expected: 5168c9577878ef31591e6d0ab9b5ef1ce607c74c57e10b9fd46be00ae75a5b3a)
+setting value at position 15 (array count: 16)
+FAIL: 'what's up doc?' => '6ef9f60ae6a353660c49760ca246c458d576b99a934e96cc5ad0e43d59c1b789' (expected: 6c4ff685d4f8bd026184371f9de4945b2767fe61842bb912cf5b015879d427f9)
+==5494== 
+==5494== HEAP SUMMARY:
+==5494==     in use at exit: 0 bytes in 0 blocks
+==5494==   total heap usage: 4,036 allocs, 4,036 frees, 603,028 bytes allocated
+==5494== 
+==5494== All heap blocks were freed -- no leaks are possible
+==5494== 
+==5494== For lists of detected and suppressed errors, rerun with: -s
+==5494== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

@@ -1,0 +1,23 @@
+==5433== Memcheck, a memory error detector
+==5433== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==5433== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==5433== Command: ./cpp/run ceval.nn
+==5433== 
+arg="ceval.nn" nargc=0
+nargv[0]=ceval.nn
+OK  : (0x777 & 0xFF) = 119 (119)
+OK  : (1234 & 5678) = 1026 (1026)
+OK  : (12 << 48) = 786432 (786432)
+OK  : (233 >> 2) = 58 (58)
+OK  : (12 | 48) = 60 (60)
+OK  : (55 ^ 48) = 7 (7)
+all good
+==5433== 
+==5433== HEAP SUMMARY:
+==5433==     in use at exit: 0 bytes in 0 blocks
+==5433==   total heap usage: 1,647 allocs, 1,647 frees, 319,085 bytes allocated
+==5433== 
+==5433== All heap blocks were freed -- no leaks are possible
+==5433== 
+==5433== For lists of detected and suppressed errors, rerun with: -s
+==5433== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

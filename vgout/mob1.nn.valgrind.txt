@@ -1,0 +1,42 @@
+==5476== Memcheck, a memory error detector
+==5476== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==5476== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==5476== Command: ./cpp/run mob1.nn
+==5476== 
+arg="mob1.nn" nargc=0
+nargv[0]=mob1.nn
+0 -> 1
+1 -> 0
+2 -> *** resizing stack: needed 64 (32), from 32 to 96, allocating 1552 ***
+oldcap=32 newsz=96
+-2
+3 -> 0
+4 -> 1
+5 -> *** resizing stack: needed 192 (96), from 96 to 288, allocating 4624 ***
+oldcap=96 newsz=288
+*** resizing frames ***
+0
+6 -> *** resizing stack: needed 576 (288), from 288 to 864, allocating 13840 ***
+oldcap=288 newsz=864
+*** resizing frames ***
+1
+7 -> -1
+8 -> *** resizing frames ***
+*** resizing stack: needed 1728 (864), from 864 to 2592, allocating 41488 ***
+oldcap=864 newsz=2592
+-10
+9 -> *** resizing frames ***
+-30
+10 -> *** resizing frames ***
+*** resizing stack: needed 5184 (2592), from 2592 to 7776, allocating 124432 ***
+oldcap=2592 newsz=7776
+-67
+==5476== 
+==5476== HEAP SUMMARY:
+==5476==     in use at exit: 0 bytes in 0 blocks
+==5476==   total heap usage: 12,665 allocs, 12,665 frees, 2,512,546 bytes allocated
+==5476== 
+==5476== All heap blocks were freed -- no leaks are possible
+==5476== 
+==5476== For lists of detected and suppressed errors, rerun with: -s
+==5476== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

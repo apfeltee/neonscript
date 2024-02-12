@@ -1,0 +1,26 @@
+==5470== Memcheck, a memory error detector
+==5470== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==5470== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==5470== Command: ./cpp/run map.nn
+==5470== 
+arg="map.nn" nargc=0
+nargv[0]=map.nn
+before: a=[22, 33, 44]
+args=[22, 1]
+****** callme() being called? i=22, v=23
+args=[33, 1]
+****** callme() being called? i=33, v=34
+args=[44, 1]
+****** callme() being called? i=44, v=45
+******continuing******
+after: na=[23, 34, 45], a=[22, 33, 44]
+******end of script********
+==5470== 
+==5470== HEAP SUMMARY:
+==5470==     in use at exit: 0 bytes in 0 blocks
+==5470==   total heap usage: 1,503 allocs, 1,503 frees, 311,205 bytes allocated
+==5470== 
+==5470== All heap blocks were freed -- no leaks are possible
+==5470== 
+==5470== For lists of detected and suppressed errors, rerun with: -s
+==5470== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
