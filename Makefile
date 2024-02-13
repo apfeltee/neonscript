@@ -9,13 +9,17 @@ CFLAGS =
 
 # gottagofast.mp4
 #CFLAGS += $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
-CFLAGS += -ftrapv -fsanitize=undefined
+#CFLAGS += -ftrapv -fsanitize=undefined
+
 CFLAGS += $(INCFLAGS) -O0 -g3 -ggdb3
 
 # debug flags
 CFLAGS +=
 
-LDFLAGS = -flto -ldl -lm  -lreadline -lpthread -lubsan
+LDFLAGS =
+LDFLAGS += -flto -ldl -lm  -lreadline -lpthread
+#LDFLAGS += -lubsan
+
 target = run
 
 srcfiles_all = $(wildcard *.cpp)
