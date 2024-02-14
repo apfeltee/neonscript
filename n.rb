@@ -3,7 +3,7 @@
 $sources = {}
 
 def initsources()
-  ["main.cpp", "optparse.h", "os.h", "strbuf.h"].each do |file|
+  ["main.cpp", "os.h"].each do |file|
     $sources[file] = File.read(file)
   end
 end

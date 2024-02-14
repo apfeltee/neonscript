@@ -1,0 +1,10 @@
+
+println("hello world")
+
+// this is a comment...
+
+println("hello " +
+// " and goodbye " +
+"world"
+)
+

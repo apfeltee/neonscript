@@ -1,0 +1,18 @@
+
+String.camelCase = function()
+{
+    var selfstr = this;
+    println("inside camelCase: this=", selfstr)
+    return selfstr[0].upper() + selfstr[1 .. selfstr.length];
+}
+
+
+String.funkyCase = function()
+{    
+    var selfstr = this;
+    println("inside funkyCase: this=", selfstr)
+    return "funky!"
+}
+
+println("pork".camelCase())
+println("grey".funkyCase())

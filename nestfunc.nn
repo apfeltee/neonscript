@@ -1,0 +1,15 @@
+
+function doit()
+{
+    a = "bar";
+    (function()
+    {
+        (function()
+        {
+            a += "foo";
+        })()
+        println("a = ", a)
+    })()
+}
+doit();
+

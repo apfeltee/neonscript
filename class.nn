@@ -1,0 +1,107 @@
+class Pair {
+  var field = 10
+
+  method() {
+
+  }
+}
+
+var pair = Pair()
+pair.first = 1
+pair.second = 2
+println(pair.first + pair.second)
+println(pair.field)
+
+class Scone {
+  topping(first, second) {
+    println('scone with ' + first + ' and ' + second)
+  }
+}
+
+var scone = Scone()
+scone.topping('berries', 'cream')
+
+class Person {
+  var age = 10
+  static var id = 2001
+
+  constructor(name) {
+    this.name = name
+  }
+
+  welcome(age) {
+    println('welcome ' + this.name + '. You are ' + (this.age + age) + ' years old')
+  }
+
+  static shout() {
+    println('Person is shouting')
+  }
+}
+
+var person1 = Person('Richard')
+var person2 = Person('Jane')
+
+Person.shout()
+println(Person.id)
+
+person1.welcome(5)
+person2.welcome(15)
+
+
+class A {
+  say() {
+    println("A")
+  }
+}
+
+class B < A {
+  getClosure() {
+    function closure() {
+      super.say()
+    }
+    return closure
+  }
+
+  say() {
+    println("B")
+  }
+}
+
+class C < B {
+  say() {
+    println("C")
+  }
+}
+
+C().getClosure()()
+
+
+class Animal {
+  setName() {
+    this.doecho()
+    this.doprint('hello')
+  }
+
+  doecho() {
+    println('Name is set')
+  }
+
+   doprint(g) {
+    println(g)
+  }
+}
+
+class Dog < Animal {
+
+  var myx = 50
+
+  getName() {
+    this.myx += 120
+    println(this.myx)
+    return super.doecho()
+  }
+}
+
+Animal().setName()
+Animal().doprint('hello again')
+Dog().getName()

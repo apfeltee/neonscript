@@ -1,0 +1,19 @@
+
+
+/*
+* this currently does not work as expected; "this" is not compiled to a specific instruction,
+* and thus, "this" refers to the outermost object
+*/
+var d = {
+    things: 42,
+}
+
+d["stuff"] = function()
+    {
+        
+        println("this.things=", this.things)
+    }
+
+
+d.stuff()
+

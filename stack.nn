@@ -1,0 +1,13 @@
+
+
+function stackbloat(i)
+{
+    while(i < 100)
+    {
+        return stackbloat(i + 1)
+    }
+}
+
+stackbloat(0)
+
+

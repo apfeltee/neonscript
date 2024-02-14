@@ -1,0 +1,9 @@
+
+/*
+print('\'')*/
+
+print("hello world!\n")
+var i =/* dingus */0
+i++
+print(i)
+

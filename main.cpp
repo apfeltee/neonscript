@@ -74,16 +74,13 @@ inline void * operator new (std::size_t)
     #define NEON_PLAT_ISLINUX
 #endif
 
-
-#include "strbuf.h"
-#include "optparse.h"
 #include "os.h"
 
 
 #if 0 //defined(__GNUC__)
-    #define NEON_ALWAYSINLINE __attribute__((always_inline)) inline
+    #define NEON_FORCEINLINE __attribute__((always_inline)) inline
 #else
-    #define NEON_ALWAYSINLINE inline
+    #define NEON_FORCEINLINE inline
 #endif
 
 #define NEON_CFG_FILEEXT ".nn"
@@ -287,6 +284,11 @@ namespace neon
             }
     };
 
+#define NEON_UTIL_MIN(x, y) ((x) < (y) ? (x) : (y))
+#define NEON_UTIL_MAX(x, y) ((x) > (y) ? (x) : (y))
+#define NEON_UTIL_STRBUFBOUNDSCHECKINSERT(sbuf, pos) sbuf->callBoundsCheckInsert(pos, __FILE__, __LINE__, __func__)
+#define NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(sbuf, start, len) sbuf->callBoundsCheckReadRange(start, len, __FILE__, __LINE__, __func__)
+
     namespace Util
     {
         enum
@@ -351,7 +353,7 @@ namespace neon
             return randnum;
         }
 
-        NEON_ALWAYSINLINE size_t growCapacity(size_t capacity)
+        NEON_FORCEINLINE size_t growCapacity(size_t capacity)
         {
             if(capacity < 4)
             {
@@ -407,7 +409,7 @@ namespace neon
         struct Utf8Iterator
         {
             public:
-                NEON_ALWAYSINLINE static uint32_t convertToCodepoint(const char* character, uint8_t size)
+                NEON_FORCEINLINE static uint32_t convertToCodepoint(const char* character, uint8_t size)
                 {
                     uint8_t i;
                     static uint32_t codepoint = 0;
@@ -438,7 +440,7 @@ namespace neon
                 }
 
                 /* calculate the number of bytes a UTF8 character occupies in a string. */
-                NEON_ALWAYSINLINE static uint8_t getCharSize(const char* character)
+                NEON_FORCEINLINE static uint8_t getCharSize(const char* character)
                 {
                     if(character == NULL)
                     {
@@ -492,7 +494,7 @@ namespace neon
 
             public:
                 /* allows you to set a custom length. */
-                NEON_ALWAYSINLINE Utf8Iterator(const char* ptr, uint32_t length)
+                NEON_FORCEINLINE Utf8Iterator(const char* ptr, uint32_t length)
                 {
                     m_plainstr = ptr;
                     m_codepoint = 0;
@@ -503,7 +505,7 @@ namespace neon
                 }
 
                 /* returns 1 if there is a character in the next position. If there is not, return 0. */
-                NEON_ALWAYSINLINE uint8_t next()
+                NEON_FORCEINLINE uint8_t next()
                 {
                     const char* pointer;
                     if(m_plainstr == NULL)
@@ -534,7 +536,7 @@ namespace neon
                 }
 
                 /* return current character in UFT8 - no same that .m_codepoint (not codepoint/unicode) */
-                NEON_ALWAYSINLINE const char* getCharStr()
+                NEON_FORCEINLINE const char* getCharStr()
                 {
                     uint8_t i;
                     const char* pointer;
@@ -898,6 +900,1458 @@ namespace neon
             fclose(fh);
             return b;
         }
+
+        struct StrBuffer
+        {
+            public:
+                static size_t roundUpToPowOf64(unsigned long long x)
+                {
+                    /* long long >=64 bits guaranteed in C99 */
+                    --x;
+                    x |= x >> 1;
+                    x |= x >> 2;
+                    x |= x >> 4;
+                    x |= x >> 8;
+                    x |= x >> 16;
+                    x |= x >> 32;
+                    ++x;
+                    return x;
+                }
+
+                static void checkBufCapacity(char** buf, size_t* sizeptr, size_t len)
+                {
+                    /* for nul byte */
+                    len++;
+                    if(*sizeptr < len)
+                    {
+                        *sizeptr = roundUpToPowOf64(len);
+                        /* fprintf(stderr, "sizeptr=%ld\n", *sizeptr); */
+                        if((*buf = (char*)Memory::osRealloc(*buf, *sizeptr)) == NULL)
+                        {
+                            fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
+                            abort();
+                        }
+                    }
+                }
+
+                static bool replaceCharHelper(char *dest, const char *src, size_t srclen, int findme, const char* sstr, size_t slen, size_t maxlen, size_t* dlen)
+                {
+                    /* ch(ar) at pos(ition) */
+                    int chatpos;
+                    /* printf("'%p' '%s' %c\n", dest, src, findme); */
+                    if(*src == findme)
+                    {
+                        if(slen > maxlen)
+                        {
+                            return false;
+                        }
+                        if(!replaceCharHelper(dest + slen, src + 1, srclen, findme, sstr, slen, maxlen - slen, dlen))
+                        {
+                            return false;
+                        }
+                        memcpy(dest, sstr, slen);
+                        *dlen += slen;
+                        return true;
+                    }
+                    if(maxlen == 0)
+                    {
+                        return false;
+                    }
+                    chatpos = *src;
+                    if(*src)
+                    {
+                        *dlen += 1;
+                        if(!replaceCharHelper(dest + 1, src + 1, srclen, findme, sstr, slen, maxlen - 1, dlen))
+                        {
+                            return false;
+                        }
+                    }
+                    *dest = chatpos;
+                    return true;
+                }
+
+                static size_t replaceCharInPlace(char* target, size_t tgtlen, int findme, const char* sstr, size_t slen, size_t maxlen)
+                {
+                    size_t nlen;
+                    if(findme == 0)
+                    {
+                        return 0;
+                    }
+                    if(maxlen == 0)
+                    {
+                        return 0;
+                    }
+                    if(*sstr == 0)
+                    {
+                        /* Insure target does not shrink. */
+                        return 0;
+                    }
+                    nlen = 0;
+                    replaceCharHelper(target, target, tgtlen, findme, sstr, slen, maxlen - 1, &nlen);
+                    return nlen;
+                }
+
+                /* via: https://stackoverflow.com/a/32413923 */
+                NEON_FORCEINLINE static void replaceFullInPlace(char* target, size_t tgtlen, const char *fstr, size_t flen, const char *sstr, size_t slen)
+                {
+                    const char *p;
+                    const char *tmp;
+                    char *inspoint;
+                    char buffer[1024] = {0};
+                    (void)tgtlen;
+                    inspoint = &buffer[0];
+                    tmp = target;
+                    while(true)
+                    {
+                        p = strstr(tmp, fstr);
+                        /* walked past last occurrence of fstr; copy remaining part */
+                        if (p == NULL)
+                        {
+                            strcpy(inspoint, tmp);
+                            break;
+                        }
+                        /* copy part before fstr */
+                        memcpy(inspoint, tmp, p - tmp);
+                        inspoint += p - tmp;
+                        /* copy sstr string */
+                        memcpy(inspoint, sstr, slen);
+                        inspoint += slen;
+                        /* adjust pointers, move on */
+                        tmp = p + flen;
+                    }
+                    /* write altered string back to target */
+                    strcpy(target, buffer);
+                }
+
+                NEON_FORCEINLINE static size_t strReplaceCount(const char* str, size_t slen, const char* fstr, size_t flen, size_t slen)
+                {
+                    size_t i;
+                    size_t count;
+                    size_t total;
+                    (void)total;
+                    total = slen;
+                    count = 0;
+                    for(i=0; i<slen; i++)
+                    {
+                        if(str[i] == fstr[0])
+                        {
+                            if((i + flen) < slen)
+                            {
+                                if(memcmp(&str[i], fstr, flen) == 0)
+                                {
+                                    count++;
+                                    total += slen;
+                                }
+                            }
+                        }
+                    }
+                    if(count == 0)
+                    {
+                        return 0;
+                    }
+                    return slen + 1;
+                }
+
+                /*
+                // Removes \r and \n from the ends of a string and returns the new length
+                */
+                NEON_FORCEINLINE static size_t strChomp(char* str, size_t len)
+                {
+                    while(len > 0 && (str[len - 1] == '\r' || str[len - 1] == '\n'))
+                    {
+                        len--;
+                    }
+                    str[len] = '\0';
+                    return len;
+                }
+
+                /*
+                // Reverse a string region
+                */
+                NEON_FORCEINLINE static void strReverseRegion(char* str, size_t length)
+                {
+                    char *a;
+                    char* b;
+                    char tmp;
+                    a = str;
+                    b = str + length - 1;
+                    while(a < b)
+                    {
+                        tmp = *a;
+                        *a = *b;
+                        *b = tmp;
+                        a++;
+                        b--;
+                    }
+                }
+
+                /*
+                 * Integer to string functions adapted from:
+                 *   https://www.facebook.com/notes/facebook-engineering/three-optimization-tips-for-c/10151361643253920
+                 */
+                enum
+                {
+                    DYN_STRCONST_P01 = 10,
+                    DYN_STRCONST_P02 = 100,
+                    DYN_STRCONST_P03 = 1000,
+                    DYN_STRCONST_P04 = 10000,
+                    DYN_STRCONST_P05 = 100000,
+                    DYN_STRCONST_P06 = 1000000,
+                    DYN_STRCONST_P07 = 10000000,
+                    DYN_STRCONST_P08 = 100000000,
+                    DYN_STRCONST_P09 = 1000000000,
+                    DYN_STRCONST_P10 = 10000000000,
+                    DYN_STRCONST_P11 = 100000000000,
+                    DYN_STRCONST_P12 = 1000000000000,
+                };
+
+                /**
+                 * Return number of digits required to represent `num` in base 10.
+                 * Uses binary search to find number.
+                 * Examples:
+                 *   numOfDigits(0)   = 1
+                 *   numOfDigits(1)   = 1
+                 *   numOfDigits(10)  = 2
+                 *   numOfDigits(123) = 3
+                 */
+                NEON_FORCEINLINE static size_t numOfDigits(unsigned long v)
+                {
+                    if(v < DYN_STRCONST_P01)
+                    {
+                        return 1;
+                    }
+                    if(v < DYN_STRCONST_P02)
+                    {
+                        return 2;
+                    }
+                    if(v < DYN_STRCONST_P03)
+                    {
+                        return 3;
+                    }
+                    if(v < DYN_STRCONST_P12)
+                    {
+                        if(v < DYN_STRCONST_P08)
+                        {
+                            if(v < DYN_STRCONST_P06)
+                            {
+                                if(v < DYN_STRCONST_P04)
+                                {
+                                    return 4;
+                                }
+                                return 5 + (v >= DYN_STRCONST_P05);
+                            }
+                            return 7 + (v >= DYN_STRCONST_P07);
+                        }
+                        if(v < DYN_STRCONST_P10)
+                        {
+                            return 9 + (v >= DYN_STRCONST_P09);
+                        }
+                        return 11 + (v >= DYN_STRCONST_P11);
+                    }
+                    return 12 + numOfDigits(v / DYN_STRCONST_P12);
+                }
+
+
+            public:
+                char* m_data = nullptr;
+
+                /* total length of this buffer */
+                uint64_t m_length = 0;
+
+                /* capacity should be >= length+1 to allow for \0 */
+                uint64_t m_capacity = 0;
+
+            private:
+                /* Convert integers to string to append */
+                NEON_FORCEINLINE bool appendNumULong(unsigned long value)
+                {
+                    size_t v;
+                    size_t pos;
+                    size_t numdigits;
+                    char* dst;
+                    /* Append two digits at a time */
+                    static const char* digits = (
+                        "0001020304050607080910111213141516171819"
+                        "2021222324252627282930313233343536373839"
+                        "4041424344454647484950515253545556575859"
+                        "6061626364656667686970717273747576777879"
+                        "8081828384858687888990919293949596979899"
+                    );
+                    numdigits = numOfDigits(value);
+                    pos = numdigits - 1;
+                    ensureCapacity(m_length + numdigits);
+                    dst = m_data + m_length;
+                    while(value >= 100)
+                    {
+                        v = value % 100;
+                        value /= 100;
+                        dst[pos] = digits[v * 2 + 1];
+                        dst[pos - 1] = digits[v * 2];
+                        pos -= 2;
+                    }
+                    /* Handle last 1-2 digits */
+                    if(value < 10)
+                    {
+                        dst[pos] = '0' + value;
+                    }
+                    else
+                    {
+                        dst[pos] = digits[value * 2 + 1];
+                        dst[pos - 1] = digits[value * 2];
+                    }
+                    m_length += numdigits;
+                    m_data[m_length] = '\0';
+                    return true;
+                }
+
+                NEON_FORCEINLINE bool appendNumLong(long value)
+                {
+                    if(value < 0)
+                    {
+                        append('-');
+                        value = -value;
+                    }
+                    return appendNumULong(value);
+                }
+
+                NEON_FORCEINLINE bool appendNumInt(int value)
+                {
+                    return appendNumLong(value);
+                }
+
+            public:
+                NEON_FORCEINLINE void callBoundsCheckInsert(size_t pos, const char* file, int line, const char* func) const
+                {
+                    if(pos > this->m_length)
+                    {
+                        fprintf(stderr, "%s:%i:%s() - out of bounds error [index: %zu, num_of_bits: %zu]\n",
+                                file, line, func, pos, this->m_length);
+                        errno = EDOM;
+                        abort();
+                    }
+                }
+
+                /* Bounds check when reading a range (start+len < strlen is valid) */
+                NEON_FORCEINLINE void callBoundsCheckReadRange(size_t start, size_t len, const char* file, int line, const char* func) const
+                {
+                    if(start + len > this->m_length)
+                    {
+                        fprintf(stderr,"%s:%i:%s() - out of bounds error [start: %zu; length: %zu; strlen: %zu; buf:%.*s%s]\n",
+                                file, line, func, start, len, this->m_length, (int)NEON_UTIL_MIN(5, this->m_length), this->m_data, this->m_length > 5 ? "..." : "");
+                        errno = EDOM;
+                        abort();
+                    }
+                }
+
+                /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
+                NEON_FORCEINLINE void ensureCapacity(uint64_t len)
+                {
+                    checkBufCapacity(&this->m_data, &this->m_capacity, len);
+                }
+
+            private:
+                NEON_FORCEINLINE void resetVars()
+                {
+                    this->m_length = 0;
+                    this->m_capacity = 0;
+                    this->m_data = nullptr;
+                }
+
+                NEON_FORCEINLINE void initEmpty(size_t len)
+                {
+                    resetVars();
+                    this->m_length = len;
+                    this->m_capacity = roundUpToPowOf64(len + 1);
+                    this->m_data = (char*)Memory::osMalloc(this->m_capacity);
+                    this->m_data[0] = '\0';
+                }
+
+
+            public:
+                NEON_FORCEINLINE StrBuffer()
+                {
+                    initEmpty(0);
+                }
+
+                NEON_FORCEINLINE StrBuffer(size_t len)
+                {
+                    (void)len;
+                    //initEmpty(len);
+                    initEmpty(0);
+                }
+
+                /*
+                // Copy a string or existing string buffer
+                */
+                NEON_FORCEINLINE StrBuffer(const char* str, size_t slen)
+                {
+                    initEmpty(slen + 1);
+                    memcpy(this->m_data, str, slen);
+                    this->m_length = slen;
+                    this->m_data[slen] = '\0';
+                }
+
+                NEON_FORCEINLINE ~StrBuffer()
+                {
+                    destroy();
+                }
+
+                NEON_FORCEINLINE uint64_t size() const
+                {
+                    return m_length;
+                }
+
+                NEON_FORCEINLINE uint64_t length() const
+                {
+                    return m_length;
+                }
+
+                NEON_FORCEINLINE const char* data() const
+                {
+                    return m_data;
+                }
+
+                bool destroy()
+                {
+                    if(this->m_data != nullptr)
+                    {
+                        Memory::osFree(this->m_data);
+                        this->m_data = nullptr;
+                        resetVars();
+                    }
+                    return true;
+                }
+
+                /*
+                * Clear the content of an existing StrBuffer (sets size to 0)
+                * but keeps capacity intact.
+                */
+                void reset()
+                {
+                    size_t olen;
+                    if(this->m_data != nullptr)
+                    {
+                        olen = this->m_length;
+                        this->m_length = 0;
+                        memset(this->m_data, 0, olen);
+                        this->m_data[0] = '\0';
+                    }
+                }
+
+                /*
+                // Resize the buffer to have capacity to hold a string of m_length newlen
+                // (+ a null terminating character).  Can also be used to downsize the buffer's
+                // memory usage.  Returns 1 on success, 0 on failure.
+                */
+                bool resize(size_t newlen)
+                {
+                    size_t ncap;
+                    char* newbuf;
+                    ncap = roundUpToPowOf64(newlen + 1);
+                    newbuf = (char*)Memory::osRealloc(this->m_data, ncap * sizeof(char));
+                    if(newbuf == NULL)
+                    {
+                        return false;
+                    }
+                    this->m_data = newbuf;
+                    this->m_capacity = ncap;
+                    if(this->m_length > newlen)
+                    {
+                        /* Buffer was shrunk - re-add null byte */
+                        this->m_length = newlen;
+                        this->m_data[this->m_length] = '\0';
+                    }
+                    return true;
+                }
+
+                /* Same as above, but update pointer if it pointed to resized array */
+                void ensureCapacityUpdatePtr(size_t size, const char** ptr)
+                {
+                    size_t oldcap;
+                    char* oldbuf;
+                    if(this->m_capacity <= size + 1)
+                    {
+                        oldcap = this->m_capacity;
+                        oldbuf = this->m_data;
+                        if(!resize(size))
+                        {
+                            fprintf(stderr,
+                                    "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
+                                    "buffer. [requested %zu bytes; capacity: %zu bytes]\n",
+                                    __FILE__, __LINE__, size, this->m_capacity);
+                            abort();
+                        }
+                        /* ptr may have pointed to sbuf, which has now moved */
+                        if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
+                        {
+                            *ptr = this->m_data + (*ptr - oldbuf);
+                        }
+                    }
+                }
+
+                /*
+                // Copy N characters from a character array to the end of this StrBuffer
+                // strlen(str) must be >= len
+                */
+                bool append(const char* str, size_t len)
+                {
+                    ensureCapacityUpdatePtr(this->m_length + len, &str);
+                    memcpy(this->m_data + this->m_length, str, len);
+                    this->m_data[this->m_length = this->m_length + len] = '\0';
+                    return true;
+                }
+
+                /* Copy a character array to the end of this StrBuffer */
+                bool append(const char* str)
+                {
+                    return append(str, strlen(str));
+                }
+
+                bool append(const StrBuffer* sb2)
+                {
+                    return append(sb2->m_data, sb2->m_length);
+                }
+
+                /* Add a character to the end of this StrBuffer */
+                bool append(int c)
+                {
+                    this->ensureCapacity(this->m_length + 1);
+                    this->m_data[this->m_length] = c;
+                    this->m_data[++this->m_length] = '\0';
+                    return true;
+                }
+
+                /* Append char `c` `n` times */
+                bool appendCharN(char c, size_t n)
+                {
+                    ensureCapacity(m_length + n);
+                    memset(m_data + m_length, c, n);
+                    m_length += n;
+                    m_data[m_length] = '\0';
+                    return true;
+                }
+
+                /*
+                // sprintf
+                */
+                int appendFormatv(size_t pos, const char* fmt, va_list argptr)
+                {
+                    size_t buflen;
+                    int numchars;
+                    va_list vacpy;
+                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
+                    /* Length of remaining buffer */
+                    buflen = this->m_capacity - pos;
+                    if(buflen == 0 && !this->resize(this->m_capacity << 1))
+                    {
+                        fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
+                        abort();
+                    }
+                    /* Make a copy of the list of args incase we need to resize buff and try again */
+                    va_copy(vacpy, argptr);
+                    numchars = vsnprintf(this->m_data + pos, buflen, fmt, argptr);
+                    va_end(argptr);
+                    /*
+                    // numchars is the number of chars that would be written (not including '\0')
+                    // numchars < 0 => failure
+                    */
+                    if(numchars < 0)
+                    {
+                        fprintf(stderr, "Warning: appendFormatv something went wrong..\n");
+                        abort();
+                    }
+                    /* numchars does not include the null terminating byte */
+                    if((size_t)numchars + 1 > buflen)
+                    {
+                        this->ensureCapacity(pos + (size_t)numchars);
+                        /*
+                        // now use the argptr copy we made earlier
+                        // Don't need to use vsnprintf now, vsprintf will do since we know it'll fit
+                        */
+                        numchars = vsprintf(this->m_data + pos, fmt, vacpy);
+                        if(numchars < 0)
+                        {
+                            fprintf(stderr, "Warning: appendFormatv something went wrong..\n");
+                            abort();
+                        }
+                    }
+                    va_end(vacpy);
+                    /*
+                    // Don't need to NUL terminate, vsprintf/vnsprintf does that for us
+                    // Update m_length
+                    */
+                    this->m_length = pos + (size_t)numchars;
+                    return numchars;
+                }
+
+                /* sprintf to the end of a StrBuffer (adds string terminator after sprint) */
+                int appendFormat(const char* fmt, ...)
+                {
+                    int numchars;
+                    va_list argptr;
+                    va_start(argptr, fmt);
+                    numchars = this->appendFormatv(this->m_length, fmt, argptr);
+                    va_end(argptr);
+                    return numchars;
+                }
+
+                /* Print at a given position (overwrite chars at positions >= pos) */
+                int appendFormatAt(size_t pos, const char* fmt, ...)
+                {
+                    int numchars;
+                    va_list argptr;
+                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
+                    va_start(argptr, fmt);
+                    numchars = this->appendFormatv(pos, fmt, argptr);
+                    va_end(argptr);
+                    return numchars;
+                }
+
+                /*
+                // sprintf without terminating character
+                // Does not prematurely end the string if you sprintf within the string
+                // (terminates string if sprintf to the end)
+                // Does not prematurely end the string if you sprintf within the string
+                // (vs at the end)
+                */
+                int appendFormatNoTerm(size_t pos, const char* fmt, ...)
+                {
+                    size_t len;
+                    int nchars;
+                    char lastchar;
+                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
+                    len = this->m_length;
+                    /* Call vsnprintf with NULL, 0 to get resulting string m_length without writing */
+                    va_list argptr;
+                    va_start(argptr, fmt);
+                    nchars = vsnprintf(NULL, 0, fmt, argptr);
+                    va_end(argptr);
+                    if(nchars < 0)
+                    {
+                        fprintf(stderr, "Warning: appendFormatNoTerm something went wrong..\n");
+                        abort();
+                    }
+                    /* Save overwritten char */
+                    lastchar = (pos + (size_t)nchars < this->m_length) ? this->m_data[pos + (size_t)nchars] : 0;
+                    va_start(argptr, fmt);
+                    nchars = this->appendFormatv(pos, fmt, argptr);
+                    va_end(argptr);
+                    if(nchars < 0)
+                    {
+                        fprintf(stderr, "Warning: appendFormatNoTerm something went wrong..\n");
+                        abort();
+                    }
+                    /* Restore m_length if shrunk, null terminate if extended */
+                    if(this->m_length < len)
+                    {
+                        this->m_length = len;
+                    }
+                    else
+                    {
+                        this->m_data[this->m_length] = '\0';
+                    }
+                    /* Re-instate overwritten character */
+                    this->m_data[pos + (size_t)nchars] = lastchar;
+                    return nchars;
+                }
+
+                bool contains(char ch)
+                {
+                    size_t i;
+                    for(i=0; i<this->m_length; i++)
+                    {
+                        if(this->m_data[i] == ch)
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                bool replace(int findme, const char* sstr, size_t slen)
+                {
+                    size_t i;
+                    size_t nlen;
+                    size_t needed;
+                    needed = this->m_capacity;
+                    for(i=0; i<this->m_length; i++)
+                    {
+                        if(this->m_data[i] == findme)
+                        {
+                            needed += slen;
+                        }
+                    }
+                    if(!this->resize(needed+1))
+                    {
+                        return false;
+                    }
+                    nlen = replaceCharInPlace(this->m_data, this->m_length, findme, sstr, slen, this->m_capacity);
+                    this->m_length = nlen;
+                    return true;
+                }
+
+                bool fullReplace(const char* fstr, size_t flen, const char* sstr, size_t slen)
+                {
+                    size_t needed;
+                    StrBuffer* nbuf;
+                    needed = strReplaceCount(m_data, m_length, fstr, flen, slen);
+                    if(needed == 0)
+                    {
+                        return false;
+                    }
+                    nbuf = Memory::create<StrBuffer>(needed);
+                    nbuf->append(m_data, m_length);
+                    StrBuffer::replaceFullInPlace(nbuf->m_data, nbuf->m_length, fstr, flen, sstr, slen);
+                    nbuf->m_length = needed;
+                    Memory::osFree(m_data);
+                    m_data = nbuf->m_data;
+                    m_length = nbuf->m_length;
+                    m_capacity = nbuf->m_capacity;
+                    return true;
+                }
+
+                /*
+                // Copy a string to this StrBuffer, overwriting any existing characters
+                // Note: dstpos + len can be longer the the current dst StrBuffer
+                */
+                void copyOver(size_t dstpos, const char* src, size_t len)
+                {
+                    size_t newlen;
+                    if(src == NULL || len == 0)
+                    {
+                        return;
+                    }
+                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, dstpos);
+                    /*
+                    // Check if dst buffer can handle string
+                    // src may have pointed to dst, which has now moved
+                    */
+                    newlen = NEON_UTIL_MAX(dstpos + len, m_length);
+                    ensureCapacityUpdatePtr(newlen, &src);
+                    /* memmove instead of strncpy, as it can handle overlapping regions */
+                    memmove(m_data + dstpos, src, len * sizeof(char));
+                    if(dstpos + len > m_length)
+                    {
+                        /* Extended string - add '\0' char */
+                        m_length = dstpos + len;
+                        m_data[m_length] = '\0';
+                    }
+                }
+
+                /*
+                // Overwrite dstpos..(dstpos+dstlen-1) with srclen chars from src
+                // if dstlen != srclen, content to the right of dstlen is shifted
+                // Example:
+                //   sbuf = ... "aaabbccc";
+                //   char *data = "xxx";
+                //   sbuf->replaceAt(3,2,data,strlen(data));
+                //   // sbuf is now "aaaxxxccc"
+                //   sbuf->replaceAt(3,2,"_",1);
+                //   // sbuf is now "aaa_ccc"
+                */
+                void replaceAt(size_t dstpos, size_t dstlen, const char* src, size_t srclen)
+                {
+                    size_t len;
+                    size_t newlen;
+                    char* tgt;
+                    char* end;
+                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, dstpos, dstlen);
+                    if(src == NULL)
+                    {
+                        return;
+                    }
+                    if(dstlen == srclen)
+                    {
+                        this->copyOver(dstpos, src, srclen);
+                    }
+                    newlen = m_length + srclen - dstlen;
+                    ensureCapacityUpdatePtr(newlen, &src);
+                    if(src >= m_data && src < m_data + m_capacity)
+                    {
+                        if(srclen < dstlen)
+                        {
+                            /* copy */
+                            memmove(m_data + dstpos, src, srclen * sizeof(char));
+                            /* resize (shrink) */
+                            memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
+                        }
+                        else
+                        {
+                            /*
+                            // Buffer is going to grow and src points to this buffer
+                            // resize (grow)
+                            */
+                            memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
+                            tgt = m_data + dstpos;
+                            end = m_data + dstpos + srclen;
+                            if(src < tgt + dstlen)
+                            {
+                                len = NEON_UTIL_MIN((size_t)(end - src), srclen);
+                                memmove(tgt, src, len);
+                                tgt += len;
+                                src += len;
+                                srclen -= len;
+                            }
+                            if(src >= tgt + dstlen)
+                            {
+                                /* shift to account for resizing */
+                                src += srclen - dstlen;
+                                memmove(tgt, src, srclen);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        /* resize */
+                        memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
+                        /* copy */
+                        memcpy(m_data + dstpos, src, srclen * sizeof(char));
+                    }
+                    m_length = newlen;
+                    m_data[m_length] = '\0';
+                }
+
+                void shrinkk(size_t len)
+                {
+                    m_data[m_length = (len)] = 0;
+                }
+
+                /*
+                // Remove \r and \n characters from the end of this StringBuffesr
+                // Returns the number of characters removed
+                */
+                size_t chomp()
+                {
+                    size_t oldlen;
+                    oldlen = m_length;
+                    m_length = strChomp(m_data, m_length);
+                    return oldlen - m_length;
+                }
+
+
+                /* Reverse a string */
+                void reverse()
+                {
+                    strReverseRegion(m_data, m_length);
+                }
+
+                /*
+                // Get a substring as a new null terminated char array
+                // (remember to free the returned char* after you're done with it!)
+                */
+                char* substr(size_t start, size_t len)
+                {
+                    char* newstr;
+                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, start, len);
+                    newstr = (char*)Memory::osMalloc((len + 1) * sizeof(char));
+                    strncpy(newstr, m_data + start, len);
+                    newstr[len] = '\0';
+                    return newstr;
+                }
+
+                void toUpperCase()
+                {
+                    char* pos;
+                    char* end;
+                    end = m_data + m_length;
+                    for(pos = m_data; pos < end; pos++)
+                    {
+                        *pos = (char)toupper(*pos);
+                    }
+                }
+
+                void toLowerCase()
+                {
+                    char* pos;
+                    char* end;
+                    end = m_data + m_length;
+                    for(pos = m_data; pos < end; pos++)
+                    {
+                        *pos = (char)tolower(*pos);
+                    }
+                }
+
+                /* Insert: copy to a StrBuffer, shifting any existing characters along */
+                void insertAt(StrBuffer* dst, size_t dstpos, const char* src, size_t len)
+                {
+                    char* insert;
+                    if(src == NULL || len == 0)
+                    {
+                        return;
+                    }
+                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(dst, dstpos);
+                    /*
+                    // Check if dst buffer has capacity for inserted string plus \0
+                    // src may have pointed to dst, which will be moved in realloc when
+                    // calling ensure capacity
+                    */
+                    dst->ensureCapacityUpdatePtr(dst->m_length + len, &src);
+                    insert = dst->m_data + dstpos;
+                    /* dstpos could be at the end (== dst->m_length) */
+                    if(dstpos < dst->m_length)
+                    {
+                        /* Shift some characters up */
+                        memmove(insert + len, insert, (dst->m_length - dstpos) * sizeof(char));
+                        if(src >= dst->m_data && src < dst->m_data + dst->m_capacity)
+                        {
+                            /* src/dst strings point to the same string in memory */
+                            if(src < insert)
+                            {
+                                memmove(insert, src, len * sizeof(char));
+                            }
+                            else if(src > insert)
+                            {
+                                memmove(insert, src + len, len * sizeof(char));
+                            }
+                        }
+                        else
+                        {
+                            memmove(insert, src, len * sizeof(char));
+                        }
+                    }
+                    else
+                    {
+                        memmove(insert, src, len * sizeof(char));
+                    }
+                    /* Update size */
+                    dst->m_length += len;
+                    dst->m_data[dst->m_length] = '\0';
+                }
+
+                /*
+                // Remove characters from the buffer
+                //   sb = ... "aaaBBccc";
+                //   sb->eraseAt(3, 2);
+                //   // sb is now "aaaccc"
+                */
+                void eraseAt(size_t pos, size_t len)
+                {
+                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, pos, len);
+                    memmove(m_data + pos, m_data + pos + len, m_length - pos - len);
+                    m_length -= len;
+                    m_data[m_length] = '\0';
+                }
+
+                /* Trim whitespace characters from the start and end of a string */
+                void trimInplace()
+                {
+                    size_t start;
+                    if(m_length == 0)
+                    {
+                        return;
+                    }
+                    /* Trim end first */
+                    while(m_length > 0 && isspace((int)m_data[m_length - 1]))
+                    {
+                        m_length--;
+                    }
+                    m_data[m_length] = '\0';
+                    if(m_length == 0)
+                    {
+                        return;
+                    }
+                    start = 0;
+                    while(start < m_length && isspace((int)m_data[start]))
+                    {
+                        start++;
+                    }
+                    if(start != 0)
+                    {
+                        m_length -= start;
+                        memmove(m_data, m_data + start, m_length * sizeof(char));
+                        m_data[m_length] = '\0';
+                    }
+                }
+
+                /*
+                // Trim the characters listed in `list` from the left of `sbuf`
+                // `list` is a null-terminated string of characters
+                */
+                void trimInplaceLeft(const char* list)
+                {
+                    size_t start;
+                    start = 0;
+
+                    while(start < m_length && (strchr(list, m_data[start]) != NULL))
+                    {
+                        start++;
+                    }
+                    if(start != 0)
+                    {
+                        m_length -= start;
+                        memmove(m_data, m_data + start, m_length * sizeof(char));
+                        m_data[m_length] = '\0';
+                    }
+                }
+
+                /*
+                // Trim the characters listed in `list` from the right of `sbuf`
+                // `list` is a null-terminated string of characters
+                */
+                void trimInplaceRight(const char* list)
+                {
+                    if(m_length == 0)
+                    {
+                        return;
+                    }
+                    while(m_length > 0 && strchr(list, m_data[m_length - 1]) != NULL)
+                    {
+                        m_length--;
+                    }
+                    m_data[m_length] = '\0';
+                }
+        };
+
+        struct OptionParser
+        {
+            public:
+                enum ArgType
+                {
+                    A_NONE,
+                    A_REQUIRED,
+                    A_OPTIONAL
+                };
+
+                struct LongFlags
+                {
+                    const char* longname;
+                    int shortname;
+                    ArgType argtype;
+                    const char* helptext;
+                };
+
+
+            public:
+                bool isDashDash(const char* arg)
+                {
+                    if(arg != NULL)
+                    {
+                        if((arg[0] == '-') && (arg[1] == '-') && (arg[2] == '\0'))
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                bool isShortOpt(const char* arg)
+                {
+                    if(arg != NULL)
+                    {
+                        if((arg[0] == '-') && (arg[1] != '-') && (arg[1] != '\0'))
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                static bool isLongOpt(const char* arg)
+                {
+                    if(arg != NULL)
+                    {
+                        if((arg[0] == '-') && (arg[1] == '-') && (arg[2] != '\0'))
+                        {
+                            return true;
+                        }
+                    }
+                    return false;
+                }
+
+                static int getArgType(const char* optstring, char c)
+                {
+                    int count;
+                    count = A_NONE;
+                    if(c == ':')
+                    {
+                        return -1;
+                    }
+                    for(; *optstring && c != *optstring; optstring++)
+                    {
+                    }
+                    if(!*optstring)
+                    {
+                        return -1;
+                    }
+                    if(optstring[1] == ':')
+                    {
+                        count += optstring[2] == ':' ? 2 : 1;
+                    }
+                    return count;
+                }
+
+                static bool isLongOptsEnd(const LongFlags* longopts, int i)
+                {
+                    if(!longopts[i].longname && !longopts[i].shortname)
+                    {
+                        return true;
+                    }
+                    return false;
+                }
+
+                void fromLong(const LongFlags* longopts, char* optstring)
+                {
+                    int i;
+                    int a;
+                    char* p;
+                    p = optstring;
+                    for(i = 0; !isLongOptsEnd(longopts, i); i++)
+                    {
+                        if(longopts[i].shortname && longopts[i].shortname < 127)
+                        {
+                            *p++ = longopts[i].shortname;
+                            for(a = 0; a < (int)longopts[i].argtype; a++)
+                            {
+                                *p++ = ':';
+                            }
+                        }
+                    }
+                    *p = '\0';
+                }
+
+                /* Unlike strcmp(), handles options containing "=". */
+                static bool matchLongOpts(const char* longname, const char* option)
+                {
+                    const char *a;
+                    const char* n;
+                    a = option;
+                    n = longname;
+                    if(longname == 0)
+                    {
+                        return 0;
+                    }
+                    for(; *a && *n && *a != '='; a++, n++)
+                    {
+                        if(*a != *n)
+                        {
+                            return 0;
+                        }
+                    }
+                    return *n == '\0' && (*a == '\0' || *a == '=');
+                }
+
+                /* Return the part after "=", or NULL. */
+                static char* getLongOptsArg(char* option)
+                {
+                    for(; *option && *option != '='; option++)
+                    {
+                    }
+                    if(*option == '=')
+                    {
+                        return option + 1;
+                    }
+                    return NULL;
+                }
+
+            public:
+                char** argv;
+                int argc;
+                int dopermute;
+                int optind;
+                int optopt;
+                char* optarg;
+                char errmsg[64];
+                int subopt;
+
+            public:
+                /**
+                 * Initializes the parser state.
+                 */
+                OptionParser(int ac, char** av)
+                {
+                    this->argv = av;
+                    this->argc = ac;
+                    this->dopermute = 1;
+                    this->optind = argv[0] != 0;
+                    this->subopt = 0;
+                    this->optarg = 0;
+                    this->errmsg[0] = '\0';
+                }
+
+                int makeError(const char* msg, const char* data)
+                {
+                    unsigned p;
+                    const char* sep;
+                    p = 0;
+                    sep = " -- '";
+                    while(*msg)
+                    {
+                        this->errmsg[p++] = *msg++;
+                    }
+                    while(*sep)
+                    {
+                        this->errmsg[p++] = *sep++;
+                    }
+                    while(p < sizeof(this->errmsg) - 2 && *data)
+                    {
+                        this->errmsg[p++] = *data++;
+                    }
+                    this->errmsg[p++] = '\'';
+                    this->errmsg[p++] = '\0';
+                    return '?';
+                }
+
+                void permute(int index)
+                {
+                    int i;
+                    char* nonoption;
+                    nonoption = this->argv[index];
+                    for(i = index; i < this->optind - 1; i++)
+                    {
+                        this->argv[i] = this->argv[i + 1];
+                    }
+                    this->argv[this->optind - 1] = nonoption;
+                }
+
+                /**
+                 * Handles GNU-style long options in addition to getopt() options.
+                 * This works a lot like GNU's getopt_long(). The last option in
+                 * longopts must be all zeros, marking the end of the array. The
+                 * longindex argument may be NULL.
+                 */
+                int nextLong(const LongFlags* longopts, int* longindex)
+                {
+                    int i;
+                    int r;
+                    int index;
+                    char* arg;
+                    char* option;
+                    const char* name;
+                    option = this->argv[this->optind];
+                    if(option == 0)
+                    {
+                        return -1;
+                    }
+                    else if(isDashDash(option))
+                    {
+                        this->optind++; /* consume "--" */
+                        return -1;
+                    }
+                    else if(isShortOpt(option))
+                    {
+                        return this->longFallback(longopts, longindex);
+                    }
+                    else if(!isLongOpt(option))
+                    {
+                        if(this->dopermute)
+                        {
+                            index = this->optind++;
+                            r = this->nextLong(longopts, longindex);
+                            this->permute(index);
+                            this->optind--;
+                            return r;
+                        }
+                        else
+                        {
+                            return -1;
+                        }
+                    }
+                    /* Parse as long option. */
+                    this->errmsg[0] = '\0';
+                    this->optopt = 0;
+                    this->optarg = 0;
+                    option += 2; /* skip "--" */
+                    this->optind++;
+                    for(i = 0; !isLongOptsEnd(longopts, i); i++)
+                    {
+                        name = longopts[i].longname;
+                        if(matchLongOpts(name, option))
+                        {
+                            if(longindex)
+                            {
+                                *longindex = i;
+                            }
+                            this->optopt = longopts[i].shortname;
+                            arg = getLongOptsArg(option);
+                            if(longopts[i].argtype == A_NONE && arg != 0)
+                            {
+                                return this->makeError("option takes no arguments", name);
+                            }
+                            if(arg != 0)
+                            {
+                                this->optarg = arg;
+                            }
+                            else if(longopts[i].argtype == A_REQUIRED)
+                            {
+                                this->optarg = this->argv[this->optind];
+                                if(this->optarg == 0)
+                                {
+                                    return this->makeError("option requires an argument", name);
+                                }
+                                else
+                                {
+                                    this->optind++;
+                                }
+                            }
+                            return this->optopt;
+                        }
+                    }
+                    return this->makeError("invalid option", option);
+                }
+
+                /**
+                 * Read the next option in the argv array.
+                 * @param optstring a getopt()-formatted option string.
+                 * @return the next option character, -1 for done, or '?' for error
+                 *
+                 * Just like getopt(), a character followed by no colons means no
+                 * argument. One colon means the option has a required argument. Two
+                 * colons means the option takes an optional argument.
+                 */
+                int nextShort(const char* optstring)
+                {
+                    int r;
+                    int type;
+                    int index;
+                    char* next;
+                    char* option;
+                    char str[2] = { 0, 0 };
+                    option = this->argv[this->optind];
+                    this->errmsg[0] = '\0';
+                    this->optopt = 0;
+                    this->optarg = 0;
+                    if(option == 0)
+                    {
+                        return -1;
+                    }
+                    else if(isDashDash(option))
+                    {
+                        /* consume "--" */
+                        this->optind++;
+                        return -1;
+                    }
+                    else if(!isShortOpt(option))
+                    {
+                        if(this->dopermute)
+                        {
+                            index = this->optind++;
+                            r = this->nextShort(optstring);
+                            this->permute(index);
+                            this->optind--;
+                            return r;
+                        }
+                        else
+                        {
+                            return -1;
+                        }
+                    }
+                    option += this->subopt + 1;
+                    this->optopt = option[0];
+                    type = getArgType(optstring, option[0]);
+                    next = this->argv[this->optind + 1];
+                    switch(type)
+                    {
+                        case -1:
+                            {
+                                str[1] = 0;
+                                str[0] = option[0];
+                                this->optind++;
+                                return this->makeError("invalid option", str);
+                            }
+                            break;
+                        case A_NONE:
+                            {
+                                if(option[1])
+                                {
+                                    this->subopt++;
+                                }
+                                else
+                                {
+                                    this->subopt = 0;
+                                    this->optind++;
+                                }
+                                return option[0];
+                            }
+                            break;
+                        case A_REQUIRED:
+                            {
+                                this->subopt = 0;
+                                this->optind++;
+                                if(option[1])
+                                {
+                                    this->optarg = option + 1;
+                                }
+                                else if(next != 0)
+                                {
+                                    this->optarg = next;
+                                    this->optind++;
+                                }
+                                else
+                                {
+                                    str[1] = 0;
+                                    str[0] = option[0];
+                                    this->optarg = 0;
+                                    return this->makeError("option requires an argument", str);
+                                }
+                                return option[0];
+                            }
+                            break;
+                        case A_OPTIONAL:
+                            {
+                                this->subopt = 0;
+                                this->optind++;
+                                if(option[1])
+                                {
+                                    this->optarg = option + 1;
+                                }
+                                else
+                                {
+                                    this->optarg = 0;
+                                }
+                                return option[0];
+                            }
+                            break;
+                    }
+                    return 0;
+                }
+
+                int longFallback(const LongFlags* longopts, int* longindex)
+                {
+                    int i;
+                    int result;
+                    /* 96 ASCII printable characters */
+                    char optstring[96 * 3 + 1];
+                    fromLong(longopts, optstring);
+                    result = this->nextShort(optstring);
+                    if(longindex != 0)
+                    {
+                        *longindex = -1;
+                        if(result != -1)
+                        {
+                            for(i = 0; !isLongOptsEnd(longopts, i); i++)
+                            {
+                                if(longopts[i].shortname == this->optopt)
+                                {
+                                    *longindex = i;
+                                }
+                            }
+                        }
+                    }
+                    return result;
+                }
+
+                /**
+                 * Used for stepping over non-option arguments.
+                 * @return the next non-option argument, or NULL for no more arguments
+                 *
+                 * Argument parsing can continue with optparse() after using this
+                 * function. That would be used to parse the options for the
+                 * subcommand returned by nextPositional(). This function allows you to
+                 * ignore the value of optind.
+                 */
+                char* nextPositional()
+                {
+                    char* option;
+                    option = this->argv[this->optind];
+                    this->subopt = 0;
+                    if(option != 0)
+                    {
+                        this->optind++;
+                    }
+                    return option;
+                }
+        };
+
     }
 
     struct Color
@@ -929,7 +2383,7 @@ namespace neon
                 #endif
             }
 
-            NEON_ALWAYSINLINE Code codeFromChar(char c)
+            NEON_FORCEINLINE Code codeFromChar(char c)
             {
                 switch(c)
                 {
@@ -951,7 +2405,7 @@ namespace neon
                 return COLOR_RESET;
             }
 
-            NEON_ALWAYSINLINE const char* color(Code tc)
+            NEON_FORCEINLINE const char* color(Code tc)
             {
                 #if !defined(NEON_CFG_FORCEDISABLECOLOR)
 
@@ -981,7 +2435,7 @@ namespace neon
                 return "";
             }
 
-            NEON_ALWAYSINLINE const char* color(char tc)
+            NEON_FORCEINLINE const char* color(char tc)
             {
                 return color(codeFromChar(tc));
             }
@@ -1001,8 +2455,8 @@ int nn_fileobject_close(neon::File *file);
 bool nn_fileobject_open(neon::File *file);
 bool nn_vm_callvaluewithobject(neon::State *state, neon::Value callable, neon::Value thisval, int argcount);
 
-static NEON_ALWAYSINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...);
-static NEON_ALWAYSINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...);
+static NEON_FORCEINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...);
+static NEON_FORCEINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...);
 
 void nn_astparser_consumestmtend(neon::Parser *prs);
 int nn_astparser_getcodeargscount(const neon::Instruction *bytecode, const neon::Value *constants, int ip);
@@ -1013,7 +2467,6 @@ int nn_astparser_parsevariable(neon::Parser *prs, const char *message);
 void nn_astparser_markinitialized(neon::Parser *prs);
 void nn_astparser_definevariable(neon::Parser *prs, int global);
 neon::Token nn_astparser_synthtoken(const char *name);
-neon::FuncScript *nn_astparser_endcompiler(neon::Parser *prs);
 void nn_astparser_scopebegin(neon::Parser *prs);
 void nn_astparser_scopeend(neon::Parser *prs);
 int nn_astparser_discardlocals(neon::Parser *prs, int depth);
@@ -1034,12 +2487,7 @@ bool nn_astparser_rulevarglobal(neon::Parser *prs, bool canassign);
 bool nn_astparser_rulethis(neon::Parser *prs, bool canassign);
 bool nn_astparser_rulesuper(neon::Parser *prs, bool canassign);
 bool nn_astparser_rulegrouping(neon::Parser *prs, bool canassign);
-neon::Value nn_astparser_compilenumber(neon::Parser *prs);
 bool nn_astparser_rulenumber(neon::Parser *prs, bool canassign);
-int nn_astparser_readhexdigit(char c);
-int nn_astparser_readhexescape(neon::Parser *prs, const char *str, int index, int count);
-int nn_astparser_readunicodeescape(neon::Parser *prs, char *string, const char *realstring, int numberbytes, int realindex, int index);
-char *nn_astparser_compilestring(neon::Parser *prs, int *length);
 bool nn_astparser_rulestring(neon::Parser *prs, bool canassign);
 bool nn_astparser_ruleinterpolstring(neon::Parser *prs, bool canassign);
 bool nn_astparser_ruleunary(neon::Parser *prs, bool canassign);
@@ -1076,8 +2524,6 @@ void nn_astparser_parsewhilestmt(neon::Parser *prs);
 void nn_astparser_parsedo_whilestmt(neon::Parser *prs);
 void nn_astparser_parsecontinuestmt(neon::Parser *prs);
 void nn_astparser_parsebreakstmt(neon::Parser *prs);
-void nn_astparser_synchronize(neon::Parser *prs);
-
 
 /*
 * quite a number of types ***MUST NOT EVER BE DERIVED FROM***, to ensure
@@ -1297,26 +2743,26 @@ namespace neon
             };
 
         public:
-            static NEON_ALWAYSINLINE Value makeValue(ValType type)
+            static NEON_FORCEINLINE Value makeValue(ValType type)
             {
                 Value v;
                 v.m_valtype = type;
                 return v;
             }
 
-            static NEON_ALWAYSINLINE Value makeEmpty()
+            static NEON_FORCEINLINE Value makeEmpty()
             {
                 return makeValue(VALTYPE_EMPTY);
             }
 
-            static NEON_ALWAYSINLINE Value makeNull()
+            static NEON_FORCEINLINE Value makeNull()
             {
                 Value v;
                 v = makeValue(VALTYPE_NULL);
                 return v;
             }
 
-            static NEON_ALWAYSINLINE Value makeBool(bool b)
+            static NEON_FORCEINLINE Value makeBool(bool b)
             {
                 Value v;
                 v = makeValue(VALTYPE_BOOL);
@@ -1324,7 +2770,7 @@ namespace neon
                 return v;
             }
 
-            static NEON_ALWAYSINLINE Value makeNumber(double d)
+            static NEON_FORCEINLINE Value makeNumber(double d)
             {
                 Value v;
                 v = makeValue(VALTYPE_NUMBER);
@@ -1332,7 +2778,7 @@ namespace neon
                 return v;
             }
 
-            static NEON_ALWAYSINLINE Value makeInt(int i)
+            static NEON_FORCEINLINE Value makeInt(int i)
             {
                 Value v;
                 v = makeValue(VALTYPE_NUMBER);
@@ -1341,7 +2787,7 @@ namespace neon
             }
 
             template<typename SubObjT>
-            static NEON_ALWAYSINLINE Value fromObject(SubObjT* obj)
+            static NEON_FORCEINLINE Value fromObject(SubObjT* obj)
             {
                 Value v;
                 v = makeValue(VALTYPE_OBJECT);
@@ -1351,7 +2797,7 @@ namespace neon
 
             static bool getObjNumberVal(Value val, size_t* dest);
 
-            static NEON_ALWAYSINLINE bool getNumberVal(Value val, size_t* dest)
+            static NEON_FORCEINLINE bool getNumberVal(Value val, size_t* dest)
             {
                 if(val.isNumber())
                 {
@@ -1366,7 +2812,7 @@ namespace neon
                 return getObjNumberVal(val, dest);
             }
 
-            static NEON_ALWAYSINLINE bool isLessOrEqual(State* state, Value a, Value b)
+            static NEON_FORCEINLINE bool isLessOrEqual(State* state, Value a, Value b)
             {
                 double ia;
                 double ib;
@@ -1419,7 +2865,7 @@ namespace neon
              * returns the greater of the two values.
              * this function encapsulates the object hierarchy
              */
-            NEON_ALWAYSINLINE static Value findGreater(Value a, Value b)
+            NEON_FORCEINLINE static Value findGreater(Value a, Value b)
             {
                 if(a.isNull())
                 {
@@ -1470,7 +2916,7 @@ namespace neon
 
             static uint32_t getObjHash(Object* object);
 
-            NEON_ALWAYSINLINE static uint32_t getHash(Value value)
+            NEON_FORCEINLINE static uint32_t getHash(Value value)
             {
                 switch(value.type())
                 {
@@ -1491,7 +2937,7 @@ namespace neon
 
             static const char* objClassTypename(Object* obj);
 
-            NEON_ALWAYSINLINE static const char* objTypename(ObjType ot, Object* obj)
+            NEON_FORCEINLINE static const char* objTypename(ObjType ot, Object* obj)
             {
                 switch(ot)
                 {
@@ -1529,7 +2975,7 @@ namespace neon
                 return "unknown";
             }
 
-            NEON_ALWAYSINLINE static const char* Typename(Value value)
+            NEON_FORCEINLINE static const char* Typename(Value value)
             {
                 if(value.isEmpty())
                 {
@@ -1567,7 +3013,7 @@ namespace neon
         public:
             bool compareObject(State* state, Value b);
 
-            NEON_ALWAYSINLINE bool compareActual(State* state, Value b)
+            NEON_FORCEINLINE bool compareActual(State* state, Value b)
             {
                 if(type() != b.type())
                 {
@@ -1607,7 +3053,7 @@ namespace neon
             }
 
 
-            NEON_ALWAYSINLINE bool compare(State* state, Value b)
+            NEON_FORCEINLINE bool compare(State* state, Value b)
             {
                 bool r;
                 r = compareActual(state, b);
@@ -1616,12 +3062,12 @@ namespace neon
 
             Value::ObjType objectType();
 
-            NEON_ALWAYSINLINE ValType type() const
+            NEON_FORCEINLINE ValType type() const
             {
                 return m_valtype;
             }
 
-            NEON_ALWAYSINLINE bool isPrimitive() const
+            NEON_FORCEINLINE bool isPrimitive() const
             {
                 return (
                     isEmpty() ||
@@ -1632,49 +3078,49 @@ namespace neon
             }
 
 
-            NEON_ALWAYSINLINE bool isObject() const
+            NEON_FORCEINLINE bool isObject() const
             {
                 return (m_valtype == VALTYPE_OBJECT);
             }
 
-            NEON_ALWAYSINLINE bool isNull() const
+            NEON_FORCEINLINE bool isNull() const
             {
                 return (m_valtype == VALTYPE_NULL);
             }
 
-            NEON_ALWAYSINLINE bool isEmpty() const
+            NEON_FORCEINLINE bool isEmpty() const
             {
                 return (m_valtype == VALTYPE_EMPTY);
             }
 
-            NEON_ALWAYSINLINE bool isObjType(ObjType t) const;
+            NEON_FORCEINLINE bool isObjType(ObjType t) const;
 
-            NEON_ALWAYSINLINE bool isFuncNative() const
+            NEON_FORCEINLINE bool isFuncNative() const
             {
                 return isObjType(OBJTYPE_FUNCNATIVE);
             }
 
-            NEON_ALWAYSINLINE bool isFuncScript() const
+            NEON_FORCEINLINE bool isFuncScript() const
             {
                 return isObjType(OBJTYPE_FUNCSCRIPT);
             }
 
-            NEON_ALWAYSINLINE bool isFuncClosure() const
+            NEON_FORCEINLINE bool isFuncClosure() const
             {
                 return isObjType(OBJTYPE_FUNCCLOSURE);
             }
 
-            NEON_ALWAYSINLINE bool isFuncBound() const
+            NEON_FORCEINLINE bool isFuncBound() const
             {
                 return isObjType(OBJTYPE_FUNCBOUND);
             }
 
-            NEON_ALWAYSINLINE bool isClass() const
+            NEON_FORCEINLINE bool isClass() const
             {
                 return isObjType(OBJTYPE_CLASS);
             }
 
-            NEON_ALWAYSINLINE bool isCallable() const
+            NEON_FORCEINLINE bool isCallable() const
             {
                 return (
                     isClass() ||
@@ -1685,137 +3131,137 @@ namespace neon
                 );
             }
 
-            NEON_ALWAYSINLINE bool isString() const
+            NEON_FORCEINLINE bool isString() const
             {
                 return isObjType(OBJTYPE_STRING);
             }
 
-            NEON_ALWAYSINLINE bool isBool() const
+            NEON_FORCEINLINE bool isBool() const
             {
                 return (type() == Value::VALTYPE_BOOL);
             }
 
-            NEON_ALWAYSINLINE bool isNumber() const
+            NEON_FORCEINLINE bool isNumber() const
             {
                 return (type() == Value::VALTYPE_NUMBER);
             }
 
-            NEON_ALWAYSINLINE bool isInstance() const
+            NEON_FORCEINLINE bool isInstance() const
             {
                 return isObjType(OBJTYPE_INSTANCE);
             }
 
-            NEON_ALWAYSINLINE bool isArray() const
+            NEON_FORCEINLINE bool isArray() const
             {
                 return isObjType(OBJTYPE_ARRAY);
             }
 
-            NEON_ALWAYSINLINE bool isDict() const
+            NEON_FORCEINLINE bool isDict() const
             {
                 return isObjType(OBJTYPE_DICT);
             }
 
-            NEON_ALWAYSINLINE bool isFile() const
+            NEON_FORCEINLINE bool isFile() const
             {
                 return isObjType(OBJTYPE_FILE);
             }
 
-            NEON_ALWAYSINLINE bool isRange() const
+            NEON_FORCEINLINE bool isRange() const
             {
                 return isObjType(OBJTYPE_RANGE);
             }
 
-            NEON_ALWAYSINLINE bool isModule() const
+            NEON_FORCEINLINE bool isModule() const
             {
                 return isObjType(OBJTYPE_MODULE);
             }
 
-            NEON_ALWAYSINLINE Object* asObject()
+            NEON_FORCEINLINE Object* asObject()
             {
                 return (m_valunion.obj);
             }
 
-            NEON_ALWAYSINLINE const Object* asObject() const
+            NEON_FORCEINLINE const Object* asObject() const
             {
                 return (m_valunion.obj);
             }
 
-            NEON_ALWAYSINLINE double asNumber() const
+            NEON_FORCEINLINE double asNumber() const
             {
                 return (m_valunion.number);
             }
 
-            NEON_ALWAYSINLINE String* asString() const
+            NEON_FORCEINLINE String* asString() const
             {
                 return (String*)asObject();
             }
 
-            NEON_ALWAYSINLINE Array* asArray() const
+            NEON_FORCEINLINE Array* asArray() const
             {
                 return (Array*)asObject();
             }
 
-            NEON_ALWAYSINLINE ClassInstance* asInstance() const
+            NEON_FORCEINLINE ClassInstance* asInstance() const
             {
                 return (ClassInstance*)asObject();
             }
 
-            NEON_ALWAYSINLINE Module* asModule() const
+            NEON_FORCEINLINE Module* asModule() const
             {
                 return (Module*)asObject();
             }
 
-            NEON_ALWAYSINLINE FuncScript* asFuncScript() const
+            NEON_FORCEINLINE FuncScript* asFuncScript() const
             {
                 return (FuncScript*)asObject();
             }
 
-            NEON_ALWAYSINLINE FuncClosure* asFuncClosure() const
+            NEON_FORCEINLINE FuncClosure* asFuncClosure() const
             {
                 return (FuncClosure*)asObject();
             }
 
-            NEON_ALWAYSINLINE bool asBool() const
+            NEON_FORCEINLINE bool asBool() const
             {
                 return (m_valunion.boolean);
             }
 
-            NEON_ALWAYSINLINE FuncNative* asFuncNative() const
+            NEON_FORCEINLINE FuncNative* asFuncNative() const
             {
                 return (FuncNative*)asObject();
             }
 
-            NEON_ALWAYSINLINE ClassObject* asClass() const
+            NEON_FORCEINLINE ClassObject* asClass() const
             {
                 return (ClassObject*)asObject();
             }
 
-            NEON_ALWAYSINLINE FuncBound* asFuncBound() const
+            NEON_FORCEINLINE FuncBound* asFuncBound() const
             {
                 return (FuncBound*)asObject();
             }
 
-            NEON_ALWAYSINLINE VarSwitch* asSwitch() const
+            NEON_FORCEINLINE VarSwitch* asSwitch() const
             {
                 return (VarSwitch*)asObject();
             }
 
-            NEON_ALWAYSINLINE Userdata* asUserdata() const
+            NEON_FORCEINLINE Userdata* asUserdata() const
             {
                 return (Userdata*)asObject();
             }
 
-            NEON_ALWAYSINLINE Dictionary* asDict() const
+            NEON_FORCEINLINE Dictionary* asDict() const
             {
                 return (Dictionary*)asObject();
             }
 
-            NEON_ALWAYSINLINE File* asFile() const
+            NEON_FORCEINLINE File* asFile() const
             {
                 return (File*)asObject();
             }
 
-            NEON_ALWAYSINLINE Range* asRange() const
+            NEON_FORCEINLINE Range* asRange() const
             {
                 return (Range*)asObject();
             }
@@ -1832,7 +3278,7 @@ namespace neon
             void* userptr;
 
         public:
-            NEON_ALWAYSINLINE Arguments(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr): m_pvm(state)
+            NEON_FORCEINLINE Arguments(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr): m_pvm(state)
             {
                 this->funcname = n;
                 this->thisval = tv;
@@ -2206,10 +3652,11 @@ namespace neon
             template<typename... ArgsT>
             void warn(const char* fmt, ArgsT&&... args)
             {
+                static auto fn_fprintf = fprintf;
                 if(m_conf.enablewarnings)
                 {
                     fprintf(stderr, "WARNING: ");
-                    fprintf(stderr, fmt, args...);
+                    fn_fprintf(stderr, fmt, args...);
                     fprintf(stderr, "\n");
                 }
             }
@@ -2263,7 +3710,7 @@ namespace neon
 
             ClassObject* makeNamedClass(const char* name, ClassObject* parent);
 
-            NEON_ALWAYSINLINE uint8_t readByte()
+            NEON_FORCEINLINE uint8_t readByte()
             {
                 uint8_t r;
                 r = m_vmstate.currentframe->inscode->code;
@@ -2271,7 +3718,7 @@ namespace neon
                 return r;
             }
 
-            NEON_ALWAYSINLINE Instruction readInstruction()
+            NEON_FORCEINLINE Instruction readInstruction()
             {
                 Instruction r;
                 r = *m_vmstate.currentframe->inscode;
@@ -2279,7 +3726,7 @@ namespace neon
                 return r;
             }
 
-            NEON_ALWAYSINLINE uint16_t readShort()
+            NEON_FORCEINLINE uint16_t readShort()
             {
                 uint8_t b;
                 uint8_t a;
@@ -2289,22 +3736,22 @@ namespace neon
                 return (uint16_t)((a << 8) | b);
             }
 
-            NEON_ALWAYSINLINE Value readConst();
+            NEON_FORCEINLINE Value readConst();
 
-            NEON_ALWAYSINLINE String* readString()
+            NEON_FORCEINLINE String* readString()
             {
                 return readConst().asString();
             }
 
 
-            NEON_ALWAYSINLINE void stackPush(Value value)
+            NEON_FORCEINLINE void stackPush(Value value)
             {
                 checkMaybeResize();
                 m_vmstate.stackvalues[m_vmstate.stackidx] = value;
                 m_vmstate.stackidx++;
             }
 
-            NEON_ALWAYSINLINE Value stackPop()
+            NEON_FORCEINLINE Value stackPop()
             {
                 Value v;
                 m_vmstate.stackidx--;
@@ -2312,7 +3759,7 @@ namespace neon
                 return v;
             }
 
-            NEON_ALWAYSINLINE Value stackPop(int n)
+            NEON_FORCEINLINE Value stackPop(int n)
             {
                 Value v;
                 m_vmstate.stackidx -= n;
@@ -2320,7 +3767,7 @@ namespace neon
                 return v;
             }
 
-            NEON_ALWAYSINLINE Value stackPeek(int distance)
+            NEON_FORCEINLINE Value stackPeek(int distance)
             {
                 Value v;
                 v = m_vmstate.stackvalues[m_vmstate.stackidx + (-1 - distance)];
@@ -2494,27 +3941,27 @@ namespace neon
                 destroy();
             }
 
-            NEON_ALWAYSINLINE uint64_t size() const
+            NEON_FORCEINLINE uint64_t size() const
             {
                 return m_count;
             }
 
-            NEON_ALWAYSINLINE uint64_t length() const
+            NEON_FORCEINLINE uint64_t length() const
             {
                 return m_count;
             }
 
-            NEON_ALWAYSINLINE uint64_t count() const
+            NEON_FORCEINLINE uint64_t count() const
             {
                 return m_count;
             }
 
-            NEON_ALWAYSINLINE ValType& at(uint64_t i)
+            NEON_FORCEINLINE ValType& at(uint64_t i)
             {
                 return m_values[i];
             }
 
-            NEON_ALWAYSINLINE ValType& operator[](uint64_t i)
+            NEON_FORCEINLINE ValType& operator[](uint64_t i)
             {
                 return at(i);
             }
@@ -2602,14 +4049,14 @@ namespace neon
             {
                 public:
                     template<typename ArrT>
-                    NEON_ALWAYSINLINE static void swapGeneric(ArrT* varr, size_t idxleft, size_t idxright)
+                    NEON_FORCEINLINE static void swapGeneric(ArrT* varr, size_t idxleft, size_t idxright)
                     {
                         auto temp = varr[idxleft];
                         varr[idxleft] = varr[idxright];
                         varr[idxright] = temp;
                     }
 
-                    NEON_ALWAYSINLINE static void swap(ValArray* varr, size_t idxleft, size_t idxright)
+                    NEON_FORCEINLINE static void swap(ValArray* varr, size_t idxleft, size_t idxright)
                     {
                         /*
                         Value temp;
@@ -2820,17 +4267,17 @@ namespace neon
                 BasicArray::freeArray(m_pvm, m_entries, m_capacity);
             }
 
-            NEON_ALWAYSINLINE uint64_t size() const
+            NEON_FORCEINLINE uint64_t size() const
             {
                 return m_count;
             }
 
-            NEON_ALWAYSINLINE uint64_t length() const
+            NEON_FORCEINLINE uint64_t length() const
             {
                 return m_count;
             }
 
-            NEON_ALWAYSINLINE uint64_t count() const
+            NEON_FORCEINLINE uint64_t count() const
             {
                 return m_count;
             }
@@ -3152,7 +4599,7 @@ namespace neon
                 State* state;
                 Entry* entry;
                 state = from->m_pvm;
-                for(i = 0; i < (int)from->m_capacity; i++)
+                for(i = 0; i < from->m_capacity; i++)
                 {
                     entry = &from->m_entries[i];
                     if(!entry->key.isEmpty())
@@ -3168,7 +4615,7 @@ namespace neon
             {
                 uint64_t i;
                 Entry* entry;
-                for(i = 0; i < (int)m_capacity; i++)
+                for(i = 0; i < m_capacity; i++)
                 {
                     entry = &m_entries[i];
                     if(!entry->key.isNull() && !entry->key.isEmpty())
@@ -3279,7 +4726,7 @@ namespace neon
             }
     };
 
-    NEON_ALWAYSINLINE bool Value::isObjType(Value::ObjType t) const
+    NEON_FORCEINLINE bool Value::isObjType(Value::ObjType t) const
     {
         return isObject() && asObject()->m_objtype == t;
     }
@@ -3368,7 +4815,7 @@ namespace neon
                 return String::copy(state, str, length);
             }
 
-            static String* makeFromStrbuf(State* state, StrBuffer* sbuf, uint32_t hash)
+            static String* makeFromStrbuf(State* state, Util::StrBuffer* sbuf, uint32_t hash)
             {
                 String* rs;
                 rs = Object::make<String>(state, Value::OBJTYPE_STRING);
@@ -3440,9 +4887,9 @@ namespace neon
         private:
             static String* makeFromChars(State* state, const char* estr, size_t elen, uint32_t hash, bool istaking)
             {
-                StrBuffer* sbuf;
+                Util::StrBuffer* sbuf;
                 (void)istaking;
-                sbuf = Memory::create<StrBuffer>(elen);
+                sbuf = Memory::create<Util::StrBuffer>(elen);
                 sbuf->append(estr, elen);
                 return makeFromStrbuf(state, sbuf, hash);
             }
@@ -3461,7 +4908,7 @@ namespace neon
 
         public:
             uint32_t m_hash;
-            StrBuffer* m_sbuf;
+            Util::StrBuffer* m_sbuf;
 
         public:
             //String() = delete;
@@ -3478,32 +4925,37 @@ namespace neon
                 return false;
             }
 
-            NEON_ALWAYSINLINE uint64_t length() const
+            NEON_FORCEINLINE uint64_t size() const
             {
                 return m_sbuf->m_length;
             }
 
-            NEON_ALWAYSINLINE const char* data() const
+            NEON_FORCEINLINE uint64_t length() const
+            {
+                return m_sbuf->m_length;
+            }
+
+            NEON_FORCEINLINE const char* data() const
             {
                 return m_sbuf->data();
             }
 
-            NEON_ALWAYSINLINE char* mutableData()
+            NEON_FORCEINLINE char* mutableData()
             {
                 return m_sbuf->m_data;
             }
 
-            NEON_ALWAYSINLINE const char* cstr() const
+            NEON_FORCEINLINE const char* cstr() const
             {
                 return data();
             }
 
-            NEON_ALWAYSINLINE int at(uint64_t pos) const
+            NEON_FORCEINLINE int at(uint64_t pos) const
             {
                 return m_sbuf->m_data[pos];
             }
 
-            NEON_ALWAYSINLINE void set(uint64_t pos, int c)
+            NEON_FORCEINLINE void set(uint64_t pos, int c)
             {
                 m_sbuf->m_data[pos] = c;
             }
@@ -3595,7 +5047,7 @@ namespace neon
                 {
                     for(i=0; i<cnt; i++)
                     {
-                        rt->m_varray->push(filler);
+                        rt->push(filler);
                     }
                 }
                 return rt;
@@ -3619,26 +5071,31 @@ namespace neon
                 return true;
             }
 
-            NEON_ALWAYSINLINE size_t size() const
+            NEON_FORCEINLINE size_t size() const
             {
                 return m_varray->size();
             }
 
-            NEON_ALWAYSINLINE size_t length() const
+            NEON_FORCEINLINE size_t length() const
             {
                 return m_varray->size();
             }
 
-            NEON_ALWAYSINLINE size_t count() const
+            NEON_FORCEINLINE size_t count() const
             {
                 return m_varray->size();
+            }
+
+            NEON_FORCEINLINE Value at(size_t pos) const
+            {
+                return m_varray->m_values[pos];
             }
 
             void clear()
             {
             }
 
-            NEON_ALWAYSINLINE void push(Value value)
+            NEON_FORCEINLINE void push(Value value)
             {
                 /*m_pvm->stackPush(value);*/
                 m_varray->push(value);
@@ -3722,17 +5179,17 @@ namespace neon
             //Dictionary() = delete;
             //~Dictionary() = delete;
 
-            NEON_ALWAYSINLINE size_t size() const
+            NEON_FORCEINLINE size_t size() const
             {
                 return m_keynames->size();
             }
 
-            NEON_ALWAYSINLINE size_t length() const
+            NEON_FORCEINLINE size_t length() const
             {
                 return m_keynames->size();
             }
 
-            NEON_ALWAYSINLINE size_t count() const
+            NEON_FORCEINLINE size_t count() const
             {
                 return m_keynames->size();
             }
@@ -4167,19 +5624,21 @@ namespace neon
             /* helper function to access call outside the state file. */
             bool call(Value callable, Value thisval, Array* args, Value* dest)
             {
-                int i;
-                int argc;
+                size_t i;
+                size_t argc;
                 size_t pidx;
+                size_t vsz;
                 Status status;
                 pidx = m_pvm->m_vmstate.stackidx;
                 /* set the closure before the args */
                 m_pvm->stackPush(callable);
                 argc = 0;
-                if(args && (argc = args->m_varray->m_count))
+                vsz = args->size();
+                if(args && ((argc = vsz)) > 0)
                 {
-                    for(i = 0; i < args->m_varray->m_count; i++)
+                    for(i = 0; i < vsz; i++)
                     {
-                        m_pvm->stackPush(args->m_varray->m_values[i]);
+                        m_pvm->stackPush(args->at(i));
                     }
                 }
                 if(!nn_vm_callvaluewithobject(m_pvm, callable, thisval, argc))
@@ -4498,7 +5957,7 @@ namespace neon
                 struct stat stroot;
                 struct stat stmod;
                 String* pitem;
-                StrBuffer* pathbuf;
+                Util::StrBuffer* pathbuf;
                 (void)rootfile;
                 (void)isrelative;
                 (void)stroot;
@@ -4511,7 +5970,7 @@ namespace neon
                     pitem = state->m_modimportpath->m_values[i].asString();
                     if(pathbuf == nullptr)
                     {
-                        pathbuf = Memory::create<StrBuffer>(pitem->length() + mlen + 5);
+                        pathbuf = Memory::create<Util::StrBuffer>(pitem->length() + mlen + 5);
                     }
                     else
                     {
@@ -4823,7 +6282,7 @@ namespace neon
             size_t m_maxvallength = 0;
             /* the mode that determines what writer actually does */
             PrintMode m_pmode = PMODE_UNDEFINED;
-            StrBuffer* m_ptostring = nullptr;
+            Util::StrBuffer* m_ptostring = nullptr;
             FILE* m_filehandle = nullptr;
 
         private:
@@ -4867,6 +6326,328 @@ namespace neon
                 return true;
             }
 
+
+            void printObjFunction(FuncScript* func)
+            {
+                if(func->m_scriptfnname == nullptr)
+                {
+                    putformat("<script at %p>", (void*)func);
+                }
+                else
+                {
+                    if(func->m_isvariadic)
+                    {
+                        putformat("<function %s(%d...) at %p>", func->m_scriptfnname->data(), func->m_arity, (void*)func);
+                    }
+                    else
+                    {
+                        putformat("<function %s(%d) at %p>", func->m_scriptfnname->data(), func->m_arity, (void*)func);
+                    }
+                }
+            }
+
+            void printObjArray(Array* list)
+            {
+                size_t i;
+                size_t vsz;
+                bool isrecur;
+                Value val;
+                Array* subarr;
+                vsz = list->size();
+                putformat("[");
+                for(i = 0; i < vsz; i++)
+                {
+                    isrecur = false;
+                    val = list->at(i);
+                    if(val.isArray())
+                    {
+                        subarr = val.asArray();
+                        if(subarr == list)
+                        {
+                            isrecur = true;
+                        }
+                    }
+                    if(isrecur)
+                    {
+                        putformat("<recursion>");
+                    }
+                    else
+                    {
+                        printValue(val, true, true);
+                    }
+                    if(i != vsz - 1)
+                    {
+                        putformat(", ");
+                    }
+                    if(m_shortenvalues && (i >= m_maxvallength))
+                    {
+                        putformat(" [%ld items]", vsz);
+                        break;
+                    }
+                }
+                putformat("]");
+            }
+
+            void printObjDict(Dictionary* dict)
+            {
+                size_t i;
+                size_t dsz;
+                bool keyisrecur;
+                bool valisrecur;
+                Value val;
+                Dictionary* subdict;
+                Property* field;
+                dsz = dict->m_keynames->m_count;
+                putformat("{");
+                for(i = 0; i < dsz; i++)
+                {
+                    valisrecur = false;
+                    keyisrecur = false;
+                    val = dict->m_keynames->m_values[i];
+                    if(val.isDict())
+                    {
+                        subdict = val.asDict();
+                        if(subdict == dict)
+                        {
+                            valisrecur = true;
+                        }
+                    }
+                    if(valisrecur)
+                    {
+                        putformat("<recursion>");
+                    }
+                    else
+                    {
+                        printValue(val, true, true);
+                    }
+                    putformat(": ");
+                    field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+                    if(field != nullptr)
+                    {
+                        if(field->m_actualval.isDict())
+                        {
+                            subdict = field->m_actualval.asDict();
+                            if(subdict == dict)
+                            {
+                                keyisrecur = true;
+                            }
+                        }
+                        if(keyisrecur)
+                        {
+                            putformat("<recursion>");
+                        }
+                        else
+                        {
+                            printValue(field->m_actualval, true, true);
+                        }
+                    }
+                    if(i != dsz - 1)
+                    {
+                        putformat(", ");
+                    }
+                    if(m_shortenvalues && (m_maxvallength >= i))
+                    {
+                        putformat(" [%ld items]", dsz);
+                        break;
+                    }
+                }
+                putformat("}");
+            }
+
+            void printObjFile(File* file)
+            {
+                putformat("<file at %s in mode %s>", file->m_filepath->data(), file->m_filemode->data());
+            }
+
+            void printObjInstance(ClassInstance* instance, bool invmethod)
+            {
+                (void)invmethod;
+                #if 0
+                int arity;
+                Value resv;
+                Value thisval;
+                Property* field;
+                State* state;
+                String* os;
+                Array* args;
+                state = m_pvm;
+                if(invmethod)
+                {
+                    field = instance->m_fromclass->m_methods->getByCStr("toString");
+                    if(field != nullptr)
+                    {
+                        NestCall nc(state);
+                        args = Array::make(state);
+                        thisval = Value::fromObject(instance);
+                        arity = nc.prepare(field->m_actualval, thisval, args);
+                        fprintf(stderr, "arity = %d\n", arity);
+                        state->stackPop();
+                        state->stackPush(thisval);
+                        if(nc.call(field->m_actualval, thisval, args, &resv))
+                        {
+                            Printer subp(state, &subw);
+                            subp.printValue(resv, false, false);
+                            os = subp.takeString();
+                            put(os->data(), os->length());
+                            //state->stackPop();
+                            return;
+                        }
+                    }
+                }
+                #endif
+                putformat("<instance of %s at %p>", instance->m_fromclass->m_classname->data(), (void*)instance);
+            }
+
+            void doPrintObject(Value value, bool fixstring, bool invmethod)
+            {
+                Object* obj;
+                obj = m_pvm->gcProtect(value.asObject());
+                switch(obj->m_objtype)
+                {
+                    case Value::OBJTYPE_SWITCH:
+                        {
+                            put("<switch>");
+                        }
+                        break;
+                    case Value::OBJTYPE_USERDATA:
+                        {
+                            putformat("<userdata %s>", static_cast<Userdata*>(obj)->m_udtypename);
+                        }
+                        break;
+                    case Value::OBJTYPE_RANGE:
+                        {
+                            Range* range;
+                            range = static_cast<Range*>(obj);
+                            putformat("<range %d .. %d>", range->m_lower, range->m_upper);
+                        }
+                        break;
+                    case Value::OBJTYPE_FILE:
+                        {
+                            printObjFile(static_cast<File*>(obj));
+                        }
+                        break;
+                    case Value::OBJTYPE_DICT:
+                        {
+                            auto dict = m_pvm->gcProtect(static_cast<Dictionary*>(obj));
+                            printObjDict(dict);
+                            m_pvm->clearProtect();
+                        }
+                        break;
+                    case Value::OBJTYPE_ARRAY:
+                        {
+                            auto arr = m_pvm->gcProtect(static_cast<Array*>(obj));
+                            printObjArray(arr);
+                            m_pvm->clearProtect();
+                        }
+                        break;
+                    case Value::OBJTYPE_FUNCBOUND:
+                        {
+                            FuncBound* bn;
+                            bn = static_cast<FuncBound*>(obj);
+                            printObjFunction(bn->method->scriptfunc);
+                        }
+                        break;
+                    case Value::OBJTYPE_MODULE:
+                        {
+                            Module* mod;
+                            mod = static_cast<Module*>(obj);
+                            putformat("<module '%s' at '%s'>", mod->m_modname->data(), mod->m_physlocation->data());
+                        }
+                        break;
+                    case Value::OBJTYPE_CLASS:
+                        {
+                            ClassObject* klass;
+                            klass = static_cast<ClassObject*>(obj);
+                            putformat("<class %s at %p>", klass->m_classname->data(), (void*)klass);
+                        }
+                        break;
+                    case Value::OBJTYPE_FUNCCLOSURE:
+                        {
+                            FuncClosure* cls;
+                            cls = static_cast<FuncClosure*>(obj);
+                            printObjFunction(cls->scriptfunc);
+                        }
+                        break;
+                    case Value::OBJTYPE_FUNCSCRIPT:
+                        {
+                            FuncScript* fn;
+                            fn = static_cast<FuncScript*>(obj);
+                            printObjFunction(fn);
+                        }
+                        break;
+                    case Value::OBJTYPE_INSTANCE:
+                        {
+                            /* @TODO: support the toString() override */
+                            ClassInstance* instance;
+                            instance = static_cast<ClassInstance*>(obj);
+                            printObjInstance(instance, invmethod);
+                        }
+                        break;
+                    case Value::OBJTYPE_FUNCNATIVE:
+                        {
+                            FuncNative* native;
+                            native = static_cast<FuncNative*>(obj);
+                            putformat("<function %s(native) at %p>", native->m_nativefnname, (void*)native);
+                        }
+                        break;
+                    case Value::OBJTYPE_UPVALUE:
+                        {
+                            putformat("<upvalue>");
+                        }
+                        break;
+                    case Value::OBJTYPE_STRING:
+                        {
+                            String* string;
+                            string = m_pvm->gcProtect(static_cast<String*>(obj));
+                            if(fixstring)
+                            {
+                                putQuotedString(string->data(), string->length(), true);
+                            }
+                            else
+                            {
+                                put(string->data(), string->length());
+                            }
+                            m_pvm->clearProtect();
+                        }
+                        break;
+                }
+                m_pvm->clearProtect();
+            }
+
+            void doPrintValue(Value value, bool fixstring, bool invmethod)
+            {
+                switch(value.type())
+                {
+                    case Value::VALTYPE_EMPTY:
+                        {
+                            put("<empty>");
+                        }
+                        break;
+                    case Value::VALTYPE_NULL:
+                        {
+                            put("null");
+                        }
+                        break;
+                    case Value::VALTYPE_BOOL:
+                        {
+                            put(value.asBool() ? "true" : "false");
+                        }
+                        break;
+                    case Value::VALTYPE_NUMBER:
+                        {
+                            putformat("%.16g", value.asNumber());
+                        }
+                        break;
+                    case Value::VALTYPE_OBJECT:
+                        {
+                            doPrintObject(value, fixstring, invmethod);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+            }
+
         public:
             Printer(State* state, PrintMode mode): m_pvm(state)
             {
@@ -4883,7 +6664,7 @@ namespace neon
             {
                 m_fromstack = true;
                 m_pmode = PMODE_STRING;
-                m_ptostring = Memory::create<StrBuffer>(0);
+                m_ptostring = Memory::create<Util::StrBuffer>(0);
             }
 
             ~Printer()
@@ -5060,489 +6841,62 @@ namespace neon
                 return true;
             }
 
-            void printObjFunction(FuncScript* func)
-            {
-                if(func->m_scriptfnname == nullptr)
-                {
-                    putformat("<script at %p>", (void*)func);
-                }
-                else
-                {
-                    if(func->m_isvariadic)
-                    {
-                        putformat("<function %s(%d...) at %p>", func->m_scriptfnname->data(), func->m_arity, (void*)func);
-                    }
-                    else
-                    {
-                        putformat("<function %s(%d) at %p>", func->m_scriptfnname->data(), func->m_arity, (void*)func);
-                    }
-                }
-            }
-
-            void printObjArray(Array* list)
-            {
-                size_t i;
-                size_t vsz;
-                bool isrecur;
-                Value val;
-                Array* subarr;
-                vsz = list->m_varray->m_count;
-                putformat("[");
-                for(i = 0; i < vsz; i++)
-                {
-                    isrecur = false;
-                    val = list->m_varray->m_values[i];
-                    if(val.isArray())
-                    {
-                        subarr = val.asArray();
-                        if(subarr == list)
-                        {
-                            isrecur = true;
-                        }
-                    }
-                    if(isrecur)
-                    {
-                        putformat("<recursion>");
-                    }
-                    else
-                    {
-                        printValue(val, true, true);
-                    }
-                    if(i != vsz - 1)
-                    {
-                        putformat(", ");
-                    }
-                    if(m_shortenvalues && (i >= m_maxvallength))
-                    {
-                        putformat(" [%ld items]", vsz);
-                        break;
-                    }
-                }
-                putformat("]");
-            }
-
-            void printObjDict(Dictionary* dict)
-            {
-                size_t i;
-                size_t dsz;
-                bool keyisrecur;
-                bool valisrecur;
-                Value val;
-                Dictionary* subdict;
-                Property* field;
-                dsz = dict->m_keynames->m_count;
-                putformat("{");
-                for(i = 0; i < dsz; i++)
-                {
-                    valisrecur = false;
-                    keyisrecur = false;
-                    val = dict->m_keynames->m_values[i];
-                    if(val.isDict())
-                    {
-                        subdict = val.asDict();
-                        if(subdict == dict)
-                        {
-                            valisrecur = true;
-                        }
-                    }
-                    if(valisrecur)
-                    {
-                        putformat("<recursion>");
-                    }
-                    else
-                    {
-                        printValue(val, true, true);
-                    }
-                    putformat(": ");
-                    field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-                    if(field != nullptr)
-                    {
-                        if(field->m_actualval.isDict())
-                        {
-                            subdict = field->m_actualval.asDict();
-                            if(subdict == dict)
-                            {
-                                keyisrecur = true;
-                            }
-                        }
-                        if(keyisrecur)
-                        {
-                            putformat("<recursion>");
-                        }
-                        else
-                        {
-                            printValue(field->m_actualval, true, true);
-                        }
-                    }
-                    if(i != dsz - 1)
-                    {
-                        putformat(", ");
-                    }
-                    if(m_shortenvalues && (m_maxvallength >= i))
-                    {
-                        putformat(" [%ld items]", dsz);
-                        break;
-                    }
-                }
-                putformat("}");
-            }
-
-            void printObjFile(File* file)
-            {
-                putformat("<file at %s in mode %s>", file->m_filepath->data(), file->m_filemode->data());
-            }
-
-            void printObjInstance(ClassInstance* instance, bool invmethod)
-            {
-                (void)invmethod;
-                #if 0
-                int arity;
-                Value resv;
-                Value thisval;
-                Property* field;
-                State* state;
-                String* os;
-                Array* args;
-                state = m_pvm;
-                if(invmethod)
-                {
-                    field = instance->m_fromclass->m_methods->getByCStr("toString");
-                    if(field != nullptr)
-                    {
-                        NestCall nc(state);
-                        args = Array::make(state);
-                        thisval = Value::fromObject(instance);
-                        arity = nc.prepare(field->m_actualval, thisval, args);
-                        fprintf(stderr, "arity = %d\n", arity);
-                        state->stackPop();
-                        state->stackPush(thisval);
-                        if(nc.call(field->m_actualval, thisval, args, &resv))
-                        {
-                            Printer subp(state, &subw);
-                            subp.printValue(resv, false, false);
-                            os = subp.takeString();
-                            put(os->data(), os->length());
-                            //state->stackPop();
-                            return;
-                        }
-                    }
-                }
-                #endif
-                putformat("<instance of %s at %p>", instance->m_fromclass->m_classname->data(), (void*)instance);
-            }
-
             void printObject(Value value, bool fixstring, bool invmethod)
             {
-                Object* obj;
-                obj = m_pvm->gcProtect(value.asObject());
-                switch(obj->m_objtype)
-                {
-                    case Value::OBJTYPE_SWITCH:
-                        {
-                            put("<switch>");
-                        }
-                        break;
-                    case Value::OBJTYPE_USERDATA:
-                        {
-                            putformat("<userdata %s>", static_cast<Userdata*>(obj)->m_udtypename);
-                        }
-                        break;
-                    case Value::OBJTYPE_RANGE:
-                        {
-                            Range* range;
-                            range = static_cast<Range*>(obj);
-                            putformat("<range %d .. %d>", range->m_lower, range->m_upper);
-                        }
-                        break;
-                    case Value::OBJTYPE_FILE:
-                        {
-                            printObjFile(static_cast<File*>(obj));
-                        }
-                        break;
-                    case Value::OBJTYPE_DICT:
-                        {
-                            auto dict = m_pvm->gcProtect(static_cast<Dictionary*>(obj));
-                            printObjDict(dict);
-                            m_pvm->clearProtect();
-                        }
-                        break;
-                    case Value::OBJTYPE_ARRAY:
-                        {
-                            auto arr = m_pvm->gcProtect(static_cast<Array*>(obj));
-                            printObjArray(arr);
-                            m_pvm->clearProtect();
-                        }
-                        break;
-                    case Value::OBJTYPE_FUNCBOUND:
-                        {
-                            FuncBound* bn;
-                            bn = static_cast<FuncBound*>(obj);
-                            printObjFunction(bn->method->scriptfunc);
-                        }
-                        break;
-                    case Value::OBJTYPE_MODULE:
-                        {
-                            Module* mod;
-                            mod = static_cast<Module*>(obj);
-                            putformat("<module '%s' at '%s'>", mod->m_modname->data(), mod->m_physlocation->data());
-                        }
-                        break;
-                    case Value::OBJTYPE_CLASS:
-                        {
-                            ClassObject* klass;
-                            klass = static_cast<ClassObject*>(obj);
-                            putformat("<class %s at %p>", klass->m_classname->data(), (void*)klass);
-                        }
-                        break;
-                    case Value::OBJTYPE_FUNCCLOSURE:
-                        {
-                            FuncClosure* cls;
-                            cls = static_cast<FuncClosure*>(obj);
-                            printObjFunction(cls->scriptfunc);
-                        }
-                        break;
-                    case Value::OBJTYPE_FUNCSCRIPT:
-                        {
-                            FuncScript* fn;
-                            fn = static_cast<FuncScript*>(obj);
-                            printObjFunction(fn);
-                        }
-                        break;
-                    case Value::OBJTYPE_INSTANCE:
-                        {
-                            /* @TODO: support the toString() override */
-                            ClassInstance* instance;
-                            instance = static_cast<ClassInstance*>(obj);
-                            printObjInstance(instance, invmethod);
-                        }
-                        break;
-                    case Value::OBJTYPE_FUNCNATIVE:
-                        {
-                            FuncNative* native;
-                            native = static_cast<FuncNative*>(obj);
-                            putformat("<function %s(native) at %p>", native->m_nativefnname, (void*)native);
-                        }
-                        break;
-                    case Value::OBJTYPE_UPVALUE:
-                        {
-                            putformat("<upvalue>");
-                        }
-                        break;
-                    case Value::OBJTYPE_STRING:
-                        {
-                            String* string;
-                            string = m_pvm->gcProtect(static_cast<String*>(obj));
-                            if(fixstring)
-                            {
-                                putQuotedString(string->data(), string->length(), true);
-                            }
-                            else
-                            {
-                                put(string->data(), string->length());
-                            }
-                            m_pvm->clearProtect();
-                        }
-                        break;
-                }
-                m_pvm->clearProtect();
+                return doPrintObject(value, fixstring, invmethod);
             }
 
             void printValue(Value value, bool fixstring, bool invmethod)
             {
-                switch(value.type())
-                {
-                    case Value::VALTYPE_EMPTY:
-                        {
-                            put("<empty>");
-                        }
-                        break;
-                    case Value::VALTYPE_NULL:
-                        {
-                            put("null");
-                        }
-                        break;
-                    case Value::VALTYPE_BOOL:
-                        {
-                            put(value.asBool() ? "true" : "false");
-                        }
-                        break;
-                    case Value::VALTYPE_NUMBER:
-                        {
-                            putformat("%.16g", value.asNumber());
-                        }
-                        break;
-                    case Value::VALTYPE_OBJECT:
-                        {
-                            printObject(value, fixstring, invmethod);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-    };
-
-    struct FormatInfo
-    {
-        public:
-            template<typename... VargT>
-            static bool formatArgs(Printer* pr, const char* fmt, VargT&&... args)
-            {
-                size_t argc = sizeof...(args);
-                Value fargs[] = {(args) ..., Value::makeEmpty()};
-                FormatInfo inf(pr->m_pvm, pr, fmt, strlen(fmt));
-                return inf.format(argc, 0, fargs);
-            }
-
-        public:
-            State* m_pvm;
-            /* length of the format string */
-            size_t m_fmtlen = 0;
-            /* the actual format string */
-            const char* m_fmtstr = nullptr;
-            /* destination printer */
-            Printer* m_printer = nullptr;
-
-        private:
-            void init(Printer* pr, const char* fstr, size_t flen)
-            {
-                m_fmtstr = fstr;
-                m_fmtlen = flen;
-                m_printer = pr;
-            }
-
-        public:
-            FormatInfo(State* state, Printer* pr, const char* fstr, size_t flen): m_pvm(state)
-            {
-                init(pr, fstr, flen);
-            }
-
-            ~FormatInfo()
-            {
-            }
-
-            bool format(int argc, int argbegin, Value* argv)
-            {
-                int ch;
-                int ival;
-                int nextch;
-                bool failed;
-                size_t i;
-                size_t argpos;
-                Value cval;
-                i = 0;
-                argpos = argbegin;
-                failed = false;
-                while(i < m_fmtlen)
-                {
-                    ch = m_fmtstr[i];
-                    nextch = -1;
-                    if((i + 1) < m_fmtlen)
-                    {
-                        nextch = m_fmtstr[i+1];
-                    }
-                    i++;
-                    if(ch == '%')
-                    {
-                        if(nextch == '%')
-                        {
-                            m_printer->putChar('%');
-                        }
-                        else
-                        {
-                            i++;
-                            if((int)argpos > argc)
-                            {
-                                failed = true;
-                                cval = Value::makeEmpty();
-                            }
-                            else
-                            {
-                                cval = argv[argpos];
-                            }
-                            argpos++;
-                            switch(nextch)
-                            {
-                                case 'q':
-                                case 'p':
-                                    {
-                                        m_printer->printValue(cval, true, true);
-                                    }
-                                    break;
-                                case 'c':
-                                    {
-                                        ival = (int)cval.asNumber();
-                                        m_printer->putformat("%c", ival);
-                                    }
-                                    break;
-                                /* TODO: implement actual field formatting */
-                                case 's':
-                                case 'd':
-                                case 'i':
-                                case 'g':
-                                    {
-                                        m_printer->printValue(cval, false, true);
-                                    }
-                                    break;
-                                default:
-                                    {
-                                        m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "unknown/invalid format flag '%%c'", nextch);
-                                    }
-                                    break;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        m_printer->putChar(ch);
-                    }
-                }
-                return failed;
+                doPrintValue(value, fixstring, invmethod);
             }
     };
 
+    #include "temp.h"
 
     struct DebugPrinter
     {
         private:
+            State* m_pvm;
             Printer* m_printer;
+            const char* m_insname;
+            Blob* m_currblob;
 
         private:
-            void doPrintInstrName(const char* name)
+            void doPrintInstrName()
             {
                 Color nc;
-                m_printer->putformat("%s%-16s%s ", nc.color('r'), name, nc.color('0'));
+                m_printer->putformat("%s%-16s%s ", nc.color('r'), m_insname, nc.color('0'));
             }
 
-            int doPrintSimpleInstr(const char* name, int offset)
+            size_t doPrintSimpleInstr(size_t offset)
             {
-                doPrintInstrName(name);
+                doPrintInstrName();
                 m_printer->putformat("\n");
                 return offset + 1;
             }
 
-            int doPrintConstInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintConstInstr(size_t offset)
             {
                 uint16_t constant;
-                constant = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
-                doPrintInstrName(name);
+                constant = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d ", constant);
-                m_printer->printValue(blob->m_constants->m_values[constant], true, false);
+                m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
                 return offset + 3;
             }
 
-            int doPrintPropertyInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintPropertyInstr(size_t offset)
             {
                 const char* proptn;
                 uint16_t constant;
-                constant = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
-                doPrintInstrName(name);
+                constant = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d ", constant);
-                m_printer->printValue(blob->m_constants->m_values[constant], true, false);
+                m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 proptn = "";
-                if(blob->m_instrucs[offset + 3].code == 1)
+                if(m_currblob->m_instrucs[offset + 3].code == 1)
                 {
                     proptn = "static";
                 }
@@ -5551,84 +6905,84 @@ namespace neon
                 return offset + 4;
             }
 
-            int doPrintShortInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintShortInstr(size_t offset)
             {
                 uint16_t slot;
-                slot = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
-                doPrintInstrName(name);
+                slot = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d\n", slot);
                 return offset + 3;
             }
 
-            int doPrintByteInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintByteInstr(size_t offset)
             {
                 uint8_t slot;
-                slot = blob->m_instrucs[offset + 1].code;
-                doPrintInstrName(name);
+                slot = m_currblob->m_instrucs[offset + 1].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d\n", slot);
                 return offset + 2;
             }
 
-            int doPrintJumpInstr(const char* name, int sign, Blob* blob, int offset)
+            size_t doPrintJumpInstr(size_t sign, size_t offset)
             {
                 uint16_t jump;
-                jump = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
-                jump |= blob->m_instrucs[offset + 2].code;
-                doPrintInstrName(name);
+                jump = (uint16_t)(m_currblob->m_instrucs[offset + 1].code << 8);
+                jump |= m_currblob->m_instrucs[offset + 2].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d -> %d\n", offset, offset + 3 + sign * jump);
                 return offset + 3;
             }
 
-            int doPrintTryInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintTryInstr(size_t offset)
             {
                 uint16_t finally;
                 uint16_t type;
                 uint16_t address;
-                type = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
-                type |= blob->m_instrucs[offset + 2].code;
-                address = (uint16_t)(blob->m_instrucs[offset + 3].code << 8);
-                address |= blob->m_instrucs[offset + 4].code;
-                finally = (uint16_t)(blob->m_instrucs[offset + 5].code << 8);
-                finally |= blob->m_instrucs[offset + 6].code;
-                doPrintInstrName(name);
+                type = (uint16_t)(m_currblob->m_instrucs[offset + 1].code << 8);
+                type |= m_currblob->m_instrucs[offset + 2].code;
+                address = (uint16_t)(m_currblob->m_instrucs[offset + 3].code << 8);
+                address |= m_currblob->m_instrucs[offset + 4].code;
+                finally = (uint16_t)(m_currblob->m_instrucs[offset + 5].code << 8);
+                finally |= m_currblob->m_instrucs[offset + 6].code;
+                doPrintInstrName();
                 m_printer->putformat("%8d -> %d, %d\n", type, address, finally);
                 return offset + 7;
             }
 
-            int doPrintInvokeInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintInvokeInstr(size_t offset)
             {
                 uint16_t constant;
                 uint8_t argcount;
-                constant = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
-                constant |= blob->m_instrucs[offset + 2].code;
-                argcount = blob->m_instrucs[offset + 3].code;
-                doPrintInstrName(name);
+                constant = (uint16_t)(m_currblob->m_instrucs[offset + 1].code << 8);
+                constant |= m_currblob->m_instrucs[offset + 2].code;
+                argcount = m_currblob->m_instrucs[offset + 3].code;
+                doPrintInstrName();
                 m_printer->putformat("(%d args) %8d ", argcount, constant);
-                m_printer->printValue(blob->m_constants->m_values[constant], true, false);
+                m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
                 return offset + 4;
             }
 
-            int doPrintClosureInstr(const char* name, Blob* blob, int offset)
+            size_t doPrintClosureInstr(size_t offset)
             {
-                int j;
-                int islocal;
+                size_t j;
+                size_t islocal;
                 uint16_t index;
                 uint16_t constant;
                 const char* locn;
                 FuncScript* function;
                 offset++;
-                constant = blob->m_instrucs[offset++].code << 8;
-                constant |= blob->m_instrucs[offset++].code;
-                m_printer->putformat("%-16s %8d ", name, constant);
-                m_printer->printValue(blob->m_constants->m_values[constant], true, false);
+                constant = m_currblob->m_instrucs[offset++].code << 8;
+                constant |= m_currblob->m_instrucs[offset++].code;
+                m_printer->putformat("%-16s %8d ", m_insname, constant);
+                m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
-                function = blob->m_constants->m_values[constant].asFuncScript();
-                for(j = 0; j < function->m_upvalcount; j++)
+                function = m_currblob->m_constants->m_values[constant].asFuncScript();
+                for(j = 0; j < (size_t)function->m_upvalcount; j++)
                 {
-                    islocal = blob->m_instrucs[offset++].code;
-                    index = blob->m_instrucs[offset++].code << 8;
-                    index |= blob->m_instrucs[offset++].code;
+                    islocal = m_currblob->m_instrucs[offset++].code;
+                    index = m_currblob->m_instrucs[offset++].code << 8;
+                    index |= m_currblob->m_instrucs[offset++].code;
                     locn = "upvalue";
                     if(islocal)
                     {
@@ -5640,14 +6994,15 @@ namespace neon
             }
 
         public:
-            DebugPrinter(Printer* pd)
+            DebugPrinter(State* state, Printer* pd)
             {
+                m_pvm = state;
                 m_printer = pd;
             }
 
             void printFunctionDisassembly(Blob* blob, const char* name)
             {
-                int offset;
+                size_t offset;
                 m_printer->putformat("== compiled '%s' [[\n", name);
                 for(offset = 0; offset < blob->m_count;)
                 {
@@ -5656,14 +7011,17 @@ namespace neon
                 m_printer->putformat("]]\n");
             }
 
-            int printInstructionAt(Blob* blob, int offset, bool ascompiled)
+            size_t printInstructionAt(Blob* blob, size_t offset, bool ascompiled)
             {
                 bool issame;
                 size_t srcline;
                 uint8_t instruction;
-                const char* opname;
-                srcline = blob->m_instrucs[offset].srcline;
-                issame = (offset > 0 && srcline == blob->m_instrucs[offset - 1].srcline);
+                m_currblob = blob;
+                srcline = m_currblob->m_instrucs[offset].srcline;
+                issame = (
+                    (int(offset) > 0) &&
+                    (int(srcline) == int(m_currblob->m_instrucs[offset - 1].srcline))
+                );
                 if(ascompiled)
                 {
                     m_printer->putformat(" >> %d ", offset, srcline);
@@ -5685,156 +7043,156 @@ namespace neon
                 }
                 else
                 {
-                    m_printer->putformat("(line %d) ", blob->m_instrucs[offset].srcline);
+                    m_printer->putformat("(line %d) ", m_currblob->m_instrucs[offset].srcline);
                 }
-                instruction = blob->m_instrucs[offset].code;
-                opname = Instruction::opName(instruction);
+                instruction = m_currblob->m_instrucs[offset].code;
+                m_insname = Instruction::opName(instruction);
                 switch(instruction)
                 {
                     case Instruction::OP_JUMPIFFALSE:
-                        return doPrintJumpInstr(opname, 1, blob, offset);
+                        return doPrintJumpInstr(1, offset);
                     case Instruction::OP_JUMPNOW:
-                        return doPrintJumpInstr(opname, 1, blob, offset);
+                        return doPrintJumpInstr(1, offset);
                     case Instruction::OP_EXTRY:
-                        return doPrintTryInstr(opname, blob, offset);
+                        return doPrintTryInstr(offset);
                     case Instruction::OP_LOOP:
-                        return doPrintJumpInstr(opname, -1, blob, offset);
+                        return doPrintJumpInstr(-1, offset);
                     case Instruction::OP_GLOBALDEFINE:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_GLOBALGET:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_GLOBALSET:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_LOCALGET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_LOCALSET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_FUNCARGGET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_FUNCARGSET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_PROPERTYGET:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_PROPERTYGETSELF:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_PROPERTYSET:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_UPVALUEGET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_UPVALUESET:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_EXPOPTRY:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_EXPUBLISHTRY:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHCONSTANT:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_EQUAL:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMGREATER:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMLESSTHAN:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHEMPTY:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHNULL:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHTRUE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHFALSE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMADD:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMSUBTRACT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMMULTIPLY:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMDIVIDE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMFLOORDIVIDE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMMODULO:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMPOW:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMNEGATE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMNOT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMBITNOT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMAND:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMOR:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMBITXOR:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMSHIFTLEFT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PRIMSHIFTRIGHT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_PUSHONE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_IMPORTIMPORT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_TYPEOF:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_ECHO:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_STRINGIFY:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_EXTHROW:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_POPONE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_UPVALUECLOSE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_DUPONE:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_ASSERT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_POPN:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                         /* non-user objects... */
                     case Instruction::OP_SWITCH:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                         /* data container manipulators */
                     case Instruction::OP_MAKERANGE:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_MAKEARRAY:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_MAKEDICT:
-                        return doPrintShortInstr(opname, blob, offset);
+                        return doPrintShortInstr(offset);
                     case Instruction::OP_INDEXGET:
-                        return doPrintByteInstr(opname, blob, offset);
+                        return doPrintByteInstr(offset);
                     case Instruction::OP_INDEXGETRANGED:
-                        return doPrintByteInstr(opname, blob, offset);
+                        return doPrintByteInstr(offset);
                     case Instruction::OP_INDEXSET:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_MAKECLOSURE:
-                        return doPrintClosureInstr(opname, blob, offset);
+                        return doPrintClosureInstr(offset);
                     case Instruction::OP_CALLFUNCTION:
-                        return doPrintByteInstr(opname, blob, offset);
+                        return doPrintByteInstr(offset);
                     case Instruction::OP_CALLMETHOD:
-                        return doPrintInvokeInstr(opname, blob, offset);
+                        return doPrintInvokeInstr(offset);
                     case Instruction::OP_CLASSINVOKETHIS:
-                        return doPrintInvokeInstr(opname, blob, offset);
+                        return doPrintInvokeInstr(offset);
                     case Instruction::OP_RETURN:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_MAKECLASS:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_MAKEMETHOD:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_CLASSPROPERTYDEFINE:
-                        return doPrintPropertyInstr(opname, blob, offset);
+                        return doPrintPropertyInstr(offset);
                     case Instruction::OP_CLASSGETSUPER:
-                        return doPrintConstInstr(opname, blob, offset);
+                        return doPrintConstInstr(offset);
                     case Instruction::OP_CLASSINHERIT:
-                        return doPrintSimpleInstr(opname, offset);
+                        return doPrintSimpleInstr(offset);
                     case Instruction::OP_CLASSINVOKESUPER:
-                        return doPrintInvokeInstr(opname, blob, offset);
+                        return doPrintInvokeInstr(offset);
                     case Instruction::OP_CLASSINVOKESUPERSELF:
-                        return doPrintByteInstr(opname, blob, offset);
+                        return doPrintByteInstr(offset);
                     default:
                         {
                             m_printer->putformat("unknown opcode %d\n", instruction);
@@ -6094,6 +7452,27 @@ namespace neon
             static bool charIsHexadecimal(char c)
             {
                 return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            }
+
+            /*
+            // Reads the next character, which should be a hex digit (0-9, a-f, or A-F) and
+            // returns its numeric value. If the character isn't a hex digit, returns -1.
+            */
+            static int readHexDigit(char c)
+            {
+                if((c >= '0') && (c <= '9'))
+                {
+                    return (c - '0');
+                }
+                if((c >= 'a') && (c <= 'f'))
+                {
+                    return ((c - 'a') + 10);
+                }
+                if((c >= 'A') && (c <= 'F'))
+                {
+                    return ((c - 'A') + 10);
+                }
+                return -1;
             }
 
         public:
@@ -6889,15 +8268,15 @@ namespace neon
                 public:
                     static Rule* make(Rule* dest, PrefixFN prefix, InfixFN infix, Precedence precedence)
                     {
-                        dest->prefix = prefix;
-                        dest->infix = infix;
+                        dest->fnprefix = prefix;
+                        dest->fninfix = infix;
                         dest->precedence = precedence;
                         return dest;
                     }
                 
                 public:
-                    PrefixFN prefix;
-                    InfixFN infix;
+                    PrefixFN fnprefix;
+                    InfixFN fninfix;
                     Precedence precedence;
             };
 
@@ -7001,6 +8380,32 @@ namespace neon
                     {
                     }
 
+                    void compileBody(bool closescope, bool isanon)
+                    {
+                        int i;
+                        FuncScript* function;
+                        (void)isanon;
+                        /* compile the body */
+                        m_prs->ignoreSpace();
+                        m_prs->consume(Token::TOK_BRACEOPEN, "expected '{' before function body");
+                        nn_astparser_parseblock(m_prs);
+                        /* create the function object */
+                        if(closescope)
+                        {
+                            nn_astparser_scopeend(m_prs);
+                        }
+                        function = m_prs->endCompiler();
+                        m_prs->m_pvm->stackPush(Value::fromObject(function));
+                        m_prs->emitInstruction(Instruction::OP_MAKECLOSURE);
+                        m_prs->emit1short(m_prs->pushConst(Value::fromObject(function)));
+                        for(i = 0; i < function->m_upvalcount; i++)
+                        {
+                            m_prs->emit1byte(m_compiledupvals[i].islocal ? 1 : 0);
+                            m_prs->emit1short(m_compiledupvals[i].index);
+                        }
+                        m_prs->m_pvm->stackPop();
+                    }
+
                     int resolveLocal(Token* name)
                     {
                         int i;
@@ -7096,7 +8501,7 @@ namespace neon
                 FuncCompiler compiler(parser, FuncCommon::FUNCTYPE_SCRIPT, true);
                 compiler.m_fromimport = fromimport;
                 parser->runParser();
-                function = nn_astparser_endcompiler(parser);
+                function = parser->endCompiler();
                 if(parser->m_haderror)
                 {
                     function = nullptr;
@@ -7214,6 +8619,51 @@ namespace neon
                 raiseErrorAt(&m_currtoken, message, args...);
                 return false;
             }
+
+            void synchronize()
+            {
+                m_panicmode = false;
+                while(m_currtoken.type != Token::TOK_EOF)
+                {
+                    if(m_currtoken.type == Token::TOK_NEWLINE || m_currtoken.type == Token::TOK_SEMICOLON)
+                    {
+                        return;
+                    }
+                    switch(m_currtoken.type)
+                    {
+                        case Token::TOK_KWCLASS:
+                        case Token::TOK_KWFUNCTION:
+                        case Token::TOK_KWVAR:
+                        case Token::TOK_KWFOREACH:
+                        case Token::TOK_KWIF:
+                        case Token::TOK_KWSWITCH:
+                        case Token::TOK_KWCASE:
+                        case Token::TOK_KWFOR:
+                        case Token::TOK_KWDO:
+                        case Token::TOK_KWWHILE:
+                        case Token::TOK_KWECHO:
+                        case Token::TOK_KWASSERT:
+                        case Token::TOK_KWTRY:
+                        case Token::TOK_KWCATCH:
+                        case Token::TOK_KWTHROW:
+                        case Token::TOK_KWRETURN:
+                        case Token::TOK_KWSTATIC:
+                        case Token::TOK_KWTHIS:
+                        case Token::TOK_KWSUPER:
+                        case Token::TOK_KWFINALLY:
+                        case Token::TOK_KWIN:
+                        case Token::TOK_KWIMPORT:
+                        case Token::TOK_KWAS:
+                            return;
+                        default:
+                            {
+                                /* do nothing */
+                            }
+                    }
+                    advance();
+                }
+            }
+
 
             Blob* currentBlob()
             {
@@ -7475,7 +8925,7 @@ namespace neon
                 Token previous;
                 Rule::InfixFN infixrule;
                 Rule::PrefixFN prefixrule;
-                prefixrule = getRule(m_prevtoken.type)->prefix;
+                prefixrule = getRule(m_prevtoken.type)->fnprefix;
                 if(prefixrule == nullptr)
                 {
                     raiseError("expected expression");
@@ -7488,7 +8938,7 @@ namespace neon
                     previous = m_prevtoken;
                     ignoreSpace();
                     advance();
-                    infixrule = getRule(m_prevtoken.type)->infix;
+                    infixrule = getRule(m_prevtoken.type)->fninfix;
                     infixrule(this, previous, canassign);
                 }
                 if(canassign && match(Token::TOK_ASSIGN))
@@ -7533,7 +8983,300 @@ namespace neon
                 return parsePrecedence(Rule::PREC_ASSIGNMENT);
             }
 
+            void printCompiledFuncBlob(const char* fname)
+            {
+                DebugPrinter dp(m_pvm, m_pvm->m_debugprinter);
+                dp.printFunctionDisassembly(currentBlob(), fname);
+            }
+
+            FuncScript* endCompiler()
+            {
+                const char* fname;
+                FuncScript* function;
+                emitReturn();
+                function = m_currfunccompiler->m_targetfunc;
+                fname = nullptr;
+                if(function->m_scriptfnname == nullptr)
+                {
+                    fname = m_currmodule->m_physlocation->data();
+                }
+                else
+                {
+                    fname = function->m_scriptfnname->data();
+                }
+                if(!m_haderror && m_pvm->m_conf.dumpbytecode)
+                {
+                    printCompiledFuncBlob(fname);
+                }
+                NEON_ASTDEBUG(m_pvm, "for function '%s'", fname);
+                m_currfunccompiler = m_currfunccompiler->m_enclosing;
+                return function;
+            }
+
+
             Rule* getRule(Token::Type type);
+
+            /*
+            // Reads [digits] hex digits in a string literal and returns their number value.
+            */
+            int readStringHexEscape(const char* str, int index, int count)
+            {
+                size_t pos;
+                int i;
+                int cval;
+                int digit;
+                int value;
+                value = 0;
+                i = 0;
+                digit = 0;
+                for(; i < count; i++)
+                {
+                    pos = (index + i + 2);
+                    cval = str[pos];
+                    digit = Lexer::readHexDigit(cval);
+                    if(digit == -1)
+                    {
+                        raiseError("invalid hex escape sequence at #%d of \"%s\": '%c' (%d)", pos, str, cval, cval);
+                    }
+                    value = (value * 16) | digit;
+                }
+                if(count == 4 && (digit = Lexer::readHexDigit(str[index + i + 2])) != -1)
+                {
+                    value = (value * 16) | digit;
+                }
+                return value;
+            }
+
+            int readStringUnicodeEscape(char* string, const char* realstring, int numberbytes, int realindex, int index)
+            {
+                int value;
+                int count;
+                size_t len;
+                char* chr;
+                NEON_ASTDEBUG(m_pvm, "");
+                value = readStringHexEscape(realstring, realindex, numberbytes);
+                count = Util::utf8NumBytes(value);
+                if(count == -1)
+                {
+                    raiseError("cannot encode a negative unicode value");
+                }
+                /* check for greater that \uffff */
+                if(value > 65535)
+                {
+                    count++;
+                }
+                if(count != 0)
+                {
+                    chr = Util::utf8Encode(m_pvm, value, &len);
+                    if(chr)
+                    {
+                        memcpy(string + index, chr, (size_t)count + 1);
+                        Memory::osFree(chr);
+                    }
+                    else
+                    {
+                        raiseError("cannot decode unicode escape at index %d", realindex);
+                    }
+                }
+                /* but greater than \uffff doesn't occupy any extra byte */
+                /*
+                if(value > 65535)
+                {
+                    count--;
+                }
+                */
+                return count;
+            }
+
+            char* parseString(int* length)
+            {
+                int k;
+                int i;
+                int count;
+                int reallength;
+                int rawlen;
+                char c;
+                char quote;
+                char* deststr;
+                char* realstr;
+                rawlen = (((size_t)m_prevtoken.length - 2) + 1);
+                NEON_ASTDEBUG(m_pvm, "raw length=%d", rawlen);
+                deststr = (char*)State::GC::allocate(m_pvm, sizeof(char), rawlen);
+                quote = m_prevtoken.start[0];
+                realstr = (char*)m_prevtoken.start + 1;
+                reallength = m_prevtoken.length - 2;
+                k = 0;
+                for(i = 0; i < reallength; i++, k++)
+                {
+                    c = realstr[i];
+                    if(c == '\\' && i < reallength - 1)
+                    {
+                        switch(realstr[i + 1])
+                        {
+                            case '0':
+                                {
+                                    c = '\0';
+                                }
+                                break;
+                            case '$':
+                                {
+                                    c = '$';
+                                }
+                                break;
+                            case '\'':
+                                {
+                                    if(quote == '\'' || quote == '}')
+                                    {
+                                        /* } handle closing of interpolation. */
+                                        c = '\'';
+                                    }
+                                    else
+                                    {
+                                        i--;
+                                    }
+                                }
+                                break;
+                            case '"':
+                                {
+                                    if(quote == '"' || quote == '}')
+                                    {
+                                        c = '"';
+                                    }
+                                    else
+                                    {
+                                        i--;
+                                    }
+                                }
+                                break;
+                            case 'a':
+                                {
+                                    c = '\a';
+                                }
+                                break;
+                            case 'b':
+                                {
+                                    c = '\b';
+                                }
+                                break;
+                            case 'f':
+                                {
+                                    c = '\f';
+                                }
+                                break;
+                            case 'n':
+                                {
+                                    c = '\n';
+                                }
+                                break;
+                            case 'r':
+                                {
+                                    c = '\r';
+                                }
+                                break;
+                            case 't':
+                                {
+                                    c = '\t';
+                                }
+                                break;
+                            case 'e':
+                                {
+                                    c = 27;
+                                }
+                                break;
+                            case '\\':
+                                {
+                                    c = '\\';
+                                }
+                                break;
+                            case 'v':
+                                {
+                                    c = '\v';
+                                }
+                                break;
+                            case 'x':
+                                {
+                                    //k += readStringUnicodeEscape(deststr, realstr, 2, i, k) - 1;
+                                    //k += readStringHexEscape(deststr, i, 2) - 0;
+                                    c = readStringHexEscape(realstr, i, 2) - 0;
+                                    i += 2;
+                                    //continue;
+                                }
+                                break;
+                            case 'u':
+                                {
+                                    count = readStringUnicodeEscape(deststr, realstr, 4, i, k);
+                                    if(count > 4)
+                                    {
+                                        k += count - 2;
+                                    }
+                                    else
+                                    {
+                                        k += count - 1;
+                                    }
+                                    if(count > 4)
+                                    {
+                                        i += 6;
+                                    }
+                                    else
+                                    {
+                                        i += 5;
+                                    }
+                                    continue;
+                                }
+                            case 'U':
+                                {
+                                    count = readStringUnicodeEscape(deststr, realstr, 8, i, k);
+                                    if(count > 4)
+                                    {
+                                        k += count - 2;
+                                    }
+                                    else
+                                    {
+                                        k += count - 1;
+                                    }
+                                    i += 9;
+                                    continue;
+                                }
+                            default:
+                                {
+                                    i--;
+                                }
+                                break;
+                        }
+                        i++;
+                    }
+                    memcpy(deststr + k, &c, 1);
+                }
+                *length = k;
+                deststr[k] = '\0';
+                return deststr;
+            }
+
+            Value parseNumber()
+            {
+                double dbval;
+                long longval;
+                long long llval;
+                NEON_ASTDEBUG(m_pvm, "");
+                if(m_prevtoken.type == Token::TOK_LITNUMBIN)
+                {
+                    llval = strtoll(m_prevtoken.start + 2, nullptr, 2);
+                    return Value::makeNumber(llval);
+                }
+                else if(m_prevtoken.type == Token::TOK_LITNUMOCT)
+                {
+                    longval = strtol(m_prevtoken.start + 2, nullptr, 8);
+                    return Value::makeNumber(longval);
+                }
+                else if(m_prevtoken.type == Token::TOK_LITNUMHEX)
+                {
+                    longval = strtol(m_prevtoken.start, nullptr, 16);
+                    return Value::makeNumber(longval);
+                }
+                dbval = strtod(m_prevtoken.start, nullptr);
+                return Value::makeNumber(dbval);
+            }
+
 
             void parseDeclaration()
             {
@@ -7570,7 +9313,7 @@ namespace neon
                 ignoreSpace();
                 if(m_panicmode)
                 {
-                    nn_astparser_synchronize(this);
+                    synchronize();
                 }
                 ignoreSpace();
             }
@@ -7658,7 +9401,7 @@ namespace neon
 
 #include "prot.inc"
 
-static NEON_ALWAYSINLINE void nn_state_apidebugv(neon::State* state, const char* funcname, const char* format, va_list va)
+static NEON_FORCEINLINE void nn_state_apidebugv(neon::State* state, const char* funcname, const char* format, va_list va)
 {
     (void)state;
     fprintf(stderr, "API CALL: to '%s': ", funcname);
@@ -7666,7 +9409,7 @@ static NEON_ALWAYSINLINE void nn_state_apidebugv(neon::State* state, const char*
     fprintf(stderr, "\n");
 }
 
-static NEON_ALWAYSINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...)
+static NEON_FORCEINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...)
 {
     va_list va;
     va_start(va, format);
@@ -7674,7 +9417,7 @@ static NEON_ALWAYSINLINE void nn_state_apidebug(neon::State* state, const char* 
     va_end(va);
 }
 
-static NEON_ALWAYSINLINE void nn_state_astdebugv(neon::State* state, const char* funcname, const char* format, va_list va)
+static NEON_FORCEINLINE void nn_state_astdebugv(neon::State* state, const char* funcname, const char* format, va_list va)
 {
     (void)state;
     fprintf(stderr, "AST CALL: to '%s': ", funcname);
@@ -7682,7 +9425,7 @@ static NEON_ALWAYSINLINE void nn_state_astdebugv(neon::State* state, const char*
     fprintf(stderr, "\n");
 }
 
-static NEON_ALWAYSINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...)
+static NEON_FORCEINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...)
 {
     va_list va;
     va_start(va, format);
@@ -7697,7 +9440,7 @@ namespace neon
         return Parser::compileSource(state, module, source, blob, fromimport, keeplast);
     }
 
-    NEON_ALWAYSINLINE Value State::readConst()
+    NEON_FORCEINLINE Value State::readConst()
     {
         uint16_t idx;
         idx = readShort();
@@ -7973,7 +9716,7 @@ namespace neon
         /* Non-empty lists are true, empty lists are false.*/
         else if(val.isArray())
         {
-            return val.asArray()->m_varray->m_count == 0;
+            return val.asArray()->size() == 0;
         }
         /* Non-empty dicts are true, empty dicts are false. */
         else if(val.isDict())
@@ -8038,7 +9781,7 @@ namespace neon
         }
         else if(a.isArray() && b.isArray())
         {
-            if(a.asArray()->m_varray->m_count >= b.asArray()->m_varray->m_count)
+            if(a.asArray()->size() >= b.asArray()->size())
             {
                 return a;
             }
@@ -8089,15 +9832,15 @@ namespace neon
                     break;
                 case Value::OBJTYPE_ARRAY:
                 {
-                    int i;
+                    size_t i;
                     Array* list;
                     Array* newlist;
                     list = value.asArray();
                     newlist = Array::make(state);
                     state->stackPush(Value::fromObject(newlist));
-                    for(i = 0; i < list->m_varray->m_count; i++)
+                    for(i = 0; i < list->size(); i++)
                     {
-                        newlist->m_varray->push(list->m_varray->m_values[i]);
+                        newlist->push(list->at(i));
                     }
                     state->stackPop();
                     return Value::fromObject(newlist);
@@ -8204,11 +9947,11 @@ namespace neon
             {
                 arra = (Array*)oa;
                 arrb = (Array*)ob;
-                if(arra->m_varray->m_count == arrb->m_varray->m_count)
+                if(arra->size() == arrb->size())
                 {
-                    for(i=0; i<(size_t)arra->m_varray->m_count; i++)
+                    for(i=0; i<(size_t)arra->size(); i++)
                     {
-                        if(!arra->m_varray->m_values[i].compare(state, arrb->m_varray->m_values[i]))
+                        if(!arra->at(i).compare(state, arrb->at(i)))
                         {
                             return false;
                         }
@@ -8303,7 +10046,7 @@ namespace neon
 
     void HashTable::printTo(Printer* pd, const char* name)
     {
-        int i;
+        size_t i;
         HashTable::Entry* entry;
         pd->putformat("<HashTable of %s : {\n", name);
         for(i = 0; i < m_capacity; i++)
@@ -8571,13 +10314,13 @@ namespace neon
         {
             fprintf(stderr, "  stacktrace:\n");
             oa = field->m_actualval.asArray();
-            cnt = oa->m_varray->m_count;
+            cnt = oa->size();
             i = cnt-1;
             if(cnt > 0)
             {
                 while(true)
                 {
-                    stackitm = oa->m_varray->m_values[i];
+                    stackitm = oa->at(i);
                     m_debugprinter->putformat("  ");
                     m_debugprinter->printValue(stackitm, false, true);
                     m_debugprinter->putformat("\n");
@@ -8997,31 +10740,6 @@ neon::Token nn_astparser_synthtoken(const char* name)
     return token;
 }
 
-neon::FuncScript* nn_astparser_endcompiler(neon::Parser* prs)
-{
-    const char* fname;
-    neon::FuncScript* function;
-    prs->emitReturn();
-    function = prs->m_currfunccompiler->m_targetfunc;
-    fname = nullptr;
-    if(function->m_scriptfnname == nullptr)
-    {
-        fname = prs->m_currmodule->m_physlocation->data();
-    }
-    else
-    {
-        fname = function->m_scriptfnname->data();
-    }
-    if(!prs->m_haderror && prs->m_pvm->m_conf.dumpbytecode)
-    {
-        neon::DebugPrinter dp(prs->m_pvm->m_debugprinter);
-        dp.printFunctionDisassembly(prs->currentBlob(), fname);
-    }
-    NEON_ASTDEBUG(prs->m_pvm, "for function '%s'", fname);
-    prs->m_currfunccompiler = prs->m_currfunccompiler->m_enclosing;
-    return function;
-}
-
 void nn_astparser_scopebegin(neon::Parser* prs)
 {
     NEON_ASTDEBUG(prs->m_pvm, "current depth=%d", prs->m_currfunccompiler->m_scopedepth);
@@ -9101,7 +10819,7 @@ int nn_astparser_discardlocals(neon::Parser* prs, int depth)
 
 void nn_astparser_endloop(neon::Parser* prs)
 {
-    int i;
+    size_t i;
     neon::Instruction* bcode;
     neon::Value* cvals;
     NEON_ASTDEBUG(prs->m_pvm, "");
@@ -9757,299 +11475,12 @@ bool nn_astparser_rulegrouping(neon::Parser* prs, bool canassign)
     return true;
 }
 
-neon::Value nn_astparser_compilenumber(neon::Parser* prs)
-{
-    double dbval;
-    long longval;
-    long long llval;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMBIN)
-    {
-        llval = strtoll(prs->m_prevtoken.start + 2, nullptr, 2);
-        return neon::Value::makeNumber(llval);
-    }
-    else if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMOCT)
-    {
-        longval = strtol(prs->m_prevtoken.start + 2, nullptr, 8);
-        return neon::Value::makeNumber(longval);
-    }
-    else if(prs->m_prevtoken.type == neon::Token::TOK_LITNUMHEX)
-    {
-        longval = strtol(prs->m_prevtoken.start, nullptr, 16);
-        return neon::Value::makeNumber(longval);
-    }
-    else
-    {
-        dbval = strtod(prs->m_prevtoken.start, nullptr);
-        return neon::Value::makeNumber(dbval);
-    }
-}
-
 bool nn_astparser_rulenumber(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->emitConst(nn_astparser_compilenumber(prs));
+    prs->emitConst(prs->parseNumber());
     return true;
-}
-
-/*
-// Reads the next character, which should be a hex digit (0-9, a-f, or A-F) and
-// returns its numeric value. If the character isn't a hex digit, returns -1.
-*/
-int nn_astparser_readhexdigit(char c)
-{
-    if((c >= '0') && (c <= '9'))
-    {
-        return (c - '0');
-    }
-    if((c >= 'a') && (c <= 'f'))
-    {
-        return ((c - 'a') + 10);
-    }
-    if((c >= 'A') && (c <= 'F'))
-    {
-        return ((c - 'A') + 10);
-    }
-    return -1;
-}
-
-/*
-// Reads [digits] hex digits in a string literal and returns their number value.
-*/
-int nn_astparser_readhexescape(neon::Parser* prs, const char* str, int index, int count)
-{
-    size_t pos;
-    int i;
-    int cval;
-    int digit;
-    int value;
-    value = 0;
-    i = 0;
-    digit = 0;
-    for(; i < count; i++)
-    {
-        pos = (index + i + 2);
-        cval = str[pos];
-        digit = nn_astparser_readhexdigit(cval);
-        if(digit == -1)
-        {
-            prs->raiseError("invalid hex escape sequence at #%d of \"%s\": '%c' (%d)", pos, str, cval, cval);
-        }
-        value = (value * 16) | digit;
-    }
-    if(count == 4 && (digit = nn_astparser_readhexdigit(str[index + i + 2])) != -1)
-    {
-        value = (value * 16) | digit;
-    }
-    return value;
-}
-
-int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, const char* realstring, int numberbytes, int realindex, int index)
-{
-    int value;
-    int count;
-    size_t len;
-    char* chr;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    value = nn_astparser_readhexescape(prs, realstring, realindex, numberbytes);
-    count = neon::Util::utf8NumBytes(value);
-    if(count == -1)
-    {
-        prs->raiseError("cannot encode a negative unicode value");
-    }
-    /* check for greater that \uffff */
-    if(value > 65535)
-    {
-        count++;
-    }
-    if(count != 0)
-    {
-        chr = neon::Util::utf8Encode(prs->m_pvm, value, &len);
-        if(chr)
-        {
-            memcpy(string + index, chr, (size_t)count + 1);
-            neon::Memory::osFree(chr);
-        }
-        else
-        {
-            prs->raiseError("cannot decode unicode escape at index %d", realindex);
-        }
-    }
-    /* but greater than \uffff doesn't occupy any extra byte */
-    /*
-    if(value > 65535)
-    {
-        count--;
-    }
-    */
-    return count;
-}
-
-char* nn_astparser_compilestring(neon::Parser* prs, int* length)
-{
-    int k;
-    int i;
-    int count;
-    int reallength;
-    int rawlen;
-    char c;
-    char quote;
-    char* deststr;
-    char* realstr;
-    rawlen = (((size_t)prs->m_prevtoken.length - 2) + 1);
-    NEON_ASTDEBUG(prs->m_pvm, "raw length=%d", rawlen);
-    deststr = (char*)neon::State::GC::allocate(prs->m_pvm, sizeof(char), rawlen);
-    quote = prs->m_prevtoken.start[0];
-    realstr = (char*)prs->m_prevtoken.start + 1;
-    reallength = prs->m_prevtoken.length - 2;
-    k = 0;
-    for(i = 0; i < reallength; i++, k++)
-    {
-        c = realstr[i];
-        if(c == '\\' && i < reallength - 1)
-        {
-            switch(realstr[i + 1])
-            {
-                case '0':
-                    {
-                        c = '\0';
-                    }
-                    break;
-                case '$':
-                    {
-                        c = '$';
-                    }
-                    break;
-                case '\'':
-                    {
-                        if(quote == '\'' || quote == '}')
-                        {
-                            /* } handle closing of interpolation. */
-                            c = '\'';
-                        }
-                        else
-                        {
-                            i--;
-                        }
-                    }
-                    break;
-                case '"':
-                    {
-                        if(quote == '"' || quote == '}')
-                        {
-                            c = '"';
-                        }
-                        else
-                        {
-                            i--;
-                        }
-                    }
-                    break;
-                case 'a':
-                    {
-                        c = '\a';
-                    }
-                    break;
-                case 'b':
-                    {
-                        c = '\b';
-                    }
-                    break;
-                case 'f':
-                    {
-                        c = '\f';
-                    }
-                    break;
-                case 'n':
-                    {
-                        c = '\n';
-                    }
-                    break;
-                case 'r':
-                    {
-                        c = '\r';
-                    }
-                    break;
-                case 't':
-                    {
-                        c = '\t';
-                    }
-                    break;
-                case 'e':
-                    {
-                        c = 27;
-                    }
-                    break;
-                case '\\':
-                    {
-                        c = '\\';
-                    }
-                    break;
-                case 'v':
-                    {
-                        c = '\v';
-                    }
-                    break;
-                case 'x':
-                    {
-                        //int nn_astparser_readunicodeescape(neon::Parser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
-                        //int nn_astparser_readhexescape(neon::Parser* prs, const char* str, int index, int count)
-                        //k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
-                        //k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
-                        c = nn_astparser_readhexescape(prs, realstr, i, 2) - 0;
-                        i += 2;
-                        //continue;
-                    }
-                    break;
-                case 'u':
-                    {
-                        count = nn_astparser_readunicodeescape(prs, deststr, realstr, 4, i, k);
-                        if(count > 4)
-                        {
-                            k += count - 2;
-                        }
-                        else
-                        {
-                            k += count - 1;
-                        }
-                        if(count > 4)
-                        {
-                            i += 6;
-                        }
-                        else
-                        {
-                            i += 5;
-                        }
-                        continue;
-                    }
-                case 'U':
-                    {
-                        count = nn_astparser_readunicodeescape(prs, deststr, realstr, 8, i, k);
-                        if(count > 4)
-                        {
-                            k += count - 2;
-                        }
-                        else
-                        {
-                            k += count - 1;
-                        }
-                        i += 9;
-                        continue;
-                    }
-                default:
-                    {
-                        i--;
-                    }
-                    break;
-            }
-            i++;
-        }
-        memcpy(deststr + k, &c, 1);
-    }
-    *length = k;
-    deststr[k] = '\0';
-    return deststr;
 }
 
 bool nn_astparser_rulestring(neon::Parser* prs, bool canassign)
@@ -10058,7 +11489,7 @@ bool nn_astparser_rulestring(neon::Parser* prs, bool canassign)
     char* str;
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "canassign=%d", canassign);
-    str = nn_astparser_compilestring(prs, &length);
+    str = prs->parseString(&length);
     prs->emitConst(neon::Value::fromObject(neon::String::take(prs->m_pvm, str, length)));
     return true;
 }
@@ -10340,8 +11771,6 @@ neon::Parser::Rule* neon::Parser::getRule(neon::Token::Type type)
 }
 #undef dorule
 
-
-
 bool nn_astparser_parseblock(neon::Parser* prs)
 {
     prs->m_blockcount++;
@@ -10453,31 +11882,6 @@ void nn_astparser_parsefuncparamlist(neon::Parser* prs)
     } while(prs->match(neon::Token::TOK_COMMA));
 }
 
-void nn_astfunccompiler_compilebody(neon::Parser* prs, neon::Parser::FuncCompiler* compiler, bool closescope, bool isanon)
-{
-    int i;
-    neon::FuncScript* function;
-    (void)isanon;
-    /* compile the body */
-    prs->ignoreSpace();
-    prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' before function body");
-    nn_astparser_parseblock(prs);
-    /* create the function object */
-    if(closescope)
-    {
-        nn_astparser_scopeend(prs);
-    }
-    function = nn_astparser_endcompiler(prs);
-    prs->m_pvm->stackPush(neon::Value::fromObject(function));
-    prs->emitInstruction(neon::Instruction::OP_MAKECLOSURE);
-    prs->emit1short(prs->pushConst(neon::Value::fromObject(function)));
-    for(i = 0; i < function->m_upvalcount; i++)
-    {
-        prs->emit1byte(compiler->m_compiledupvals[i].islocal ? 1 : 0);
-        prs->emit1short(compiler->m_compiledupvals[i].index);
-    }
-    prs->m_pvm->stackPop();
-}
 
 void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, bool isanon)
 {
@@ -10491,7 +11895,7 @@ void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, 
         nn_astparser_parsefuncparamlist(prs);
     }
     prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after function parameters");
-    nn_astfunccompiler_compilebody(prs, &compiler, false, isanon);
+    compiler.compileBody(false, isanon);
     prs->m_infunction = false;
 }
 
@@ -10534,7 +11938,7 @@ bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
         nn_astparser_parsefuncparamlist(prs);
     }
     prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
-    nn_astfunccompiler_compilebody(prs, &compiler, true, true);
+    compiler.compileBody(true, true);
     return true;
 }
 
@@ -11023,7 +12427,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
                     }
                     else if(prs->m_prevtoken.type == neon::Token::TOK_LITERAL)
                     {
-                        str = nn_astparser_compilestring(prs, &length);
+                        str = prs->parseString(&length);
                         string = neon::String::take(prs->m_pvm, str, length);
                         /* gc fix */
                         prs->m_pvm->stackPush(neon::Value::fromObject(string));
@@ -11033,7 +12437,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
                     }
                     else if(prs->checkNumber())
                     {
-                        sw->m_jumppositions->set(nn_astparser_compilenumber(prs), jump);
+                        sw->m_jumppositions->set(prs->parseNumber(), jump);
                     }
                     else
                     {
@@ -11338,50 +12742,6 @@ void nn_astparser_parsebreakstmt(neon::Parser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_synchronize(neon::Parser* prs)
-{
-    prs->m_panicmode = false;
-    while(prs->m_currtoken.type != neon::Token::TOK_EOF)
-    {
-        if(prs->m_currtoken.type == neon::Token::TOK_NEWLINE || prs->m_currtoken.type == neon::Token::TOK_SEMICOLON)
-        {
-            return;
-        }
-        switch(prs->m_currtoken.type)
-        {
-            case neon::Token::TOK_KWCLASS:
-            case neon::Token::TOK_KWFUNCTION:
-            case neon::Token::TOK_KWVAR:
-            case neon::Token::TOK_KWFOREACH:
-            case neon::Token::TOK_KWIF:
-            case neon::Token::TOK_KWSWITCH:
-            case neon::Token::TOK_KWCASE:
-            case neon::Token::TOK_KWFOR:
-            case neon::Token::TOK_KWDO:
-            case neon::Token::TOK_KWWHILE:
-            case neon::Token::TOK_KWECHO:
-            case neon::Token::TOK_KWASSERT:
-            case neon::Token::TOK_KWTRY:
-            case neon::Token::TOK_KWCATCH:
-            case neon::Token::TOK_KWTHROW:
-            case neon::Token::TOK_KWRETURN:
-            case neon::Token::TOK_KWSTATIC:
-            case neon::Token::TOK_KWTHIS:
-            case neon::Token::TOK_KWSUPER:
-            case neon::Token::TOK_KWFINALLY:
-            case neon::Token::TOK_KWIN:
-            case neon::Token::TOK_KWIMPORT:
-            case neon::Token::TOK_KWAS:
-                return;
-            default:
-                /* do nothing */
-            ;
-        }
-        prs->advance();
-    }
-}
-
-
 
 neon::RegModule* nn_natmodule_load_null(neon::State* state)
 {
@@ -11465,12 +12825,16 @@ neon::RegModule* nn_natmodule_load_os(neon::State* state)
 
 neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
 {
+    size_t prelen;
+    const char* prefix;
     const char* cstr;
     neon::String* insrc;
     neon::Lexer* lex;
     neon::Array* arr;
     neon::Dictionary* itm;
     neon::Token token;
+    prefix = "TOK_";
+    prelen = strlen(prefix);
     NEON_ARGS_CHECKTYPE(args, 0, isString);
     insrc = args->argv[0].asString();
     lex = neon::Memory::create<neon::Lexer>(state, insrc->data());
@@ -11481,7 +12845,7 @@ neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
         token = lex->scanToken();
         itm->addEntryCStr("line", neon::Value::makeNumber(token.line));
         cstr = neon::Token::tokenName(token.type);
-        itm->addEntryCStr("type", neon::Value::fromObject(neon::String::copy(state, cstr + 12)));
+        itm->addEntryCStr("type", neon::Value::fromObject(neon::String::copy(state, cstr + prelen)));
         itm->addEntryCStr("source", neon::Value::fromObject(neon::String::copy(state, token.start, token.length)));
         arr->push(neon::Value::fromObject(itm));
     }
@@ -11630,7 +12994,7 @@ neon::Value nn_memberfunc_dict_clear(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_clone(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Dictionary* newdict;
     NEON_ARGS_CHECKCOUNT(args, 0);
@@ -11646,7 +13010,7 @@ neon::Value nn_memberfunc_dict_clone(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_compact(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Dictionary* newdict;
     NEON_ARGS_CHECKCOUNT(args, 0);
@@ -11676,7 +13040,7 @@ neon::Value nn_memberfunc_dict_contains(neon::State* state, neon::Arguments* arg
 
 neon::Value nn_memberfunc_dict_extend(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Dictionary* dictcpy;
     (void)state;
@@ -11721,7 +13085,7 @@ neon::Value nn_memberfunc_dict_get(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_keys(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 0);
@@ -11736,7 +13100,7 @@ neon::Value nn_memberfunc_dict_keys(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_values(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Array* list;
     neon::Property* field;
@@ -11753,7 +13117,7 @@ neon::Value nn_memberfunc_dict_values(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_remove(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int index;
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 1);
@@ -11798,7 +13162,7 @@ neon::Value nn_memberfunc_dict_findkey(neon::State* state, neon::Arguments* args
 
 neon::Value nn_memberfunc_dict_tolist(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     neon::Dictionary* dict;
     neon::Array* namelist;
@@ -11843,7 +13207,7 @@ neon::Value nn_memberfunc_dict_iter(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_itern(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     NEON_ARGS_CHECKCOUNT(args, 1);
     dict = args->thisval.asDict();
@@ -11867,7 +13231,7 @@ neon::Value nn_memberfunc_dict_itern(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_each(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value value;
     neon::Value callable;
@@ -11902,7 +13266,7 @@ neon::Value nn_memberfunc_dict_each(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_filter(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value value;
     neon::Value callable;
@@ -11943,7 +13307,7 @@ neon::Value nn_memberfunc_dict_filter(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_some(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value result;
     neon::Value value;
@@ -11985,7 +13349,7 @@ neon::Value nn_memberfunc_dict_some(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_every(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value value;
     neon::Value callable;  
@@ -12026,7 +13390,7 @@ neon::Value nn_memberfunc_dict_every(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_dict_reduce(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     int startindex;
     neon::Value value;
@@ -12633,7 +13997,7 @@ neon::Value nn_memberfunc_array_length(neon::State* state, neon::Arguments* args
     neon::Array* selfarr;
     (void)state;
     selfarr = args->thisval.asArray();
-    return neon::Value::makeNumber(selfarr->m_varray->m_count);
+    return neon::Value::makeNumber(selfarr->size());
 }
 
 neon::Value nn_memberfunc_array_append(neon::State* state, neon::Arguments* args)
@@ -12661,20 +14025,20 @@ neon::Value nn_memberfunc_array_clone(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
-    return neon::Value::fromObject(list->copy(0, list->m_varray->m_count));
+    return neon::Value::fromObject(list->copy(0, list->size()));
 }
 
 neon::Value nn_memberfunc_array_count(neon::State* state, neon::Arguments* args)
 {
-    int i;
-    int count;
+    size_t i;
+    size_t count;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 1);
     list = args->thisval.asArray();
     count = 0;
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->size(); i++)
     {
-        if(list->m_varray->m_values[i].compare(state, args->argv[0]))
+        if(list->at(i).compare(state, args->argv[0]))
         {
             count++;
         }
@@ -12684,7 +14048,7 @@ neon::Value nn_memberfunc_array_count(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_extend(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     neon::Array* list2;
     (void)state;
@@ -12692,16 +14056,16 @@ neon::Value nn_memberfunc_array_extend(neon::State* state, neon::Arguments* args
     NEON_ARGS_CHECKTYPE(args, 0, isArray);
     list = args->thisval.asArray();
     list2 = args->argv[0].asArray();
-    for(i = 0; i < list2->m_varray->m_count; i++)
+    for(i = 0; i < list2->size(); i++)
     {
-        list->push(list2->m_varray->m_values[i]);
+        list->push(list2->at(i));
     }
     return neon::Value::makeEmpty();
 }
 
 neon::Value nn_memberfunc_array_indexof(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
     list = args->thisval.asArray();
@@ -12711,9 +14075,9 @@ neon::Value nn_memberfunc_array_indexof(neon::State* state, neon::Arguments* arg
         NEON_ARGS_CHECKTYPE(args, 1, isNumber);
         i = args->argv[1].asNumber();
     }
-    for(; i < list->m_varray->m_count; i++)
+    for(; i < list->size(); i++)
     {
-        if(list->m_varray->m_values[i].compare(state, args->argv[0]))
+        if(list->at(i).compare(state, args->argv[0]))
         {
             return neon::Value::makeNumber(i);
         }
@@ -12723,13 +14087,13 @@ neon::Value nn_memberfunc_array_indexof(neon::State* state, neon::Arguments* arg
 
 neon::Value nn_memberfunc_array_insert(neon::State* state, neon::Arguments* args)
 {
-    int index;
+    size_t index;
     neon::Array* list;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 2);
     NEON_ARGS_CHECKTYPE(args, 1, isNumber);
     list = args->thisval.asArray();
-    index = (int)args->argv[1].asNumber();
+    index = args->argv[1].asNumber();
     list->m_varray->insert(args->argv[0], index);
     return neon::Value::makeEmpty();
 }
@@ -12742,9 +14106,9 @@ neon::Value nn_memberfunc_array_pop(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
-    if(list->m_varray->m_count > 0)
+    if(list->size() > 0)
     {
-        value = list->m_varray->m_values[list->m_varray->m_count - 1];
+        value = list->at(list->size() - 1);
         list->m_varray->m_count--;
         return value;
     }
@@ -12753,9 +14117,9 @@ neon::Value nn_memberfunc_array_pop(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_shift(neon::State* state, neon::Arguments* args)
 {
-    int i;
-    int j;
-    int count;
+    size_t i;
+    size_t j;
+    size_t count;
     neon::Array* list;
     neon::Array* newlist;
     NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
@@ -12766,7 +14130,7 @@ neon::Value nn_memberfunc_array_shift(neon::State* state, neon::Arguments* args)
         count = args->argv[0].asNumber();
     }
     list = args->thisval.asArray();
-    if(count >= list->m_varray->m_count || list->m_varray->m_count == 1)
+    if(count >= list->size() || list->size() == 1)
     {
         list->m_varray->m_count = 0;
         return neon::Value::makeNull();
@@ -12776,16 +14140,16 @@ neon::Value nn_memberfunc_array_shift(neon::State* state, neon::Arguments* args)
         newlist = state->gcProtect(neon::Array::make(state));
         for(i = 0; i < count; i++)
         {
-            newlist->push(list->m_varray->m_values[0]);
-            for(j = 0; j < list->m_varray->m_count; j++)
+            newlist->push(list->at(0));
+            for(j = 0; j < list->size(); j++)
             {
-                list->m_varray->m_values[j] = list->m_varray->m_values[j + 1];
+                list->m_varray->m_values[j] = list->at(j + 1);
             }
             list->m_varray->m_count -= 1;
         }
         if(count == 1)
         {
-            return newlist->m_varray->m_values[0];
+            return newlist->at(0);
         }
         else
         {
@@ -12797,7 +14161,7 @@ neon::Value nn_memberfunc_array_shift(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_removeat(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int index;
     neon::Value value;
     neon::Array* list;
@@ -12805,14 +14169,14 @@ neon::Value nn_memberfunc_array_removeat(neon::State* state, neon::Arguments* ar
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
     list = args->thisval.asArray();
     index = args->argv[0].asNumber();
-    if(index < 0 || index >= list->m_varray->m_count)
+    if(index < 0 || index >= int(list->size()))
     {
         return state->raiseFromFunction(args, "list index %d out of range at remove_at()", index);
     }
-    value = list->m_varray->m_values[index];
-    for(i = index; i < list->m_varray->m_count - 1; i++)
+    value = list->at(index);
+    for(i = index; i < list->size() - 1; i++)
     {
-        list->m_varray->m_values[i] = list->m_varray->m_values[i + 1];
+        list->m_varray->m_values[i] = list->at(i + 1);
     }
     list->m_varray->m_count--;
     return value;
@@ -12820,15 +14184,15 @@ neon::Value nn_memberfunc_array_removeat(neon::State* state, neon::Arguments* ar
 
 neon::Value nn_memberfunc_array_remove(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int index;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 1);
     list = args->thisval.asArray();
     index = -1;
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->size(); i++)
     {
-        if(list->m_varray->m_values[i].compare(state, args->argv[0]))
+        if(list->at(i).compare(state, args->argv[0]))
         {
             index = i;
             break;
@@ -12836,9 +14200,9 @@ neon::Value nn_memberfunc_array_remove(neon::State* state, neon::Arguments* args
     }
     if(index != -1)
     {
-        for(i = index; i < list->m_varray->m_count; i++)
+        for(i = index; i < list->size(); i++)
         {
-            list->m_varray->m_values[i] = list->m_varray->m_values[i + 1];
+            list->m_varray->m_values[i] = list->at(i + 1);
         }
         list->m_varray->m_count--;
     }
@@ -12856,19 +14220,19 @@ neon::Value nn_memberfunc_array_reverse(neon::State* state, neon::Arguments* arg
     /* in-place reversal:*/
     /*
     int start = 0;
-    int end = list->m_varray->m_count - 1;
+    int end = list->size() - 1;
     while(start < end)
     {
-        neon::Value temp = list->m_varray->m_values[start];
-        list->m_varray->m_values[start] = list->m_varray->m_values[end];
+        neon::Value temp = list->at(start);
+        list->m_varray->m_values[start] = list->at(end);
         list->m_varray->m_values[end] = temp;
         start++;
         end--;
     }
     */
-    for(fromtop = list->m_varray->m_count - 1; fromtop >= 0; fromtop--)
+    for(fromtop = list->size() - 1; fromtop >= 0; fromtop--)
     {
-        nlist->push(list->m_varray->m_values[fromtop]);
+        nlist->push(list->at(fromtop));
     }
     return neon::Value::fromObject(nlist);
 }
@@ -12880,19 +14244,19 @@ neon::Value nn_memberfunc_array_sort(neon::State* state, neon::Arguments* args)
     neon::ValArray::QuickSort qs(state);
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
-    qs.runSort(list->m_varray, 0, list->m_varray->m_count-1);
+    qs.runSort(list->m_varray, 0, list->size()-0);
     return neon::Value::fromObject(list);
 }
 
 neon::Value nn_memberfunc_array_contains(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 1);
     list = args->thisval.asArray();
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->size(); i++)
     {
-        if(args->argv[0].compare(state, list->m_varray->m_values[i]))
+        if(args->argv[0].compare(state, list->at(i)))
         {
             return neon::Value::makeBool(true);
         }
@@ -12916,17 +14280,17 @@ neon::Value nn_memberfunc_array_delete(neon::State* state, neon::Arguments* args
         idxupper = args->argv[1].asNumber();
     }
     list = args->thisval.asArray();
-    if(idxlower < 0 || idxlower >= list->m_varray->m_count)
+    if(idxlower < 0 || idxlower >= int(list->size()))
     {
         return state->raiseFromFunction(args, "list index %d out of range at delete()", idxlower);
     }
-    else if(idxupper < idxlower || idxupper >= list->m_varray->m_count)
+    else if(idxupper < idxlower || idxupper >= int(list->size()))
     {
         return state->raiseFromFunction(args, "invalid upper limit %d at delete()", idxupper);
     }
-    for(i = 0; i < list->m_varray->m_count - idxupper; i++)
+    for(i = 0; i < int(list->size() - idxupper); i++)
     {
-        list->m_varray->m_values[idxlower + i] = list->m_varray->m_values[i + idxupper + 1];
+        list->m_varray->m_values[idxlower + i] = list->at(i + idxupper + 1);
     }
     list->m_varray->m_count -= idxupper - idxlower + 1;
     return neon::Value::makeNumber((double)idxupper - (double)idxlower + 1);
@@ -12938,9 +14302,9 @@ neon::Value nn_memberfunc_array_first(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
-    if(list->m_varray->m_count > 0)
+    if(list->size() > 0)
     {
-        return list->m_varray->m_values[0];
+        return list->at(0);
     }
     return neon::Value::makeNull();
 }
@@ -12951,9 +14315,9 @@ neon::Value nn_memberfunc_array_last(neon::State* state, neon::Arguments* args)
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
-    if(list->m_varray->m_count > 0)
+    if(list->size() > 0)
     {
-        return list->m_varray->m_values[list->m_varray->m_count - 1];
+        return list->at(list->size() - 1);
     }
     return neon::Value::makeNull();
 }
@@ -12962,9 +14326,8 @@ neon::Value nn_memberfunc_array_isempty(neon::State* state, neon::Arguments* arg
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeBool(args->thisval.asArray()->m_varray->m_count == 0);
+    return neon::Value::makeBool(args->thisval.asArray()->size() == 0);
 }
-
 
 neon::Value nn_memberfunc_array_take(neon::State* state, neon::Arguments* args)
 {
@@ -12977,11 +14340,11 @@ neon::Value nn_memberfunc_array_take(neon::State* state, neon::Arguments* args)
     count = args->argv[0].asNumber();
     if(count < 0)
     {
-        count = list->m_varray->m_count + count;
+        count = list->count() + count;
     }
-    if(list->m_varray->m_count < count)
+    if(int(list->count()) < count)
     {
-        return neon::Value::fromObject(list->copy(0, list->m_varray->m_count));
+        return neon::Value::fromObject(list->copy(0, list->count()));
     }
     return neon::Value::fromObject(list->copy(0, count));
 }
@@ -12995,48 +14358,47 @@ neon::Value nn_memberfunc_array_get(neon::State* state, neon::Arguments* args)
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
     list = args->thisval.asArray();
     index = args->argv[0].asNumber();
-    if(index < 0 || index >= list->m_varray->m_count)
+    if(index < 0 || index >= int(list->count()))
     {
         return neon::Value::makeNull();
     }
-    return list->m_varray->m_values[index];
+    return list->at(index);
 }
 
 neon::Value nn_memberfunc_array_compact(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     neon::Array* newlist;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
     newlist = state->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].compare(state, neon::Value::makeNull()))
+        if(!list->at(i).compare(state, neon::Value::makeNull()))
         {
-            newlist->push(list->m_varray->m_values[i]);
+            newlist->push(list->at(i));
         }
     }
     return neon::Value::fromObject(newlist);
 }
 
-
 neon::Value nn_memberfunc_array_unique(neon::State* state, neon::Arguments* args)
 {
-    int i;
-    int j;
+    size_t i;
+    size_t j;
     bool found;
     neon::Array* list;
     neon::Array* newlist;
     NEON_ARGS_CHECKCOUNT(args, 0);
     list = args->thisval.asArray();
     newlist = state->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
         found = false;
-        for(j = 0; j < newlist->m_varray->m_count; j++)
+        for(j = 0; j < newlist->count(); j++)
         {
-            if(newlist->m_varray->m_values[j].compare(state, list->m_varray->m_values[i]))
+            if(newlist->at(j).compare(state, list->at(i)))
             {
                 found = true;
                 continue;
@@ -13044,7 +14406,7 @@ neon::Value nn_memberfunc_array_unique(neon::State* state, neon::Arguments* args
         }
         if(!found)
         {
-            newlist->push(list->m_varray->m_values[i]);
+            newlist->push(list->at(i));
         }
     }
     return neon::Value::fromObject(newlist);
@@ -13052,8 +14414,8 @@ neon::Value nn_memberfunc_array_unique(neon::State* state, neon::Arguments* args
 
 neon::Value nn_memberfunc_array_zip(neon::State* state, neon::Arguments* args)
 {
-    int i;
-    int j;
+    size_t i;
+    size_t j;
     neon::Array* list;
     neon::Array* newlist;
     neon::Array* alist;
@@ -13061,21 +14423,21 @@ neon::Value nn_memberfunc_array_zip(neon::State* state, neon::Arguments* args)
     list = args->thisval.asArray();
     newlist = state->gcProtect(neon::Array::make(state));
     arglist = (neon::Array**)neon::State::GC::allocate(state, sizeof(neon::Array*), args->argc);
-    for(i = 0; i < args->argc; i++)
+    for(i = 0; i < size_t(args->argc); i++)
     {
         NEON_ARGS_CHECKTYPE(args, i, isArray);
         arglist[i] = args->argv[i].asArray();
     }
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
         alist = state->gcProtect(neon::Array::make(state));
         /* item of main list*/
-        alist->push(list->m_varray->m_values[i]);
-        for(j = 0; j < args->argc; j++)
+        alist->push(list->at(i));
+        for(j = 0; j < size_t(args->argc); j++)
         {
-            if(i < arglist[j]->m_varray->m_count)
+            if(i < arglist[j]->count())
             {
-                alist->push(arglist[j]->m_varray->m_values[i]);
+                alist->push(arglist[j]->at(i));
             }
             else
             {
@@ -13090,8 +14452,8 @@ neon::Value nn_memberfunc_array_zip(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_zipfrom(neon::State* state, neon::Arguments* args)
 {
-    int i;
-    int j;
+    size_t i;
+    size_t j;
     neon::Array* list;
     neon::Array* newlist;
     neon::Array* alist;
@@ -13101,22 +14463,22 @@ neon::Value nn_memberfunc_array_zipfrom(neon::State* state, neon::Arguments* arg
     list = args->thisval.asArray();
     newlist = state->gcProtect(neon::Array::make(state));
     arglist = args->argv[0].asArray();
-    for(i = 0; i < arglist->m_varray->m_count; i++)
+    for(i = 0; i < arglist->count(); i++)
     {
-        if(!arglist->m_varray->m_values[i].isArray())
+        if(!arglist->at(i).isArray())
         {
             return state->raiseFromFunction(args, "invalid list in zip entries");
         }
     }
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
         alist = state->gcProtect(neon::Array::make(state));
-        alist->push(list->m_varray->m_values[i]);
-        for(j = 0; j < arglist->m_varray->m_count; j++)
+        alist->push(list->at(i));
+        for(j = 0; j < arglist->count(); j++)
         {
-            if(i < arglist->m_varray->m_values[j].asArray()->m_varray->m_count)
+            if(i < arglist->at(j).asArray()->count())
             {
-                alist->push(arglist->m_varray->m_values[j].asArray()->m_varray->m_values[i]);
+                alist->push(arglist->at(j).asArray()->at(i));
             }
             else
             {
@@ -13130,15 +14492,15 @@ neon::Value nn_memberfunc_array_zipfrom(neon::State* state, neon::Arguments* arg
 
 neon::Value nn_memberfunc_array_todict(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     neon::Dictionary* dict;
     neon::Array* list;
     NEON_ARGS_CHECKCOUNT(args, 0);
     dict = state->gcProtect(neon::Dictionary::make(state));
     list = args->thisval.asArray();
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        dict->setEntry(neon::Value::makeNumber(i), list->m_varray->m_values[i]);
+        dict->setEntry(neon::Value::makeNumber(i), list->at(i));
     }
     return neon::Value::fromObject(dict);
 }
@@ -13152,9 +14514,9 @@ neon::Value nn_memberfunc_array_iter(neon::State* state, neon::Arguments* args)
     NEON_ARGS_CHECKTYPE(args, 0, isNumber);
     list = args->thisval.asArray();
     index = args->argv[0].asNumber();
-    if(index > -1 && index < list->m_varray->m_count)
+    if(index > -1 && index < int(list->count()))
     {
-        return list->m_varray->m_values[index];
+        return list->at(index);
     }
     return neon::Value::makeNull();
 }
@@ -13167,7 +14529,7 @@ neon::Value nn_memberfunc_array_itern(neon::State* state, neon::Arguments* args)
     list = args->thisval.asArray();
     if(args->argv[0].isNull())
     {
-        if(list->m_varray->m_count == 0)
+        if(list->count() == 0)
         {
             return neon::Value::makeBool(false);
         }
@@ -13178,7 +14540,7 @@ neon::Value nn_memberfunc_array_itern(neon::State* state, neon::Arguments* args)
         return state->raiseFromFunction(args, "lists are numerically indexed");
     }
     index = args->argv[0].asNumber();
-    if(index < list->m_varray->m_count - 1)
+    if(index < int(list->count() - 1))
     {
         return neon::Value::makeNumber((double)index + 1);
     }
@@ -13187,7 +14549,7 @@ neon::Value nn_memberfunc_array_itern(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_each(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value callable;
     neon::Value unused;
@@ -13201,11 +14563,11 @@ neon::Value nn_memberfunc_array_each(neon::State* state, neon::Arguments* args)
     state->stackPush(neon::Value::fromObject(nestargs));
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
         if(arity > 0)
         {
-            nestargs->m_varray->m_values[0] = list->m_varray->m_values[i];
+            nestargs->m_varray->m_values[0] = list->at(i);
             if(arity > 1)
             {
                 nestargs->m_varray->m_values[1] = neon::Value::makeNumber(i);
@@ -13220,7 +14582,7 @@ neon::Value nn_memberfunc_array_each(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_map(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value res;
     neon::Value callable;
@@ -13236,13 +14598,13 @@ neon::Value nn_memberfunc_array_map(neon::State* state, neon::Arguments* args)
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
     resultlist = state->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].isEmpty())
+        if(!list->at(i).isEmpty())
         {
             if(arity > 0)
             {
-                nestargs->m_varray->m_values[0] = list->m_varray->m_values[i];
+                nestargs->m_varray->m_values[0] = list->at(i);
                 if(arity > 1)
                 {
                     nestargs->m_varray->m_values[1] = neon::Value::makeNumber(i);
@@ -13263,7 +14625,7 @@ neon::Value nn_memberfunc_array_map(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_filter(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value callable;
     neon::Value result;
@@ -13279,13 +14641,13 @@ neon::Value nn_memberfunc_array_filter(neon::State* state, neon::Arguments* args
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
     resultlist = state->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].isEmpty())
+        if(!list->at(i).isEmpty())
         {
             if(arity > 0)
             {
-                nestargs->m_varray->m_values[0] = list->m_varray->m_values[i];
+                nestargs->m_varray->m_values[0] = list->at(i);
                 if(arity > 1)
                 {
                     nestargs->m_varray->m_values[1] = neon::Value::makeNumber(i);
@@ -13294,7 +14656,7 @@ neon::Value nn_memberfunc_array_filter(neon::State* state, neon::Arguments* args
             nc.call(callable, args->thisval, nestargs, &result);
             if(!neon::Value::isFalse(result))
             {
-                resultlist->push(list->m_varray->m_values[i]);
+                resultlist->push(list->at(i));
             }
         }
     }
@@ -13304,7 +14666,7 @@ neon::Value nn_memberfunc_array_filter(neon::State* state, neon::Arguments* args
 
 neon::Value nn_memberfunc_array_some(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value callable;
     neon::Value result;
@@ -13318,13 +14680,13 @@ neon::Value nn_memberfunc_array_some(neon::State* state, neon::Arguments* args)
     state->stackPush(neon::Value::fromObject(nestargs));
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].isEmpty())
+        if(!list->at(i).isEmpty())
         {
             if(arity > 0)
             {
-                nestargs->m_varray->m_values[0] = list->m_varray->m_values[i];
+                nestargs->m_varray->m_values[0] = list->at(i);
                 if(arity > 1)
                 {
                     nestargs->m_varray->m_values[1] = neon::Value::makeNumber(i);
@@ -13345,7 +14707,7 @@ neon::Value nn_memberfunc_array_some(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_every(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     neon::Value result;
     neon::Value callable;
@@ -13359,13 +14721,13 @@ neon::Value nn_memberfunc_array_every(neon::State* state, neon::Arguments* args)
     state->stackPush(neon::Value::fromObject(nestargs));
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < list->m_varray->m_count; i++)
+    for(i = 0; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].isEmpty())
+        if(!list->at(i).isEmpty())
         {
             if(arity > 0)
             {
-                nestargs->m_varray->m_values[0] = list->m_varray->m_values[i];
+                nestargs->m_varray->m_values[0] = list->at(i);
                 if(arity > 1)
                 {
                     nestargs->m_varray->m_values[1] = neon::Value::makeNumber(i);
@@ -13385,7 +14747,7 @@ neon::Value nn_memberfunc_array_every(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_memberfunc_array_reduce(neon::State* state, neon::Arguments* args)
 {
-    int i;
+    size_t i;
     int arity;
     int startindex;
     neon::Value callable;
@@ -13402,25 +14764,25 @@ neon::Value nn_memberfunc_array_reduce(neon::State* state, neon::Arguments* args
     {
         accumulator = args->argv[1];
     }
-    if(accumulator.isNull() && list->m_varray->m_count > 0)
+    if(accumulator.isNull() && list->count() > 0)
     {
-        accumulator = list->m_varray->m_values[0];
+        accumulator = list->at(0);
         startindex = 1;
     }
     nestargs = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(nestargs));
     neon::NestCall nc(state);
     arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = startindex; i < list->m_varray->m_count; i++)
+    for(i = startindex; i < list->count(); i++)
     {
-        if(!list->m_varray->m_values[i].isNull() && !list->m_varray->m_values[i].isEmpty())
+        if(!list->at(i).isNull() && !list->at(i).isEmpty())
         {
             if(arity > 0)
             {
                 nestargs->m_varray->m_values[0] = accumulator;
                 if(arity > 1)
                 {
-                    nestargs->m_varray->m_values[1] = list->m_varray->m_values[i];
+                    nestargs->m_varray->m_values[1] = list->at(i);
                     if(arity > 2)
                     {
                         nestargs->m_varray->m_values[2] = neon::Value::makeNumber(i);
@@ -14099,7 +15461,7 @@ neon::Value nn_memberfunc_array_join(neon::State* state, neon::Arguments* args)
         }
     }
     list = selfarr->m_varray->m_values;
-    count = selfarr->m_varray->m_count;
+    count = selfarr->count();
     if(count == 0)
     {
         return neon::Value::fromObject(neon::String::copy(state, ""));
@@ -14395,7 +15757,7 @@ neon::Value nn_memberfunc_string_replace(neon::State* state, neon::Arguments* ar
 {
     int i;
     int totallength;
-    StrBuffer* result;
+    neon::Util::StrBuffer* result;
     neon::String* substr;
     neon::String* string;
     neon::String* repsubstr;
@@ -14409,7 +15771,7 @@ neon::Value nn_memberfunc_string_replace(neon::State* state, neon::Arguments* ar
     {
         return neon::Value::fromObject(neon::String::copy(state, string->data(), string->length()));
     }
-    result = neon::Memory::create<StrBuffer>(0);
+    result = neon::Memory::create<neon::Util::StrBuffer>(0);
     totallength = 0;
     for(i = 0; i < (int)string->length(); i++)
     {
@@ -14885,11 +16247,13 @@ neon::Value nn_nativefn_microtime(neon::State* state, neon::Arguments* args)
 
 neon::Value nn_nativefn_id(neon::State* state, neon::Arguments* args)
 {
+    long* lptr;
     neon::Value val;
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 1);
     val = args->argv[0];
-    return neon::Value::makeNumber(*(long*)&val);
+    lptr = reinterpret_cast<long*>(&val);
+    return neon::Value::makeNumber(*lptr);
 }
 
 neon::Value nn_nativefn_int(neon::State* state, neon::Arguments* args)
@@ -15143,7 +16507,7 @@ namespace neon
             stackPush(Value::fromObject(argslist));
             for(i = startva; i >= 0; i--)
             {
-                argslist->m_varray->push(stackPeek(i + 1));
+                argslist->push(stackPeek(i + 1));
             }
             argcount -= startva;
             /* +1 for the gc protection push above */
@@ -15615,7 +16979,7 @@ neon::ClassObject* nn_vmutil_getclassfor(neon::State* state, neon::Value receive
         return rtval; \
     }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodfromclass(neon::State* state, neon::ClassObject* klass, neon::String* name, int argcount)
+static NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(neon::State* state, neon::ClassObject* klass, neon::String* name, int argcount)
 {
     neon::Property* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
@@ -15631,7 +16995,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodfromclass(neon::State* state
     return state->raiseClass(state->m_exceptions.stdexception, "undefined method '%s' in %s", name->data(), klass->m_classname->data());
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neon::String* name, int argcount)
+static NEON_FORCEINLINE bool nn_vmutil_invokemethodself(neon::State* state, neon::String* name, int argcount)
 {
     size_t spos;
     neon::Value receiver;
@@ -15670,7 +17034,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethodself(neon::State* state, neo
     return state->raiseClass(state->m_exceptions.stdexception, "cannot call method '%s' on object of type '%s'", name->data(), neon::Value::Typename(receiver));
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::String* name, int argcount)
+static NEON_FORCEINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::String* name, int argcount)
 {
     size_t spos;
     neon::Value::ObjType rectype;
@@ -15786,7 +17150,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_invokemethod(neon::State* state, neon::S
     return state->raiseClass(state->m_exceptions.stdexception, "'%s' has no method %s()", klass->m_classname->data(), name->data());
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_bindmethod(neon::State* state, neon::ClassObject* klass, neon::String* name)
+static NEON_FORCEINLINE bool nn_vmutil_bindmethod(neon::State* state, neon::ClassObject* klass, neon::String* name)
 {
     neon::Value val;
     neon::Property* field;
@@ -15807,7 +17171,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_bindmethod(neon::State* state, neon::Cla
     return state->raiseClass(state->m_exceptions.stdexception, "undefined property '%s'", name->data());
 }
 
-static NEON_ALWAYSINLINE neon::ScopeUpvalue* nn_vmutil_upvaluescapture(neon::State* state, neon::Value* local, int stackpos)
+static NEON_FORCEINLINE neon::ScopeUpvalue* nn_vmutil_upvaluescapture(neon::State* state, neon::Value* local, int stackpos)
 {
     neon::ScopeUpvalue* upvalue;
     neon::ScopeUpvalue* prevupvalue;
@@ -15836,7 +17200,7 @@ static NEON_ALWAYSINLINE neon::ScopeUpvalue* nn_vmutil_upvaluescapture(neon::Sta
     return createdupvalue;
 }
 
-static NEON_ALWAYSINLINE void nn_vmutil_upvaluesclose(neon::State* state, const neon::Value* last)
+static NEON_FORCEINLINE void nn_vmutil_upvaluesclose(neon::State* state, const neon::Value* last)
 {
     neon::ScopeUpvalue* upvalue;
     while(state->m_vmstate.openupvalues != nullptr && (&state->m_vmstate.openupvalues->m_location) >= last)
@@ -15848,7 +17212,7 @@ static NEON_ALWAYSINLINE void nn_vmutil_upvaluesclose(neon::State* state, const 
     }
 }
 
-static NEON_ALWAYSINLINE void nn_vmutil_definemethod(neon::State* state, neon::String* name)
+static NEON_FORCEINLINE void nn_vmutil_definemethod(neon::State* state, neon::String* name)
 {
     neon::Value method;
     neon::ClassObject* klass;
@@ -15862,7 +17226,7 @@ static NEON_ALWAYSINLINE void nn_vmutil_definemethod(neon::State* state, neon::S
     state->stackPop();
 }
 
-static NEON_ALWAYSINLINE void nn_vmutil_defineproperty(neon::State* state, neon::String* name, bool isstatic)
+static NEON_FORCEINLINE void nn_vmutil_defineproperty(neon::State* state, neon::String* name, bool isstatic)
 {
     neon::Value property;
     neon::ClassObject* klass;
@@ -15901,7 +17265,7 @@ bool nn_util_isinstanceof(neon::ClassObject* klass1, neon::ClassObject* expected
     return false;
 }
 
-static NEON_ALWAYSINLINE neon::String* nn_vmutil_multiplystring(neon::State* state, neon::String* str, double number)
+static NEON_FORCEINLINE neon::String* nn_vmutil_multiplystring(neon::State* state, neon::String* str, double number)
 {
     int i;
     int times;
@@ -15924,39 +17288,39 @@ static NEON_ALWAYSINLINE neon::String* nn_vmutil_multiplystring(neon::State* sta
     return pd.takeString();
 }
 
-static NEON_ALWAYSINLINE neon::Array* nn_vmutil_combinearrays(neon::State* state, neon::Array* a, neon::Array* b)
+static NEON_FORCEINLINE neon::Array* nn_vmutil_combinearrays(neon::State* state, neon::Array* a, neon::Array* b)
 {
-    int i;
+    size_t i;
     neon::Array* list;
     list = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(list));
-    for(i = 0; i < a->m_varray->m_count; i++)
+    for(i = 0; i < a->count(); i++)
     {
-        list->m_varray->push(a->m_varray->m_values[i]);
+        list->push(a->at(i));
     }
-    for(i = 0; i < b->m_varray->m_count; i++)
+    for(i = 0; i < b->count(); i++)
     {
-        list->m_varray->push(b->m_varray->m_values[i]);
+        list->push(b->at(i));
     }
     state->stackPop();
     return list;
 }
 
-static NEON_ALWAYSINLINE void nn_vmutil_multiplyarray(neon::State* state, neon::Array* from, neon::Array* newlist, int times)
+static NEON_FORCEINLINE void nn_vmutil_multiplyarray(neon::State* state, neon::Array* from, neon::Array* newlist, size_t times)
 {
-    int i;
-    int j;
+    size_t i;
+    size_t j;
     (void)state;
     for(i = 0; i < times; i++)
     {
-        for(j = 0; j < from->m_varray->m_count; j++)
+        for(j = 0; j < from->count(); j++)
         {
-            newlist->m_varray->push(from->m_varray->m_values[j]);
+            newlist->push(from->at(j));
         }
     }
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State* state, neon::Array* list, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State* state, neon::Array* list, bool willassign)
 {
     int i;
     int idxlower;
@@ -15978,13 +17342,13 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State* sta
     }
     if(valupper.isNull())
     {
-        idxupper = list->m_varray->m_count;
+        idxupper = list->count();
     }
     else
     {
         idxupper = valupper.asNumber();
     }
-    if(idxlower < 0 || (idxupper < 0 && ((list->m_varray->m_count + idxupper) < 0)) || idxlower >= list->m_varray->m_count)
+    if(idxlower < 0 || (idxupper < 0 && (int(list->count() + idxupper) < 0)) || idxlower >= int(list->count()))
     {
         /* always return an empty list... */
         if(!willassign)
@@ -15997,17 +17361,17 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State* sta
     }
     if(idxupper < 0)
     {
-        idxupper = list->m_varray->m_count + idxupper;
+        idxupper = list->count() + idxupper;
     }
-    if(idxupper > list->m_varray->m_count)
+    if(idxupper > int(list->count()))
     {
-        idxupper = list->m_varray->m_count;
+        idxupper = list->count();
     }
     newlist = neon::Array::make(state);
     state->stackPush(neon::Value::fromObject(newlist));
     for(i = idxlower; i < idxupper; i++)
     {
-        newlist->m_varray->push(list->m_varray->m_values[i]);
+        newlist->push(list->at(i));
     }
     /* clear gc protect */
     state->stackPop();
@@ -16020,7 +17384,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State* sta
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofstring(neon::State* state, neon::String* string, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(neon::State* state, neon::String* string, bool willassign)
 {
     int end;
     int start;
@@ -16080,7 +17444,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dogetrangedindexofstring(neon::State* st
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_getrangedindex(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_getrangedindex(neon::State* state)
 {
     bool isgotten;
     uint8_t willassign;
@@ -16126,7 +17490,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_getrangedindex(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetdict(neon::State* state, neon::Dictionary* dict, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_doindexgetdict(neon::State* state, neon::Dictionary* dict, bool willassign)
 {
     neon::Value vindex;
     neon::Property* field;
@@ -16147,7 +17511,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetdict(neon::State* state, neon:
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetmodule(neon::State* state, neon::Module* module, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(neon::State* state, neon::Module* module, bool willassign)
 {
     neon::Value vindex;
     neon::Value result;
@@ -16166,7 +17530,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetmodule(neon::State* state, neo
     return state->raiseClass(state->m_exceptions.stdexception, "%s is undefined in module %s", neon::Value::toString(state, vindex)->data(), module->m_modname);
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetstring(neon::State* state, neon::String* string, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(neon::State* state, neon::String* string, bool willassign)
 {
     int end;
     int start;
@@ -16217,7 +17581,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetstring(neon::State* state, neo
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetarray(neon::State* state, neon::Array* list, bool willassign)
+static NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(neon::State* state, neon::Array* list, bool willassign)
 {
     int index;
     neon::Value finalval;
@@ -16240,11 +17604,11 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetarray(neon::State* state, neon
     index = vindex.asNumber();
     if(NEON_UNLIKELY(index < 0))
     {
-        index = list->m_varray->m_count + index;
+        index = list->size() + index;
     }
-    if(index < list->m_varray->m_count && index >= 0)
+    if((index < int(list->size())) && (index >= 0))
     {
-        finalval = list->m_varray->m_values[index];
+        finalval = list->at(index);
     }
     else
     {
@@ -16262,7 +17626,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexgetarray(neon::State* state, neon
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_indexget(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_indexget(neon::State* state)
 {
     bool isgotten;
     uint8_t willassign;
@@ -16325,7 +17689,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexget(neon::State* state)
 }
 
 
-static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexdict(neon::State* state, neon::Dictionary* dict, neon::Value index, neon::Value value)
+static NEON_FORCEINLINE bool nn_vmutil_dosetindexdict(neon::State* state, neon::Dictionary* dict, neon::Value index, neon::Value value)
 {
     dict->setEntry(index, value);
     /* pop the value, index and dict out */
@@ -16338,7 +17702,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexdict(neon::State* state, neon:
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexmodule(neon::State* state, neon::Module* module, neon::Value index, neon::Value value)
+static NEON_FORCEINLINE bool nn_vmutil_dosetindexmodule(neon::State* state, neon::Module* module, neon::Value index, neon::Value value)
 {
     module->m_deftable->set(index, value);
     /* pop the value, index and dict out */
@@ -16351,7 +17715,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexmodule(neon::State* state, neo
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon::Array* list, neon::Value index, neon::Value value)
+static NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon::Array* list, neon::Value index, neon::Value value)
 {
     int tmp;
     int rawpos;
@@ -16366,12 +17730,12 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon
         return state->raiseClass(state->m_exceptions.stdexception, "list are numerically indexed");
     }
     ocap = list->m_varray->m_capacity;
-    ocnt = list->m_varray->m_count;
+    ocnt = list->count();
     rawpos = index.asNumber();
     position = rawpos;
     if(rawpos < 0)
     {
-        rawpos = list->m_varray->m_count + rawpos;
+        rawpos = list->count() + rawpos;
     }
     if(position < ocap && position > -(ocap))
     {
@@ -16389,7 +17753,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon
             position = (~position) + 1;
         }
         tmp = 0;
-        vasz = list->m_varray->m_count;
+        vasz = list->count();
         if((position > vasz) || ((position == 0) && (vasz == 0)))
         {
             if(position == 0)
@@ -16406,7 +17770,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon
                 }
             }
         }
-        fprintf(stderr, "setting value at position %d (array count: %d)\n", position, list->m_varray->m_count);
+        fprintf(stderr, "setting value at position %ld (array count: %ld)\n", size_t(position), size_t(list->count()));
     }
     list->m_varray->m_values[position] = value;
     /* pop the value, index and list out */
@@ -16426,7 +17790,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_doindexsetarray(neon::State* state, neon
     */
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexstring(neon::State* state, neon::String* os, neon::Value index, neon::Value value)
+static NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(neon::State* state, neon::String* os, neon::Value index, neon::Value value)
 {
     neon::String* instr;
     int inchar;
@@ -16502,7 +17866,7 @@ static NEON_ALWAYSINLINE bool nn_vmutil_dosetindexstring(neon::State* state, neo
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_indexset(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_indexset(neon::State* state)
 {
     bool isset;
     neon::Value value;
@@ -16564,7 +17928,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_indexset(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmutil_concatenate(neon::State* state, bool ontoself)
+static NEON_FORCEINLINE bool nn_vmutil_concatenate(neon::State* state, bool ontoself)
 {
     neon::Value vleft;
     neon::Value vright;
@@ -16581,14 +17945,14 @@ static NEON_ALWAYSINLINE bool nn_vmutil_concatenate(neon::State* state, bool ont
     return true;
 }
 
-static NEON_ALWAYSINLINE int nn_vmutil_floordiv(double a, double b)
+static NEON_FORCEINLINE int nn_vmutil_floordiv(double a, double b)
 {
     int d;
     d = (int)a / (int)b;
     return d - ((d * b == a) & ((a < 0) ^ (b < 0)));
 }
 
-static NEON_ALWAYSINLINE double nn_vmutil_modulo(double a, double b)
+static NEON_FORCEINLINE double nn_vmutil_modulo(double a, double b)
 {
     double r;
     r = fmod(a, b);
@@ -16599,7 +17963,7 @@ static NEON_ALWAYSINLINE double nn_vmutil_modulo(double a, double b)
     return r;
 }
 
-static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* state, neon::Value peeked, neon::String* name)
+static NEON_FORCEINLINE neon::Property* nn_vmutil_getproperty(neon::State* state, neon::Value peeked, neon::String* name)
 {
     neon::Property* field;
     switch(peeked.asObject()->m_objtype)
@@ -16754,7 +18118,7 @@ static NEON_ALWAYSINLINE neon::Property* nn_vmutil_getproperty(neon::State* stat
     return nullptr;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_propertyget(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_propertyget(neon::State* state)
 {
     neon::Value peeked;
     neon::Property* field;
@@ -16790,7 +18154,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyget(neon::State* state)
     return false;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_propertygetself(neon::State* state)
 {
     neon::Value peeked;
     neon::String* name;
@@ -16866,7 +18230,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertygetself(neon::State* state)
     return false;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_propertyset(neon::State* state)
 {
     neon::Value value;
     neon::Value vtarget;
@@ -16926,7 +18290,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_propertyset(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE double nn_vmutil_valtonum(neon::Value v)
+static NEON_FORCEINLINE double nn_vmutil_valtonum(neon::Value v)
 {
     if(v.isNull())
     {
@@ -16944,7 +18308,7 @@ static NEON_ALWAYSINLINE double nn_vmutil_valtonum(neon::Value v)
 }
 
 
-static NEON_ALWAYSINLINE uint32_t nn_vmutil_valtouint(neon::Value v)
+static NEON_FORCEINLINE uint32_t nn_vmutil_valtouint(neon::Value v)
 {
     if(v.isNull())
     {
@@ -16961,12 +18325,12 @@ static NEON_ALWAYSINLINE uint32_t nn_vmutil_valtouint(neon::Value v)
     return v.asNumber();
 }
 
-static NEON_ALWAYSINLINE long nn_vmutil_valtoint(neon::Value v)
+static NEON_FORCEINLINE long nn_vmutil_valtoint(neon::Value v)
 {
     return (long)nn_vmutil_valtonum(v);
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_dobinary(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_dobinary(neon::State* state)
 {
     bool isfail;
     long ibinright;
@@ -17103,7 +18467,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_dobinary(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_globaldefine(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_globaldefine(neon::State* state)
 {
     neon::Value val;
     neon::String* name;
@@ -17124,7 +18488,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globaldefine(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_globalget(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_globalget(neon::State* state)
 {
     neon::String* name;
     neon::HashTable* tab;
@@ -17145,7 +18509,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globalget(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_globalset(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_globalset(neon::State* state)
 {
     neon::String* name;
     neon::HashTable* table;
@@ -17168,7 +18532,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_globalset(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_localget(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_localget(neon::State* state)
 {
     size_t ssp;
     uint16_t slot;
@@ -17180,7 +18544,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_localget(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_localset(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_localset(neon::State* state)
 {
     size_t ssp;
     uint16_t slot;
@@ -17197,7 +18561,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_localset(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_funcargget(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_funcargget(neon::State* state)
 {
     size_t ssp;
     uint16_t slot;
@@ -17210,7 +18574,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_funcargget(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_funcargset(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_funcargset(neon::State* state)
 {
     size_t ssp;
     uint16_t slot;
@@ -17227,7 +18591,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_funcargset(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_makeclosure(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_makeclosure(neon::State* state)
 {
     int i;
     int index;
@@ -17258,7 +18622,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_makeclosure(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_makearray(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_makearray(neon::State* state)
 {
     int i;
     int count;
@@ -17274,7 +18638,7 @@ static NEON_ALWAYSINLINE bool nn_vmdo_makearray(neon::State* state)
     return true;
 }
 
-static NEON_ALWAYSINLINE bool nn_vmdo_makedict(neon::State* state)
+static NEON_FORCEINLINE bool nn_vmdo_makedict(neon::State* state)
 {
     int i;
     int count;
@@ -17340,7 +18704,7 @@ neon::Status neon::State::runVM(int exitframe, neon::Value* rv)
     neon::Color nc;
     you_are_calling_exit_vm_outside_of_runvm = false;
     m_vmstate.currentframe = &m_vmstate.framevalues[m_vmstate.framecount - 1];
-    DebugPrinter dp(m_debugprinter);
+    DebugPrinter dp(this, m_debugprinter);
     for(;;)
     {
         /*
@@ -18183,7 +19547,7 @@ static bool nn_cli_repl(neon::State* state)
     int singlequotecount;
     bool continuerepl;
     char* line;
-    StrBuffer source;
+    neon::Util::StrBuffer source;
     const char* cursor;
     neon::Value dest;
     state->m_isreplmode = true;
@@ -18460,6 +19824,7 @@ void nn_cli_printtypesizes()
     #undef ptyp
 }
 
+using OptionParser = neon::Util::OptionParser;
 
 void nn_cli_fprintmaybearg(FILE* out, const char* begin, const char* flagname, size_t flaglen, bool needval, bool maybeval, const char* delim)
 {
@@ -18666,7 +20031,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = state->m_cliargv->m_varray->m_values[0].asString()->data();
+        filename = state->m_cliargv->at(0).asString()->data();
         fprintf(stderr, "nargv[0]=%s\n", filename);
         ok = nn_cli_runfile(state, filename);
     }

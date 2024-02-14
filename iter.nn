@@ -1,0 +1,8 @@
+
+a = {"foo": "bar", "red": "color"}
+
+foreach(k, v in a) {
+    println("k=", k, ", v=", v)
+}
+
+

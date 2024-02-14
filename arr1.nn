@@ -1,0 +1,9 @@
+
+var a = ["red", "green", "blue"];
+println("a:count=", a.size());
+println("a      =", a);
+a.push("yellow", "purple", 42, 889);
+println("a now  =", a);
+println("a[1]   =", a[1]);
+a[5]++
+println("a inc  =", a);

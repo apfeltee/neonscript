@@ -1,0 +1,80 @@
+
+var g_totaltrees = 0;
+class Tree {
+    constructor(item, depth) {
+        g_totaltrees++
+        this.item = item;
+        this.depth = depth;
+        if (depth > 0)
+        {
+            var item2 = item + item;
+            depth = depth - 1;
+            this.left = Tree(item2 - 1, depth);
+            this.right = Tree(item2, depth);
+        }
+        else
+        {
+            this.left = null;
+            this.right = null;
+        }
+    }
+
+    check()
+    {
+        if(this.left == null)
+        {
+            return this.item;
+        }
+        var a = this.item;
+        var b = this.left.check();
+        var c = this.right.check();
+        return a + b - c;
+    }
+}
+
+function clock()
+{
+    return 0
+}
+
+
+var mindepth = 4;
+var maxdepth = mindepth*2;
+var stretchdepth = maxdepth + 1;
+
+var start = clock();
+
+var dep =  (Tree(0, stretchdepth)).check();
+print("stretch tree of depth:", stretchdepth, " check:",dep, "\n");
+
+var longlivedtree = Tree(0, maxdepth);
+
+
+var iterations = 1;
+var d = 0;
+while (d < maxdepth)
+{
+    iterations = iterations * 2;
+    d = d + 1;
+}
+
+var i = 0;
+var checkme = 0;
+var depth = mindepth;
+while (depth < stretchdepth)
+{
+    checkme = 0;
+    i = 1;
+    while (i <= iterations)
+    {
+        var t1 = Tree(i, depth);
+        var t2 = Tree(-i, depth);
+        checkme += t1.check() + t2.check();
+        i = i + 1;
+    }
+    print("num trees:", iterations * 2, ", depth:", depth, ", checkme:", checkme, "\n");
+    iterations = iterations / 4;
+    depth = depth + 2;
+}
+
+print("long lived tree of depth:", maxdepth, ", check:", longlivedtree.check(), ", elapsed:", clock() - start, "\n");

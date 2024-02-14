@@ -1,0 +1,10 @@
+
+var str = "hello"
+var cnt = 0
+while(true)
+{
+    str += str
+    cnt++
+    println("str.length = ", str.length)
+}
+

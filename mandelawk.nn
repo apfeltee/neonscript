@@ -1,0 +1,30 @@
+
+xsize = 59;
+ysize = 21;
+minim = -1.0;
+maxim = 1.0;
+minre = -2.0;
+maxre = 1.0;
+stepx = (maxre - minre) / xsize;
+stepy = (maxim - minim) / ysize;
+for(y = 0; y < ysize; y++)
+{
+    im = minim + stepy * y;
+    for(x = 0; x < xsize; x++)
+    {
+        re = minre + stepx * x;
+        zr = re;
+        zi = im;
+        for(n = 0; n < 30; n++)
+        {
+            a = zr * zr;
+            b = zi * zi;
+            if(a + b > 4.0)
+                break;
+            zi = 2 * zr * zi + im;
+            zr = a - b + re;
+        }
+        printf("%c", 62 - n);
+    }
+    println();
+}

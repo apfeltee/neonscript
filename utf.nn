@@ -1,0 +1,52 @@
+
+/*
+test unicode functions, etc.
+this will not work on windows, due to windows being UTF-16...
+correct output would look something like this:
+
+len=8: [104, 228, 117, 223, 108, 101]: häußle:
+   h,ä,u,ß,l,e
+
+len=15: [20320, 22909, 19990, 30028, 65281]: 你好世界！:
+   你,好,世,界,！
+
+len=14: [50504, 45397, 32, 49464, 49345, 33]: 안녕 세상!:
+   안,녕, ,세,상,!
+
+len=38: [2344, 2350, 2360, 2381, 2325, 2366, 2352, 32, 2360, 2306, 2360, 2366, 2352, 33]: नमस्कार संसार!:
+   न,म,स,्,क,ा,र, ,स,ं,स,ा,र,!
+
+len=37: [3626, 3623, 3633, 3626, 3604, 3637, 3594, 3634, 3623, 3650, 3621, 3585, 33]: สวัสดีชาวโลก!:
+   ส,ว,ั,ส,ด,ี,ช,า,ว,โ,ล,ก,!
+
+len=19: [67, 104, 224, 111, 32, 116, 104, 7871, 32, 103, 105, 7899, 105, 33]: Chào thế giới!:
+   C,h,à,o, ,t,h,ế, ,g,i,ớ,i,!
+
+all good.
+*/
+
+function testutf(s)
+{
+    var cps = s.utf8Codepoints();
+    var clen = cps.length
+    print("len=${s.length}: ${cps}: ${s}:\n   ")
+    for(i=0; i<clen; i++)
+    {
+        var cc = cps[i]
+        var enc = String.utf8Encode(cc)
+        print(enc)
+        if((i+1) < clen)
+        {
+            print(",")
+        }
+    }
+    println("\n");
+}
+
+testutf("häußle");
+testutf("你好世界！");
+testutf("안녕 세상!");
+testutf("नमस्कार संसार!")
+testutf("สวัสดีชาวโลก!");
+testutf("Chào thế giới!");
+println("all good.");
