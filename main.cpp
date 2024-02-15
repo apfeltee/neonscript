@@ -3,14 +3,6 @@
     //#pragma GCC poison alloca
 #endif
 
-
-#include <stdexcept>
-inline void * operator new (std::size_t)
-{
-    extern void* calls_to_operator_new_are_not_allowed();
-    return calls_to_operator_new_are_not_allowed();
-}
-
 #if defined(_WIN32)
     #include <fcntl.h>
     #include <io.h>
@@ -28,7 +20,6 @@ inline void * operator new (std::size_t)
 #include <inttypes.h>
 #include <type_traits>
 #include <new>
-#include <source_location>
 
 /*
 * needed because clang + wasi (wasi headers, specifically) don't seem to define these.
@@ -194,13 +185,13 @@ inline void * operator new (std::size_t)
 #define NEON_APIDEBUG(state, ...) \
     if((NEON_UNLIKELY((state)->m_conf.enableapidebug))) \
     { \
-        nn_state_apidebug(state, __FUNCTION__, __VA_ARGS__); \
+        state->apiDebugVMCall(__FUNCTION__, __VA_ARGS__); \
     }
 
 #define NEON_ASTDEBUG(state, ...) \
     if((NEON_UNLIKELY((state)->m_conf.enableastdebug))) \
     { \
-        nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
+        state->apiDebugAstCall(__FUNCTION__, __VA_ARGS__); \
     }
 
 namespace neon
@@ -243,54 +234,30 @@ namespace neon
     struct /**/VarSwitch;
     struct /**/Instruction;
 
-    class Memory
-    {
-        public:
-            static void* osRealloc(void* ptr, size_t size)
-            {
-                return realloc(ptr, size);
-            }
+}
 
-            static void* osMalloc(size_t size)
-            {
-                return malloc(size);
-            }
+#include "memory.h"
 
-            static void* osCalloc(size_t count, size_t size)
-            {
-                return calloc(count, size);
-            }
-
-            static void osFree(void* ptr)
-            {
-                free(ptr);
-            }
-
-            template<typename Type, typename... ArgsT>
-            static Type* create(ArgsT&&... args)
-            {
-                Type* rt;
-                Type* buf;
-                buf = (Type*)osMalloc(sizeof(Type));
-                rt = new(buf) Type(args...);
-                return rt;
-            }
-
-            template<typename Type>
-            static void destroy(Type* ptr)
-            {
-                ptr->~Type();
-                osFree(ptr);
-            }
-    };
-
-#define NEON_UTIL_MIN(x, y) ((x) < (y) ? (x) : (y))
-#define NEON_UTIL_MAX(x, y) ((x) > (y) ? (x) : (y))
-#define NEON_UTIL_STRBUFBOUNDSCHECKINSERT(sbuf, pos) sbuf->callBoundsCheckInsert(pos, __FILE__, __LINE__, __func__)
-#define NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(sbuf, start, len) sbuf->callBoundsCheckReadRange(start, len, __FILE__, __LINE__, __func__)
-
+namespace neon
+{
     namespace Util
     {
+        // if at all necessary, add code here to support (or enforce) utf8 support.
+        // currently only applies to windows.
+        void setOSUnicode()
+        {
+            #if defined(NEON_PLAT_ISWINDOWS)
+                _setmode(fileno(stdout), _O_BINARY);
+                _setmode(fileno(stderr), _O_BINARY);
+                // via: https://stackoverflow.com/a/45622802
+                // Set console code page to UTF-8 so console known how to interpret string data
+                SetConsoleOutputCP(CP_UTF8);
+                // Enable buffering to prevent VS from chopping up UTF-8 byte sequences
+                // probably very likely not necessary when std(out|err) is set to binary
+                //setvbuf(stdout, nullptr, _IOFBF, 1000);
+            #endif
+        }
+
         enum
         {
             MT_STATE_SIZE = 624,
@@ -900,1008 +867,17 @@ namespace neon
             fclose(fh);
             return b;
         }
+    }
+}
 
-        struct StrBuffer
-        {
-            public:
-                static size_t roundUpToPowOf64(unsigned long long x)
-                {
-                    /* long long >=64 bits guaranteed in C99 */
-                    --x;
-                    x |= x >> 1;
-                    x |= x >> 2;
-                    x |= x >> 4;
-                    x |= x >> 8;
-                    x |= x >> 16;
-                    x |= x >> 32;
-                    ++x;
-                    return x;
-                }
-
-                static void checkBufCapacity(char** buf, size_t* sizeptr, size_t len)
-                {
-                    /* for nul byte */
-                    len++;
-                    if(*sizeptr < len)
-                    {
-                        *sizeptr = roundUpToPowOf64(len);
-                        /* fprintf(stderr, "sizeptr=%ld\n", *sizeptr); */
-                        if((*buf = (char*)Memory::osRealloc(*buf, *sizeptr)) == NULL)
-                        {
-                            fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
-                            abort();
-                        }
-                    }
-                }
-
-                static bool replaceCharHelper(char *dest, const char *src, size_t srclen, int findme, const char* sstr, size_t slen, size_t maxlen, size_t* dlen)
-                {
-                    /* ch(ar) at pos(ition) */
-                    int chatpos;
-                    /* printf("'%p' '%s' %c\n", dest, src, findme); */
-                    if(*src == findme)
-                    {
-                        if(slen > maxlen)
-                        {
-                            return false;
-                        }
-                        if(!replaceCharHelper(dest + slen, src + 1, srclen, findme, sstr, slen, maxlen - slen, dlen))
-                        {
-                            return false;
-                        }
-                        memcpy(dest, sstr, slen);
-                        *dlen += slen;
-                        return true;
-                    }
-                    if(maxlen == 0)
-                    {
-                        return false;
-                    }
-                    chatpos = *src;
-                    if(*src)
-                    {
-                        *dlen += 1;
-                        if(!replaceCharHelper(dest + 1, src + 1, srclen, findme, sstr, slen, maxlen - 1, dlen))
-                        {
-                            return false;
-                        }
-                    }
-                    *dest = chatpos;
-                    return true;
-                }
-
-                static size_t replaceCharInPlace(char* target, size_t tgtlen, int findme, const char* sstr, size_t slen, size_t maxlen)
-                {
-                    size_t nlen;
-                    if(findme == 0)
-                    {
-                        return 0;
-                    }
-                    if(maxlen == 0)
-                    {
-                        return 0;
-                    }
-                    if(*sstr == 0)
-                    {
-                        /* Insure target does not shrink. */
-                        return 0;
-                    }
-                    nlen = 0;
-                    replaceCharHelper(target, target, tgtlen, findme, sstr, slen, maxlen - 1, &nlen);
-                    return nlen;
-                }
-
-                /* via: https://stackoverflow.com/a/32413923 */
-                NEON_FORCEINLINE static void replaceFullInPlace(char* target, size_t tgtlen, const char *fstr, size_t flen, const char *sstr, size_t slen)
-                {
-                    const char *p;
-                    const char *tmp;
-                    char *inspoint;
-                    char buffer[1024] = {0};
-                    (void)tgtlen;
-                    inspoint = &buffer[0];
-                    tmp = target;
-                    while(true)
-                    {
-                        p = strstr(tmp, fstr);
-                        /* walked past last occurrence of fstr; copy remaining part */
-                        if (p == NULL)
-                        {
-                            strcpy(inspoint, tmp);
-                            break;
-                        }
-                        /* copy part before fstr */
-                        memcpy(inspoint, tmp, p - tmp);
-                        inspoint += p - tmp;
-                        /* copy sstr string */
-                        memcpy(inspoint, sstr, slen);
-                        inspoint += slen;
-                        /* adjust pointers, move on */
-                        tmp = p + flen;
-                    }
-                    /* write altered string back to target */
-                    strcpy(target, buffer);
-                }
-
-                NEON_FORCEINLINE static size_t strReplaceCount(const char* str, size_t slen, const char* fstr, size_t flen, size_t slen)
-                {
-                    size_t i;
-                    size_t count;
-                    size_t total;
-                    (void)total;
-                    total = slen;
-                    count = 0;
-                    for(i=0; i<slen; i++)
-                    {
-                        if(str[i] == fstr[0])
-                        {
-                            if((i + flen) < slen)
-                            {
-                                if(memcmp(&str[i], fstr, flen) == 0)
-                                {
-                                    count++;
-                                    total += slen;
-                                }
-                            }
-                        }
-                    }
-                    if(count == 0)
-                    {
-                        return 0;
-                    }
-                    return slen + 1;
-                }
-
-                /*
-                // Removes \r and \n from the ends of a string and returns the new length
-                */
-                NEON_FORCEINLINE static size_t strChomp(char* str, size_t len)
-                {
-                    while(len > 0 && (str[len - 1] == '\r' || str[len - 1] == '\n'))
-                    {
-                        len--;
-                    }
-                    str[len] = '\0';
-                    return len;
-                }
-
-                /*
-                // Reverse a string region
-                */
-                NEON_FORCEINLINE static void strReverseRegion(char* str, size_t length)
-                {
-                    char *a;
-                    char* b;
-                    char tmp;
-                    a = str;
-                    b = str + length - 1;
-                    while(a < b)
-                    {
-                        tmp = *a;
-                        *a = *b;
-                        *b = tmp;
-                        a++;
-                        b--;
-                    }
-                }
-
-                /*
-                 * Integer to string functions adapted from:
-                 *   https://www.facebook.com/notes/facebook-engineering/three-optimization-tips-for-c/10151361643253920
-                 */
-                enum
-                {
-                    DYN_STRCONST_P01 = 10,
-                    DYN_STRCONST_P02 = 100,
-                    DYN_STRCONST_P03 = 1000,
-                    DYN_STRCONST_P04 = 10000,
-                    DYN_STRCONST_P05 = 100000,
-                    DYN_STRCONST_P06 = 1000000,
-                    DYN_STRCONST_P07 = 10000000,
-                    DYN_STRCONST_P08 = 100000000,
-                    DYN_STRCONST_P09 = 1000000000,
-                    DYN_STRCONST_P10 = 10000000000,
-                    DYN_STRCONST_P11 = 100000000000,
-                    DYN_STRCONST_P12 = 1000000000000,
-                };
-
-                /**
-                 * Return number of digits required to represent `num` in base 10.
-                 * Uses binary search to find number.
-                 * Examples:
-                 *   numOfDigits(0)   = 1
-                 *   numOfDigits(1)   = 1
-                 *   numOfDigits(10)  = 2
-                 *   numOfDigits(123) = 3
-                 */
-                NEON_FORCEINLINE static size_t numOfDigits(unsigned long v)
-                {
-                    if(v < DYN_STRCONST_P01)
-                    {
-                        return 1;
-                    }
-                    if(v < DYN_STRCONST_P02)
-                    {
-                        return 2;
-                    }
-                    if(v < DYN_STRCONST_P03)
-                    {
-                        return 3;
-                    }
-                    if(v < DYN_STRCONST_P12)
-                    {
-                        if(v < DYN_STRCONST_P08)
-                        {
-                            if(v < DYN_STRCONST_P06)
-                            {
-                                if(v < DYN_STRCONST_P04)
-                                {
-                                    return 4;
-                                }
-                                return 5 + (v >= DYN_STRCONST_P05);
-                            }
-                            return 7 + (v >= DYN_STRCONST_P07);
-                        }
-                        if(v < DYN_STRCONST_P10)
-                        {
-                            return 9 + (v >= DYN_STRCONST_P09);
-                        }
-                        return 11 + (v >= DYN_STRCONST_P11);
-                    }
-                    return 12 + numOfDigits(v / DYN_STRCONST_P12);
-                }
+#include "genericarray.h"
+#include "sbuf.h"
 
 
-            public:
-                char* m_data = nullptr;
-
-                /* total length of this buffer */
-                uint64_t m_length = 0;
-
-                /* capacity should be >= length+1 to allow for \0 */
-                uint64_t m_capacity = 0;
-
-            private:
-                /* Convert integers to string to append */
-                NEON_FORCEINLINE bool appendNumULong(unsigned long value)
-                {
-                    size_t v;
-                    size_t pos;
-                    size_t numdigits;
-                    char* dst;
-                    /* Append two digits at a time */
-                    static const char* digits = (
-                        "0001020304050607080910111213141516171819"
-                        "2021222324252627282930313233343536373839"
-                        "4041424344454647484950515253545556575859"
-                        "6061626364656667686970717273747576777879"
-                        "8081828384858687888990919293949596979899"
-                    );
-                    numdigits = numOfDigits(value);
-                    pos = numdigits - 1;
-                    ensureCapacity(m_length + numdigits);
-                    dst = m_data + m_length;
-                    while(value >= 100)
-                    {
-                        v = value % 100;
-                        value /= 100;
-                        dst[pos] = digits[v * 2 + 1];
-                        dst[pos - 1] = digits[v * 2];
-                        pos -= 2;
-                    }
-                    /* Handle last 1-2 digits */
-                    if(value < 10)
-                    {
-                        dst[pos] = '0' + value;
-                    }
-                    else
-                    {
-                        dst[pos] = digits[value * 2 + 1];
-                        dst[pos - 1] = digits[value * 2];
-                    }
-                    m_length += numdigits;
-                    m_data[m_length] = '\0';
-                    return true;
-                }
-
-                NEON_FORCEINLINE bool appendNumLong(long value)
-                {
-                    if(value < 0)
-                    {
-                        append('-');
-                        value = -value;
-                    }
-                    return appendNumULong(value);
-                }
-
-                NEON_FORCEINLINE bool appendNumInt(int value)
-                {
-                    return appendNumLong(value);
-                }
-
-            public:
-                NEON_FORCEINLINE void callBoundsCheckInsert(size_t pos, const char* file, int line, const char* func) const
-                {
-                    if(pos > this->m_length)
-                    {
-                        fprintf(stderr, "%s:%i:%s() - out of bounds error [index: %zu, num_of_bits: %zu]\n",
-                                file, line, func, pos, this->m_length);
-                        errno = EDOM;
-                        abort();
-                    }
-                }
-
-                /* Bounds check when reading a range (start+len < strlen is valid) */
-                NEON_FORCEINLINE void callBoundsCheckReadRange(size_t start, size_t len, const char* file, int line, const char* func) const
-                {
-                    if(start + len > this->m_length)
-                    {
-                        fprintf(stderr,"%s:%i:%s() - out of bounds error [start: %zu; length: %zu; strlen: %zu; buf:%.*s%s]\n",
-                                file, line, func, start, len, this->m_length, (int)NEON_UTIL_MIN(5, this->m_length), this->m_data, this->m_length > 5 ? "..." : "");
-                        errno = EDOM;
-                        abort();
-                    }
-                }
-
-                /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
-                NEON_FORCEINLINE void ensureCapacity(uint64_t len)
-                {
-                    checkBufCapacity(&this->m_data, &this->m_capacity, len);
-                }
-
-            private:
-                NEON_FORCEINLINE void resetVars()
-                {
-                    this->m_length = 0;
-                    this->m_capacity = 0;
-                    this->m_data = nullptr;
-                }
-
-                NEON_FORCEINLINE void initEmpty(size_t len)
-                {
-                    resetVars();
-                    this->m_length = len;
-                    this->m_capacity = roundUpToPowOf64(len + 1);
-                    this->m_data = (char*)Memory::osMalloc(this->m_capacity);
-                    this->m_data[0] = '\0';
-                }
-
-
-            public:
-                NEON_FORCEINLINE StrBuffer()
-                {
-                    initEmpty(0);
-                }
-
-                NEON_FORCEINLINE StrBuffer(size_t len)
-                {
-                    (void)len;
-                    //initEmpty(len);
-                    initEmpty(0);
-                }
-
-                /*
-                // Copy a string or existing string buffer
-                */
-                NEON_FORCEINLINE StrBuffer(const char* str, size_t slen)
-                {
-                    initEmpty(slen + 1);
-                    memcpy(this->m_data, str, slen);
-                    this->m_length = slen;
-                    this->m_data[slen] = '\0';
-                }
-
-                NEON_FORCEINLINE ~StrBuffer()
-                {
-                    destroy();
-                }
-
-                NEON_FORCEINLINE uint64_t size() const
-                {
-                    return m_length;
-                }
-
-                NEON_FORCEINLINE uint64_t length() const
-                {
-                    return m_length;
-                }
-
-                NEON_FORCEINLINE const char* data() const
-                {
-                    return m_data;
-                }
-
-                bool destroy()
-                {
-                    if(this->m_data != nullptr)
-                    {
-                        Memory::osFree(this->m_data);
-                        this->m_data = nullptr;
-                        resetVars();
-                    }
-                    return true;
-                }
-
-                /*
-                * Clear the content of an existing StrBuffer (sets size to 0)
-                * but keeps capacity intact.
-                */
-                void reset()
-                {
-                    size_t olen;
-                    if(this->m_data != nullptr)
-                    {
-                        olen = this->m_length;
-                        this->m_length = 0;
-                        memset(this->m_data, 0, olen);
-                        this->m_data[0] = '\0';
-                    }
-                }
-
-                /*
-                // Resize the buffer to have capacity to hold a string of m_length newlen
-                // (+ a null terminating character).  Can also be used to downsize the buffer's
-                // memory usage.  Returns 1 on success, 0 on failure.
-                */
-                bool resize(size_t newlen)
-                {
-                    size_t ncap;
-                    char* newbuf;
-                    ncap = roundUpToPowOf64(newlen + 1);
-                    newbuf = (char*)Memory::osRealloc(this->m_data, ncap * sizeof(char));
-                    if(newbuf == NULL)
-                    {
-                        return false;
-                    }
-                    this->m_data = newbuf;
-                    this->m_capacity = ncap;
-                    if(this->m_length > newlen)
-                    {
-                        /* Buffer was shrunk - re-add null byte */
-                        this->m_length = newlen;
-                        this->m_data[this->m_length] = '\0';
-                    }
-                    return true;
-                }
-
-                /* Same as above, but update pointer if it pointed to resized array */
-                void ensureCapacityUpdatePtr(size_t size, const char** ptr)
-                {
-                    size_t oldcap;
-                    char* oldbuf;
-                    if(this->m_capacity <= size + 1)
-                    {
-                        oldcap = this->m_capacity;
-                        oldbuf = this->m_data;
-                        if(!resize(size))
-                        {
-                            fprintf(stderr,
-                                    "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
-                                    "buffer. [requested %zu bytes; capacity: %zu bytes]\n",
-                                    __FILE__, __LINE__, size, this->m_capacity);
-                            abort();
-                        }
-                        /* ptr may have pointed to sbuf, which has now moved */
-                        if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
-                        {
-                            *ptr = this->m_data + (*ptr - oldbuf);
-                        }
-                    }
-                }
-
-                /*
-                // Copy N characters from a character array to the end of this StrBuffer
-                // strlen(str) must be >= len
-                */
-                bool append(const char* str, size_t len)
-                {
-                    ensureCapacityUpdatePtr(this->m_length + len, &str);
-                    memcpy(this->m_data + this->m_length, str, len);
-                    this->m_data[this->m_length = this->m_length + len] = '\0';
-                    return true;
-                }
-
-                /* Copy a character array to the end of this StrBuffer */
-                bool append(const char* str)
-                {
-                    return append(str, strlen(str));
-                }
-
-                bool append(const StrBuffer* sb2)
-                {
-                    return append(sb2->m_data, sb2->m_length);
-                }
-
-                /* Add a character to the end of this StrBuffer */
-                bool append(int c)
-                {
-                    this->ensureCapacity(this->m_length + 1);
-                    this->m_data[this->m_length] = c;
-                    this->m_data[++this->m_length] = '\0';
-                    return true;
-                }
-
-                /* Append char `c` `n` times */
-                bool appendCharN(char c, size_t n)
-                {
-                    ensureCapacity(m_length + n);
-                    memset(m_data + m_length, c, n);
-                    m_length += n;
-                    m_data[m_length] = '\0';
-                    return true;
-                }
-
-                /*
-                // sprintf
-                */
-                int appendFormatv(size_t pos, const char* fmt, va_list argptr)
-                {
-                    size_t buflen;
-                    int numchars;
-                    va_list vacpy;
-                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
-                    /* Length of remaining buffer */
-                    buflen = this->m_capacity - pos;
-                    if(buflen == 0 && !this->resize(this->m_capacity << 1))
-                    {
-                        fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
-                        abort();
-                    }
-                    /* Make a copy of the list of args incase we need to resize buff and try again */
-                    va_copy(vacpy, argptr);
-                    numchars = vsnprintf(this->m_data + pos, buflen, fmt, argptr);
-                    va_end(argptr);
-                    /*
-                    // numchars is the number of chars that would be written (not including '\0')
-                    // numchars < 0 => failure
-                    */
-                    if(numchars < 0)
-                    {
-                        fprintf(stderr, "Warning: appendFormatv something went wrong..\n");
-                        abort();
-                    }
-                    /* numchars does not include the null terminating byte */
-                    if((size_t)numchars + 1 > buflen)
-                    {
-                        this->ensureCapacity(pos + (size_t)numchars);
-                        /*
-                        // now use the argptr copy we made earlier
-                        // Don't need to use vsnprintf now, vsprintf will do since we know it'll fit
-                        */
-                        numchars = vsprintf(this->m_data + pos, fmt, vacpy);
-                        if(numchars < 0)
-                        {
-                            fprintf(stderr, "Warning: appendFormatv something went wrong..\n");
-                            abort();
-                        }
-                    }
-                    va_end(vacpy);
-                    /*
-                    // Don't need to NUL terminate, vsprintf/vnsprintf does that for us
-                    // Update m_length
-                    */
-                    this->m_length = pos + (size_t)numchars;
-                    return numchars;
-                }
-
-                /* sprintf to the end of a StrBuffer (adds string terminator after sprint) */
-                int appendFormat(const char* fmt, ...)
-                {
-                    int numchars;
-                    va_list argptr;
-                    va_start(argptr, fmt);
-                    numchars = this->appendFormatv(this->m_length, fmt, argptr);
-                    va_end(argptr);
-                    return numchars;
-                }
-
-                /* Print at a given position (overwrite chars at positions >= pos) */
-                int appendFormatAt(size_t pos, const char* fmt, ...)
-                {
-                    int numchars;
-                    va_list argptr;
-                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
-                    va_start(argptr, fmt);
-                    numchars = this->appendFormatv(pos, fmt, argptr);
-                    va_end(argptr);
-                    return numchars;
-                }
-
-                /*
-                // sprintf without terminating character
-                // Does not prematurely end the string if you sprintf within the string
-                // (terminates string if sprintf to the end)
-                // Does not prematurely end the string if you sprintf within the string
-                // (vs at the end)
-                */
-                int appendFormatNoTerm(size_t pos, const char* fmt, ...)
-                {
-                    size_t len;
-                    int nchars;
-                    char lastchar;
-                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, pos);
-                    len = this->m_length;
-                    /* Call vsnprintf with NULL, 0 to get resulting string m_length without writing */
-                    va_list argptr;
-                    va_start(argptr, fmt);
-                    nchars = vsnprintf(NULL, 0, fmt, argptr);
-                    va_end(argptr);
-                    if(nchars < 0)
-                    {
-                        fprintf(stderr, "Warning: appendFormatNoTerm something went wrong..\n");
-                        abort();
-                    }
-                    /* Save overwritten char */
-                    lastchar = (pos + (size_t)nchars < this->m_length) ? this->m_data[pos + (size_t)nchars] : 0;
-                    va_start(argptr, fmt);
-                    nchars = this->appendFormatv(pos, fmt, argptr);
-                    va_end(argptr);
-                    if(nchars < 0)
-                    {
-                        fprintf(stderr, "Warning: appendFormatNoTerm something went wrong..\n");
-                        abort();
-                    }
-                    /* Restore m_length if shrunk, null terminate if extended */
-                    if(this->m_length < len)
-                    {
-                        this->m_length = len;
-                    }
-                    else
-                    {
-                        this->m_data[this->m_length] = '\0';
-                    }
-                    /* Re-instate overwritten character */
-                    this->m_data[pos + (size_t)nchars] = lastchar;
-                    return nchars;
-                }
-
-                bool contains(char ch)
-                {
-                    size_t i;
-                    for(i=0; i<this->m_length; i++)
-                    {
-                        if(this->m_data[i] == ch)
-                        {
-                            return true;
-                        }
-                    }
-                    return false;
-                }
-
-                bool replace(int findme, const char* sstr, size_t slen)
-                {
-                    size_t i;
-                    size_t nlen;
-                    size_t needed;
-                    needed = this->m_capacity;
-                    for(i=0; i<this->m_length; i++)
-                    {
-                        if(this->m_data[i] == findme)
-                        {
-                            needed += slen;
-                        }
-                    }
-                    if(!this->resize(needed+1))
-                    {
-                        return false;
-                    }
-                    nlen = replaceCharInPlace(this->m_data, this->m_length, findme, sstr, slen, this->m_capacity);
-                    this->m_length = nlen;
-                    return true;
-                }
-
-                bool fullReplace(const char* fstr, size_t flen, const char* sstr, size_t slen)
-                {
-                    size_t needed;
-                    StrBuffer* nbuf;
-                    needed = strReplaceCount(m_data, m_length, fstr, flen, slen);
-                    if(needed == 0)
-                    {
-                        return false;
-                    }
-                    nbuf = Memory::create<StrBuffer>(needed);
-                    nbuf->append(m_data, m_length);
-                    StrBuffer::replaceFullInPlace(nbuf->m_data, nbuf->m_length, fstr, flen, sstr, slen);
-                    nbuf->m_length = needed;
-                    Memory::osFree(m_data);
-                    m_data = nbuf->m_data;
-                    m_length = nbuf->m_length;
-                    m_capacity = nbuf->m_capacity;
-                    return true;
-                }
-
-                /*
-                // Copy a string to this StrBuffer, overwriting any existing characters
-                // Note: dstpos + len can be longer the the current dst StrBuffer
-                */
-                void copyOver(size_t dstpos, const char* src, size_t len)
-                {
-                    size_t newlen;
-                    if(src == NULL || len == 0)
-                    {
-                        return;
-                    }
-                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(this, dstpos);
-                    /*
-                    // Check if dst buffer can handle string
-                    // src may have pointed to dst, which has now moved
-                    */
-                    newlen = NEON_UTIL_MAX(dstpos + len, m_length);
-                    ensureCapacityUpdatePtr(newlen, &src);
-                    /* memmove instead of strncpy, as it can handle overlapping regions */
-                    memmove(m_data + dstpos, src, len * sizeof(char));
-                    if(dstpos + len > m_length)
-                    {
-                        /* Extended string - add '\0' char */
-                        m_length = dstpos + len;
-                        m_data[m_length] = '\0';
-                    }
-                }
-
-                /*
-                // Overwrite dstpos..(dstpos+dstlen-1) with srclen chars from src
-                // if dstlen != srclen, content to the right of dstlen is shifted
-                // Example:
-                //   sbuf = ... "aaabbccc";
-                //   char *data = "xxx";
-                //   sbuf->replaceAt(3,2,data,strlen(data));
-                //   // sbuf is now "aaaxxxccc"
-                //   sbuf->replaceAt(3,2,"_",1);
-                //   // sbuf is now "aaa_ccc"
-                */
-                void replaceAt(size_t dstpos, size_t dstlen, const char* src, size_t srclen)
-                {
-                    size_t len;
-                    size_t newlen;
-                    char* tgt;
-                    char* end;
-                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, dstpos, dstlen);
-                    if(src == NULL)
-                    {
-                        return;
-                    }
-                    if(dstlen == srclen)
-                    {
-                        this->copyOver(dstpos, src, srclen);
-                    }
-                    newlen = m_length + srclen - dstlen;
-                    ensureCapacityUpdatePtr(newlen, &src);
-                    if(src >= m_data && src < m_data + m_capacity)
-                    {
-                        if(srclen < dstlen)
-                        {
-                            /* copy */
-                            memmove(m_data + dstpos, src, srclen * sizeof(char));
-                            /* resize (shrink) */
-                            memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
-                        }
-                        else
-                        {
-                            /*
-                            // Buffer is going to grow and src points to this buffer
-                            // resize (grow)
-                            */
-                            memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
-                            tgt = m_data + dstpos;
-                            end = m_data + dstpos + srclen;
-                            if(src < tgt + dstlen)
-                            {
-                                len = NEON_UTIL_MIN((size_t)(end - src), srclen);
-                                memmove(tgt, src, len);
-                                tgt += len;
-                                src += len;
-                                srclen -= len;
-                            }
-                            if(src >= tgt + dstlen)
-                            {
-                                /* shift to account for resizing */
-                                src += srclen - dstlen;
-                                memmove(tgt, src, srclen);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        /* resize */
-                        memmove(m_data + dstpos + srclen, m_data + dstpos + dstlen, (m_length - dstpos - dstlen) * sizeof(char));
-                        /* copy */
-                        memcpy(m_data + dstpos, src, srclen * sizeof(char));
-                    }
-                    m_length = newlen;
-                    m_data[m_length] = '\0';
-                }
-
-                void shrinkk(size_t len)
-                {
-                    m_data[m_length = (len)] = 0;
-                }
-
-                /*
-                // Remove \r and \n characters from the end of this StringBuffesr
-                // Returns the number of characters removed
-                */
-                size_t chomp()
-                {
-                    size_t oldlen;
-                    oldlen = m_length;
-                    m_length = strChomp(m_data, m_length);
-                    return oldlen - m_length;
-                }
-
-
-                /* Reverse a string */
-                void reverse()
-                {
-                    strReverseRegion(m_data, m_length);
-                }
-
-                /*
-                // Get a substring as a new null terminated char array
-                // (remember to free the returned char* after you're done with it!)
-                */
-                char* substr(size_t start, size_t len)
-                {
-                    char* newstr;
-                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, start, len);
-                    newstr = (char*)Memory::osMalloc((len + 1) * sizeof(char));
-                    strncpy(newstr, m_data + start, len);
-                    newstr[len] = '\0';
-                    return newstr;
-                }
-
-                void toUpperCase()
-                {
-                    char* pos;
-                    char* end;
-                    end = m_data + m_length;
-                    for(pos = m_data; pos < end; pos++)
-                    {
-                        *pos = (char)toupper(*pos);
-                    }
-                }
-
-                void toLowerCase()
-                {
-                    char* pos;
-                    char* end;
-                    end = m_data + m_length;
-                    for(pos = m_data; pos < end; pos++)
-                    {
-                        *pos = (char)tolower(*pos);
-                    }
-                }
-
-                /* Insert: copy to a StrBuffer, shifting any existing characters along */
-                void insertAt(StrBuffer* dst, size_t dstpos, const char* src, size_t len)
-                {
-                    char* insert;
-                    if(src == NULL || len == 0)
-                    {
-                        return;
-                    }
-                    NEON_UTIL_STRBUFBOUNDSCHECKINSERT(dst, dstpos);
-                    /*
-                    // Check if dst buffer has capacity for inserted string plus \0
-                    // src may have pointed to dst, which will be moved in realloc when
-                    // calling ensure capacity
-                    */
-                    dst->ensureCapacityUpdatePtr(dst->m_length + len, &src);
-                    insert = dst->m_data + dstpos;
-                    /* dstpos could be at the end (== dst->m_length) */
-                    if(dstpos < dst->m_length)
-                    {
-                        /* Shift some characters up */
-                        memmove(insert + len, insert, (dst->m_length - dstpos) * sizeof(char));
-                        if(src >= dst->m_data && src < dst->m_data + dst->m_capacity)
-                        {
-                            /* src/dst strings point to the same string in memory */
-                            if(src < insert)
-                            {
-                                memmove(insert, src, len * sizeof(char));
-                            }
-                            else if(src > insert)
-                            {
-                                memmove(insert, src + len, len * sizeof(char));
-                            }
-                        }
-                        else
-                        {
-                            memmove(insert, src, len * sizeof(char));
-                        }
-                    }
-                    else
-                    {
-                        memmove(insert, src, len * sizeof(char));
-                    }
-                    /* Update size */
-                    dst->m_length += len;
-                    dst->m_data[dst->m_length] = '\0';
-                }
-
-                /*
-                // Remove characters from the buffer
-                //   sb = ... "aaaBBccc";
-                //   sb->eraseAt(3, 2);
-                //   // sb is now "aaaccc"
-                */
-                void eraseAt(size_t pos, size_t len)
-                {
-                    NEON_UTIL_STRBUFBOUNDSCHECKREADRANGE(this, pos, len);
-                    memmove(m_data + pos, m_data + pos + len, m_length - pos - len);
-                    m_length -= len;
-                    m_data[m_length] = '\0';
-                }
-
-                /* Trim whitespace characters from the start and end of a string */
-                void trimInplace()
-                {
-                    size_t start;
-                    if(m_length == 0)
-                    {
-                        return;
-                    }
-                    /* Trim end first */
-                    while(m_length > 0 && isspace((int)m_data[m_length - 1]))
-                    {
-                        m_length--;
-                    }
-                    m_data[m_length] = '\0';
-                    if(m_length == 0)
-                    {
-                        return;
-                    }
-                    start = 0;
-                    while(start < m_length && isspace((int)m_data[start]))
-                    {
-                        start++;
-                    }
-                    if(start != 0)
-                    {
-                        m_length -= start;
-                        memmove(m_data, m_data + start, m_length * sizeof(char));
-                        m_data[m_length] = '\0';
-                    }
-                }
-
-                /*
-                // Trim the characters listed in `list` from the left of `sbuf`
-                // `list` is a null-terminated string of characters
-                */
-                void trimInplaceLeft(const char* list)
-                {
-                    size_t start;
-                    start = 0;
-
-                    while(start < m_length && (strchr(list, m_data[start]) != NULL))
-                    {
-                        start++;
-                    }
-                    if(start != 0)
-                    {
-                        m_length -= start;
-                        memmove(m_data, m_data + start, m_length * sizeof(char));
-                        m_data[m_length] = '\0';
-                    }
-                }
-
-                /*
-                // Trim the characters listed in `list` from the right of `sbuf`
-                // `list` is a null-terminated string of characters
-                */
-                void trimInplaceRight(const char* list)
-                {
-                    if(m_length == 0)
-                    {
-                        return;
-                    }
-                    while(m_length > 0 && strchr(list, m_data[m_length - 1]) != NULL)
-                    {
-                        m_length--;
-                    }
-                    m_data[m_length] = '\0';
-                }
-        };
-
+namespace neon
+{
+    namespace Util
+    {
         struct OptionParser
         {
             public:
@@ -1920,9 +896,8 @@ namespace neon
                     const char* helptext;
                 };
 
-
             public:
-                bool isDashDash(const char* arg)
+                static bool isDashDash(const char* arg)
                 {
                     if(arg != NULL)
                     {
@@ -1934,7 +909,7 @@ namespace neon
                     return false;
                 }
 
-                bool isShortOpt(const char* arg)
+                static bool isShortOpt(const char* arg)
                 {
                     if(arg != NULL)
                     {
@@ -1989,7 +964,7 @@ namespace neon
                     return false;
                 }
 
-                void fromLong(const LongFlags* longopts, char* optstring)
+                static void fromLong(const LongFlags* longopts, char* optstring)
                 {
                     int i;
                     int a;
@@ -2354,7 +1329,39 @@ namespace neon
 
     }
 
-    struct Color
+    struct Descriptor
+    {
+        public:
+            int m_fd = -1;
+
+        public:
+            NEON_FORCEINLINE Descriptor()
+            {
+            }
+
+            NEON_FORCEINLINE Descriptor(int fd): m_fd(fd)
+            {
+            }
+
+            NEON_FORCEINLINE bool isTTY() const
+            {
+                return osfn_isatty(m_fd);
+            }
+
+            NEON_FORCEINLINE int fd() const
+            {
+                return m_fd;
+            }
+
+            size_t read(void* buf, size_t cnt)
+            {
+                //ssize_t read(int fd, void *buf, size_t count);
+                return osfn_fdread(m_fd, buf, cnt);
+            }
+
+    };
+
+    struct Terminal
     {
         public:
             enum Code
@@ -2369,21 +1376,28 @@ namespace neon
             };
 
         private:
-            bool m_istty = false;
-            int m_fdstdout = -1;
-            int m_fdstderr = -1;
+            bool m_isalltty = false;
+            Descriptor m_stdin;
+            Descriptor m_stdout;
+            Descriptor m_stderr;
 
         public:
-            Color()
+            Terminal()
             {
+                m_stdin = Descriptor(fileno(stdin));
+                m_stdout = Descriptor(fileno(stdout));
+                m_stdin = Descriptor(fileno(stderr));
                 #if !defined(NEON_CFG_FORCEDISABLECOLOR)
-                    m_fdstdout = fileno(stdout);
-                    m_fdstderr = fileno(stderr);
-                    m_istty = (osfn_isatty(m_fdstderr) && osfn_isatty(m_fdstdout));
+                    m_isalltty = (m_stdout.isTTY() && m_stdin.isTTY());
                 #endif
             }
 
-            NEON_FORCEINLINE Code codeFromChar(char c)
+            NEON_FORCEINLINE bool stdoutIsTTY() const
+            {
+                return m_isalltty;
+            }
+
+            NEON_FORCEINLINE Code codeFromChar(char c) const
             {
                 switch(c)
                 {
@@ -2405,11 +1419,11 @@ namespace neon
                 return COLOR_RESET;
             }
 
-            NEON_FORCEINLINE const char* color(Code tc)
+            NEON_FORCEINLINE const char* color(Code tc) const
             {
                 #if !defined(NEON_CFG_FORCEDISABLECOLOR)
 
-                    if(m_istty)
+                    if(m_isalltty)
                     {
                         switch(tc)
                         {
@@ -2435,7 +1449,7 @@ namespace neon
                 return "";
             }
 
-            NEON_FORCEINLINE const char* color(char tc)
+            NEON_FORCEINLINE const char* color(char tc) const
             {
                 return color(codeFromChar(tc));
             }
@@ -2450,34 +1464,16 @@ bool nn_util_fsfileisfile(neon::State *state, const char *filepath);
 bool nn_util_fsfileisdirectory(neon::State *state, const char *filepath);
 char *nn_util_fsgetbasename(neon::State *state, const char *path);
 
-void nn_import_closemodule(void *dlw);
-int nn_fileobject_close(neon::File *file);
-bool nn_fileobject_open(neon::File *file);
 bool nn_vm_callvaluewithobject(neon::State *state, neon::Value callable, neon::Value thisval, int argcount);
 
-static NEON_FORCEINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...);
-static NEON_FORCEINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...);
-
-void nn_astparser_consumestmtend(neon::Parser *prs);
 int nn_astparser_getcodeargscount(const neon::Instruction *bytecode, const neon::Value *constants, int ip);
-int nn_astparser_makeidentconst(neon::Parser *prs, neon::Token *name);
-int nn_astparser_addlocal(neon::Parser *prs, neon::Token name);
-void nn_astparser_declarevariable(neon::Parser *prs);
 int nn_astparser_parsevariable(neon::Parser *prs, const char *message);
-void nn_astparser_markinitialized(neon::Parser *prs);
-void nn_astparser_definevariable(neon::Parser *prs, int global);
-neon::Token nn_astparser_synthtoken(const char *name);
-void nn_astparser_scopebegin(neon::Parser *prs);
-void nn_astparser_scopeend(neon::Parser *prs);
 int nn_astparser_discardlocals(neon::Parser *prs, int depth);
 void nn_astparser_endloop(neon::Parser *prs);
 bool nn_astparser_rulebinary(neon::Parser *prs, neon::Token previous, bool canassign);
 bool nn_astparser_rulecall(neon::Parser *prs, neon::Token previous, bool canassign);
 bool nn_astparser_ruleliteral(neon::Parser *prs, bool canassign);
-void nn_astparser_parseassign(neon::Parser *prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg);
-void nn_astparser_assignment(neon::Parser *prs, uint8_t getop, uint8_t setop, int arg, bool canassign);
 bool nn_astparser_ruledot(neon::Parser *prs, neon::Token previous, bool canassign);
-void nn_astparser_namedvar(neon::Parser *prs, neon::Token name, bool canassign);
 void nn_astparser_createdvar(neon::Parser *prs, neon::Token name);
 bool nn_astparser_rulearray(neon::Parser *prs, bool canassign);
 bool nn_astparser_ruledictionary(neon::Parser *prs, bool canassign);
@@ -3689,6 +2685,24 @@ namespace neon
                 return Value::makeBool(false);
             }
 
+            template<typename... ArgsT>
+            NEON_FORCEINLINE void apiDebugVMCall(const char* funcname, const char* format, ArgsT&&... args)
+            {
+                static auto fn_fprintf = fprintf;
+                fprintf(stderr, "API CALL: to '%s': ", funcname);
+                fn_fprintf(stderr, format, args...);
+                fprintf(stderr, "\n");
+            }
+
+            template<typename... ArgsT>
+            NEON_FORCEINLINE void apiDebugAstCall(const char* funcname, const char* format, ArgsT&&... args)
+            {
+                static auto fn_fprintf = fprintf;
+                fprintf(stderr, "AST CALL: to '%s': ", funcname);
+                fn_fprintf(stderr, format, args...);
+                fprintf(stderr, "\n");
+            }
+
             FuncClosure* compileScriptSource(Module* module, bool fromeval, const char* source);
             Value evalSource(const char* source);
             Status execSource(Module* module, const char* source, Value* dest);
@@ -3875,174 +2889,7 @@ namespace neon
             }
     };
 
-    struct BasicArray
-    {
-        public:
-            template<typename ValType>
-            static inline ValType* growArray(State* state, ValType* pointer, size_t oldcount, size_t newcount)
-            {
-                size_t tsz;
-                (void)state;
-                (void)oldcount;
-                tsz = sizeof(ValType);
-                //return (ValType*)State::GC::reallocate(state, pointer, tsz * oldcount, tsz * newcount);
-                return (ValType*)Memory::osRealloc(pointer, tsz*newcount);
-            }
-
-            template<typename ValType>
-            static inline void freeArray(State* state, ValType* pointer, size_t oldcount)
-            {
-                size_t tsz;
-                tsz = sizeof(ValType);
-                State::GC::gcRelease(state, pointer, tsz * oldcount);
-            }
-    };
-
-    template<typename ValType>
-    struct GenericArray: public BasicArray
-    {
-        public:
-            State* m_pvm;
-            /* how many entries are currently stored? */
-            uint64_t m_count;
-            /* how many entries can be stored before growing? */
-            uint64_t m_capacity;
-            ValType* m_values;
-
-        private:
-            bool destroy()
-            {
-                if(m_values != nullptr)
-                {
-                    freeArray(m_pvm, m_values, m_capacity);
-                    m_values = nullptr;
-                    m_count = 0;
-                    m_capacity = 0;
-                    return true;
-                }
-                return false;
-            }
-
-        public:
-            GenericArray(): GenericArray(nullptr)
-            {
-            }
-
-            GenericArray(State* state)
-            {
-                m_pvm = state;
-                m_capacity = 0;
-                m_count = 0;
-                m_values = nullptr;
-            }
-
-            ~GenericArray()
-            {
-                destroy();
-            }
-
-            NEON_FORCEINLINE uint64_t size() const
-            {
-                return m_count;
-            }
-
-            NEON_FORCEINLINE uint64_t length() const
-            {
-                return m_count;
-            }
-
-            NEON_FORCEINLINE uint64_t count() const
-            {
-                return m_count;
-            }
-
-            NEON_FORCEINLINE ValType& at(uint64_t i)
-            {
-                return m_values[i];
-            }
-
-            NEON_FORCEINLINE ValType& operator[](uint64_t i)
-            {
-                return at(i);
-            }
-
-            void push(ValType value)
-            {
-                uint64_t oldcapacity;
-                if(m_capacity < m_count + 1)
-                {
-                    oldcapacity = m_capacity;
-                    m_capacity = Util::growCapacity(oldcapacity);
-                    m_values = growArray(m_pvm, m_values, oldcapacity, m_capacity);
-                }
-                m_values[m_count] = value;
-                m_count++;
-            }
-
-            void insertDefault(ValType value, uint64_t index, ValType defaultvalue)
-            {
-                uint64_t i;
-                uint64_t oldcap;
-                if(m_capacity <= index)
-                {
-                    m_capacity = Util::growCapacity(index);
-                    m_values = growArray(m_pvm, m_values, m_count, m_capacity);
-                }
-                else if(m_capacity < m_count + 2)
-                {
-                    oldcap = m_capacity;
-                    m_capacity = Util::growCapacity(oldcap);
-                    m_values = growArray(m_pvm, m_values, oldcap, m_capacity);
-                }
-                if(index <= m_count)
-                {
-                    for(i = m_count - 1; i >= index; i--)
-                    {
-                        m_values[i + 1] = m_values[i];
-                    }
-                }
-                else
-                {
-                    for(i = m_count; i < index; i++)
-                    {
-                        /* null out overflow indices */
-                        m_values[i] = defaultvalue;
-                        m_count++;
-                    }
-                }
-                m_values[index] = value;
-                m_count++;
-            }
-
-            ValType shiftDefault(uint64_t count, ValType defval)
-            {
-                uint64_t i;
-                uint64_t j;
-                uint64_t vsz;
-                ValType temp;
-                ValType item;
-                vsz = m_count;
-                if(count >= vsz || vsz == 1)
-                {
-                    m_count = 0;
-                    return defval;
-                }
-                item = m_values[0];
-                j = 0;
-                for(i=1; i<vsz; i++)
-                {
-                    temp = m_values[i];
-                    m_values[j] = temp;
-                    j++;
-                }
-                m_count--;
-                return item;
-            }
-
-
-    };
-
-    struct ValArray: public GenericArray<Value>
+    struct ValArray: public Util::GenericArray<Value>
     {
         public:
             struct QuickSort
@@ -4151,8 +2998,14 @@ namespace neon
                         #endif
                     }
             };
+
+        private:
+            State* m_pvm;
+
         public:
-            using GenericArray::GenericArray;
+            ValArray(State* state): GenericArray(), m_pvm(state)
+            {
+            }
 
             void gcMark()
             {
@@ -4264,7 +3117,7 @@ namespace neon
 
             ~HashTable()
             {
-                BasicArray::freeArray(m_pvm, m_entries, m_capacity);
+                Memory::freeArray(m_entries, m_capacity);
             }
 
             NEON_FORCEINLINE uint64_t size() const
@@ -4493,11 +3346,9 @@ namespace neon
             void adjustCapacity(uint64_t needcap)
             {
                 uint64_t i;
-                State* state;
                 Entry* dest;
                 Entry* entry;
                 Entry* nents;
-                state = m_pvm;
                 //nents = (Entry*)State::GC::allocate(state, sizeof(Entry), needcap);
                 nents = (Entry*)Memory::osMalloc(sizeof(Entry) * needcap);
                 for(i = 0; i < needcap; i++)
@@ -4520,7 +3371,7 @@ namespace neon
                     m_count++;
                 }
                 /* free the old entries... */
-                BasicArray::freeArray(state, m_entries, m_capacity);
+                Memory::freeArray(m_entries, m_capacity);
                 m_entries = nents;
                 m_capacity = needcap;
             }
@@ -4694,7 +3545,7 @@ namespace neon
             {
                 if(m_instrucs != nullptr)
                 {
-                    BasicArray::freeArray(m_pvm, m_instrucs, m_capacity);
+                    Memory::freeArray(m_instrucs, m_capacity);
                 }
                 Memory::destroy(m_constants);
                 Memory::destroy(m_argdefvals);
@@ -4707,7 +3558,7 @@ namespace neon
                 {
                     oldcapacity = m_capacity;
                     m_capacity = Util::growCapacity(oldcapacity);
-                    m_instrucs = BasicArray::growArray(m_pvm, m_instrucs, oldcapacity, m_capacity);
+                    m_instrucs = Memory::growArray(m_instrucs, oldcapacity, m_capacity);
                 }
                 m_instrucs[m_count] = ins;
                 m_count++;
@@ -4836,7 +3687,7 @@ namespace neon
                 {
                     rs = makeFromChars(state, chars, length, hash, true);
                 }
-                BasicArray::freeArray(state, chars, (size_t)length + 1);
+                Memory::freeArray(chars, (size_t)length + 1);
                 return rs;
             }
 
@@ -5280,8 +4131,51 @@ namespace neon
 
             bool destroyThisObject()
             {
-                nn_fileobject_close(this);
+                selfCloseFile();
                 return true;
+            }
+
+            bool selfOpenFile()
+            {
+                if(m_filehandle != nullptr)
+                {
+                    return true;
+                }
+                if(m_filehandle == nullptr && !m_isstd)
+                {
+                    m_filehandle = fopen(m_filepath->data(), m_filemode->data());
+                    if(m_filehandle != nullptr)
+                    {
+                        m_isopen = true;
+                        m_filedesc = fileno(m_filehandle);
+                        m_istty = osfn_isatty(m_filedesc);
+                        return true;
+                    }
+                    else
+                    {
+                        m_filedesc = -1;
+                        m_istty = false;
+                    }
+                    return false;
+                }
+                return false;
+            }
+
+
+            int selfCloseFile()
+            {
+                int result;
+                if(m_filehandle != nullptr && !m_isstd)
+                {
+                    fflush(m_filehandle);
+                    result = fclose(m_filehandle);
+                    m_filehandle = nullptr;
+                    m_isopen = false;
+                    m_filedesc = -1;
+                    m_istty = false;
+                    return result;
+                }
+                return -1;
             }
 
             bool readChunk(size_t readhowmuch, IOResult* dest)
@@ -5308,7 +4202,7 @@ namespace neon
                     if(!m_isopen)
                     {
                         /* open the file if it isn't open */
-                        nn_fileobject_open(this);
+                        selfOpenFile();
                     }
                     else if(m_filehandle == nullptr)
                     {
@@ -5509,7 +4403,7 @@ namespace neon
         public:
             bool destroyThisObject()
             {
-                BasicArray::freeArray(m_pvm, m_storedupvals, m_upvalcount);
+                Memory::freeArray(m_storedupvals, m_upvalcount);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
@@ -5945,6 +4839,12 @@ namespace neon
                 return rt;
             }
 
+            static void closeLibHandle(void* dlw)
+            {
+                (void)dlw;
+                //dlwrap_dlclose(dlw);
+            }
+
             static char* resolvePath(State* state, const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
             {
                 size_t i;
@@ -6246,7 +5146,7 @@ namespace neon
                 }
                 if(m_libhandle != nullptr)
                 {
-                    nn_import_closemodule(m_libhandle);
+                    closeLibHandle(m_libhandle);
                 }
                 return true;
             }
@@ -6852,7 +5752,163 @@ namespace neon
             }
     };
 
-    #include "temp.h"
+
+    struct FormatInfo
+    {
+        public:
+            struct FlagParseState;
+            using GetNextFN = Value(*)(FlagParseState*, int);
+
+            struct FlagParseState
+            {
+                int currchar = -1;
+                int nextchar = -1;
+                bool failed = false;
+                size_t position = 0;
+                size_t argpos = 0;
+                int argc = 0;
+                Value* argv = nullptr;
+                Value currvalue;
+            };
+
+        public:
+            template<typename... VargT>
+            static inline bool formatArgs(Printer* pr, const char* fmt, VargT&&... args)
+            {
+                size_t argc = sizeof...(args);
+                Value fargs[] = {(args) ..., Value::makeEmpty()};
+                FormatInfo inf(pr->m_pvm, pr, fmt, strlen(fmt));
+                return inf.format(argc, 0, fargs);
+            }
+
+        private:
+            static inline Value defaultGetNextValue(FlagParseState* st, int pos)
+            {
+                //st.currvalue = st.argv[st.argpos];
+                return st->argv[pos];
+            }
+
+        public:
+            State* m_pvm;
+            /* length of the format string */
+            size_t m_fmtlen = 0;
+            /* the actual format string */
+            const char* m_fmtstr = nullptr;
+            /* destination printer */
+            Printer* m_printer = nullptr;
+            GetNextFN m_fngetnext = nullptr;
+
+
+        private:
+            inline void doHandleFlag(FlagParseState& st)
+            {
+                int intval;
+                char chval;
+                if(st.nextchar == '%')
+                {
+                    m_printer->putChar('%');
+                }
+                else
+                {
+                    st.position++;
+                    if((int)st.argpos > st.argc)
+                    {
+                        st.failed = true;
+                        st.currvalue = Value::makeEmpty();
+                    }
+                    else
+                    {                        
+                        if(m_fngetnext != nullptr)
+                        {
+                            st.currvalue = m_fngetnext(&st, st.argpos);
+                        }
+                        else
+                        {
+                            st.currvalue = st.argv[st.argpos];
+                        }
+                    }
+                    st.argpos++;
+                    switch(st.nextchar)
+                    {
+                        case 'q':
+                        case 'p':
+                            {
+                                m_printer->printValue(st.currvalue, true, true);
+                            }
+                            break;
+                        case 'c':
+                            {
+                                intval = (int)st.currvalue.asNumber();
+                                chval = intval;
+                                //m_printer->putformat("%c", intval);
+                                m_printer->put(&chval, 1);
+                            }
+                            break;
+                        /* TODO: implement actual field formatting */
+                        case 's':
+                        case 'd':
+                        case 'i':
+                        case 'g':
+                            {
+                                m_printer->printValue(st.currvalue, false, true);
+                            }
+                            break;
+                        default:
+                            {
+                                m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "unknown/invalid format flag '%%c'", st.nextchar);
+                            }
+                            break;
+                    }
+                }
+            }
+
+        public:
+            inline FormatInfo(State* state, Printer* pr, const char* fstr, size_t flen): m_pvm(state)
+            {
+                m_fmtstr = fstr;
+                m_fmtlen = flen;
+                m_printer = pr;
+            }
+
+            inline ~FormatInfo()
+            {
+            }
+
+            inline bool format(int argc, int argbegin, Value* argv)
+            {
+                return format(argc, argbegin, argv, nullptr);
+            }
+
+            inline bool format(int argc, int argbegin, Value* argv, GetNextFN fn)
+            {
+                FlagParseState st;
+                st.position = 0;
+                st.argpos = argbegin;
+                st.failed = false;
+                st.argc = argc;
+                st.argv = argv;
+                m_fngetnext = fn;
+                while(st.position < m_fmtlen)
+                {
+                    st.currchar = m_fmtstr[st.position];
+                    st.nextchar = -1;
+                    if((st.position + 1) < m_fmtlen)
+                    {
+                        st.nextchar = m_fmtstr[st.position+1];
+                    }
+                    st.position++;
+                    if(st.currchar == '%')
+                    {
+                        doHandleFlag(st);
+                    }
+                    else
+                    {
+                        m_printer->putChar(st.currchar);
+                    }
+                }
+                return st.failed;
+            }
+    };
 
     struct DebugPrinter
     {
@@ -6865,7 +5921,7 @@ namespace neon
         private:
             void doPrintInstrName()
             {
-                Color nc;
+                Terminal nc;
                 m_printer->putformat("%s%-16s%s ", nc.color('r'), m_insname, nc.color('0'));
             }
 
@@ -8317,7 +7373,7 @@ namespace neon
                     FuncCommon::Type m_type;
                     //CompiledLocal m_compiledlocals[MaxLocals];
                     CompiledUpvalue m_compiledupvals[MaxUpvalues];
-                    GenericArray<CompiledLocal> m_compiledlocals;
+                    Util::GenericArray<CompiledLocal> m_compiledlocals;
 
                 public:
                     FuncCompiler(Parser* prs, FuncCommon::Type t, bool isanon)
@@ -8337,7 +7393,6 @@ namespace neon
                         m_fromimport = false;
                         m_targetfunc = FuncScript::make(prs->m_pvm, prs->m_currmodule, t);
                         prs->m_currfunccompiler = this;
-                        m_compiledlocals.m_pvm = prs->m_pvm;
                         m_compiledlocals.push(CompiledLocal{});
                         if(t != FuncCommon::FUNCTYPE_SCRIPT)
                         {
@@ -8392,7 +7447,7 @@ namespace neon
                         /* create the function object */
                         if(closescope)
                         {
-                            nn_astparser_scopeend(m_prs);
+                            m_prs->scopeEnd();
                         }
                         function = m_prs->endCompiler();
                         m_prs->m_pvm->stackPush(Value::fromObject(function));
@@ -8510,6 +7565,17 @@ namespace neon
                 Memory::destroy(parser);
                 state->m_activeparser = nullptr;
                 return function;
+            }
+
+            static Token makeSynthToken(const char* name)
+            {
+                Token token;
+                token.isglobal = false;
+                token.line = 0;
+                token.type = (Token::Type)0;
+                token.start = name;
+                token.length = (int)strlen(name);
+                return token;
             }
 
         public:
@@ -8664,7 +7730,6 @@ namespace neon
                 }
             }
 
-
             Blob* currentBlob()
             {
                 return m_currfunccompiler->m_targetfunc->m_compiledblob;
@@ -8706,6 +7771,30 @@ namespace neon
                     }
                 }
                 raiseErrorAtCurrent(message);
+            }
+
+            void consumeStmtEnd()
+            {
+                /* allow block last statement to omit statement end */
+                if(m_blockcount > 0 && check(Token::TOK_BRACECLOSE))
+                {
+                    return;
+                }
+                if(match(Token::TOK_SEMICOLON))
+                {
+                    while(match(Token::TOK_SEMICOLON) || match(Token::TOK_NEWLINE))
+                    {
+                    }
+                    return;
+                }
+                if(match(Token::TOK_EOF) || m_prevtoken.type == Token::TOK_EOF)
+                {
+                    return;
+                }
+                /* consume(Token::TOK_NEWLINE, "end of statement expected"); */
+                while(match(Token::TOK_SEMICOLON) || match(Token::TOK_NEWLINE))
+                {
+                }
             }
 
             void emit(uint8_t byte, int line, bool isop)
@@ -8878,6 +7967,55 @@ namespace neon
 
             }
 
+            void scopeBegin()
+            {
+                NEON_ASTDEBUG(m_pvm, "current depth=%d", m_currfunccompiler->m_scopedepth);
+                m_currfunccompiler->m_scopedepth++;
+            }
+
+            bool scopeEndCanContinue()
+            {
+                int lopos;
+                int locount;
+                int lodepth;
+                int scodepth;
+                NEON_ASTDEBUG(m_pvm, "");
+                locount = m_currfunccompiler->m_localcount;
+                lopos = m_currfunccompiler->m_localcount - 1;
+                lodepth = m_currfunccompiler->m_compiledlocals[lopos].depth;
+                scodepth = m_currfunccompiler->m_scopedepth;
+                if(locount > 0 && lodepth > scodepth)
+                {
+                    return true;
+                }
+                return false;
+            }
+
+            void scopeEnd()
+            {
+                NEON_ASTDEBUG(m_pvm, "current scope depth=%d", m_currfunccompiler->m_scopedepth);
+                m_currfunccompiler->m_scopedepth--;
+                /*
+                // remove all variables declared in scope while exiting...
+                */
+                if(m_keeplastvalue)
+                {
+                    //return;
+                }
+                while(scopeEndCanContinue())
+                {
+                    if(m_currfunccompiler->m_compiledlocals[m_currfunccompiler->m_localcount - 1].iscaptured)
+                    {
+                        emitInstruction(Instruction::OP_UPVALUECLOSE);
+                    }
+                    else
+                    {
+                        emitInstruction(Instruction::OP_POPONE);
+                    }
+                    m_currfunccompiler->m_localcount--;
+                }
+            }
+
             bool checkNumber()
             {
                 Token::Type t;
@@ -8917,6 +8055,69 @@ namespace neon
                         break;
                     }
                 }
+            }
+
+            int makeIdentConst(Token* name)
+            {
+                int rawlen;
+                const char* rawstr;
+                String* str;
+                rawstr = name->start;
+                rawlen = name->length;
+                if(name->isglobal)
+                {
+                    rawstr++;
+                    rawlen--;
+                }
+                str = String::copy(m_pvm, rawstr, rawlen);
+                return pushConst(Value::fromObject(str));
+            }
+
+            void declareVariable()
+            {
+                int i;
+                Token* name;
+                CompiledLocal* local;
+                /* global variables are implicitly declared... */
+                if(m_currfunccompiler->m_scopedepth == 0)
+                {
+                    return;
+                }
+                name = &m_prevtoken;
+                for(i = m_currfunccompiler->m_localcount - 1; i >= 0; i--)
+                {
+                    local = &m_currfunccompiler->m_compiledlocals[i];
+                    if(local->depth != -1 && local->depth < m_currfunccompiler->m_scopedepth)
+                    {
+                        break;
+                    }
+                    if(identsEqual(name, &local->varname))
+                    {
+                        raiseError("%.*s already declared in current scope", name->length, name->start);
+                    }
+                }
+                addLocal(*name);
+            }
+
+            int addLocal(Token name)
+            {
+                CompiledLocal local;
+                #if 0
+                if(m_currfunccompiler->m_localcount == FuncCompiler::MaxLocals)
+                {
+                    /* we've reached maximum local variables per scope */
+                    raiseError("too many local variables in scope");
+                    return -1;
+                }
+                #endif
+                local.varname = name;
+                local.depth = -1;
+                local.iscaptured = false;
+                //m_currfunccompiler->m_compiledlocals.push(local);
+                m_currfunccompiler->m_compiledlocals.insertDefault(local, m_currfunccompiler->m_localcount, CompiledLocal{});
+
+                m_currfunccompiler->m_localcount++;
+                return m_currfunccompiler->m_localcount;
             }
 
             bool doParsePrecedence(Rule::Precedence precedence/*, AstExpression* dest*/)
@@ -8977,6 +8178,230 @@ namespace neon
                 }
                 return doParsePrecedence(precedence);
             }
+
+            void emitAssign(uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+            {
+                NEON_ASTDEBUG(m_pvm, "");
+                m_replcanecho = false;
+                if(getop == Instruction::OP_PROPERTYGET || getop == Instruction::OP_PROPERTYGETSELF)
+                {
+                    emitInstruction(Instruction::OP_DUPONE);
+                }
+                if(arg != -1)
+                {
+                    emitByteAndShort(getop, arg);
+                }
+                else
+                {
+                    emitInstruction(getop);
+                    emit1byte(1);
+                }
+                parseExpression();
+                emitInstruction(realop);
+                if(arg != -1)
+                {
+                    emitByteAndShort(setop, (uint16_t)arg);
+                }
+                else
+                {
+                    emitInstruction(setop);
+                }
+            }
+
+            void emitNamedVar(Token name, bool canassign)
+            {
+                bool fromclass;
+                uint8_t getop;
+                uint8_t setop;
+                int arg;
+                (void)fromclass;
+                NEON_ASTDEBUG(m_pvm, " name=%.*s", name.length, name.start);
+                fromclass = m_currclasscompiler != nullptr;
+                arg = m_currfunccompiler->resolveLocal(&name);
+                if(arg != -1)
+                {
+                    if(m_infunction)
+                    {
+                        getop = Instruction::OP_FUNCARGGET;
+                        setop = Instruction::OP_FUNCARGSET;
+                    }
+                    else
+                    {
+                        getop = Instruction::OP_LOCALGET;
+                        setop = Instruction::OP_LOCALSET;
+                    }
+                }
+                else
+                {
+                    arg = m_currfunccompiler->resolveUpvalue(&name);
+                    if((arg != -1) && (name.isglobal == false))
+                    {
+                        getop = Instruction::OP_UPVALUEGET;
+                        setop = Instruction::OP_UPVALUESET;
+                    }
+                    else
+                    {
+                        arg = makeIdentConst(&name);
+                        getop = Instruction::OP_GLOBALGET;
+                        setop = Instruction::OP_GLOBALSET;
+                    }
+                }
+                parseAssign(getop, setop, arg, canassign);
+            }
+
+            void markLocalInitialized()
+            {
+                int xpos;
+                if(m_currfunccompiler->m_scopedepth == 0)
+                {
+                    return;
+                }
+                xpos = (m_currfunccompiler->m_localcount - 1);
+                m_currfunccompiler->m_compiledlocals[xpos].depth = m_currfunccompiler->m_scopedepth;
+            }
+
+
+            void emitDefineVariable(int global)
+            {
+                /* we are in a local scope... */
+                if(m_currfunccompiler->m_scopedepth > 0)
+                {
+                    markLocalInitialized();
+                    return;
+                }
+                emitInstruction(Instruction::OP_GLOBALDEFINE);
+                emit1short(global);
+            }
+
+            void parseAssign(uint8_t getop, uint8_t setop, int arg, bool canassign)
+            {
+                NEON_ASTDEBUG(m_pvm, "");
+                if(canassign && match(Token::TOK_ASSIGN))
+                {
+                    m_replcanecho = false;
+                    parseExpression();
+                    if(arg != -1)
+                    {
+                        emitByteAndShort(setop, (uint16_t)arg);
+                    }
+                    else
+                    {
+                        emitInstruction(setop);
+                    }
+                }
+                else if(canassign && match(Token::TOK_PLUSASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMADD, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_MINUSASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMSUBTRACT, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_MULTASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMMULTIPLY, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_DIVASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMDIVIDE, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_POWASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMPOW, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_MODASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMMODULO, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_AMPASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMAND, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_BARASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMOR, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_TILDEASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMBITNOT, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_XORASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMBITXOR, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_LEFTSHIFTASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMSHIFTLEFT, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_RIGHTSHIFTASSIGN))
+                {
+                    emitAssign(Instruction::OP_PRIMSHIFTRIGHT, getop, setop, arg);
+                }
+                else if(canassign && match(Token::TOK_INCREMENT))
+                {
+                    m_replcanecho = false;
+                    if(getop == Instruction::OP_PROPERTYGET || getop == Instruction::OP_PROPERTYGETSELF)
+                    {
+                        emitInstruction(Instruction::OP_DUPONE);
+                    }
+                    if(arg != -1)
+                    {
+                        emitByteAndShort(getop, arg);
+                    }
+                    else
+                    {
+                        emitInstruction(getop);
+                        emit1byte(1);
+                    }
+                    emitInstruction(Instruction::OP_PUSHONE);
+                    emitInstruction(Instruction::OP_PRIMADD);
+                    emitInstruction(setop);
+                    emit1short((uint16_t)arg);
+                }
+                else if(canassign && match(Token::TOK_DECREMENT))
+                {
+                    m_replcanecho = false;
+                    if(getop == Instruction::OP_PROPERTYGET || getop == Instruction::OP_PROPERTYGETSELF)
+                    {
+                        emitInstruction(Instruction::OP_DUPONE);
+                    }
+                    if(arg != -1)
+                    {
+                        emitByteAndShort(getop, arg);
+                    }
+                    else
+                    {
+                        emitInstruction(getop);
+                        emit1byte(1);
+                    }
+                    emitInstruction(Instruction::OP_PUSHONE);
+                    emitInstruction(Instruction::OP_PRIMSUBTRACT);
+                    emitInstruction(setop);
+                    emit1short((uint16_t)arg);
+                }
+                else
+                {
+                    if(arg != -1)
+                    {
+                        if(getop == Instruction::OP_INDEXGET || getop == Instruction::OP_INDEXGETRANGED)
+                        {
+                            emitInstruction(getop);
+                            emit1byte((uint8_t)0);
+                        }
+                        else
+                        {
+                            emitByteAndShort(getop, (uint16_t)arg);
+                        }
+                    }
+                    else
+                    {
+                        emitInstruction(getop);
+                        emit1byte((uint8_t)0);
+                    }
+                }
+            }
+
+
 
             bool parseExpression()
             {
@@ -9301,9 +8726,9 @@ namespace neon
                     }
                     else
                     {
-                        nn_astparser_scopebegin(this);
+                        scopeBegin();
                         nn_astparser_parseblock(this);
-                        nn_astparser_scopeend(this);
+                        scopeEnd();
                     }
                 }
                 else
@@ -9372,9 +8797,9 @@ namespace neon
                 }
                 else if(match(Token::TOK_BRACEOPEN))
                 {
-                    nn_astparser_scopebegin(this);
+                    scopeBegin();
                     nn_astparser_parseblock(this);
-                    nn_astparser_scopeend(this);
+                    scopeEnd();
                 }
                 else if(match(Token::TOK_KWTRY))
                 {
@@ -9400,38 +8825,6 @@ namespace neon
 }
 
 #include "prot.inc"
-
-static NEON_FORCEINLINE void nn_state_apidebugv(neon::State* state, const char* funcname, const char* format, va_list va)
-{
-    (void)state;
-    fprintf(stderr, "API CALL: to '%s': ", funcname);
-    vfprintf(stderr, format, va);
-    fprintf(stderr, "\n");
-}
-
-static NEON_FORCEINLINE void nn_state_apidebug(neon::State* state, const char* funcname, const char* format, ...)
-{
-    va_list va;
-    va_start(va, format);
-    nn_state_apidebugv(state, funcname, format, va);
-    va_end(va);
-}
-
-static NEON_FORCEINLINE void nn_state_astdebugv(neon::State* state, const char* funcname, const char* format, va_list va)
-{
-    (void)state;
-    fprintf(stderr, "AST CALL: to '%s': ", funcname);
-    vfprintf(stderr, format, va);
-    fprintf(stderr, "\n");
-}
-
-static NEON_FORCEINLINE void nn_state_astdebug(neon::State* state, const char* funcname, const char* format, ...)
-{
-    va_list va;
-    va_start(va, format);
-    nn_state_astdebugv(state, funcname, format, va);
-    va_end(va);
-}
 
 namespace neon
 {
@@ -10286,7 +9679,7 @@ namespace neon
         Property* field;
         String* emsg;
         Array* oa;
-        Color nc;
+        Terminal nc;
         colred = nc.color('r');
         colreset = nc.color('0');
         /* at this point, the exception is unhandled; so, print it out. */
@@ -10507,30 +9900,6 @@ namespace neon
 }
 
 
-void nn_astparser_consumestmtend(neon::Parser* prs)
-{
-    /* allow block last statement to omit statement end */
-    if(prs->m_blockcount > 0 && prs->check(neon::Token::TOK_BRACECLOSE))
-    {
-        return;
-    }
-    if(prs->match(neon::Token::TOK_SEMICOLON))
-    {
-        while(prs->match(neon::Token::TOK_SEMICOLON) || prs->match(neon::Token::TOK_NEWLINE))
-        {
-        }
-        return;
-    }
-    if(prs->match(neon::Token::TOK_EOF) || prs->m_prevtoken.type == neon::Token::TOK_EOF)
-    {
-        return;
-    }
-    /* prs->consume(neon::Token::TOK_NEWLINE, "end of statement expected"); */
-    while(prs->match(neon::Token::TOK_SEMICOLON) || prs->match(neon::Token::TOK_NEWLINE))
-    {
-    }
-}
-
 int nn_astparser_getcodeargscount(const neon::Instruction* bytecode, const neon::Value* constants, int ip)
 {
     int constant;
@@ -10630,164 +9999,23 @@ int nn_astparser_getcodeargscount(const neon::Instruction* bytecode, const neon:
     return 0;
 }
 
-
-int nn_astparser_makeidentconst(neon::Parser* prs, neon::Token* name)
-{
-    int rawlen;
-    const char* rawstr;
-    neon::String* str;
-    rawstr = name->start;
-    rawlen = name->length;
-    if(name->isglobal)
-    {
-        rawstr++;
-        rawlen--;
-    }
-    str = neon::String::copy(prs->m_pvm, rawstr, rawlen);
-    return prs->pushConst(neon::Value::fromObject(str));
-}
-
-
-int nn_astparser_addlocal(neon::Parser* prs, neon::Token name)
-{
-    neon::Parser::CompiledLocal local;
-    if(prs->m_currfunccompiler->m_localcount == neon::Parser::FuncCompiler::MaxLocals)
-    {
-        /* we've reached maximum local variables per scope */
-        prs->raiseError("too many local variables in scope");
-        return -1;
-    }
-    local.varname = name;
-    local.depth = -1;
-    local.iscaptured = false;
-    //prs->m_currfunccompiler->m_compiledlocals.push(local);
-    prs->m_currfunccompiler->m_compiledlocals.insertDefault(local, prs->m_currfunccompiler->m_localcount, neon::Parser::CompiledLocal{});
-
-    prs->m_currfunccompiler->m_localcount++;
-    return prs->m_currfunccompiler->m_localcount;
-}
-
-void nn_astparser_declarevariable(neon::Parser* prs)
-{
-    int i;
-    neon::Token* name;
-    neon::Parser::CompiledLocal* local;
-    /* global variables are implicitly declared... */
-    if(prs->m_currfunccompiler->m_scopedepth == 0)
-    {
-        return;
-    }
-    name = &prs->m_prevtoken;
-    for(i = prs->m_currfunccompiler->m_localcount - 1; i >= 0; i--)
-    {
-        local = &prs->m_currfunccompiler->m_compiledlocals[i];
-        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->m_scopedepth)
-        {
-            break;
-        }
-        if(neon::Parser::identsEqual(name, &local->varname))
-        {
-            prs->raiseError("%.*s already declared in current scope", name->length, name->start);
-        }
-    }
-    nn_astparser_addlocal(prs, *name);
-}
-
 int nn_astparser_parsevariable(neon::Parser* prs, const char* message)
 {
     if(!prs->consume(neon::Token::TOK_IDENTNORMAL, message))
     {
         /* what to do here? */
     }
-    nn_astparser_declarevariable(prs);
+    prs->declareVariable();
     /* we are in a local scope... */
     if(prs->m_currfunccompiler->m_scopedepth > 0)
     {
         return 0;
     }
-    return nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    return prs->makeIdentConst(&prs->m_prevtoken);
 }
 
-void nn_astparser_markinitialized(neon::Parser* prs)
-{
-    if(prs->m_currfunccompiler->m_scopedepth == 0)
-    {
-        return;
-    }
-    prs->m_currfunccompiler->m_compiledlocals[prs->m_currfunccompiler->m_localcount - 1].depth = prs->m_currfunccompiler->m_scopedepth;
-}
 
-void nn_astparser_definevariable(neon::Parser* prs, int global)
-{
-    /* we are in a local scope... */
-    if(prs->m_currfunccompiler->m_scopedepth > 0)
-    {
-        nn_astparser_markinitialized(prs);
-        return;
-    }
-    prs->emitInstruction(neon::Instruction::OP_GLOBALDEFINE);
-    prs->emit1short(global);
-}
 
-neon::Token nn_astparser_synthtoken(const char* name)
-{
-    neon::Token token;
-    token.isglobal = false;
-    token.line = 0;
-    token.type = (neon::Token::Type)0;
-    token.start = name;
-    token.length = (int)strlen(name);
-    return token;
-}
-
-void nn_astparser_scopebegin(neon::Parser* prs)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "current depth=%d", prs->m_currfunccompiler->m_scopedepth);
-    prs->m_currfunccompiler->m_scopedepth++;
-}
-
-bool nn_astutil_scopeendcancontinue(neon::Parser* prs)
-{
-    int lopos;
-    int locount;
-    int lodepth;
-    int scodepth;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    locount = prs->m_currfunccompiler->m_localcount;
-    lopos = prs->m_currfunccompiler->m_localcount - 1;
-    lodepth = prs->m_currfunccompiler->m_compiledlocals[lopos].depth;
-    scodepth = prs->m_currfunccompiler->m_scopedepth;
-    if(locount > 0 && lodepth > scodepth)
-    {
-        return true;
-    }
-    return false;
-}
-
-void nn_astparser_scopeend(neon::Parser* prs)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "current scope depth=%d", prs->m_currfunccompiler->m_scopedepth);
-    prs->m_currfunccompiler->m_scopedepth--;
-    /*
-    // remove all variables declared in scope while exiting...
-    */
-    if(prs->m_keeplastvalue)
-    {
-        //return;
-    }
-    while(nn_astutil_scopeendcancontinue(prs))
-    {
-        if(prs->m_currfunccompiler->m_compiledlocals[prs->m_currfunccompiler->m_localcount - 1].iscaptured)
-        {
-            prs->emitInstruction(neon::Instruction::OP_UPVALUECLOSE);
-        }
-        else
-        {
-            prs->emitInstruction(neon::Instruction::OP_POPONE);
-        }
-        prs->m_currfunccompiler->m_localcount--;
-    }
-}
 
 int nn_astparser_discardlocals(neon::Parser* prs, int depth)
 {
@@ -10961,166 +10189,6 @@ bool nn_astparser_ruleliteral(neon::Parser* prs, bool canassign)
     return true;
 }
 
-void nn_astparser_parseassign(neon::Parser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->m_replcanecho = false;
-    if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
-    {
-        prs->emitInstruction(neon::Instruction::OP_DUPONE);
-    }
-    if(arg != -1)
-    {
-        prs->emitByteAndShort(getop, arg);
-    }
-    else
-    {
-        prs->emitInstruction(getop);
-        prs->emit1byte(1);
-    }
-    prs->parseExpression();
-    prs->emitInstruction(realop);
-    if(arg != -1)
-    {
-        prs->emitByteAndShort(setop, (uint16_t)arg);
-    }
-    else
-    {
-        prs->emitInstruction(setop);
-    }
-}
-
-void nn_astparser_assignment(neon::Parser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    if(canassign && prs->match(neon::Token::TOK_ASSIGN))
-    {
-        prs->m_replcanecho = false;
-        prs->parseExpression();
-        if(arg != -1)
-        {
-            prs->emitByteAndShort(setop, (uint16_t)arg);
-        }
-        else
-        {
-            prs->emitInstruction(setop);
-        }
-    }
-    else if(canassign && prs->match(neon::Token::TOK_PLUSASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMADD, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_MINUSASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSUBTRACT, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_MULTASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMULTIPLY, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_DIVASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMDIVIDE, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_POWASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMPOW, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_MODASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMMODULO, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_AMPASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMAND, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_BARASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMOR, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_TILDEASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITNOT, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_XORASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMBITXOR, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_LEFTSHIFTASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTLEFT, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_RIGHTSHIFTASSIGN))
-    {
-        nn_astparser_parseassign(prs, neon::Instruction::OP_PRIMSHIFTRIGHT, getop, setop, arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_INCREMENT))
-    {
-        prs->m_replcanecho = false;
-        if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
-        {
-            prs->emitInstruction(neon::Instruction::OP_DUPONE);
-        }
-
-        if(arg != -1)
-        {
-            prs->emitByteAndShort(getop, arg);
-        }
-        else
-        {
-            prs->emitInstruction(getop);
-            prs->emit1byte(1);
-        }
-
-        prs->emitInstruction(neon::Instruction::OP_PUSHONE);
-        prs->emitInstruction(neon::Instruction::OP_PRIMADD);
-        prs->emitInstruction(setop);
-        prs->emit1short((uint16_t)arg);
-    }
-    else if(canassign && prs->match(neon::Token::TOK_DECREMENT))
-    {
-        prs->m_replcanecho = false;
-        if(getop == neon::Instruction::OP_PROPERTYGET || getop == neon::Instruction::OP_PROPERTYGETSELF)
-        {
-            prs->emitInstruction(neon::Instruction::OP_DUPONE);
-        }
-
-        if(arg != -1)
-        {
-            prs->emitByteAndShort(getop, arg);
-        }
-        else
-        {
-            prs->emitInstruction(getop);
-            prs->emit1byte(1);
-        }
-
-        prs->emitInstruction(neon::Instruction::OP_PUSHONE);
-        prs->emitInstruction(neon::Instruction::OP_PRIMSUBTRACT);
-        prs->emitInstruction(setop);
-        prs->emit1short((uint16_t)arg);
-    }
-    else
-    {
-        if(arg != -1)
-        {
-            if(getop == neon::Instruction::OP_INDEXGET || getop == neon::Instruction::OP_INDEXGETRANGED)
-            {
-                prs->emitInstruction(getop);
-                prs->emit1byte((uint8_t)0);
-            }
-            else
-            {
-                prs->emitByteAndShort(getop, (uint16_t)arg);
-            }
-        }
-        else
-        {
-            prs->emitInstruction(getop);
-            prs->emit1byte((uint8_t)0);
-        }
-    }
-}
 
 bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassign)
 {
@@ -11135,7 +10203,7 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
     {
         return false;
     }
-    name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    name = prs->makeIdentConst(&prs->m_prevtoken);
     if(prs->match(neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
@@ -11166,51 +10234,11 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
         {
             getop = neon::Instruction::OP_PROPERTYGETSELF;
         }
-        nn_astparser_assignment(prs, getop, setop, name, canassign);
+        prs->parseAssign(getop, setop, name, canassign);
     }
     return true;
 }
 
-void nn_astparser_namedvar(neon::Parser* prs, neon::Token name, bool canassign)
-{
-    bool fromclass;
-    uint8_t getop;
-    uint8_t setop;
-    int arg;
-    (void)fromclass;
-    NEON_ASTDEBUG(prs->m_pvm, " name=%.*s", name.length, name.start);
-    fromclass = prs->m_currclasscompiler != nullptr;
-    arg = prs->m_currfunccompiler->resolveLocal(&name);
-    if(arg != -1)
-    {
-        if(prs->m_infunction)
-        {
-            getop = neon::Instruction::OP_FUNCARGGET;
-            setop = neon::Instruction::OP_FUNCARGSET;
-        }
-        else
-        {
-            getop = neon::Instruction::OP_LOCALGET;
-            setop = neon::Instruction::OP_LOCALSET;
-        }
-    }
-    else
-    {
-        arg = prs->m_currfunccompiler->resolveUpvalue(&name);
-        if((arg != -1) && (name.isglobal == false))
-        {
-            getop = neon::Instruction::OP_UPVALUEGET;
-            setop = neon::Instruction::OP_UPVALUESET;
-        }
-        else
-        {
-            arg = nn_astparser_makeidentconst(prs, &name);
-            getop = neon::Instruction::OP_GLOBALGET;
-            setop = neon::Instruction::OP_GLOBALSET;
-        }
-    }
-    nn_astparser_assignment(prs, getop, setop, arg, canassign);
-}
 
 void nn_astparser_createdvar(neon::Parser* prs, neon::Token name)
 {
@@ -11218,15 +10246,15 @@ void nn_astparser_createdvar(neon::Parser* prs, neon::Token name)
     NEON_ASTDEBUG(prs->m_pvm, "name=%.*s", name.length, name.start);
     if(prs->m_currfunccompiler->m_targetfunc->m_scriptfnname != nullptr)
     {
-        local = nn_astparser_addlocal(prs, name) - 1;
-        nn_astparser_markinitialized(prs);
+        local = prs->addLocal(name) - 1;
+        prs->markLocalInitialized();
         prs->emitInstruction(neon::Instruction::OP_LOCALSET);
         prs->emit1short((uint16_t)local);
     }
     else
     {
         prs->emitInstruction(neon::Instruction::OP_GLOBALDEFINE);
-        prs->emit1short((uint16_t)nn_astparser_makeidentconst(prs, &name));
+        prs->emit1short((uint16_t)prs->makeIdentConst(&name));
     }
 }
 
@@ -11308,7 +10336,7 @@ bool nn_astparser_ruledictionary(neon::Parser* prs, bool canassign)
                     }
                     else
                     {
-                        nn_astparser_namedvar(prs, prs->m_prevtoken, false);
+                        prs->emitNamedVar(prs->m_prevtoken, false);
                     }
                 }
                 itemcount++;
@@ -11368,21 +10396,21 @@ bool nn_astparser_ruleindexing(neon::Parser* prs, neon::Token previous, bool can
             prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
         }
     }
-    nn_astparser_assignment(prs, getop, neon::Instruction::OP_INDEXSET, -1, assignable);
+    prs->parseAssign(getop, neon::Instruction::OP_INDEXSET, -1, assignable);
     return true;
 }
 
 bool nn_astparser_rulevarnormal(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_namedvar(prs, prs->m_prevtoken, canassign);
+    prs->emitNamedVar(prs->m_prevtoken, canassign);
     return true;
 }
 
 bool nn_astparser_rulevarglobal(neon::Parser* prs, bool canassign)
 {
     NEON_ASTDEBUG(prs->m_pvm, "");
-    nn_astparser_namedvar(prs, prs->m_prevtoken, canassign);
+    prs->emitNamedVar(prs->m_prevtoken, canassign);
     return true;
 }
 
@@ -11399,8 +10427,8 @@ bool nn_astparser_rulethis(neon::Parser* prs, bool canassign)
     #endif
     //if(prs->m_currclasscompiler != nullptr)
     {
-        nn_astparser_namedvar(prs, prs->m_prevtoken, false);
-        //nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
+        prs->emitNamedVar(prs->m_prevtoken, false);
+        //prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strthis), false);
     }
     return true;
 }
@@ -11428,17 +10456,17 @@ bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
     {
         prs->consume(neon::Token::TOK_DOT, "expected '.' or '(' after super");
         prs->consume(neon::Token::TOK_IDENTNORMAL, "expected super class method name after .");
-        name = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+        name = prs->makeIdentConst(&prs->m_prevtoken);
     }
     else
     {
         invokeself = true;
     }
-    nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strthis), false);
+    prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strthis), false);
     if(prs->match(neon::Token::TOK_PARENOPEN))
     {
         argcount = nn_astparser_parsefunccallargs(prs);
-        nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
+        prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strsuper), false);
         if(!invokeself)
         {
             prs->emitInstruction(neon::Instruction::OP_CLASSINVOKESUPER);
@@ -11453,7 +10481,7 @@ bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
     }
     else
     {
-        nn_astparser_namedvar(prs, nn_astparser_synthtoken(neon::g_strsuper), false);
+        prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strsuper), false);
         prs->emitInstruction(neon::Instruction::OP_CLASSGETSUPER);
         prs->emit1short(name);
     }
@@ -11813,7 +10841,7 @@ void nn_astparser_declarefuncargvar(neon::Parser* prs)
             prs->raiseError("%.*s already declared in current scope", name->length, name->start);
         }
     }
-    nn_astparser_addlocal(prs, *name);
+    prs->addLocal(*name);
 }
 
 
@@ -11829,7 +10857,7 @@ int nn_astparser_parsefuncparamvar(neon::Parser* prs, const char* message)
     {
         return 0;
     }
-    return nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    return prs->makeIdentConst(&prs->m_prevtoken);
 }
 
 uint8_t nn_astparser_parsefunccallargs(neon::Parser* prs)
@@ -11842,10 +10870,12 @@ uint8_t nn_astparser_parsefunccallargs(neon::Parser* prs)
         {
             prs->ignoreSpace();
             prs->parseExpression();
+            #if 0
             if(argcount == NEON_CFG_ASTMAXFUNCPARAMS)
             {
                 prs->raiseError("cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
             }
+            #endif
             argcount++;
         } while(prs->match(neon::Token::TOK_COMMA));
     }
@@ -11865,19 +10895,21 @@ void nn_astparser_parsefuncparamlist(neon::Parser* prs)
     {
         prs->ignoreSpace();
         prs->m_currfunccompiler->m_targetfunc->m_arity++;
+        #if 0
         if(prs->m_currfunccompiler->m_targetfunc->m_arity > NEON_CFG_ASTMAXFUNCPARAMS)
         {
             prs->raiseErrorAtCurrent("cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
         }
+        #endif
         if(prs->match(neon::Token::TOK_TRIPLEDOT))
         {
             prs->m_currfunccompiler->m_targetfunc->m_isvariadic = true;
-            nn_astparser_addlocal(prs, nn_astparser_synthtoken("__args__"));
-            nn_astparser_definevariable(prs, 0);
+            prs->addLocal(neon::Parser::makeSynthToken("__args__"));
+            prs->emitDefineVariable(0);
             break;
         }
         paramconstant = nn_astparser_parsefuncparamvar(prs, "expected parameter name");
-        nn_astparser_definevariable(prs, paramconstant);
+        prs->emitDefineVariable(paramconstant);
         prs->ignoreSpace();
     } while(prs->match(neon::Token::TOK_COMMA));
 }
@@ -11887,7 +10919,7 @@ void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, 
 {
     prs->m_infunction = true;
     neon::Parser::FuncCompiler compiler(prs, type, isanon);
-    nn_astparser_scopebegin(prs);
+    prs->scopeBegin();
     /* compile parameter list */
     prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after function name");
     if(!prs->check(neon::Token::TOK_PARENCLOSE))
@@ -11911,7 +10943,7 @@ void nn_astparser_parsemethod(neon::Parser* prs, neon::Token classname, bool iss
     sc = "constructor";
     sn = strlen(sc);
     prs->consumeOr("method name expected", tkns, 2);
-    constant = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    constant = prs->makeIdentConst(&prs->m_prevtoken);
     type = neon::FuncCommon::FUNCTYPE_METHOD;
     if((prs->m_prevtoken.length == (int)sn) && (memcmp(prs->m_prevtoken.start, sc, sn) == 0))
     {
@@ -11930,7 +10962,7 @@ bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
 {
     (void)canassign;
     neon::Parser::FuncCompiler compiler(prs, neon::FuncCommon::FUNCTYPE_FUNCTION, true);
-    nn_astparser_scopebegin(prs);
+    prs->scopeBegin();
     /* compile parameter list */
     prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
     if(!prs->check(neon::Token::TOK_PARENCLOSE))
@@ -11946,7 +10978,7 @@ void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
 {
     int fieldconstant;
     prs->consume(neon::Token::TOK_IDENTNORMAL, "class property name expected");
-    fieldconstant = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    fieldconstant = prs->makeIdentConst( &prs->m_prevtoken);
     if(prs->match(neon::Token::TOK_ASSIGN))
     {
         prs->parseExpression();
@@ -11958,7 +10990,7 @@ void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
     prs->emitInstruction(neon::Instruction::OP_CLASSPROPERTYDEFINE);
     prs->emit1short(fieldconstant);
     prs->emit1byte(isstatic ? 1 : 0);
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
     prs->ignoreSpace();
 }
 
@@ -11966,9 +10998,9 @@ void nn_astparser_parsefuncdecl(neon::Parser* prs)
 {
     int global;
     global = nn_astparser_parsevariable(prs, "function name expected");
-    nn_astparser_markinitialized(prs);
+    prs->markLocalInitialized();
     nn_astparser_parsefuncfull(prs, neon::FuncCommon::FUNCTYPE_FUNCTION, false);
-    nn_astparser_definevariable(prs, global);
+    prs->emitDefineVariable(global);
 }
 
 void nn_astparser_parseclassdeclaration(neon::Parser* prs)
@@ -11979,12 +11011,12 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
     neon::Token classname;
     neon::Parser::ClassCompiler classcompiler;
     prs->consume(neon::Token::TOK_IDENTNORMAL, "class name expected");
-    nameconst = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+    nameconst = prs->makeIdentConst(&prs->m_prevtoken);
     classname = prs->m_prevtoken;
-    nn_astparser_declarevariable(prs);
+    prs->declareVariable();
     prs->emitInstruction(neon::Instruction::OP_MAKECLASS);
     prs->emit1short(nameconst);
-    nn_astparser_definevariable(prs, nameconst);
+    prs->emitDefineVariable(nameconst);
     classcompiler.classname = prs->m_prevtoken;
     classcompiler.hassuperclass = false;
     classcompiler.m_enclosing = prs->m_currclasscompiler;
@@ -11999,14 +11031,14 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
         {
             prs->raiseError("class %.*s cannot inherit from itself", classname.length, classname.start);
         }
-        nn_astparser_scopebegin(prs);
-        nn_astparser_addlocal(prs, nn_astparser_synthtoken(neon::g_strsuper));
-        nn_astparser_definevariable(prs, 0);
-        nn_astparser_namedvar(prs, classname, false);
+        prs->scopeBegin();
+        prs->addLocal(neon::Parser::makeSynthToken(neon::g_strsuper));
+        prs->emitDefineVariable(0);
+        prs->emitNamedVar(classname, false);
         prs->emitInstruction(neon::Instruction::OP_CLASSINHERIT);
         classcompiler.hassuperclass = true;
     }
-    nn_astparser_namedvar(prs, classname, false);
+    prs->emitNamedVar(classname, false);
     prs->ignoreSpace();
     prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' before class body");
     prs->ignoreSpace();
@@ -12035,7 +11067,7 @@ void nn_astparser_parseclassdeclaration(neon::Parser* prs)
     prs->emitInstruction(neon::Instruction::OP_POPONE);
     if(classcompiler.hassuperclass)
     {
-        nn_astparser_scopeend(prs);
+        prs->scopeEnd();
     }
     prs->m_currclasscompiler = prs->m_currclasscompiler->m_enclosing;
     prs->m_compcontext = oldctx;
@@ -12061,13 +11093,13 @@ void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
         {
             prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
         }
-        nn_astparser_definevariable(prs, global);
+        prs->emitDefineVariable(global);
         totalparsed++;
     } while(prs->match(neon::Token::TOK_COMMA));
 
     if(!isinitializer)
     {
-        nn_astparser_consumestmtend(prs);
+        prs->consumeStmtEnd();
     }
     else
     {
@@ -12104,7 +11136,7 @@ void nn_astparser_parseexprstmt(neon::Parser* prs, bool isinitializer, bool semi
                 prs->emitInstruction(neon::Instruction::OP_POPONE);
             }
         }
-        nn_astparser_consumestmtend(prs);
+        prs->consumeStmtEnd();
     }
     else
     {
@@ -12139,7 +11171,7 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
     int incrstart;
     int surroundingloopstart;
     int surroundingscopedepth;
-    nn_astparser_scopebegin(prs);
+    prs->scopeBegin();
     prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'for'");
     /* parse initializer... */
     if(prs->match(neon::Token::TOK_SEMICOLON))
@@ -12196,7 +11228,7 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
     /* reset the loop start and scope depth to the surrounding value */
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
-    nn_astparser_scopeend(prs);
+    prs->scopeEnd();
 }
 
 /**
@@ -12259,7 +11291,7 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     neon::Token iteratortoken;
     neon::Token keytoken;
     neon::Token valuetoken;
-    nn_astparser_scopebegin(prs);
+    prs->scopeBegin();
     /* define @iter and @itern constant */
     citer = prs->pushConst(neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@iter")));
     citern = prs->pushConst(neon::Value::fromObject(neon::String::copy(prs->m_pvm, "@itern")));
@@ -12267,7 +11299,7 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     prs->consume(neon::Token::TOK_IDENTNORMAL, "expected variable name after 'foreach'");
     if(!prs->check(neon::Token::TOK_COMMA))
     {
-        keytoken = nn_astparser_synthtoken(" _ ");
+        keytoken = neon::Parser::makeSynthToken(" _ ");
         valuetoken = prs->m_prevtoken;
     }
     else
@@ -12283,7 +11315,7 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     // The space in the variable name ensures it won't collide with a user-defined
     // variable.
     */
-    iteratortoken = nn_astparser_synthtoken(" iterator ");
+    iteratortoken = neon::Parser::makeSynthToken(" iterator ");
     /* Evaluate the sequence expression and store it in a hidden local variable. */
     prs->parseExpression();
     prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'foreach'");
@@ -12293,16 +11325,16 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
         return;
     }
     /* add the iterator to the local scope */
-    iteratorslot = nn_astparser_addlocal(prs, iteratortoken) - 1;
-    nn_astparser_definevariable(prs, 0);
+    iteratorslot = prs->addLocal(iteratortoken) - 1;
+    prs->emitDefineVariable(0);
     /* Create the key local variable. */
     prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-    keyslot = nn_astparser_addlocal(prs, keytoken) - 1;
-    nn_astparser_definevariable(prs, keyslot);
+    keyslot = prs->addLocal(keytoken) - 1;
+    prs->emitDefineVariable(keyslot);
     /* create the local value slot */
     prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-    valueslot = nn_astparser_addlocal(prs, valuetoken) - 1;
-    nn_astparser_definevariable(prs, 0);
+    valueslot = prs->addLocal(valuetoken) - 1;
+    prs->emitDefineVariable(0);
     surroundingloopstart = prs->m_innermostloopstart;
     surroundingscopedepth = prs->m_innermostloopscopedepth;
     /*
@@ -12335,20 +11367,20 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     // Bind the loop value in its own scope. This ensures we get a fresh
     // variable each iteration so that closures for it don't all see the same one.
     */
-    nn_astparser_scopebegin(prs);
+    prs->scopeBegin();
     /* update the value */
     prs->emitInstruction(neon::Instruction::OP_LOCALSET);
     prs->emit1short(valueslot);
     prs->emitInstruction(neon::Instruction::OP_POPONE);
     prs->parseStatement();
-    nn_astparser_scopeend(prs);
+    prs->scopeEnd();
     prs->emitLoop(prs->m_innermostloopstart);
     prs->emitPatchJump(falsejump);
     prs->emitInstruction(neon::Instruction::OP_POPONE);
     nn_astparser_endloop(prs);
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
-    nn_astparser_scopeend(prs);
+    prs->scopeEnd();
 }
 
 /**
@@ -12376,7 +11408,7 @@ void nn_astparser_parseswitchstmt(neon::Parser* prs)
     neon::Token::Type casetype;
     neon::VarSwitch* sw;
     neon::String* string;
-    neon::GenericArray<int> caseends(prs->m_pvm);
+    neon::Util::GenericArray<int> caseends;
     /* the expression */
     prs->parseExpression();
     prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
@@ -12505,7 +11537,7 @@ void nn_astparser_parseechostmt(neon::Parser* prs)
 {
     prs->parseExpression();
     prs->emitInstruction(neon::Instruction::OP_ECHO);
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
 }
 
 void nn_astparser_parsethrowstmt(neon::Parser* prs)
@@ -12513,7 +11545,7 @@ void nn_astparser_parsethrowstmt(neon::Parser* prs)
     prs->parseExpression();
     prs->emitInstruction(neon::Instruction::OP_EXTHROW);
     nn_astparser_discardlocals(prs, prs->m_currfunccompiler->m_scopedepth - 1);
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
 }
 
 void nn_astparser_parseassertstmt(neon::Parser* prs)
@@ -12531,7 +11563,7 @@ void nn_astparser_parseassertstmt(neon::Parser* prs)
     }
     prs->emitInstruction(neon::Instruction::OP_ASSERT);
     prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'assert'");
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
 }
 
 void nn_astparser_parsetrystmt(neon::Parser* prs)
@@ -12570,10 +11602,10 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
     if(prs->match(neon::Token::TOK_KWCATCH))
     {
         catchexists = true;
-        nn_astparser_scopebegin(prs);
+        prs->scopeBegin();
         prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'catch'");
         prs->consume(neon::Token::TOK_IDENTNORMAL, "missing exception class name");
-        type = nn_astparser_makeidentconst(prs, &prs->m_prevtoken);
+        type = prs->makeIdentConst(&prs->m_prevtoken);
         address = prs->currentBlob()->m_count;
         if(prs->match(neon::Token::TOK_IDENTNORMAL))
         {
@@ -12587,7 +11619,7 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
         prs->emitInstruction(neon::Instruction::OP_EXPOPTRY);
         prs->ignoreSpace();
         prs->parseStatement();
-        nn_astparser_scopeend(prs);
+        prs->scopeEnd();
     }
     else
     {
@@ -12644,7 +11676,7 @@ void nn_astparser_parsereturnstmt(neon::Parser* prs)
         }
         prs->parseExpression();
         prs->emitInstruction(neon::Instruction::OP_RETURN);
-        nn_astparser_consumestmtend(prs);
+        prs->consumeStmtEnd();
     }
     prs->m_isreturning = false;
 }
@@ -12713,7 +11745,7 @@ void nn_astparser_parsecontinuestmt(neon::Parser* prs)
     nn_astparser_discardlocals(prs, prs->m_innermostloopscopedepth + 1);
     /* go back to the top of the loop */
     prs->emitLoop(prs->m_innermostloopstart);
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
 }
 
 void nn_astparser_parsebreakstmt(neon::Parser* prs)
@@ -12739,7 +11771,7 @@ void nn_astparser_parsebreakstmt(neon::Parser* prs)
     */
     nn_astparser_discardlocals(prs, prs->m_innermostloopscopedepth + 1);
     prs->emitJump(neon::Instruction::OP_BREAK_PL);
-    nn_astparser_consumestmtend(prs);
+    prs->consumeStmtEnd();
 }
 
 
@@ -12892,13 +11924,6 @@ void nn_import_loadbuiltinmodules(neon::State* state)
         neon::Module::loadBuiltinModule(state, g_builtinmodules[i], nullptr, "<__native__>", nullptr);
     }
 }
-
-void nn_import_closemodule(void* dlw)
-{
-    (void)dlw;
-    //dlwrap_dlclose(dlw);
-}
-
 
 bool nn_util_fsfileexists(neon::State* state, const char* filepath)
 {
@@ -13467,48 +12492,6 @@ neon::Value nn_memberfunc_dict_reduce(neon::State* state, neon::Arguments* args)
     if(file->m_isstd) \
     return state->raiseFromFunction(args, "method not supported for std files");
 
-int nn_fileobject_close(neon::File* file)
-{
-    int result;
-    if(file->m_filehandle != nullptr && !file->m_isstd)
-    {
-        fflush(file->m_filehandle);
-        result = fclose(file->m_filehandle);
-        file->m_filehandle = nullptr;
-        file->m_isopen = false;
-        file->m_filedesc = -1;
-        file->m_istty = false;
-        return result;
-    }
-    return -1;
-}
-
-bool nn_fileobject_open(neon::File* file)
-{
-    if(file->m_filehandle != nullptr)
-    {
-        return true;
-    }
-    if(file->m_filehandle == nullptr && !file->m_isstd)
-    {
-        file->m_filehandle = fopen(file->m_filepath->data(), file->m_filemode->data());
-        if(file->m_filehandle != nullptr)
-        {
-            file->m_isopen = true;
-            file->m_filedesc = fileno(file->m_filehandle);
-            file->m_istty = osfn_isatty(file->m_filedesc);
-            return true;
-        }
-        else
-        {
-            file->m_filedesc = -1;
-            file->m_istty = false;
-        }
-        return false;
-    }
-    return false;
-}
-
 neon::Value nn_memberfunc_file_constructor(neon::State* state, neon::Arguments* args)
 {
     FILE* hnd;
@@ -13532,7 +12515,7 @@ neon::Value nn_memberfunc_file_constructor(neon::State* state, neon::Arguments* 
     }
     path = opath->data();
     file = state->gcProtect(neon::File::make(state, nullptr, false, path, mode));
-    nn_fileobject_open(file);
+    file->selfOpenFile();
     return neon::Value::fromObject(file);
 }
 
@@ -13568,7 +12551,7 @@ neon::Value nn_memberfunc_file_close(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    nn_fileobject_close(args->thisval.asFile());
+    args->thisval.asFile()->selfCloseFile();
     return neon::Value::makeEmpty();
 }
 
@@ -13576,7 +12559,7 @@ neon::Value nn_memberfunc_file_open(neon::State* state, neon::Arguments* args)
 {
     (void)state;
     NEON_ARGS_CHECKCOUNT(args, 0);
-    nn_fileobject_open(args->thisval.asFile());
+    args->thisval.asFile()->selfOpenFile();
     return neon::Value::makeEmpty();
 }
 
@@ -13733,7 +12716,7 @@ neon::Value nn_memberfunc_file_write(neon::State* state, neon::Arguments* args)
         }
         else if(file->m_filehandle == nullptr || !file->m_isopen)
         {
-            nn_fileobject_open(file);
+            file->selfOpenFile();
         }
         else if(file->m_filehandle == nullptr)
         {
@@ -15653,7 +14636,7 @@ neon::Value nn_memberfunc_string_lpad(neon::State* state, neon::Arguments* args)
     memcpy(str, fill, fillsize);
     memcpy(str + fillsize, string->m_sbuf->m_data, string->m_sbuf->m_length);
     str[finalsize] = '\0';
-    neon::BasicArray::freeArray(state, fill, fillsize + 1);
+    neon::Memory::freeArray(fill, fillsize + 1);
     result = neon::String::take(state, str, finalsize);
     result->m_sbuf->m_length = finalutf8size;
     result->m_sbuf->m_length = finalsize;
@@ -15699,7 +14682,7 @@ neon::Value nn_memberfunc_string_rpad(neon::State* state, neon::Arguments* args)
     memcpy(str, string->m_sbuf->m_data, string->m_sbuf->m_length);
     memcpy(str + string->m_sbuf->m_length, fill, fillsize);
     str[finalsize] = '\0';
-    neon::BasicArray::freeArray(state, fill, fillsize + 1);
+    neon::Memory::freeArray(fill, fillsize + 1);
     result = neon::String::take(state, str, finalsize);
     result->m_sbuf->m_length = finalutf8size;
     result->m_sbuf->m_length = finalsize;
@@ -18701,7 +17684,7 @@ neon::Status neon::State::runVM(int exitframe, neon::Value* rv)
     bool you_are_calling_exit_vm_outside_of_runvm;
     neon::Value* dbgslot;
     neon::Instruction currinstr;
-    neon::Color nc;
+    neon::Terminal nc;
     you_are_calling_exit_vm_outside_of_runvm = false;
     m_vmstate.currentframe = &m_vmstate.framevalues[m_vmstate.framecount - 1];
     DebugPrinter dp(this, m_debugprinter);
@@ -19896,7 +18879,6 @@ void nn_cli_showusage(char* argv[], OptionParser::LongFlags* flags, bool fail)
     nn_cli_fprintusage(out, flags);
 }
 
-
 int main(int argc, char* argv[], char** envp)
 {
     int i;
@@ -19913,6 +18895,7 @@ int main(int argc, char* argv[], char** envp)
     const char* filename;
     char* nargv[128];
     neon::State* state;
+    neon::Util::setOSUnicode();
     ok = true;
     wasusage = false;
     quitafterinit = false;

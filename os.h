@@ -14,27 +14,28 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-
+#include <fcntl.h>
 
 #if defined(__unix__) || defined(__linux__)
     #define OSFN_ISUNIXY 1
 #endif
 
-#define TINDIR_PATHSIZE 1024
+#define OSFN_PATHSIZE 1024
 #if defined(__unix__) || defined(__linux__)
-    #define TINDIR_ISUNIX
+    #define OSFN_ISUNIX
 #elif defined(_WIN32) || defined(_WIN64)
-    #define TINDIR_ISWINDOWS
+    #define OSFN_ISWINDOWS
 #endif
 
-#if defined(TINDIR_ISUNIX)
+#if defined(OSFN_ISUNIX)
     #include <unistd.h>
     #include <dirent.h>
     #include <libgen.h>
     #include <sys/time.h>
 #else
-    #if defined(TINDIR_ISWINDOWS)
+    #if defined(OSFN_ISWINDOWS)
         #include <windows.h>
+        #include <io.h>
     #endif
 #endif
 
@@ -121,7 +122,7 @@ struct FSDirReader
 
 struct FSDirItem
 {
-    char name[TINDIR_PATHSIZE + 1];
+    char name[OSFN_PATHSIZE + 1];
     bool isdir;
     bool isfile;
 };
@@ -146,7 +147,7 @@ static char* osfn_utilstrdup(const char* src)
 
 bool fslib_diropen(FSDirReader* rd, const char* path)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISUNIX)
         if((rd->handle = opendir(path)) == NULL)
         {
             return false;
@@ -160,8 +161,8 @@ bool fslib_dirread(FSDirReader* rd, FSDirItem* itm)
 {
     itm->isdir = false;
     itm->isfile = false;
-    memset(itm->name, 0, TINDIR_PATHSIZE);
-    #if defined(TINDIR_ISUNIX)
+    memset(itm->name, 0, OSFN_PATHSIZE);
+    #if defined(OSFN_ISUNIX)
         struct dirent* ent;
         if((ent = readdir((DIR*)(rd->handle))) == NULL)
         {
@@ -183,15 +184,71 @@ bool fslib_dirread(FSDirReader* rd, FSDirItem* itm)
 
 bool fslib_dirclose(FSDirReader* rd)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISUNIX)
         closedir((DIR*)(rd->handle));
     #endif
     return false;
 }
 
+/*
+int open(const char *pathname, int flags);
+int open(const char *pathname, int flags, mode_t mode);
+int creat(const char *pathname, mode_t mode);
+int openat(int dirfd, const char *pathname, int flags);
+int openat(int dirfd, const char *pathname, int flags, mode_t mode);
+*/
+
+int osfn_fdopen(const char *path, int flags, int mode)
+{
+    return open(path, flags, mode);
+}
+
+int osfn_fdcreat(const char* path, int mode)
+{
+    return creat(path, mode);
+}
+
+int osfn_fdclose(int fd)
+{
+    return close(fd);
+}
+
+size_t osfn_fdread(int fd, void* buf, size_t count)
+{
+    return read(fd, buf, count);
+}
+
+//ssize_t write(int fd, const void *buf, size_t count);
+size_t osfn_fdwrite(int fd, const void* buf, size_t count)
+{
+    return write(fd, buf, count);
+}
+
+// alias to osfn_fdwrite -- my 'w' is still broken.
+size_t osfn_fdput(int fd, const void* buf, size_t count)
+{
+    return osfn_fdwrite(fd, buf, count);
+}
+
+int osfn_fdsyncfs(int fd)
+{
+    #if defined(OSFN_ISUNIX)
+        return syncfs(fd);
+    #endif
+    return -1;
+}
+
+int osfn_fdselect(int nfds, fd_set* readfds, fd_set* writefds, fd_set* exceptfds, struct timeval* timeout)
+{
+    #if defined(OSFN_ISUNIX)
+        return select(nfds, readfds, writefds, exceptfds, timeout);
+    #endif
+    return -1;
+}
+
 FILE* osfn_popen(const char* cmd, const char* type)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISUNIX)
         return popen(cmd, type);
     #endif
     return NULL;
@@ -199,7 +256,7 @@ FILE* osfn_popen(const char* cmd, const char* type)
 
 void osfn_pclose(FILE* fh)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISUNIX)
         pclose(fh);
     #endif
 }
