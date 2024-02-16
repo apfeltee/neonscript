@@ -1466,47 +1466,6 @@ char *nn_util_fsgetbasename(neon::State *state, const char *path);
 
 bool nn_vm_callvaluewithobject(neon::State *state, neon::Value callable, neon::Value thisval, int argcount);
 
-int nn_astparser_getcodeargscount(const neon::Instruction *bytecode, const neon::Value *constants, int ip);
-int nn_astparser_parsevariable(neon::Parser *prs, const char *message);
-int nn_astparser_discardlocals(neon::Parser *prs, int depth);
-void nn_astparser_endloop(neon::Parser *prs);
-bool nn_astparser_rulebinary(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_rulecall(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_ruleliteral(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruledot(neon::Parser *prs, neon::Token previous, bool canassign);
-void nn_astparser_createdvar(neon::Parser *prs, neon::Token name);
-bool nn_astparser_rulearray(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruledictionary(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruleindexing(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_rulevarnormal(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulevarglobal(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulethis(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulesuper(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulegrouping(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulenumber(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulestring(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruleinterpolstring(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruleunary(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruleand(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_ruleor(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_ruleconditional(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_ruleimport(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulenew(neon::Parser *prs, bool canassign);
-bool nn_astparser_ruletypeof(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulenothingprefix(neon::Parser *prs, bool canassign);
-bool nn_astparser_rulenothinginfix(neon::Parser *prs, neon::Token previous, bool canassign);
-bool nn_astparser_parseblock(neon::Parser *prs);
-void nn_astparser_declarefuncargvar(neon::Parser *prs);
-int nn_astparser_parsefuncparamvar(neon::Parser *prs, const char *message);
-uint8_t nn_astparser_parsefunccallargs(neon::Parser *prs);
-void nn_astparser_parsefuncparamlist(neon::Parser *prs);
-void nn_astparser_parsemethod(neon::Parser *prs, neon::Token classname, bool isstatic);
-bool nn_astparser_ruleanonfunc(neon::Parser *prs, bool canassign);
-void nn_astparser_parsefield(neon::Parser *prs, bool isstatic);
-void nn_astparser_parsefuncdecl(neon::Parser *prs);
-void nn_astparser_parseclassdeclaration(neon::Parser *prs);
-void nn_astparser_parsevardecl(neon::Parser *prs, bool isinitializer);
-void nn_astparser_parseexprstmt(neon::Parser *prs, bool isinitializer, bool semi);
 void nn_astparser_parseforstmt(neon::Parser *prs);
 void nn_astparser_parseforeachstmt(neon::Parser *prs);
 void nn_astparser_parseswitchstmt(neon::Parser *prs);
@@ -7443,7 +7402,7 @@ namespace neon
                         /* compile the body */
                         m_prs->ignoreSpace();
                         m_prs->consume(Token::TOK_BRACEOPEN, "expected '{' before function body");
-                        nn_astparser_parseblock(m_prs);
+                        m_prs->parseBlock();
                         /* create the function object */
                         if(closescope)
                         {
@@ -7576,6 +7535,105 @@ namespace neon
                 token.start = name;
                 token.length = (int)strlen(name);
                 return token;
+            }
+
+            static int getCodeArgsCount(const Instruction* bytecode, const Value* constants, int ip)
+            {
+                int constant;
+                Instruction::OpCode code;
+                FuncScript* fn;
+                code = (Instruction::OpCode)bytecode[ip].code;
+                switch(code)
+                {
+                    case Instruction::OP_EQUAL:
+                    case Instruction::OP_PRIMGREATER:
+                    case Instruction::OP_PRIMLESSTHAN:
+                    case Instruction::OP_PUSHNULL:
+                    case Instruction::OP_PUSHTRUE:
+                    case Instruction::OP_PUSHFALSE:
+                    case Instruction::OP_PRIMADD:
+                    case Instruction::OP_PRIMSUBTRACT:
+                    case Instruction::OP_PRIMMULTIPLY:
+                    case Instruction::OP_PRIMDIVIDE:
+                    case Instruction::OP_PRIMFLOORDIVIDE:
+                    case Instruction::OP_PRIMMODULO:
+                    case Instruction::OP_PRIMPOW:
+                    case Instruction::OP_PRIMNEGATE:
+                    case Instruction::OP_PRIMNOT:
+                    case Instruction::OP_ECHO:
+                    case Instruction::OP_TYPEOF:
+                    case Instruction::OP_POPONE:
+                    case Instruction::OP_UPVALUECLOSE:
+                    case Instruction::OP_DUPONE:
+                    case Instruction::OP_RETURN:
+                    case Instruction::OP_CLASSINHERIT:
+                    case Instruction::OP_CLASSGETSUPER:
+                    case Instruction::OP_PRIMAND:
+                    case Instruction::OP_PRIMOR:
+                    case Instruction::OP_PRIMBITXOR:
+                    case Instruction::OP_PRIMSHIFTLEFT:
+                    case Instruction::OP_PRIMSHIFTRIGHT:
+                    case Instruction::OP_PRIMBITNOT:
+                    case Instruction::OP_PUSHONE:
+                    case Instruction::OP_INDEXSET:
+                    case Instruction::OP_ASSERT:
+                    case Instruction::OP_EXTHROW:
+                    case Instruction::OP_EXPOPTRY:
+                    case Instruction::OP_MAKERANGE:
+                    case Instruction::OP_STRINGIFY:
+                    case Instruction::OP_PUSHEMPTY:
+                    case Instruction::OP_EXPUBLISHTRY:
+                        return 0;
+                    case Instruction::OP_CALLFUNCTION:
+                    case Instruction::OP_CLASSINVOKESUPERSELF:
+                    case Instruction::OP_INDEXGET:
+                    case Instruction::OP_INDEXGETRANGED:
+                        return 1;
+                    case Instruction::OP_GLOBALDEFINE:
+                    case Instruction::OP_GLOBALGET:
+                    case Instruction::OP_GLOBALSET:
+                    case Instruction::OP_LOCALGET:
+                    case Instruction::OP_LOCALSET:
+                    case Instruction::OP_FUNCARGSET:
+                    case Instruction::OP_FUNCARGGET:
+                    case Instruction::OP_UPVALUEGET:
+                    case Instruction::OP_UPVALUESET:
+                    case Instruction::OP_JUMPIFFALSE:
+                    case Instruction::OP_JUMPNOW:
+                    case Instruction::OP_BREAK_PL:
+                    case Instruction::OP_LOOP:
+                    case Instruction::OP_PUSHCONSTANT:
+                    case Instruction::OP_POPN:
+                    case Instruction::OP_MAKECLASS:
+                    case Instruction::OP_PROPERTYGET:
+                    case Instruction::OP_PROPERTYGETSELF:
+                    case Instruction::OP_PROPERTYSET:
+                    case Instruction::OP_MAKEARRAY:
+                    case Instruction::OP_MAKEDICT:
+                    case Instruction::OP_IMPORTIMPORT:
+                    case Instruction::OP_SWITCH:
+                    case Instruction::OP_MAKEMETHOD:
+                    //case Instruction::OP_FUNCOPTARG:
+                        return 2;
+                    case Instruction::OP_CALLMETHOD:
+                    case Instruction::OP_CLASSINVOKETHIS:
+                    case Instruction::OP_CLASSINVOKESUPER:
+                    case Instruction::OP_CLASSPROPERTYDEFINE:
+                        return 3;
+                    case Instruction::OP_EXTRY:
+                        return 6;
+                    case Instruction::OP_MAKECLOSURE:
+                        {
+                            constant = (bytecode[ip + 1].code << 8) | bytecode[ip + 2].code;
+                            fn = constants[constant].asFuncScript();
+                            /* There is two byte for the constant, then three for each up value. */
+                            return 2 + (fn->m_upvalcount * 3);
+                        }
+                        break;
+                    default:
+                        break;
+                }
+                return 0;
             }
 
         public:
@@ -7967,6 +8025,107 @@ namespace neon
 
             }
 
+            void emitAssign(uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+            {
+                NEON_ASTDEBUG(m_pvm, "");
+                m_replcanecho = false;
+                if(getop == Instruction::OP_PROPERTYGET || getop == Instruction::OP_PROPERTYGETSELF)
+                {
+                    emitInstruction(Instruction::OP_DUPONE);
+                }
+                if(arg != -1)
+                {
+                    emitByteAndShort(getop, arg);
+                }
+                else
+                {
+                    emitInstruction(getop);
+                    emit1byte(1);
+                }
+                parseExpression();
+                emitInstruction(realop);
+                if(arg != -1)
+                {
+                    emitByteAndShort(setop, (uint16_t)arg);
+                }
+                else
+                {
+                    emitInstruction(setop);
+                }
+            }
+
+            void emitNamedVar(Token name, bool canassign)
+            {
+                bool fromclass;
+                uint8_t getop;
+                uint8_t setop;
+                int arg;
+                (void)fromclass;
+                NEON_ASTDEBUG(m_pvm, " name=%.*s", name.length, name.start);
+                fromclass = m_currclasscompiler != nullptr;
+                arg = m_currfunccompiler->resolveLocal(&name);
+                if(arg != -1)
+                {
+                    if(m_infunction)
+                    {
+                        getop = Instruction::OP_FUNCARGGET;
+                        setop = Instruction::OP_FUNCARGSET;
+                    }
+                    else
+                    {
+                        getop = Instruction::OP_LOCALGET;
+                        setop = Instruction::OP_LOCALSET;
+                    }
+                }
+                else
+                {
+                    arg = m_currfunccompiler->resolveUpvalue(&name);
+                    if((arg != -1) && (name.isglobal == false))
+                    {
+                        getop = Instruction::OP_UPVALUEGET;
+                        setop = Instruction::OP_UPVALUESET;
+                    }
+                    else
+                    {
+                        arg = makeIdentConst(&name);
+                        getop = Instruction::OP_GLOBALGET;
+                        setop = Instruction::OP_GLOBALSET;
+                    }
+                }
+                parseAssign(getop, setop, arg, canassign);
+            }
+
+
+            void emitDefineVariable(int global)
+            {
+                /* we are in a local scope... */
+                if(m_currfunccompiler->m_scopedepth > 0)
+                {
+                    markLocalInitialized();
+                    return;
+                }
+                emitInstruction(Instruction::OP_GLOBALDEFINE);
+                emit1short(global);
+            }
+
+            void emitSetStmtVar(Token name)
+            {
+                int local;
+                NEON_ASTDEBUG(m_pvm, "name=%.*s", name.length, name.start);
+                if(m_currfunccompiler->m_targetfunc->m_scriptfnname != nullptr)
+                {
+                    local = addLocal(name) - 1;
+                    markLocalInitialized();
+                    emitInstruction(Instruction::OP_LOCALSET);
+                    emit1short((uint16_t)local);
+                }
+                else
+                {
+                    emitInstruction(Instruction::OP_GLOBALDEFINE);
+                    emit1short((uint16_t)makeIdentConst(&name));
+                }
+            }
+
             void scopeBegin()
             {
                 NEON_ASTDEBUG(m_pvm, "current depth=%d", m_currfunccompiler->m_scopedepth);
@@ -8120,6 +8279,76 @@ namespace neon
                 return m_currfunccompiler->m_localcount;
             }
 
+            int parseIdentVar(const char* message)
+            {
+                if(!consume(Token::TOK_IDENTNORMAL, message))
+                {
+                    /* what to do here? */
+                }
+                declareVariable();
+                /* we are in a local scope... */
+                if(m_currfunccompiler->m_scopedepth > 0)
+                {
+                    return 0;
+                }
+                return makeIdentConst(&m_prevtoken);
+            }
+
+            int discardLocalVars(int depth)
+            {
+                int local;
+                NEON_ASTDEBUG(m_pvm, "");
+                if(m_keeplastvalue)
+                {
+                    //return 0;
+                }
+                if(m_currfunccompiler->m_scopedepth == -1)
+                {
+                    raiseError("cannot exit top-level scope");
+                }
+                local = m_currfunccompiler->m_localcount - 1;
+                while(local >= 0 && m_currfunccompiler->m_compiledlocals[local].depth >= depth)
+                {
+                    if(m_currfunccompiler->m_compiledlocals[local].iscaptured)
+                    {
+                        emitInstruction(Instruction::OP_UPVALUECLOSE);
+                    }
+                    else
+                    {
+                        emitInstruction(Instruction::OP_POPONE);
+                    }
+                    local--;
+                }
+                return m_currfunccompiler->m_localcount - local - 1;
+            }
+
+            void endLoop()
+            {
+                size_t i;
+                Instruction* bcode;
+                Value* cvals;
+                NEON_ASTDEBUG(m_pvm, "");
+                /*
+                // find all Instruction::OP_BREAK_PL placeholder and replace with the appropriate jump...
+                */
+                i = m_innermostloopstart;
+                while(i < m_currfunccompiler->m_targetfunc->m_compiledblob->m_count)
+                {
+                    if(m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs[i].code == Instruction::OP_BREAK_PL)
+                    {
+                        m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs[i].code = Instruction::OP_JUMPNOW;
+                        emitPatchJump(i + 1);
+                        i += 3;
+                    }
+                    else
+                    {
+                        bcode = m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs;
+                        cvals = m_currfunccompiler->m_targetfunc->m_compiledblob->m_constants->m_values;
+                        i += 1 + getCodeArgsCount(bcode, cvals, i);
+                    }
+                }
+            }
+
             bool doParsePrecedence(Rule::Precedence precedence/*, AstExpression* dest*/)
             {
                 bool canassign;
@@ -8179,76 +8408,6 @@ namespace neon
                 return doParsePrecedence(precedence);
             }
 
-            void emitAssign(uint8_t realop, uint8_t getop, uint8_t setop, int arg)
-            {
-                NEON_ASTDEBUG(m_pvm, "");
-                m_replcanecho = false;
-                if(getop == Instruction::OP_PROPERTYGET || getop == Instruction::OP_PROPERTYGETSELF)
-                {
-                    emitInstruction(Instruction::OP_DUPONE);
-                }
-                if(arg != -1)
-                {
-                    emitByteAndShort(getop, arg);
-                }
-                else
-                {
-                    emitInstruction(getop);
-                    emit1byte(1);
-                }
-                parseExpression();
-                emitInstruction(realop);
-                if(arg != -1)
-                {
-                    emitByteAndShort(setop, (uint16_t)arg);
-                }
-                else
-                {
-                    emitInstruction(setop);
-                }
-            }
-
-            void emitNamedVar(Token name, bool canassign)
-            {
-                bool fromclass;
-                uint8_t getop;
-                uint8_t setop;
-                int arg;
-                (void)fromclass;
-                NEON_ASTDEBUG(m_pvm, " name=%.*s", name.length, name.start);
-                fromclass = m_currclasscompiler != nullptr;
-                arg = m_currfunccompiler->resolveLocal(&name);
-                if(arg != -1)
-                {
-                    if(m_infunction)
-                    {
-                        getop = Instruction::OP_FUNCARGGET;
-                        setop = Instruction::OP_FUNCARGSET;
-                    }
-                    else
-                    {
-                        getop = Instruction::OP_LOCALGET;
-                        setop = Instruction::OP_LOCALSET;
-                    }
-                }
-                else
-                {
-                    arg = m_currfunccompiler->resolveUpvalue(&name);
-                    if((arg != -1) && (name.isglobal == false))
-                    {
-                        getop = Instruction::OP_UPVALUEGET;
-                        setop = Instruction::OP_UPVALUESET;
-                    }
-                    else
-                    {
-                        arg = makeIdentConst(&name);
-                        getop = Instruction::OP_GLOBALGET;
-                        setop = Instruction::OP_GLOBALSET;
-                    }
-                }
-                parseAssign(getop, setop, arg, canassign);
-            }
-
             void markLocalInitialized()
             {
                 int xpos;
@@ -8258,19 +8417,6 @@ namespace neon
                 }
                 xpos = (m_currfunccompiler->m_localcount - 1);
                 m_currfunccompiler->m_compiledlocals[xpos].depth = m_currfunccompiler->m_scopedepth;
-            }
-
-
-            void emitDefineVariable(int global)
-            {
-                /* we are in a local scope... */
-                if(m_currfunccompiler->m_scopedepth > 0)
-                {
-                    markLocalInitialized();
-                    return;
-                }
-                emitInstruction(Instruction::OP_GLOBALDEFINE);
-                emit1short(global);
             }
 
             void parseAssign(uint8_t getop, uint8_t setop, int arg, bool canassign)
@@ -8400,8 +8546,6 @@ namespace neon
                     }
                 }
             }
-
-
 
             bool parseExpression()
             {
@@ -8703,31 +8847,361 @@ namespace neon
             }
 
 
+            bool parseBlock()
+            {
+                m_blockcount++;
+                ignoreSpace();
+                while(!check(Token::TOK_BRACECLOSE) && !check(Token::TOK_EOF))
+                {
+                    parseDeclaration();
+                }
+                m_blockcount--;
+                if(!consume(Token::TOK_BRACECLOSE, "expected '}' after block"))
+                {
+                    return false;
+                }
+                if(match(Token::TOK_SEMICOLON))
+                {
+                }
+                return true;
+            }
+
+            void declareFuncArgumentVar()
+            {
+                int i;
+                Token* name;
+                CompiledLocal* local;
+                /* global variables are implicitly declared... */
+                if(m_currfunccompiler->m_scopedepth == 0)
+                {
+                    return;
+                }
+                name = &m_prevtoken;
+                for(i = m_currfunccompiler->m_localcount - 1; i >= 0; i--)
+                {
+                    local = &m_currfunccompiler->m_compiledlocals[i];
+                    if(local->depth != -1 && local->depth < m_currfunccompiler->m_scopedepth)
+                    {
+                        break;
+                    }
+                    if(identsEqual(name, &local->varname))
+                    {
+                        raiseError("%.*s already declared in current scope", name->length, name->start);
+                    }
+                }
+                addLocal(*name);
+            }
+
+            int parseFuncDeclParamVar(const char* message)
+            {
+                if(!consume(Token::TOK_IDENTNORMAL, message))
+                {
+                    /* what to do here? */
+                }
+                declareFuncArgumentVar();
+                /* we are in a local scope... */
+                if(m_currfunccompiler->m_scopedepth > 0)
+                {
+                    return 0;
+                }
+                return makeIdentConst(&m_prevtoken);
+            }
+
+            uint8_t parseFuncCallArgs()
+            {
+                uint8_t argcount;
+                argcount = 0;
+                if(!check(Token::TOK_PARENCLOSE))
+                {
+                    do
+                    {
+                        ignoreSpace();
+                        parseExpression();
+                        #if 0
+                        if(argcount == NEON_CFG_ASTMAXFUNCPARAMS)
+                        {
+                            raiseError("cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
+                        }
+                        #endif
+                        argcount++;
+                    } while(match(Token::TOK_COMMA));
+                }
+                ignoreSpace();
+                if(!consume(Token::TOK_PARENCLOSE, "expected ')' after argument list"))
+                {
+                    /* TODO: handle this, somehow. */
+                }
+                return argcount;
+            }
+
+            void parseFuncDeclParamList()
+            {
+                int paramconstant;
+                /* compile argument list... */
+                do
+                {
+                    ignoreSpace();
+                    m_currfunccompiler->m_targetfunc->m_arity++;
+                    #if 0
+                    if(m_currfunccompiler->m_targetfunc->m_arity > NEON_CFG_ASTMAXFUNCPARAMS)
+                    {
+                        raiseErrorAtCurrent("cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
+                    }
+                    #endif
+                    if(match(Token::TOK_TRIPLEDOT))
+                    {
+                        m_currfunccompiler->m_targetfunc->m_isvariadic = true;
+                        addLocal(makeSynthToken("__args__"));
+                        emitDefineVariable(0);
+                        break;
+                    }
+                    paramconstant = parseFuncDeclParamVar("expected parameter name");
+                    emitDefineVariable(paramconstant);
+                    ignoreSpace();
+                } while(match(Token::TOK_COMMA));
+            }
+
+            void parseFuncDeclaration()
+            {
+                int global;
+                global = parseIdentVar("function name expected");
+                markLocalInitialized();
+                parseFuncDeclFull(FuncCommon::FUNCTYPE_FUNCTION, false);
+                emitDefineVariable(global);
+            }
+
+            void parseFuncDeclFull(FuncCommon::Type type, bool isanon)
+            {
+                m_infunction = true;
+                FuncCompiler compiler(this, type, isanon);
+                scopeBegin();
+                /* compile parameter list */
+                consume(Token::TOK_PARENOPEN, "expected '(' after function name");
+                if(!check(Token::TOK_PARENCLOSE))
+                {
+                    parseFuncDeclParamList();
+                }
+                consume(Token::TOK_PARENCLOSE, "expected ')' after function parameters");
+                compiler.compileBody(false, isanon);
+                m_infunction = false;
+            }
+
+            void parseClassFieldDefinition(bool isstatic)
+            {
+                int fieldconstant;
+                consume(Token::TOK_IDENTNORMAL, "class property name expected");
+                fieldconstant = makeIdentConst(&m_prevtoken);
+                if(match(Token::TOK_ASSIGN))
+                {
+                    parseExpression();
+                }
+                else
+                {
+                    emitInstruction(Instruction::OP_PUSHNULL);
+                }
+                emitInstruction(Instruction::OP_CLASSPROPERTYDEFINE);
+                emit1short(fieldconstant);
+                emit1byte(isstatic ? 1 : 0);
+                consumeStmtEnd();
+                ignoreSpace();
+            }
+
+            void parseClassDeclaration()
+            {
+                bool isstatic;
+                int nameconst;
+                CompContext oldctx;
+                Token classname;
+                ClassCompiler classcompiler;
+                consume(Token::TOK_IDENTNORMAL, "class name expected");
+                nameconst = makeIdentConst(&m_prevtoken);
+                classname = m_prevtoken;
+                declareVariable();
+                emitInstruction(Instruction::OP_MAKECLASS);
+                emit1short(nameconst);
+                emitDefineVariable(nameconst);
+                classcompiler.classname = m_prevtoken;
+                classcompiler.hassuperclass = false;
+                classcompiler.m_enclosing = m_currclasscompiler;
+                m_currclasscompiler = &classcompiler;
+                oldctx = m_compcontext;
+                m_compcontext = COMPCONTEXT_CLASS;
+                if(match(Token::TOK_LESSTHAN))
+                {
+                    consume(Token::TOK_IDENTNORMAL, "name of superclass expected");
+                    //nn_astparser_rulevarnormal(this, false);
+                    emitNamedVar(m_prevtoken, false);
+                    if(identsEqual(&classname, &m_prevtoken))
+                    {
+                        raiseError("class %.*s cannot inherit from itself", classname.length, classname.start);
+                    }
+                    scopeBegin();
+                    addLocal(makeSynthToken(g_strsuper));
+                    emitDefineVariable(0);
+                    emitNamedVar(classname, false);
+                    emitInstruction(Instruction::OP_CLASSINHERIT);
+                    classcompiler.hassuperclass = true;
+                }
+                emitNamedVar(classname, false);
+                ignoreSpace();
+                consume(Token::TOK_BRACEOPEN, "expected '{' before class body");
+                ignoreSpace();
+                while(!check(Token::TOK_BRACECLOSE) && !check(Token::TOK_EOF))
+                {
+                    isstatic = false;
+                    if(match(Token::TOK_KWSTATIC))
+                    {
+                        isstatic = true;
+                    }
+
+                    if(match(Token::TOK_KWVAR))
+                    {
+                        parseClassFieldDefinition(isstatic);
+                    }
+                    else
+                    {
+                        parseMethod(classname, isstatic);
+                        ignoreSpace();
+                    }
+                }
+                consume(Token::TOK_BRACECLOSE, "expected '}' after class body");
+                if(match(Token::TOK_SEMICOLON))
+                {
+                }
+                emitInstruction(Instruction::OP_POPONE);
+                if(classcompiler.hassuperclass)
+                {
+                    scopeEnd();
+                }
+                m_currclasscompiler = m_currclasscompiler->m_enclosing;
+                m_compcontext = oldctx;
+            }
+
+            void parseMethod(Token classname, bool isstatic)
+            {
+                size_t sn;
+                int constant;
+                const char* sc;
+                FuncCommon::Type type;
+                static Token::Type tkns[] = { Token::TOK_IDENTNORMAL, Token::TOK_DECORATOR };
+                (void)classname;
+                (void)isstatic;
+                sc = "constructor";
+                sn = strlen(sc);
+                consumeOr("method name expected", tkns, 2);
+                constant = makeIdentConst(&m_prevtoken);
+                type = FuncCommon::FUNCTYPE_METHOD;
+                if((m_prevtoken.length == (int)sn) && (memcmp(m_prevtoken.start, sc, sn) == 0))
+                {
+                    type = FuncCommon::FUNCTYPE_INITIALIZER;
+                }
+                else if((m_prevtoken.length > 0) && (m_prevtoken.start[0] == '_'))
+                {
+                    type = FuncCommon::FUNCTYPE_PRIVATE;
+                }
+                parseFuncDeclFull(type, false);
+                emitInstruction(Instruction::OP_MAKEMETHOD);
+                emit1short(constant);
+            }
+
+            void parseVarDeclaration(bool isinitializer)
+            {
+                int global;
+                int totalparsed;
+                totalparsed = 0;
+                do
+                {
+                    if(totalparsed > 0)
+                    {
+                        ignoreSpace();
+                    }
+                    global = parseIdentVar("variable name expected");
+                    if(match(Token::TOK_ASSIGN))
+                    {
+                        parseExpression();
+                    }
+                    else
+                    {
+                        emitInstruction(Instruction::OP_PUSHNULL);
+                    }
+                    emitDefineVariable(global);
+                    totalparsed++;
+                } while(match(Token::TOK_COMMA));
+
+                if(!isinitializer)
+                {
+                    consumeStmtEnd();
+                }
+                else
+                {
+                    consume(Token::TOK_SEMICOLON, "expected ';' after initializer");
+                    ignoreSpace();
+                }
+            }
+
+            void parseExprStatement(bool isinitializer, bool semi)
+            {
+                if(m_pvm->m_isreplmode && m_currfunccompiler->m_scopedepth == 0)
+                {
+                    m_replcanecho = true;
+                }
+                if(!semi)
+                {
+                    parseExpression();
+                }
+                else
+                {
+                    parsePrecNoAdvance(Rule::PREC_ASSIGNMENT);
+                }
+                if(!isinitializer)
+                {
+                    if(m_replcanecho && m_pvm->m_isreplmode)
+                    {
+                        emitInstruction(Instruction::OP_ECHO);
+                        m_replcanecho = false;
+                    }
+                    else
+                    {
+                        //if(!m_keeplastvalue)
+                        {
+                            emitInstruction(Instruction::OP_POPONE);
+                        }
+                    }
+                    consumeStmtEnd();
+                }
+                else
+                {
+                    consume(Token::TOK_SEMICOLON, "expected ';' after initializer");
+                    ignoreSpace();
+                    emitInstruction(Instruction::OP_POPONE);
+                }
+            }
+
             void parseDeclaration()
             {
                 ignoreSpace();
                 if(match(Token::TOK_KWCLASS))
                 {
-                    nn_astparser_parseclassdeclaration(this);
+                    parseClassDeclaration();
                 }
                 else if(match(Token::TOK_KWFUNCTION))
                 {
-                    nn_astparser_parsefuncdecl(this);
+                    parseFuncDeclaration();
                 }
                 else if(match(Token::TOK_KWVAR))
                 {
-                    nn_astparser_parsevardecl(this, false);
+                    parseVarDeclaration(false);
                 }
                 else if(match(Token::TOK_BRACEOPEN))
                 {
                     if(!check(Token::TOK_NEWLINE) && m_currfunccompiler->m_scopedepth == 0)
                     {
-                        nn_astparser_parseexprstmt(this, false, true);
+                        parseExprStatement(false, true);
                     }
                     else
                     {
                         scopeBegin();
-                        nn_astparser_parseblock(this);
+                        parseBlock();
                         scopeEnd();
                     }
                 }
@@ -8798,7 +9272,7 @@ namespace neon
                 else if(match(Token::TOK_BRACEOPEN))
                 {
                     scopeBegin();
-                    nn_astparser_parseblock(this);
+                    parseBlock();
                     scopeEnd();
                 }
                 else if(match(Token::TOK_KWTRY))
@@ -8807,7 +9281,7 @@ namespace neon
                 }
                 else
                 {
-                    nn_astparser_parseexprstmt(this, false, false);
+                    parseExprStatement(false, false);
                 }
                 ignoreSpace();
             }
@@ -9899,179 +10373,6 @@ namespace neon
 
 }
 
-
-int nn_astparser_getcodeargscount(const neon::Instruction* bytecode, const neon::Value* constants, int ip)
-{
-    int constant;
-    neon::Instruction::OpCode code;
-    neon::FuncScript* fn;
-    code = (neon::Instruction::OpCode)bytecode[ip].code;
-    switch(code)
-    {
-        case neon::Instruction::OP_EQUAL:
-        case neon::Instruction::OP_PRIMGREATER:
-        case neon::Instruction::OP_PRIMLESSTHAN:
-        case neon::Instruction::OP_PUSHNULL:
-        case neon::Instruction::OP_PUSHTRUE:
-        case neon::Instruction::OP_PUSHFALSE:
-        case neon::Instruction::OP_PRIMADD:
-        case neon::Instruction::OP_PRIMSUBTRACT:
-        case neon::Instruction::OP_PRIMMULTIPLY:
-        case neon::Instruction::OP_PRIMDIVIDE:
-        case neon::Instruction::OP_PRIMFLOORDIVIDE:
-        case neon::Instruction::OP_PRIMMODULO:
-        case neon::Instruction::OP_PRIMPOW:
-        case neon::Instruction::OP_PRIMNEGATE:
-        case neon::Instruction::OP_PRIMNOT:
-        case neon::Instruction::OP_ECHO:
-        case neon::Instruction::OP_TYPEOF:
-        case neon::Instruction::OP_POPONE:
-        case neon::Instruction::OP_UPVALUECLOSE:
-        case neon::Instruction::OP_DUPONE:
-        case neon::Instruction::OP_RETURN:
-        case neon::Instruction::OP_CLASSINHERIT:
-        case neon::Instruction::OP_CLASSGETSUPER:
-        case neon::Instruction::OP_PRIMAND:
-        case neon::Instruction::OP_PRIMOR:
-        case neon::Instruction::OP_PRIMBITXOR:
-        case neon::Instruction::OP_PRIMSHIFTLEFT:
-        case neon::Instruction::OP_PRIMSHIFTRIGHT:
-        case neon::Instruction::OP_PRIMBITNOT:
-        case neon::Instruction::OP_PUSHONE:
-        case neon::Instruction::OP_INDEXSET:
-        case neon::Instruction::OP_ASSERT:
-        case neon::Instruction::OP_EXTHROW:
-        case neon::Instruction::OP_EXPOPTRY:
-        case neon::Instruction::OP_MAKERANGE:
-        case neon::Instruction::OP_STRINGIFY:
-        case neon::Instruction::OP_PUSHEMPTY:
-        case neon::Instruction::OP_EXPUBLISHTRY:
-            return 0;
-        case neon::Instruction::OP_CALLFUNCTION:
-        case neon::Instruction::OP_CLASSINVOKESUPERSELF:
-        case neon::Instruction::OP_INDEXGET:
-        case neon::Instruction::OP_INDEXGETRANGED:
-            return 1;
-        case neon::Instruction::OP_GLOBALDEFINE:
-        case neon::Instruction::OP_GLOBALGET:
-        case neon::Instruction::OP_GLOBALSET:
-        case neon::Instruction::OP_LOCALGET:
-        case neon::Instruction::OP_LOCALSET:
-        case neon::Instruction::OP_FUNCARGSET:
-        case neon::Instruction::OP_FUNCARGGET:
-        case neon::Instruction::OP_UPVALUEGET:
-        case neon::Instruction::OP_UPVALUESET:
-        case neon::Instruction::OP_JUMPIFFALSE:
-        case neon::Instruction::OP_JUMPNOW:
-        case neon::Instruction::OP_BREAK_PL:
-        case neon::Instruction::OP_LOOP:
-        case neon::Instruction::OP_PUSHCONSTANT:
-        case neon::Instruction::OP_POPN:
-        case neon::Instruction::OP_MAKECLASS:
-        case neon::Instruction::OP_PROPERTYGET:
-        case neon::Instruction::OP_PROPERTYGETSELF:
-        case neon::Instruction::OP_PROPERTYSET:
-        case neon::Instruction::OP_MAKEARRAY:
-        case neon::Instruction::OP_MAKEDICT:
-        case neon::Instruction::OP_IMPORTIMPORT:
-        case neon::Instruction::OP_SWITCH:
-        case neon::Instruction::OP_MAKEMETHOD:
-        //case neon::Instruction::OP_FUNCOPTARG:
-            return 2;
-        case neon::Instruction::OP_CALLMETHOD:
-        case neon::Instruction::OP_CLASSINVOKETHIS:
-        case neon::Instruction::OP_CLASSINVOKESUPER:
-        case neon::Instruction::OP_CLASSPROPERTYDEFINE:
-            return 3;
-        case neon::Instruction::OP_EXTRY:
-            return 6;
-        case neon::Instruction::OP_MAKECLOSURE:
-            {
-                constant = (bytecode[ip + 1].code << 8) | bytecode[ip + 2].code;
-                fn = constants[constant].asFuncScript();
-                /* There is two byte for the constant, then three for each up value. */
-                return 2 + (fn->m_upvalcount * 3);
-            }
-            break;
-        default:
-            break;
-    }
-    return 0;
-}
-
-int nn_astparser_parsevariable(neon::Parser* prs, const char* message)
-{
-    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, message))
-    {
-        /* what to do here? */
-    }
-    prs->declareVariable();
-    /* we are in a local scope... */
-    if(prs->m_currfunccompiler->m_scopedepth > 0)
-    {
-        return 0;
-    }
-    return prs->makeIdentConst(&prs->m_prevtoken);
-}
-
-
-
-
-int nn_astparser_discardlocals(neon::Parser* prs, int depth)
-{
-    int local;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    if(prs->m_keeplastvalue)
-    {
-        //return 0;
-    }
-    if(prs->m_currfunccompiler->m_scopedepth == -1)
-    {
-        prs->raiseError("cannot exit top-level scope");
-    }
-    local = prs->m_currfunccompiler->m_localcount - 1;
-    while(local >= 0 && prs->m_currfunccompiler->m_compiledlocals[local].depth >= depth)
-    {
-        if(prs->m_currfunccompiler->m_compiledlocals[local].iscaptured)
-        {
-            prs->emitInstruction(neon::Instruction::OP_UPVALUECLOSE);
-        }
-        else
-        {
-            prs->emitInstruction(neon::Instruction::OP_POPONE);
-        }
-        local--;
-    }
-    return prs->m_currfunccompiler->m_localcount - local - 1;
-}
-
-void nn_astparser_endloop(neon::Parser* prs)
-{
-    size_t i;
-    neon::Instruction* bcode;
-    neon::Value* cvals;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    /*
-    // find all neon::Instruction::OP_BREAK_PL placeholder and replace with the appropriate jump...
-    */
-    i = prs->m_innermostloopstart;
-    while(i < prs->m_currfunccompiler->m_targetfunc->m_compiledblob->m_count)
-    {
-        if(prs->m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs[i].code == neon::Instruction::OP_BREAK_PL)
-        {
-            prs->m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs[i].code = neon::Instruction::OP_JUMPNOW;
-            prs->emitPatchJump(i + 1);
-            i += 3;
-        }
-        else
-        {
-            bcode = prs->m_currfunccompiler->m_targetfunc->m_compiledblob->m_instrucs;
-            cvals = prs->m_currfunccompiler->m_targetfunc->m_compiledblob->m_constants->m_values;
-            i += 1 + nn_astparser_getcodeargscount(bcode, cvals, i);
-        }
-    }
-}
-
 bool nn_astparser_rulebinary(neon::Parser* prs, neon::Token previous, bool canassign)
 {
     neon::Token::Type op;
@@ -10161,7 +10462,7 @@ bool nn_astparser_rulecall(neon::Parser* prs, neon::Token previous, bool canassi
     (void)previous;
     (void)canassign;
     NEON_ASTDEBUG(prs->m_pvm, "");
-    argcount = nn_astparser_parsefunccallargs(prs);
+    argcount = prs->parseFuncCallArgs();
     prs->emitInstruction(neon::Instruction::OP_CALLFUNCTION);
     prs->emit1byte(argcount);
     return true;
@@ -10206,7 +10507,7 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
     name = prs->makeIdentConst(&prs->m_prevtoken);
     if(prs->match(neon::Token::TOK_PARENOPEN))
     {
-        argcount = nn_astparser_parsefunccallargs(prs);
+        argcount = prs->parseFuncCallArgs();
         caninvoke = (
             (prs->m_currclasscompiler != nullptr) &&
             (
@@ -10240,23 +10541,7 @@ bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassig
 }
 
 
-void nn_astparser_createdvar(neon::Parser* prs, neon::Token name)
-{
-    int local;
-    NEON_ASTDEBUG(prs->m_pvm, "name=%.*s", name.length, name.start);
-    if(prs->m_currfunccompiler->m_targetfunc->m_scriptfnname != nullptr)
-    {
-        local = prs->addLocal(name) - 1;
-        prs->markLocalInitialized();
-        prs->emitInstruction(neon::Instruction::OP_LOCALSET);
-        prs->emit1short((uint16_t)local);
-    }
-    else
-    {
-        prs->emitInstruction(neon::Instruction::OP_GLOBALDEFINE);
-        prs->emit1short((uint16_t)prs->makeIdentConst(&name));
-    }
-}
+
 
 bool nn_astparser_rulearray(neon::Parser* prs, bool canassign)
 {
@@ -10465,7 +10750,7 @@ bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
     prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strthis), false);
     if(prs->match(neon::Token::TOK_PARENOPEN))
     {
-        argcount = nn_astparser_parsefunccallargs(prs);
+        argcount = prs->parseFuncCallArgs();
         prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strsuper), false);
         if(!invokeself)
         {
@@ -10799,164 +11084,7 @@ neon::Parser::Rule* neon::Parser::getRule(neon::Token::Type type)
 }
 #undef dorule
 
-bool nn_astparser_parseblock(neon::Parser* prs)
-{
-    prs->m_blockcount++;
-    prs->ignoreSpace();
-    while(!prs->check(neon::Token::TOK_BRACECLOSE) && !prs->check(neon::Token::TOK_EOF))
-    {
-        prs->parseDeclaration();
-    }
-    prs->m_blockcount--;
-    if(!prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after block"))
-    {
-        return false;
-    }
-    if(prs->match(neon::Token::TOK_SEMICOLON))
-    {
-    }
-    return true;
-}
 
-void nn_astparser_declarefuncargvar(neon::Parser* prs)
-{
-    int i;
-    neon::Token* name;
-    neon::Parser::CompiledLocal* local;
-    /* global variables are implicitly declared... */
-    if(prs->m_currfunccompiler->m_scopedepth == 0)
-    {
-        return;
-    }
-    name = &prs->m_prevtoken;
-    for(i = prs->m_currfunccompiler->m_localcount - 1; i >= 0; i--)
-    {
-        local = &prs->m_currfunccompiler->m_compiledlocals[i];
-        if(local->depth != -1 && local->depth < prs->m_currfunccompiler->m_scopedepth)
-        {
-            break;
-        }
-        if(neon::Parser::identsEqual(name, &local->varname))
-        {
-            prs->raiseError("%.*s already declared in current scope", name->length, name->start);
-        }
-    }
-    prs->addLocal(*name);
-}
-
-
-int nn_astparser_parsefuncparamvar(neon::Parser* prs, const char* message)
-{
-    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, message))
-    {
-        /* what to do here? */
-    }
-    nn_astparser_declarefuncargvar(prs);
-    /* we are in a local scope... */
-    if(prs->m_currfunccompiler->m_scopedepth > 0)
-    {
-        return 0;
-    }
-    return prs->makeIdentConst(&prs->m_prevtoken);
-}
-
-uint8_t nn_astparser_parsefunccallargs(neon::Parser* prs)
-{
-    uint8_t argcount;
-    argcount = 0;
-    if(!prs->check(neon::Token::TOK_PARENCLOSE))
-    {
-        do
-        {
-            prs->ignoreSpace();
-            prs->parseExpression();
-            #if 0
-            if(argcount == NEON_CFG_ASTMAXFUNCPARAMS)
-            {
-                prs->raiseError("cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
-            }
-            #endif
-            argcount++;
-        } while(prs->match(neon::Token::TOK_COMMA));
-    }
-    prs->ignoreSpace();
-    if(!prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after argument list"))
-    {
-        /* TODO: handle this, somehow. */
-    }
-    return argcount;
-}
-
-void nn_astparser_parsefuncparamlist(neon::Parser* prs)
-{
-    int paramconstant;
-    /* compile argument list... */
-    do
-    {
-        prs->ignoreSpace();
-        prs->m_currfunccompiler->m_targetfunc->m_arity++;
-        #if 0
-        if(prs->m_currfunccompiler->m_targetfunc->m_arity > NEON_CFG_ASTMAXFUNCPARAMS)
-        {
-            prs->raiseErrorAtCurrent("cannot have more than %d function parameters", NEON_CFG_ASTMAXFUNCPARAMS);
-        }
-        #endif
-        if(prs->match(neon::Token::TOK_TRIPLEDOT))
-        {
-            prs->m_currfunccompiler->m_targetfunc->m_isvariadic = true;
-            prs->addLocal(neon::Parser::makeSynthToken("__args__"));
-            prs->emitDefineVariable(0);
-            break;
-        }
-        paramconstant = nn_astparser_parsefuncparamvar(prs, "expected parameter name");
-        prs->emitDefineVariable(paramconstant);
-        prs->ignoreSpace();
-    } while(prs->match(neon::Token::TOK_COMMA));
-}
-
-
-void nn_astparser_parsefuncfull(neon::Parser* prs, neon::FuncCommon::Type type, bool isanon)
-{
-    prs->m_infunction = true;
-    neon::Parser::FuncCompiler compiler(prs, type, isanon);
-    prs->scopeBegin();
-    /* compile parameter list */
-    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after function name");
-    if(!prs->check(neon::Token::TOK_PARENCLOSE))
-    {
-        nn_astparser_parsefuncparamlist(prs);
-    }
-    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after function parameters");
-    compiler.compileBody(false, isanon);
-    prs->m_infunction = false;
-}
-
-void nn_astparser_parsemethod(neon::Parser* prs, neon::Token classname, bool isstatic)
-{
-    size_t sn;
-    int constant;
-    const char* sc;
-    neon::FuncCommon::Type type;
-    static neon::Token::Type tkns[] = { neon::Token::TOK_IDENTNORMAL, neon::Token::TOK_DECORATOR };
-    (void)classname;
-    (void)isstatic;
-    sc = "constructor";
-    sn = strlen(sc);
-    prs->consumeOr("method name expected", tkns, 2);
-    constant = prs->makeIdentConst(&prs->m_prevtoken);
-    type = neon::FuncCommon::FUNCTYPE_METHOD;
-    if((prs->m_prevtoken.length == (int)sn) && (memcmp(prs->m_prevtoken.start, sc, sn) == 0))
-    {
-        type = neon::FuncCommon::FUNCTYPE_INITIALIZER;
-    }
-    else if((prs->m_prevtoken.length > 0) && (prs->m_prevtoken.start[0] == '_'))
-    {
-        type = neon::FuncCommon::FUNCTYPE_PRIVATE;
-    }
-    nn_astparser_parsefuncfull(prs, type, false);
-    prs->emitInstruction(neon::Instruction::OP_MAKEMETHOD);
-    prs->emit1short(constant);
-}
 
 bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
 {
@@ -10967,184 +11095,14 @@ bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
     prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
     if(!prs->check(neon::Token::TOK_PARENCLOSE))
     {
-        nn_astparser_parsefuncparamlist(prs);
+        prs->parseFuncDeclParamList();
     }
     prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
     compiler.compileBody(true, true);
     return true;
 }
 
-void nn_astparser_parsefield(neon::Parser* prs, bool isstatic)
-{
-    int fieldconstant;
-    prs->consume(neon::Token::TOK_IDENTNORMAL, "class property name expected");
-    fieldconstant = prs->makeIdentConst( &prs->m_prevtoken);
-    if(prs->match(neon::Token::TOK_ASSIGN))
-    {
-        prs->parseExpression();
-    }
-    else
-    {
-        prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-    }
-    prs->emitInstruction(neon::Instruction::OP_CLASSPROPERTYDEFINE);
-    prs->emit1short(fieldconstant);
-    prs->emit1byte(isstatic ? 1 : 0);
-    prs->consumeStmtEnd();
-    prs->ignoreSpace();
-}
 
-void nn_astparser_parsefuncdecl(neon::Parser* prs)
-{
-    int global;
-    global = nn_astparser_parsevariable(prs, "function name expected");
-    prs->markLocalInitialized();
-    nn_astparser_parsefuncfull(prs, neon::FuncCommon::FUNCTYPE_FUNCTION, false);
-    prs->emitDefineVariable(global);
-}
-
-void nn_astparser_parseclassdeclaration(neon::Parser* prs)
-{
-    bool isstatic;
-    int nameconst;
-    neon::Parser::CompContext oldctx;
-    neon::Token classname;
-    neon::Parser::ClassCompiler classcompiler;
-    prs->consume(neon::Token::TOK_IDENTNORMAL, "class name expected");
-    nameconst = prs->makeIdentConst(&prs->m_prevtoken);
-    classname = prs->m_prevtoken;
-    prs->declareVariable();
-    prs->emitInstruction(neon::Instruction::OP_MAKECLASS);
-    prs->emit1short(nameconst);
-    prs->emitDefineVariable(nameconst);
-    classcompiler.classname = prs->m_prevtoken;
-    classcompiler.hassuperclass = false;
-    classcompiler.m_enclosing = prs->m_currclasscompiler;
-    prs->m_currclasscompiler = &classcompiler;
-    oldctx = prs->m_compcontext;
-    prs->m_compcontext = neon::Parser::COMPCONTEXT_CLASS;
-    if(prs->match(neon::Token::TOK_LESSTHAN))
-    {
-        prs->consume(neon::Token::TOK_IDENTNORMAL, "name of superclass expected");
-        nn_astparser_rulevarnormal(prs, false);
-        if(neon::Parser::identsEqual(&classname, &prs->m_prevtoken))
-        {
-            prs->raiseError("class %.*s cannot inherit from itself", classname.length, classname.start);
-        }
-        prs->scopeBegin();
-        prs->addLocal(neon::Parser::makeSynthToken(neon::g_strsuper));
-        prs->emitDefineVariable(0);
-        prs->emitNamedVar(classname, false);
-        prs->emitInstruction(neon::Instruction::OP_CLASSINHERIT);
-        classcompiler.hassuperclass = true;
-    }
-    prs->emitNamedVar(classname, false);
-    prs->ignoreSpace();
-    prs->consume(neon::Token::TOK_BRACEOPEN, "expected '{' before class body");
-    prs->ignoreSpace();
-    while(!prs->check(neon::Token::TOK_BRACECLOSE) && !prs->check(neon::Token::TOK_EOF))
-    {
-        isstatic = false;
-        if(prs->match(neon::Token::TOK_KWSTATIC))
-        {
-            isstatic = true;
-        }
-
-        if(prs->match(neon::Token::TOK_KWVAR))
-        {
-            nn_astparser_parsefield(prs, isstatic);
-        }
-        else
-        {
-            nn_astparser_parsemethod(prs, classname, isstatic);
-            prs->ignoreSpace();
-        }
-    }
-    prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after class body");
-    if(prs->match(neon::Token::TOK_SEMICOLON))
-    {
-    }
-    prs->emitInstruction(neon::Instruction::OP_POPONE);
-    if(classcompiler.hassuperclass)
-    {
-        prs->scopeEnd();
-    }
-    prs->m_currclasscompiler = prs->m_currclasscompiler->m_enclosing;
-    prs->m_compcontext = oldctx;
-}
-
-void nn_astparser_parsevardecl(neon::Parser* prs, bool isinitializer)
-{
-    int global;
-    int totalparsed;
-    totalparsed = 0;
-    do
-    {
-        if(totalparsed > 0)
-        {
-            prs->ignoreSpace();
-        }
-        global = nn_astparser_parsevariable(prs, "variable name expected");
-        if(prs->match(neon::Token::TOK_ASSIGN))
-        {
-            prs->parseExpression();
-        }
-        else
-        {
-            prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-        }
-        prs->emitDefineVariable(global);
-        totalparsed++;
-    } while(prs->match(neon::Token::TOK_COMMA));
-
-    if(!isinitializer)
-    {
-        prs->consumeStmtEnd();
-    }
-    else
-    {
-        prs->consume(neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
-        prs->ignoreSpace();
-    }
-}
-
-void nn_astparser_parseexprstmt(neon::Parser* prs, bool isinitializer, bool semi)
-{
-    if(prs->m_pvm->m_isreplmode && prs->m_currfunccompiler->m_scopedepth == 0)
-    {
-        prs->m_replcanecho = true;
-    }
-    if(!semi)
-    {
-        prs->parseExpression();
-    }
-    else
-    {
-        prs->parsePrecNoAdvance(neon::Parser::Rule::PREC_ASSIGNMENT);
-    }
-    if(!isinitializer)
-    {
-        if(prs->m_replcanecho && prs->m_pvm->m_isreplmode)
-        {
-            prs->emitInstruction(neon::Instruction::OP_ECHO);
-            prs->m_replcanecho = false;
-        }
-        else
-        {
-            //if(!prs->m_keeplastvalue)
-            {
-                prs->emitInstruction(neon::Instruction::OP_POPONE);
-            }
-        }
-        prs->consumeStmtEnd();
-    }
-    else
-    {
-        prs->consume(neon::Token::TOK_SEMICOLON, "expected ';' after initializer");
-        prs->ignoreSpace();
-        prs->emitInstruction(neon::Instruction::OP_POPONE);
-    }
-}
 
 /**
  * iter statements are like for loops in c...
@@ -11180,11 +11138,11 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
     }
     else if(prs->match(neon::Token::TOK_KWVAR))
     {
-        nn_astparser_parsevardecl(prs, true);
+        prs->parseVarDeclaration(true);
     }
     else
     {
-        nn_astparser_parseexprstmt(prs, true, false);
+        prs->parseExprStatement(true, false);
     }
     /* keep a copy of the surrounding loop's start and depth */
     surroundingloopstart = prs->m_innermostloopstart;
@@ -11224,7 +11182,7 @@ void nn_astparser_parseforstmt(neon::Parser* prs)
         prs->emitPatchJump(exitjump);
         prs->emitInstruction(neon::Instruction::OP_POPONE);
     }
-    nn_astparser_endloop(prs);
+    prs->endLoop();
     /* reset the loop start and scope depth to the surrounding value */
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
@@ -11377,7 +11335,7 @@ void nn_astparser_parseforeachstmt(neon::Parser* prs)
     prs->emitLoop(prs->m_innermostloopstart);
     prs->emitPatchJump(falsejump);
     prs->emitInstruction(neon::Instruction::OP_POPONE);
-    nn_astparser_endloop(prs);
+    prs->endLoop();
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
     prs->scopeEnd();
@@ -11544,7 +11502,7 @@ void nn_astparser_parsethrowstmt(neon::Parser* prs)
 {
     prs->parseExpression();
     prs->emitInstruction(neon::Instruction::OP_EXTHROW);
-    nn_astparser_discardlocals(prs, prs->m_currfunccompiler->m_scopedepth - 1);
+    prs->discardLocalVars(prs->m_currfunccompiler->m_scopedepth - 1);
     prs->consumeStmtEnd();
 }
 
@@ -11609,7 +11567,7 @@ void nn_astparser_parsetrystmt(neon::Parser* prs)
         address = prs->currentBlob()->m_count;
         if(prs->match(neon::Token::TOK_IDENTNORMAL))
         {
-            nn_astparser_createdvar(prs, prs->m_prevtoken);
+            prs->emitSetStmtVar(prs->m_prevtoken);
         }
         else
         {
@@ -11701,7 +11659,7 @@ void nn_astparser_parsewhilestmt(neon::Parser* prs)
     prs->emitLoop(prs->m_innermostloopstart);
     prs->emitPatchJump(exitjump);
     prs->emitInstruction(neon::Instruction::OP_POPONE);
-    nn_astparser_endloop(prs);
+    prs->endLoop();
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
 }
@@ -11727,7 +11685,7 @@ void nn_astparser_parsedo_whilestmt(neon::Parser* prs)
     prs->emitLoop(prs->m_innermostloopstart);
     prs->emitPatchJump(exitjump);
     prs->emitInstruction(neon::Instruction::OP_POPONE);
-    nn_astparser_endloop(prs);
+    prs->endLoop();
     prs->m_innermostloopstart = surroundingloopstart;
     prs->m_innermostloopscopedepth = surroundingscopedepth;
 }
@@ -11742,7 +11700,7 @@ void nn_astparser_parsecontinuestmt(neon::Parser* prs)
     // discard local variables created in the loop
     //  discard_local(prs, prs->m_innermostloopscopedepth);
     */
-    nn_astparser_discardlocals(prs, prs->m_innermostloopscopedepth + 1);
+    prs->discardLocalVars(prs->m_innermostloopscopedepth + 1);
     /* go back to the top of the loop */
     prs->emitLoop(prs->m_innermostloopstart);
     prs->consumeStmtEnd();
@@ -11769,7 +11727,7 @@ void nn_astparser_parsebreakstmt(neon::Parser* prs)
         }
     }
     */
-    nn_astparser_discardlocals(prs, prs->m_innermostloopscopedepth + 1);
+    prs->discardLocalVars(prs->m_innermostloopscopedepth + 1);
     prs->emitJump(neon::Instruction::OP_BREAK_PL);
     prs->consumeStmtEnd();
 }

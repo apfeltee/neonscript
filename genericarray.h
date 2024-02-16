@@ -20,7 +20,7 @@ namespace neon
                 {
                     if(m_values != nullptr)
                     {
-                        Memory::Memory::freeArray(m_values, m_capacity);
+                        Memory::freeArray(m_values, m_capacity);
                         m_values = nullptr;
                         m_count = 0;
                         m_capacity = 0;
