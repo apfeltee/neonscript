@@ -12,7 +12,7 @@
 {
     for (var a = 0; a < 3; a = a + 1) {
         break;
-        println("no");
+        throw Exception("no");
     }
 }
 
@@ -23,7 +23,7 @@ var a = "no";
             while (true) {
                 a = "yes";
                 break;
-                println("nope");
+                throw Exception("nope");
             }
             break;
         }
@@ -48,4 +48,5 @@ for(i=0; i<100; i++)
         }
     }
 }
+
 println("i=", i, ", j=", j)

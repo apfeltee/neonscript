@@ -10,9 +10,9 @@ namespace neon
         {
             public:
                 /* how many entries are currently stored? */
-                uint64_t m_count;
+                size_t m_count;
                 /* how many entries can be stored before growing? */
-                uint64_t m_capacity;
+                size_t m_capacity;
                 ValType* m_values;
 
             private:
@@ -42,34 +42,54 @@ namespace neon
                     destroy();
                 }
 
-                inline uint64_t size() const
+                inline size_t size() const
                 {
                     return m_count;
                 }
 
-                inline uint64_t length() const
+                inline size_t length() const
                 {
                     return m_count;
                 }
 
-                inline uint64_t count() const
+                inline size_t count() const
                 {
                     return m_count;
                 }
 
-                inline ValType& at(uint64_t i)
+                inline ValType& at(size_t i)
                 {
                     return m_values[i];
                 }
 
-                inline ValType& operator[](uint64_t i)
+                inline ValType& at(size_t i) const
                 {
-                    return at(i);
+                    return m_values[i];
+                }
+
+                inline ValType& operator[](size_t i)
+                {
+                    return m_values[i];
+                }
+
+                inline ValType& operator[](size_t i) const
+                {
+                    return m_values[i];
+                }
+
+                ValType pop()
+                {
+                    if(m_count > 0)
+                    {
+                        m_count--;
+                        return m_values[m_count+1];
+                    }
+                    return {};
                 }
 
                 void push(ValType value)
                 {
-                    uint64_t oldcapacity;
+                    size_t oldcapacity;
                     if(m_capacity < m_count + 1)
                     {
                         oldcapacity = m_capacity;
@@ -80,10 +100,10 @@ namespace neon
                     m_count++;
                 }
 
-                void insertDefault(ValType value, uint64_t index, ValType defaultvalue)
+                void insertDefault(ValType value, size_t index, ValType defaultvalue)
                 {
-                    uint64_t i;
-                    uint64_t oldcap;
+                    size_t i;
+                    size_t oldcap;
                     if(m_capacity <= index)
                     {
                         m_capacity = Util::growCapacity(index);
@@ -115,11 +135,11 @@ namespace neon
                     m_count++;
                 }
 
-                ValType shiftDefault(uint64_t count, ValType defval)
+                ValType shiftDefault(size_t count, ValType defval)
                 {
-                    uint64_t i;
-                    uint64_t j;
-                    uint64_t vsz;
+                    size_t i;
+                    size_t j;
+                    size_t vsz;
                     ValType temp;
                     ValType item;
                     vsz = m_count;

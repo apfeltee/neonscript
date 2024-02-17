@@ -436,4 +436,81 @@ int osfn_chdir(const char* path)
     #endif
 }
 
+bool osfn_fileexists(const char* filepath)
+{
+    #if defined(OSFN_ISUNIXY)
+        return access(filepath, F_OK) == 0;
+    #else
+        struct stat sb;
+        if(stat(filepath, &sb) == -1)
+        {
+            return false;
+        }
+        return true;
+    #endif
+}
+
+bool osfn_stat(const char* path, struct stat* st)
+{
+    if(stat(path, st) == -1)
+    {
+        return false;
+    }
+    return true;
+}
+
+bool osfn_statisa(const char* path, struct stat* st, char kind)
+{
+    int fm;
+    int need;
+    (void)path;
+    if(st == NULL)
+    {
+        return false;
+    }
+    need = -1;
+    #define caseflag(c, r) case c: need=r; break;
+    switch(kind)
+    {
+        #if defined(S_IFBLK)
+            caseflag('b', S_IFBLK);
+        #endif
+        #if defined(S_IFIFO)
+            caseflag('i', S_IFIFO);
+        #endif
+        #if defined(S_IFSOCK)
+            caseflag('s', S_IFSOCK);
+        #endif
+        caseflag('c', S_IFCHR);
+        caseflag('d', S_IFDIR);
+        caseflag('f', S_IFREG);
+    }
+    #undef caseflag
+    if(need == -1)
+    {
+        return false;
+    }
+    fm = (st->st_mode & S_IFMT);
+    return (fm == need);
+}
+
+bool osfn_pathcheck(const char* path, char mode)
+{
+    struct stat st;
+    if(!osfn_stat(path, &st))
+    {
+        return false;
+    }
+    return osfn_statisa(path, &st, mode);
+}
+
+bool osfn_pathisfile(const char* path)
+{
+    return osfn_pathcheck(path, 'f');
+}
+
+bool osfn_pathisdirectory(const char* path)
+{
+    return osfn_pathcheck(path, 'd');
+}
 

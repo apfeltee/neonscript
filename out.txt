@@ -1,10 +1,10 @@
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/arr1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/arr1.nn"])
-==19716== Memcheck, a memory error detector
-==19716== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19716== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19716== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/arr1.nn
-==19716== 
+==2169== Memcheck, a memory error detector
+==2169== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2169== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2169== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/arr1.nn
+==2169== 
 arg="/mnt/c/cloud/local/dev/langs/neon/arr1.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/arr1.nn
 a:count=3
@@ -12,82 +12,106 @@ a      =["red", "green", "blue"]
 a now  =["red", "green", "blue", "yellow", "purple", 42, 889]
 a[1]   =green
 a inc  =["red", "green", "blue", "yellow", "purple", 43, 889]
-==19716== 
-==19716== HEAP SUMMARY:
-==19716==     in use at exit: 0 bytes in 0 blocks
-==19716==   total heap usage: 1,459 allocs, 1,459 frees, 297,546 bytes allocated
-==19716== 
-==19716== All heap blocks were freed -- no leaks are possible
-==19716== 
-==19716== For lists of detected and suppressed errors, rerun with: -s
-==19716== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2169== 
+==2169== HEAP SUMMARY:
+==2169==     in use at exit: 120 bytes in 1 blocks
+==2169==   total heap usage: 1,468 allocs, 1,467 frees, 297,604 bytes allocated
+==2169== 
+==2169== LEAK SUMMARY:
+==2169==    definitely lost: 120 bytes in 1 blocks
+==2169==    indirectly lost: 0 bytes in 0 blocks
+==2169==      possibly lost: 0 bytes in 0 blocks
+==2169==    still reachable: 0 bytes in 0 blocks
+==2169==         suppressed: 0 bytes in 0 blocks
+==2169== Rerun with --leak-check=full to see details of leaked memory
+==2169== 
+==2169== For lists of detected and suppressed errors, rerun with: -s
+==2169== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/arr2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/arr2.nn"])
-==19717== Memcheck, a memory error detector
-==19717== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19717== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19717== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/arr2.nn
-==19717== 
+==2170== Memcheck, a memory error detector
+==2170== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2170== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2170== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/arr2.nn
+==2170== 
 arg="/mnt/c/cloud/local/dev/langs/neon/arr2.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/arr2.nn
 before: {"jim": ["red", 889, "blue"]}
 after index: ["red", 890, "blue"]
 after: {"jim": ["red", 890, "blue"]}
-==19717== 
-==19717== HEAP SUMMARY:
-==19717==     in use at exit: 0 bytes in 0 blocks
-==19717==   total heap usage: 1,445 allocs, 1,445 frees, 297,468 bytes allocated
-==19717== 
-==19717== All heap blocks were freed -- no leaks are possible
-==19717== 
-==19717== For lists of detected and suppressed errors, rerun with: -s
-==19717== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2170== 
+==2170== HEAP SUMMARY:
+==2170==     in use at exit: 120 bytes in 1 blocks
+==2170==   total heap usage: 1,454 allocs, 1,453 frees, 297,518 bytes allocated
+==2170== 
+==2170== LEAK SUMMARY:
+==2170==    definitely lost: 120 bytes in 1 blocks
+==2170==    indirectly lost: 0 bytes in 0 blocks
+==2170==      possibly lost: 0 bytes in 0 blocks
+==2170==    still reachable: 0 bytes in 0 blocks
+==2170==         suppressed: 0 bytes in 0 blocks
+==2170== Rerun with --leak-check=full to see details of leaked memory
+==2170== 
+==2170== For lists of detected and suppressed errors, rerun with: -s
+==2170== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/base64.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/base64.nn"])
-==19718== Memcheck, a memory error detector
-==19718== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19718== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19718== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/base64.nn
-==19718== 
+==2171== Memcheck, a memory error detector
+==2171== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2171== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2171== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/base64.nn
+==2171== 
 arg="/mnt/c/cloud/local/dev/langs/neon/base64.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/base64.nn
 encoded = TGVhcm5pbmcgSmF2YVNjcmlwd/
 decoded = Learning JavaScripw��
-==19718== 
-==19718== HEAP SUMMARY:
-==19718==     in use at exit: 0 bytes in 0 blocks
-==19718==   total heap usage: 1,654 allocs, 1,654 frees, 327,316 bytes allocated
-==19718== 
-==19718== All heap blocks were freed -- no leaks are possible
-==19718== 
-==19718== For lists of detected and suppressed errors, rerun with: -s
-==19718== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2171== 
+==2171== HEAP SUMMARY:
+==2171==     in use at exit: 120 bytes in 1 blocks
+==2171==   total heap usage: 1,663 allocs, 1,662 frees, 327,334 bytes allocated
+==2171== 
+==2171== LEAK SUMMARY:
+==2171==    definitely lost: 120 bytes in 1 blocks
+==2171==    indirectly lost: 0 bytes in 0 blocks
+==2171==      possibly lost: 0 bytes in 0 blocks
+==2171==    still reachable: 0 bytes in 0 blocks
+==2171==         suppressed: 0 bytes in 0 blocks
+==2171== Rerun with --leak-check=full to see details of leaked memory
+==2171== 
+==2171== For lists of detected and suppressed errors, rerun with: -s
+==2171== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/bf.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/bf.nn"])
-==19719== Memcheck, a memory error detector
-==19719== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19719== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19719== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bf.nn
-==19719== 
+==2172== Memcheck, a memory error detector
+==2172== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2172== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2172== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bf.nn
+==2172== 
 arg="/mnt/c/cloud/local/dev/langs/neon/bf.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/bf.nn
 Hello World!
-==19719== 
-==19719== HEAP SUMMARY:
-==19719==     in use at exit: 0 bytes in 0 blocks
-==19719==   total heap usage: 1,577 allocs, 1,577 frees, 337,111 bytes allocated
-==19719== 
-==19719== All heap blocks were freed -- no leaks are possible
-==19719== 
-==19719== For lists of detected and suppressed errors, rerun with: -s
-==19719== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2172== 
+==2172== HEAP SUMMARY:
+==2172==     in use at exit: 120 bytes in 1 blocks
+==2172==   total heap usage: 1,586 allocs, 1,585 frees, 337,145 bytes allocated
+==2172== 
+==2172== LEAK SUMMARY:
+==2172==    definitely lost: 120 bytes in 1 blocks
+==2172==    indirectly lost: 0 bytes in 0 blocks
+==2172==      possibly lost: 0 bytes in 0 blocks
+==2172==    still reachable: 0 bytes in 0 blocks
+==2172==         suppressed: 0 bytes in 0 blocks
+==2172== Rerun with --leak-check=full to see details of leaked memory
+==2172== 
+==2172== For lists of detected and suppressed errors, rerun with: -s
+==2172== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/bfc.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/bfc.nn"])
-==19720== Memcheck, a memory error detector
-==19720== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19720== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19720== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bfc.nn
-==19720== 
+==2173== Memcheck, a memory error detector
+==2173== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2173== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2173== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bfc.nn
+==2173== 
 arg="/mnt/c/cloud/local/dev/langs/neon/bfc.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/bfc.nn
 fpath=null
@@ -95,22 +119,28 @@ compiled 59 instructions. now resolving jumps...
 finished compiling!
 running 59 instructions...
 Hello World!
-==19720== 
-==19720== HEAP SUMMARY:
-==19720==     in use at exit: 0 bytes in 0 blocks
-==19720==   total heap usage: 2,167 allocs, 2,167 frees, 1,460,593 bytes allocated
-==19720== 
-==19720== All heap blocks were freed -- no leaks are possible
-==19720== 
-==19720== For lists of detected and suppressed errors, rerun with: -s
-==19720== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2173== 
+==2173== HEAP SUMMARY:
+==2173==     in use at exit: 120 bytes in 1 blocks
+==2173==   total heap usage: 2,176 allocs, 2,175 frees, 1,459,979 bytes allocated
+==2173== 
+==2173== LEAK SUMMARY:
+==2173==    definitely lost: 120 bytes in 1 blocks
+==2173==    indirectly lost: 0 bytes in 0 blocks
+==2173==      possibly lost: 0 bytes in 0 blocks
+==2173==    still reachable: 0 bytes in 0 blocks
+==2173==         suppressed: 0 bytes in 0 blocks
+==2173== Rerun with --leak-check=full to see details of leaked memory
+==2173== 
+==2173== For lists of detected and suppressed errors, rerun with: -s
+==2173== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/big.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/big.nn"])
-==19723== Memcheck, a memory error detector
-==19723== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19723== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19723== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/big.nn
-==19723== 
+==2174== Memcheck, a memory error detector
+==2174== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2174== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2174== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/big.nn
+==2174== 
 arg="/mnt/c/cloud/local/dev/langs/neon/big.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/big.nn
 *** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -123,42 +153,54 @@ oldcap=576 newsz=1728
 oldcap=1728 newsz=5184
 *** resizing stack: needed 10368 (5184), from 5184 to 15552, allocating 248848 ***
 oldcap=5184 newsz=15552
-==19723== 
-==19723== HEAP SUMMARY:
-==19723==     in use at exit: 0 bytes in 0 blocks
-==19723==   total heap usage: 1,423 allocs, 1,423 frees, 1,788,738 bytes allocated
-==19723== 
-==19723== All heap blocks were freed -- no leaks are possible
-==19723== 
-==19723== For lists of detected and suppressed errors, rerun with: -s
-==19723== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2174== 
+==2174== HEAP SUMMARY:
+==2174==     in use at exit: 120 bytes in 1 blocks
+==2174==   total heap usage: 1,432 allocs, 1,431 frees, 1,788,788 bytes allocated
+==2174== 
+==2174== LEAK SUMMARY:
+==2174==    definitely lost: 120 bytes in 1 blocks
+==2174==    indirectly lost: 0 bytes in 0 blocks
+==2174==      possibly lost: 0 bytes in 0 blocks
+==2174==    still reachable: 0 bytes in 0 blocks
+==2174==         suppressed: 0 bytes in 0 blocks
+==2174== Rerun with --leak-check=full to see details of leaked memory
+==2174== 
+==2174== For lists of detected and suppressed errors, rerun with: -s
+==2174== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/bogus.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/bogus.nn"])
-==19724== Memcheck, a memory error detector
-==19724== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19724== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19724== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bogus.nn
-==19724== 
+==2175== Memcheck, a memory error detector
+==2175== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2175== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2175== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bogus.nn
+==2175== 
 arg="/mnt/c/cloud/local/dev/langs/neon/bogus.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/bogus.nn
 hello world
 hello world
-==19724== 
-==19724== HEAP SUMMARY:
-==19724==     in use at exit: 0 bytes in 0 blocks
-==19724==   total heap usage: 1,416 allocs, 1,416 frees, 293,865 bytes allocated
-==19724== 
-==19724== All heap blocks were freed -- no leaks are possible
-==19724== 
-==19724== For lists of detected and suppressed errors, rerun with: -s
-==19724== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2175== 
+==2175== HEAP SUMMARY:
+==2175==     in use at exit: 120 bytes in 1 blocks
+==2175==   total heap usage: 1,425 allocs, 1,424 frees, 293,931 bytes allocated
+==2175== 
+==2175== LEAK SUMMARY:
+==2175==    definitely lost: 120 bytes in 1 blocks
+==2175==    indirectly lost: 0 bytes in 0 blocks
+==2175==      possibly lost: 0 bytes in 0 blocks
+==2175==    still reachable: 0 bytes in 0 blocks
+==2175==         suppressed: 0 bytes in 0 blocks
+==2175== Rerun with --leak-check=full to see details of leaked memory
+==2175== 
+==2175== For lists of detected and suppressed errors, rerun with: -s
+==2175== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/breakfor.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/breakfor.nn"])
-==19725== Memcheck, a memory error detector
-==19725== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19725== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19725== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/breakfor.nn
-==19725== 
+==2176== Memcheck, a memory error detector
+==2176== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2176== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2176== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/breakfor.nn
+==2176== 
 arg="/mnt/c/cloud/local/dev/langs/neon/breakfor.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/breakfor.nn
 0
@@ -166,41 +208,53 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/breakfor.nn
 2
 yes
 i=56, j=48
-==19725== 
-==19725== HEAP SUMMARY:
-==19725==     in use at exit: 0 bytes in 0 blocks
-==19725==   total heap usage: 1,444 allocs, 1,444 frees, 305,455 bytes allocated
-==19725== 
-==19725== All heap blocks were freed -- no leaks are possible
-==19725== 
-==19725== For lists of detected and suppressed errors, rerun with: -s
-==19725== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2176== 
+==2176== HEAP SUMMARY:
+==2176==     in use at exit: 120 bytes in 1 blocks
+==2176==   total heap usage: 1,453 allocs, 1,452 frees, 305,538 bytes allocated
+==2176== 
+==2176== LEAK SUMMARY:
+==2176==    definitely lost: 120 bytes in 1 blocks
+==2176==    indirectly lost: 0 bytes in 0 blocks
+==2176==      possibly lost: 0 bytes in 0 blocks
+==2176==    still reachable: 0 bytes in 0 blocks
+==2176==         suppressed: 0 bytes in 0 blocks
+==2176== Rerun with --leak-check=full to see details of leaked memory
+==2176== 
+==2176== For lists of detected and suppressed errors, rerun with: -s
+==2176== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/bug.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/bug.nn"])
-==19726== Memcheck, a memory error detector
-==19726== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19726== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19726== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bug.nn
-==19726== 
+==2177== Memcheck, a memory error detector
+==2177== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2177== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2177== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/bug.nn
+==2177== 
 arg="/mnt/c/cloud/local/dev/langs/neon/bug.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/bug.nn
 46
-==19726== 
-==19726== HEAP SUMMARY:
-==19726==     in use at exit: 0 bytes in 0 blocks
-==19726==   total heap usage: 1,411 allocs, 1,411 frees, 294,500 bytes allocated
-==19726== 
-==19726== All heap blocks were freed -- no leaks are possible
-==19726== 
-==19726== For lists of detected and suppressed errors, rerun with: -s
-==19726== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2177== 
+==2177== HEAP SUMMARY:
+==2177==     in use at exit: 120 bytes in 1 blocks
+==2177==   total heap usage: 1,420 allocs, 1,419 frees, 294,566 bytes allocated
+==2177== 
+==2177== LEAK SUMMARY:
+==2177==    definitely lost: 120 bytes in 1 blocks
+==2177==    indirectly lost: 0 bytes in 0 blocks
+==2177==      possibly lost: 0 bytes in 0 blocks
+==2177==    still reachable: 0 bytes in 0 blocks
+==2177==         suppressed: 0 bytes in 0 blocks
+==2177== Rerun with --leak-check=full to see details of leaked memory
+==2177== 
+==2177== For lists of detected and suppressed errors, rerun with: -s
+==2177== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/ceval.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/ceval.nn"])
-==19727== Memcheck, a memory error detector
-==19727== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19727== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19727== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/ceval.nn
-==19727== 
+==2178== Memcheck, a memory error detector
+==2178== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2178== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2178== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/ceval.nn
+==2178== 
 arg="/mnt/c/cloud/local/dev/langs/neon/ceval.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/ceval.nn
 OK  : (0x777 & 0xFF) = 119 (119)
@@ -210,22 +264,28 @@ OK  : (233 >> 2) = 58 (58)
 OK  : (12 | 48) = 60 (60)
 OK  : (55 ^ 48) = 7 (7)
 all good
-==19727== 
-==19727== HEAP SUMMARY:
-==19727==     in use at exit: 0 bytes in 0 blocks
-==19727==   total heap usage: 1,642 allocs, 1,642 frees, 308,419 bytes allocated
-==19727== 
-==19727== All heap blocks were freed -- no leaks are possible
-==19727== 
-==19727== For lists of detected and suppressed errors, rerun with: -s
-==19727== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2178== 
+==2178== HEAP SUMMARY:
+==2178==     in use at exit: 120 bytes in 1 blocks
+==2178==   total heap usage: 1,639 allocs, 1,638 frees, 307,757 bytes allocated
+==2178== 
+==2178== LEAK SUMMARY:
+==2178==    definitely lost: 120 bytes in 1 blocks
+==2178==    indirectly lost: 0 bytes in 0 blocks
+==2178==      possibly lost: 0 bytes in 0 blocks
+==2178==    still reachable: 0 bytes in 0 blocks
+==2178==         suppressed: 0 bytes in 0 blocks
+==2178== Rerun with --leak-check=full to see details of leaked memory
+==2178== 
+==2178== For lists of detected and suppressed errors, rerun with: -s
+==2178== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/class.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/class.nn"])
-==19728== Memcheck, a memory error detector
-==19728== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19728== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19728== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/class.nn
-==19728== 
+==2179== Memcheck, a memory error detector
+==2179== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2179== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2179== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/class.nn
+==2179== 
 arg="/mnt/c/cloud/local/dev/langs/neon/class.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/class.nn
 3
@@ -241,40 +301,52 @@ hello
 hello again
 170
 Name is set
-==19728== 
-==19728== HEAP SUMMARY:
-==19728==     in use at exit: 0 bytes in 0 blocks
-==19728==   total heap usage: 1,869 allocs, 1,869 frees, 334,409 bytes allocated
-==19728== 
-==19728== All heap blocks were freed -- no leaks are possible
-==19728== 
-==19728== For lists of detected and suppressed errors, rerun with: -s
-==19728== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2179== 
+==2179== HEAP SUMMARY:
+==2179==     in use at exit: 120 bytes in 1 blocks
+==2179==   total heap usage: 1,878 allocs, 1,877 frees, 334,251 bytes allocated
+==2179== 
+==2179== LEAK SUMMARY:
+==2179==    definitely lost: 120 bytes in 1 blocks
+==2179==    indirectly lost: 0 bytes in 0 blocks
+==2179==      possibly lost: 0 bytes in 0 blocks
+==2179==    still reachable: 0 bytes in 0 blocks
+==2179==         suppressed: 0 bytes in 0 blocks
+==2179== Rerun with --leak-check=full to see details of leaked memory
+==2179== 
+==2179== For lists of detected and suppressed errors, rerun with: -s
+==2179== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/cmaze.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/cmaze.nn"])
-==19729== Memcheck, a memory error detector
-==19729== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19729== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19729== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/cmaze.nn
-==19729== 
+==2180== Memcheck, a memory error detector
+==2180== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2180== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2180== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/cmaze.nn
+==2180== 
 arg="/mnt/c/cloud/local/dev/langs/neon/cmaze.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/cmaze.nn
-==19729== 
-==19729== HEAP SUMMARY:
-==19729==     in use at exit: 0 bytes in 0 blocks
-==19729==   total heap usage: 1,390 allocs, 1,390 frees, 288,623 bytes allocated
-==19729== 
-==19729== All heap blocks were freed -- no leaks are possible
-==19729== 
-==19729== For lists of detected and suppressed errors, rerun with: -s
-==19729== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2180== 
+==2180== HEAP SUMMARY:
+==2180==     in use at exit: 120 bytes in 1 blocks
+==2180==   total heap usage: 1,399 allocs, 1,398 frees, 288,689 bytes allocated
+==2180== 
+==2180== LEAK SUMMARY:
+==2180==    definitely lost: 120 bytes in 1 blocks
+==2180==    indirectly lost: 0 bytes in 0 blocks
+==2180==      possibly lost: 0 bytes in 0 blocks
+==2180==    still reachable: 0 bytes in 0 blocks
+==2180==         suppressed: 0 bytes in 0 blocks
+==2180== Rerun with --leak-check=full to see details of leaked memory
+==2180== 
+==2180== For lists of detected and suppressed errors, rerun with: -s
+==2180== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/continue.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/continue.nn"])
-==19730== Memcheck, a memory error detector
-==19730== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19730== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19730== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/continue.nn
-==19730== 
+==2181== Memcheck, a memory error detector
+==2181== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2181== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2181== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/continue.nn
+==2181== 
 arg="/mnt/c/cloud/local/dev/langs/neon/continue.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/continue.nn
 t1: really simple test ...
@@ -295,47 +367,59 @@ t4: scopes ok
 t5: 0
 t5: 1
 t5: 2
-==19730== 
-==19730== HEAP SUMMARY:
-==19730==     in use at exit: 0 bytes in 0 blocks
-==19730==   total heap usage: 1,565 allocs, 1,565 frees, 312,468 bytes allocated
-==19730== 
-==19730== All heap blocks were freed -- no leaks are possible
-==19730== 
-==19730== For lists of detected and suppressed errors, rerun with: -s
-==19730== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2181== 
+==2181== HEAP SUMMARY:
+==2181==     in use at exit: 120 bytes in 1 blocks
+==2181==   total heap usage: 1,574 allocs, 1,573 frees, 312,454 bytes allocated
+==2181== 
+==2181== LEAK SUMMARY:
+==2181==    definitely lost: 120 bytes in 1 blocks
+==2181==    indirectly lost: 0 bytes in 0 blocks
+==2181==      possibly lost: 0 bytes in 0 blocks
+==2181==    still reachable: 0 bytes in 0 blocks
+==2181==         suppressed: 0 bytes in 0 blocks
+==2181== Rerun with --leak-check=full to see details of leaked memory
+==2181== 
+==2181== For lists of detected and suppressed errors, rerun with: -s
+==2181== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/ctest.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/ctest.nn"])
-==19731== Memcheck, a memory error detector
-==19731== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19731== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19731== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/ctest.nn
-==19731== 
+==2182== Memcheck, a memory error detector
+==2182== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2182== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2182== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/ctest.nn
+==2182== 
 arg="/mnt/c/cloud/local/dev/langs/neon/ctest.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/ctest.nn
 IMPORTIMPORT: name='colors'
 import: trying 'mods/colors.nn' ... found!
 loading module from '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'
-IMPORTIMPORT: mod='0x4e374e0'
+IMPORTIMPORT: mod='0x4e37840'
 colors=<module 'colors' at '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'>
 v=32
 v=0
-[32mSuccessful![00m==19731== 
-==19731== HEAP SUMMARY:
-==19731==     in use at exit: 0 bytes in 0 blocks
-==19731==   total heap usage: 2,444 allocs, 2,444 frees, 549,352 bytes allocated
-==19731== 
-==19731== All heap blocks were freed -- no leaks are possible
-==19731== 
-==19731== For lists of detected and suppressed errors, rerun with: -s
-==19731== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+[32mSuccessful![00m==2182== 
+==2182== HEAP SUMMARY:
+==2182==     in use at exit: 120 bytes in 1 blocks
+==2182==   total heap usage: 2,451 allocs, 2,450 frees, 548,834 bytes allocated
+==2182== 
+==2182== LEAK SUMMARY:
+==2182==    definitely lost: 120 bytes in 1 blocks
+==2182==    indirectly lost: 0 bytes in 0 blocks
+==2182==      possibly lost: 0 bytes in 0 blocks
+==2182==    still reachable: 0 bytes in 0 blocks
+==2182==         suppressed: 0 bytes in 0 blocks
+==2182== Rerun with --leak-check=full to see details of leaked memory
+==2182== 
+==2182== For lists of detected and suppressed errors, rerun with: -s
+==2182== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/expr.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/expr.nn"])
-==19732== Memcheck, a memory error detector
-==19732== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19732== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19732== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/expr.nn
-==19732== 
+==2183== Memcheck, a memory error detector
+==2183== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2183== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2183== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/expr.nn
+==2183== 
 arg="/mnt/c/cloud/local/dev/langs/neon/expr.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/expr.nn
 output:
@@ -344,41 +428,53 @@ output:
 round trip:
 ( ( "data" "quoted data with escaped \"" 123 4.5 "14" ) ( "data" ( "!@#" ( 4.5 ) "(more" "data)" ) ) )
 
-==19732== 
-==19732== HEAP SUMMARY:
-==19732==     in use at exit: 0 bytes in 0 blocks
-==19732==   total heap usage: 2,670 allocs, 2,670 frees, 395,264 bytes allocated
-==19732== 
-==19732== All heap blocks were freed -- no leaks are possible
-==19732== 
-==19732== For lists of detected and suppressed errors, rerun with: -s
-==19732== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2183== 
+==2183== HEAP SUMMARY:
+==2183==     in use at exit: 120 bytes in 1 blocks
+==2183==   total heap usage: 2,679 allocs, 2,678 frees, 394,698 bytes allocated
+==2183== 
+==2183== LEAK SUMMARY:
+==2183==    definitely lost: 120 bytes in 1 blocks
+==2183==    indirectly lost: 0 bytes in 0 blocks
+==2183==      possibly lost: 0 bytes in 0 blocks
+==2183==    still reachable: 0 bytes in 0 blocks
+==2183==         suppressed: 0 bytes in 0 blocks
+==2183== Rerun with --leak-check=full to see details of leaked memory
+==2183== 
+==2183== For lists of detected and suppressed errors, rerun with: -s
+==2183== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/fib.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/fib.nn"])
-==19733== Memcheck, a memory error detector
-==19733== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19733== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19733== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/fib.nn
-==19733== 
+==2184== Memcheck, a memory error detector
+==2184== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2184== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2184== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/fib.nn
+==2184== 
 arg="/mnt/c/cloud/local/dev/langs/neon/fib.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/fib.nn
-fib(12): 144; elapsed: 5182.5
-==19733== 
-==19733== HEAP SUMMARY:
-==19733==     in use at exit: 0 bytes in 0 blocks
-==19733==   total heap usage: 1,440 allocs, 1,440 frees, 296,772 bytes allocated
-==19733== 
-==19733== All heap blocks were freed -- no leaks are possible
-==19733== 
-==19733== For lists of detected and suppressed errors, rerun with: -s
-==19733== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+fib(12): 144; elapsed: 3355.5
+==2184== 
+==2184== HEAP SUMMARY:
+==2184==     in use at exit: 120 bytes in 1 blocks
+==2184==   total heap usage: 1,449 allocs, 1,448 frees, 296,822 bytes allocated
+==2184== 
+==2184== LEAK SUMMARY:
+==2184==    definitely lost: 120 bytes in 1 blocks
+==2184==    indirectly lost: 0 bytes in 0 blocks
+==2184==      possibly lost: 0 bytes in 0 blocks
+==2184==    still reachable: 0 bytes in 0 blocks
+==2184==         suppressed: 0 bytes in 0 blocks
+==2184== Rerun with --leak-check=full to see details of leaked memory
+==2184== 
+==2184== For lists of detected and suppressed errors, rerun with: -s
+==2184== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/heart.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/heart.nn"])
-==19734== Memcheck, a memory error detector
-==19734== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19734== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19734== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/heart.nn
-==19734== 
+==2185== Memcheck, a memory error detector
+==2185== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2185== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2185== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/heart.nn
+==2185== 
 arg="/mnt/c/cloud/local/dev/langs/neon/heart.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/heart.nn
                                                             
@@ -411,47 +507,59 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/heart.nn
                                                             
                                                             
                                                             
-==19734== 
-==19734== HEAP SUMMARY:
-==19734==     in use at exit: 0 bytes in 0 blocks
-==19734==   total heap usage: 1,417 allocs, 1,417 frees, 298,909 bytes allocated
-==19734== 
-==19734== All heap blocks were freed -- no leaks are possible
-==19734== 
-==19734== For lists of detected and suppressed errors, rerun with: -s
-==19734== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2185== 
+==2185== HEAP SUMMARY:
+==2185==     in use at exit: 120 bytes in 1 blocks
+==2185==   total heap usage: 1,426 allocs, 1,425 frees, 298,975 bytes allocated
+==2185== 
+==2185== LEAK SUMMARY:
+==2185==    definitely lost: 120 bytes in 1 blocks
+==2185==    indirectly lost: 0 bytes in 0 blocks
+==2185==      possibly lost: 0 bytes in 0 blocks
+==2185==    still reachable: 0 bytes in 0 blocks
+==2185==         suppressed: 0 bytes in 0 blocks
+==2185== Rerun with --leak-check=full to see details of leaked memory
+==2185== 
+==2185== For lists of detected and suppressed errors, rerun with: -s
+==2185== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/hello.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/hello.nn"])
-==19735== Memcheck, a memory error detector
-==19735== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19735== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19735== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/hello.nn
-==19735== 
+==2186== Memcheck, a memory error detector
+==2186== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2186== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2186== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/hello.nn
+==2186== 
 arg="/mnt/c/cloud/local/dev/langs/neon/hello.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/hello.nn
 hello world!
-1==19735== 
-==19735== HEAP SUMMARY:
-==19735==     in use at exit: 0 bytes in 0 blocks
-==19735==   total heap usage: 1,407 allocs, 1,407 frees, 294,464 bytes allocated
-==19735== 
-==19735== All heap blocks were freed -- no leaks are possible
-==19735== 
-==19735== For lists of detected and suppressed errors, rerun with: -s
-==19735== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+1==2186== 
+==2186== HEAP SUMMARY:
+==2186==     in use at exit: 120 bytes in 1 blocks
+==2186==   total heap usage: 1,416 allocs, 1,415 frees, 294,530 bytes allocated
+==2186== 
+==2186== LEAK SUMMARY:
+==2186==    definitely lost: 120 bytes in 1 blocks
+==2186==    indirectly lost: 0 bytes in 0 blocks
+==2186==      possibly lost: 0 bytes in 0 blocks
+==2186==    still reachable: 0 bytes in 0 blocks
+==2186==         suppressed: 0 bytes in 0 blocks
+==2186== Rerun with --leak-check=full to see details of leaked memory
+==2186== 
+==2186== For lists of detected and suppressed errors, rerun with: -s
+==2186== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/io.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/io.nn"])
-==19736== Memcheck, a memory error detector
-==19736== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19736== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19736== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/io.nn
-==19736== 
+==2187== Memcheck, a memory error detector
+==2187== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2187== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2187== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/io.nn
+==2187== 
 arg="/mnt/c/cloud/local/dev/langs/neon/io.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/io.nn
 raw: 
 INCFLAGS = -I. -Ithirdparty
 
-CXX = g++
+CXX = g++ -std=c++20
 #WARNFLAGS_OPTIONAL = -Wno-unused-parameter
 WARNFLAGS_NEEDED = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(WARNFLAGS_OPTIONAL)
 CCCMD = $(CXX) $(WARNFLAGS_NEEDED)
@@ -521,42 +629,54 @@ rebuild: clean cleandep $(target)
 sanity:
 	./run sanity.msl
 
-==19736== 
-==19736== HEAP SUMMARY:
-==19736==     in use at exit: 0 bytes in 0 blocks
-==19736==   total heap usage: 1,444 allocs, 1,444 frees, 303,654 bytes allocated
-==19736== 
-==19736== All heap blocks were freed -- no leaks are possible
-==19736== 
-==19736== For lists of detected and suppressed errors, rerun with: -s
-==19736== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2187== 
+==2187== HEAP SUMMARY:
+==2187==     in use at exit: 120 bytes in 1 blocks
+==2187==   total heap usage: 1,453 allocs, 1,452 frees, 303,731 bytes allocated
+==2187== 
+==2187== LEAK SUMMARY:
+==2187==    definitely lost: 120 bytes in 1 blocks
+==2187==    indirectly lost: 0 bytes in 0 blocks
+==2187==      possibly lost: 0 bytes in 0 blocks
+==2187==    still reachable: 0 bytes in 0 blocks
+==2187==         suppressed: 0 bytes in 0 blocks
+==2187== Rerun with --leak-check=full to see details of leaked memory
+==2187== 
+==2187== For lists of detected and suppressed errors, rerun with: -s
+==2187== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/iter.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/iter.nn"])
-==19737== Memcheck, a memory error detector
-==19737== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19737== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19737== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/iter.nn
-==19737== 
+==2188== Memcheck, a memory error detector
+==2188== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2188== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2188== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/iter.nn
+==2188== 
 arg="/mnt/c/cloud/local/dev/langs/neon/iter.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/iter.nn
 k=foo, v=bar
 k=red, v=color
-==19737== 
-==19737== HEAP SUMMARY:
-==19737==     in use at exit: 0 bytes in 0 blocks
-==19737==   total heap usage: 1,440 allocs, 1,440 frees, 296,959 bytes allocated
-==19737== 
-==19737== All heap blocks were freed -- no leaks are possible
-==19737== 
-==19737== For lists of detected and suppressed errors, rerun with: -s
-==19737== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2188== 
+==2188== HEAP SUMMARY:
+==2188==     in use at exit: 120 bytes in 1 blocks
+==2188==   total heap usage: 1,449 allocs, 1,448 frees, 297,017 bytes allocated
+==2188== 
+==2188== LEAK SUMMARY:
+==2188==    definitely lost: 120 bytes in 1 blocks
+==2188==    indirectly lost: 0 bytes in 0 blocks
+==2188==      possibly lost: 0 bytes in 0 blocks
+==2188==    still reachable: 0 bytes in 0 blocks
+==2188==         suppressed: 0 bytes in 0 blocks
+==2188== Rerun with --leak-check=full to see details of leaked memory
+==2188== 
+==2188== For lists of detected and suppressed errors, rerun with: -s
+==2188== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/json.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/json.nn"])
-==19738== Memcheck, a memory error detector
-==19738== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19738== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19738== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/json.nn
-==19738== 
+==2189== Memcheck, a memory error detector
+==2189== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2189== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2189== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/json.nn
+==2189== 
 arg="/mnt/c/cloud/local/dev/langs/neon/json.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/json.nn
 ---source=<<<[1, 2, 3, {"name": "john doe", "flags": [4, 5, 6]}]>>>
@@ -573,40 +693,52 @@ parseNumber: str="5"
 c = 6, pos=7
 parseNumber: str="6"
 [1, 2, 3, {"name": "john doe", "flags": [4, 5, 6]}]
-==19738== 
-==19738== HEAP SUMMARY:
-==19738==     in use at exit: 0 bytes in 0 blocks
-==19738==   total heap usage: 2,075 allocs, 2,075 frees, 369,742 bytes allocated
-==19738== 
-==19738== All heap blocks were freed -- no leaks are possible
-==19738== 
-==19738== For lists of detected and suppressed errors, rerun with: -s
-==19738== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2189== 
+==2189== HEAP SUMMARY:
+==2189==     in use at exit: 120 bytes in 1 blocks
+==2189==   total heap usage: 2,084 allocs, 2,083 frees, 369,624 bytes allocated
+==2189== 
+==2189== LEAK SUMMARY:
+==2189==    definitely lost: 120 bytes in 1 blocks
+==2189==    indirectly lost: 0 bytes in 0 blocks
+==2189==      possibly lost: 0 bytes in 0 blocks
+==2189==    still reachable: 0 bytes in 0 blocks
+==2189==         suppressed: 0 bytes in 0 blocks
+==2189== Rerun with --leak-check=full to see details of leaked memory
+==2189== 
+==2189== For lists of detected and suppressed errors, rerun with: -s
+==2189== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/lex.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/lex.nn"])
-==19739== Memcheck, a memory error detector
-==19739== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19739== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19739== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/lex.nn
-==19739== 
+==2190== Memcheck, a memory error detector
+==2190== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2190== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2190== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/lex.nn
+==2190== 
 arg="/mnt/c/cloud/local/dev/langs/neon/lex.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/lex.nn
-==19739== 
-==19739== HEAP SUMMARY:
-==19739==     in use at exit: 0 bytes in 0 blocks
-==19739==   total heap usage: 1,426 allocs, 1,426 frees, 292,345 bytes allocated
-==19739== 
-==19739== All heap blocks were freed -- no leaks are possible
-==19739== 
-==19739== For lists of detected and suppressed errors, rerun with: -s
-==19739== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2190== 
+==2190== HEAP SUMMARY:
+==2190==     in use at exit: 120 bytes in 1 blocks
+==2190==   total heap usage: 1,435 allocs, 1,434 frees, 292,411 bytes allocated
+==2190== 
+==2190== LEAK SUMMARY:
+==2190==    definitely lost: 120 bytes in 1 blocks
+==2190==    indirectly lost: 0 bytes in 0 blocks
+==2190==      possibly lost: 0 bytes in 0 blocks
+==2190==    still reachable: 0 bytes in 0 blocks
+==2190==         suppressed: 0 bytes in 0 blocks
+==2190== Rerun with --leak-check=full to see details of leaked memory
+==2190== 
+==2190== For lists of detected and suppressed errors, rerun with: -s
+==2190== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mandel1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mandel1.nn"])
-==19740== Memcheck, a memory error detector
-==19740== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19740== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19740== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandel1.nn
-==19740== 
+==2191== Memcheck, a memory error detector
+==2191== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2191== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2191== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandel1.nn
+==2191== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mandel1.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandel1.nn
 -----------------------***************************************************************************-----
@@ -649,22 +781,28 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandel1.nn
 ----------------***************************************************************************************
 ------------------*************************************************************************************
 --------------------*********************************************************************************--
-==19740== 
-==19740== HEAP SUMMARY:
-==19740==     in use at exit: 0 bytes in 0 blocks
-==19740==   total heap usage: 1,477 allocs, 1,477 frees, 309,314 bytes allocated
-==19740== 
-==19740== All heap blocks were freed -- no leaks are possible
-==19740== 
-==19740== For lists of detected and suppressed errors, rerun with: -s
-==19740== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2191== 
+==2191== HEAP SUMMARY:
+==2191==     in use at exit: 120 bytes in 1 blocks
+==2191==   total heap usage: 1,486 allocs, 1,485 frees, 309,380 bytes allocated
+==2191== 
+==2191== LEAK SUMMARY:
+==2191==    definitely lost: 120 bytes in 1 blocks
+==2191==    indirectly lost: 0 bytes in 0 blocks
+==2191==      possibly lost: 0 bytes in 0 blocks
+==2191==    still reachable: 0 bytes in 0 blocks
+==2191==         suppressed: 0 bytes in 0 blocks
+==2191== Rerun with --leak-check=full to see details of leaked memory
+==2191== 
+==2191== For lists of detected and suppressed errors, rerun with: -s
+==2191== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mandel2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mandel2.nn"])
-==19741== Memcheck, a memory error detector
-==19741== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19741== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19741== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandel2.nn
-==19741== 
+==2192== Memcheck, a memory error detector
+==2192== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2192== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2192== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandel2.nn
+==2192== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mandel2.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandel2.nn
 ---------------------------------*** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -704,22 +842,28 @@ oldcap=576 newsz=1728
 ------------------------------------####--------------------
 --------------------------------------#---------------------
 ------------------------------------------------------------
-==19741== 
-==19741== HEAP SUMMARY:
-==19741==     in use at exit: 0 bytes in 0 blocks
-==19741==   total heap usage: 1,563 allocs, 1,563 frees, 394,426 bytes allocated
-==19741== 
-==19741== All heap blocks were freed -- no leaks are possible
-==19741== 
-==19741== For lists of detected and suppressed errors, rerun with: -s
-==19741== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2192== 
+==2192== HEAP SUMMARY:
+==2192==     in use at exit: 120 bytes in 1 blocks
+==2192==   total heap usage: 1,572 allocs, 1,571 frees, 394,364 bytes allocated
+==2192== 
+==2192== LEAK SUMMARY:
+==2192==    definitely lost: 120 bytes in 1 blocks
+==2192==    indirectly lost: 0 bytes in 0 blocks
+==2192==      possibly lost: 0 bytes in 0 blocks
+==2192==    still reachable: 0 bytes in 0 blocks
+==2192==         suppressed: 0 bytes in 0 blocks
+==2192== Rerun with --leak-check=full to see details of leaked memory
+==2192== 
+==2192== For lists of detected and suppressed errors, rerun with: -s
+==2192== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mandelawk.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mandelawk.nn"])
-==19742== Memcheck, a memory error detector
-==19742== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19742== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19742== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelawk.nn
-==19742== 
+==2193== Memcheck, a memory error detector
+==2193== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2193== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2193== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelawk.nn
+==2193== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mandelawk.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandelawk.nn
 >>>>>>=====<<<<<<<<<<<<<<<;;;;;;:::96032:;;;;<<<<==========
@@ -743,22 +887,28 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandelawk.nn
 >>>==<<<<<<<<<<<<<<<;;;;;;:98888764     5789999:;;<<<<<====
 >>>>===<<<<<<<<<<<<<<<;;;;;;;::9974    (.9::::;;<<<<<======
 >>>>>===<<<<<<<<<<<<<<<<;;;;;;;:::873*079::;;;;<<<<<=======
-==19742== 
-==19742== HEAP SUMMARY:
-==19742==     in use at exit: 0 bytes in 0 blocks
-==19742==   total heap usage: 1,481 allocs, 1,481 frees, 311,813 bytes allocated
-==19742== 
-==19742== All heap blocks were freed -- no leaks are possible
-==19742== 
-==19742== For lists of detected and suppressed errors, rerun with: -s
-==19742== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2193== 
+==2193== HEAP SUMMARY:
+==2193==     in use at exit: 120 bytes in 1 blocks
+==2193==   total heap usage: 1,490 allocs, 1,489 frees, 311,879 bytes allocated
+==2193== 
+==2193== LEAK SUMMARY:
+==2193==    definitely lost: 120 bytes in 1 blocks
+==2193==    indirectly lost: 0 bytes in 0 blocks
+==2193==      possibly lost: 0 bytes in 0 blocks
+==2193==    still reachable: 0 bytes in 0 blocks
+==2193==         suppressed: 0 bytes in 0 blocks
+==2193== Rerun with --leak-check=full to see details of leaked memory
+==2193== 
+==2193== For lists of detected and suppressed errors, rerun with: -s
+==2193== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn"])
-==19743== Memcheck, a memory error detector
-==19743== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19743== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19743== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn
-==19743== 
+==2194== Memcheck, a memory error detector
+==2194== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2194== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2194== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn
+==2194== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn
 !!!!!!!!!!!!!!!"""""""""""""################################""""""""""""""""""""
@@ -786,22 +936,28 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandelbroken.nn
 !!!!!!!!!!!"""""""""""""""""""""""""""""""""""""""""""""""""##############""""""
 !!!!!!!!!!!!!#""""""""""""""""""""""""""""""""""""""""""""""#########"""""""""""
 !!!!!!!!!!!!!!!"""""""""""""""""""""""""""""""""""""""""""""####""""""""""""""""
-==19743== 
-==19743== HEAP SUMMARY:
-==19743==     in use at exit: 0 bytes in 0 blocks
-==19743==   total heap usage: 1,454 allocs, 1,454 frees, 307,039 bytes allocated
-==19743== 
-==19743== All heap blocks were freed -- no leaks are possible
-==19743== 
-==19743== For lists of detected and suppressed errors, rerun with: -s
-==19743== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2194== 
+==2194== HEAP SUMMARY:
+==2194==     in use at exit: 120 bytes in 1 blocks
+==2194==   total heap usage: 1,463 allocs, 1,462 frees, 307,105 bytes allocated
+==2194== 
+==2194== LEAK SUMMARY:
+==2194==    definitely lost: 120 bytes in 1 blocks
+==2194==    indirectly lost: 0 bytes in 0 blocks
+==2194==      possibly lost: 0 bytes in 0 blocks
+==2194==    still reachable: 0 bytes in 0 blocks
+==2194==         suppressed: 0 bytes in 0 blocks
+==2194== Rerun with --leak-check=full to see details of leaked memory
+==2194== 
+==2194== For lists of detected and suppressed errors, rerun with: -s
+==2194== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn"])
-==19744== Memcheck, a memory error detector
-==19744== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19744== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19744== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn
-==19744== 
+==2195== Memcheck, a memory error detector
+==2195== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2195== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2195== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn
+==2195== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mandelcolor.nn
 lines=39, cols=85.80000000000001
@@ -844,22 +1000,28 @@ lines=39, cols=85.80000000000001
 [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
 [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
 [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
-==19744== 
-==19744== HEAP SUMMARY:
-==19744==     in use at exit: 0 bytes in 0 blocks
-==19744==   total heap usage: 1,503 allocs, 1,503 frees, 309,740 bytes allocated
-==19744== 
-==19744== All heap blocks were freed -- no leaks are possible
-==19744== 
-==19744== For lists of detected and suppressed errors, rerun with: -s
-==19744== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2195== 
+==2195== HEAP SUMMARY:
+==2195==     in use at exit: 120 bytes in 1 blocks
+==2195==   total heap usage: 1,512 allocs, 1,511 frees, 309,742 bytes allocated
+==2195== 
+==2195== LEAK SUMMARY:
+==2195==    definitely lost: 120 bytes in 1 blocks
+==2195==    indirectly lost: 0 bytes in 0 blocks
+==2195==      possibly lost: 0 bytes in 0 blocks
+==2195==    still reachable: 0 bytes in 0 blocks
+==2195==         suppressed: 0 bytes in 0 blocks
+==2195== Rerun with --leak-check=full to see details of leaked memory
+==2195== 
+==2195== For lists of detected and suppressed errors, rerun with: -s
+==2195== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/map.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/map.nn"])
-==19745== Memcheck, a memory error detector
-==19745== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19745== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19745== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/map.nn
-==19745== 
+==2196== Memcheck, a memory error detector
+==2196== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2196== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2196== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/map.nn
+==2196== 
 arg="/mnt/c/cloud/local/dev/langs/neon/map.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/map.nn
 before: a=[22, 33, 44]
@@ -872,43 +1034,55 @@ args=[44, 1]
 ******continuing******
 after: na=[23, 34, 45], a=[22, 33, 44]
 ******end of script********
-==19745== 
-==19745== HEAP SUMMARY:
-==19745==     in use at exit: 0 bytes in 0 blocks
-==19745==   total heap usage: 1,498 allocs, 1,498 frees, 301,595 bytes allocated
-==19745== 
-==19745== All heap blocks were freed -- no leaks are possible
-==19745== 
-==19745== For lists of detected and suppressed errors, rerun with: -s
-==19745== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2196== 
+==2196== HEAP SUMMARY:
+==2196==     in use at exit: 120 bytes in 1 blocks
+==2196==   total heap usage: 1,505 allocs, 1,504 frees, 301,509 bytes allocated
+==2196== 
+==2196== LEAK SUMMARY:
+==2196==    definitely lost: 120 bytes in 1 blocks
+==2196==    indirectly lost: 0 bytes in 0 blocks
+==2196==      possibly lost: 0 bytes in 0 blocks
+==2196==    still reachable: 0 bytes in 0 blocks
+==2196==         suppressed: 0 bytes in 0 blocks
+==2196== Rerun with --leak-check=full to see details of leaked memory
+==2196== 
+==2196== For lists of detected and suppressed errors, rerun with: -s
+==2196== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/map2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/map2.nn"])
-==19746== Memcheck, a memory error detector
-==19746== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19746== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19746== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/map2.nn
-==19746== 
+==2197== Memcheck, a memory error detector
+==2197== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2197== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2197== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/map2.nn
+==2197== 
 arg="/mnt/c/cloud/local/dev/langs/neon/map2.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/map2.nn
 before: [44, 55, 66, 77]
 after: [268, 279, 290, 301]
 --- all done ----
-==19746== 
-==19746== HEAP SUMMARY:
-==19746==     in use at exit: 0 bytes in 0 blocks
-==19746==   total heap usage: 1,559 allocs, 1,559 frees, 304,339 bytes allocated
-==19746== 
-==19746== All heap blocks were freed -- no leaks are possible
-==19746== 
-==19746== For lists of detected and suppressed errors, rerun with: -s
-==19746== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2197== 
+==2197== HEAP SUMMARY:
+==2197==     in use at exit: 120 bytes in 1 blocks
+==2197==   total heap usage: 1,548 allocs, 1,547 frees, 303,405 bytes allocated
+==2197== 
+==2197== LEAK SUMMARY:
+==2197==    definitely lost: 120 bytes in 1 blocks
+==2197==    indirectly lost: 0 bytes in 0 blocks
+==2197==      possibly lost: 0 bytes in 0 blocks
+==2197==    still reachable: 0 bytes in 0 blocks
+==2197==         suppressed: 0 bytes in 0 blocks
+==2197== Rerun with --leak-check=full to see details of leaked memory
+==2197== 
+==2197== For lists of detected and suppressed errors, rerun with: -s
+==2197== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/md5.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/md5.nn"])
-==19747== Memcheck, a memory error detector
-==19747== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19747== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19747== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/md5.nn
-==19747== 
+==2198== Memcheck, a memory error detector
+==2198== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2198== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2198== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/md5.nn
+==2198== 
 arg="/mnt/c/cloud/local/dev/langs/neon/md5.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/md5.nn
 FAIL: "message digest" => 0000000000000000
@@ -918,22 +1092,28 @@ FAIL: "abc" => 0000000000000000
 FAIL: "abcdefghijklmnopqrstuvwxyz" => 0000000000000000
 FAIL: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789" => 0000000000000000
 FAIL: "12345678901234567890123456789012345678901234567890123456789012345678901234567890" => 0000000000000000
-==19747== 
-==19747== HEAP SUMMARY:
-==19747==     in use at exit: 0 bytes in 0 blocks
-==19747==   total heap usage: 2,465 allocs, 2,465 frees, 462,492 bytes allocated
-==19747== 
-==19747== All heap blocks were freed -- no leaks are possible
-==19747== 
-==19747== For lists of detected and suppressed errors, rerun with: -s
-==19747== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2198== 
+==2198== HEAP SUMMARY:
+==2198==     in use at exit: 120 bytes in 1 blocks
+==2198==   total heap usage: 2,474 allocs, 2,473 frees, 462,158 bytes allocated
+==2198== 
+==2198== LEAK SUMMARY:
+==2198==    definitely lost: 120 bytes in 1 blocks
+==2198==    indirectly lost: 0 bytes in 0 blocks
+==2198==      possibly lost: 0 bytes in 0 blocks
+==2198==    still reachable: 0 bytes in 0 blocks
+==2198==         suppressed: 0 bytes in 0 blocks
+==2198== Rerun with --leak-check=full to see details of leaked memory
+==2198== 
+==2198== For lists of detected and suppressed errors, rerun with: -s
+==2198== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mob1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mob1.nn"])
-==19748== Memcheck, a memory error detector
-==19748== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19748== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19748== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob1.nn
-==19748== 
+==2199== Memcheck, a memory error detector
+==2199== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2199== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2199== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob1.nn
+==2199== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mob1.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mob1.nn
 0 -> 1
@@ -959,22 +1139,28 @@ oldcap=1728 newsz=5184
 -30
 10 -> *** resizing frames ***
 -67
-==19748== 
-==19748== HEAP SUMMARY:
-==19748==     in use at exit: 0 bytes in 0 blocks
-==19748==   total heap usage: 12,646 allocs, 12,646 frees, 1,892,024 bytes allocated
-==19748== 
-==19748== All heap blocks were freed -- no leaks are possible
-==19748== 
-==19748== For lists of detected and suppressed errors, rerun with: -s
-==19748== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2199== 
+==2199== HEAP SUMMARY:
+==2199==     in use at exit: 120 bytes in 1 blocks
+==2199==   total heap usage: 12,655 allocs, 12,654 frees, 1,892,010 bytes allocated
+==2199== 
+==2199== LEAK SUMMARY:
+==2199==    definitely lost: 120 bytes in 1 blocks
+==2199==    indirectly lost: 0 bytes in 0 blocks
+==2199==      possibly lost: 0 bytes in 0 blocks
+==2199==    still reachable: 0 bytes in 0 blocks
+==2199==         suppressed: 0 bytes in 0 blocks
+==2199== Rerun with --leak-check=full to see details of leaked memory
+==2199== 
+==2199== For lists of detected and suppressed errors, rerun with: -s
+==2199== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mob2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mob2.nn"])
-==19749== Memcheck, a memory error detector
-==19749== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19749== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19749== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob2.nn
-==19749== 
+==2200== Memcheck, a memory error detector
+==2200== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2200== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2200== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob2.nn
+==2200== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mob2.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mob2.nn
 *** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -993,22 +1179,28 @@ oldcap=1728 newsz=5184
 *** resizing stack: needed 10368 (5184), from 5184 to 15552, allocating 248848 ***
 oldcap=5184 newsz=15552
 -299
-==19749== 
-==19749== HEAP SUMMARY:
-==19749==     in use at exit: 0 bytes in 0 blocks
-==19749==   total heap usage: 13,561 allocs, 13,561 frees, 2,787,290 bytes allocated
-==19749== 
-==19749== All heap blocks were freed -- no leaks are possible
-==19749== 
-==19749== For lists of detected and suppressed errors, rerun with: -s
-==19749== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2200== 
+==2200== HEAP SUMMARY:
+==2200==     in use at exit: 120 bytes in 1 blocks
+==2200==   total heap usage: 13,570 allocs, 13,569 frees, 2,787,244 bytes allocated
+==2200== 
+==2200== LEAK SUMMARY:
+==2200==    definitely lost: 120 bytes in 1 blocks
+==2200==    indirectly lost: 0 bytes in 0 blocks
+==2200==      possibly lost: 0 bytes in 0 blocks
+==2200==    still reachable: 0 bytes in 0 blocks
+==2200==         suppressed: 0 bytes in 0 blocks
+==2200== Rerun with --leak-check=full to see details of leaked memory
+==2200== 
+==2200== For lists of detected and suppressed errors, rerun with: -s
+==2200== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/mob3.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/mob3.nn"])
-==19750== Memcheck, a memory error detector
-==19750== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19750== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19750== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob3.nn
-==19750== 
+==2201== Memcheck, a memory error detector
+==2201== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2201== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2201== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/mob3.nn
+==2201== 
 arg="/mnt/c/cloud/local/dev/langs/neon/mob3.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/mob3.nn
 *** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -1024,82 +1216,106 @@ oldcap=576 newsz=1728
 oldcap=1728 newsz=5184
 *** resizing frames ***
 -67
-==19750== 
-==19750== HEAP SUMMARY:
-==19750==     in use at exit: 0 bytes in 0 blocks
-==19750==   total heap usage: 7,317 allocs, 7,317 frees, 1,459,021 bytes allocated
-==19750== 
-==19750== All heap blocks were freed -- no leaks are possible
-==19750== 
-==19750== For lists of detected and suppressed errors, rerun with: -s
-==19750== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2201== 
+==2201== HEAP SUMMARY:
+==2201==     in use at exit: 120 bytes in 1 blocks
+==2201==   total heap usage: 7,326 allocs, 7,325 frees, 1,458,943 bytes allocated
+==2201== 
+==2201== LEAK SUMMARY:
+==2201==    definitely lost: 120 bytes in 1 blocks
+==2201==    indirectly lost: 0 bytes in 0 blocks
+==2201==      possibly lost: 0 bytes in 0 blocks
+==2201==    still reachable: 0 bytes in 0 blocks
+==2201==         suppressed: 0 bytes in 0 blocks
+==2201== Rerun with --leak-check=full to see details of leaked memory
+==2201== 
+==2201== For lists of detected and suppressed errors, rerun with: -s
+==2201== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/nestfunc.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/nestfunc.nn"])
-==19751== Memcheck, a memory error detector
-==19751== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19751== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19751== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/nestfunc.nn
-==19751== 
+==2202== Memcheck, a memory error detector
+==2202== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2202== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2202== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/nestfunc.nn
+==2202== 
 arg="/mnt/c/cloud/local/dev/langs/neon/nestfunc.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/nestfunc.nn
 a = barfoo
-==19751== 
-==19751== HEAP SUMMARY:
-==19751==     in use at exit: 0 bytes in 0 blocks
-==19751==   total heap usage: 1,465 allocs, 1,465 frees, 296,591 bytes allocated
-==19751== 
-==19751== All heap blocks were freed -- no leaks are possible
-==19751== 
-==19751== For lists of detected and suppressed errors, rerun with: -s
-==19751== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2202== 
+==2202== HEAP SUMMARY:
+==2202==     in use at exit: 120 bytes in 1 blocks
+==2202==   total heap usage: 1,474 allocs, 1,473 frees, 296,609 bytes allocated
+==2202== 
+==2202== LEAK SUMMARY:
+==2202==    definitely lost: 120 bytes in 1 blocks
+==2202==    indirectly lost: 0 bytes in 0 blocks
+==2202==      possibly lost: 0 bytes in 0 blocks
+==2202==    still reachable: 0 bytes in 0 blocks
+==2202==         suppressed: 0 bytes in 0 blocks
+==2202== Rerun with --leak-check=full to see details of leaked memory
+==2202== 
+==2202== For lists of detected and suppressed errors, rerun with: -s
+==2202== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/person.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/person.nn"])
-==19752== Memcheck, a memory error detector
-==19752== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19752== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19752== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/person.nn
-==19752== 
+==2203== Memcheck, a memory error detector
+==2203== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2203== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2203== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/person.nn
+==2203== 
 arg="/mnt/c/cloud/local/dev/langs/neon/person.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/person.nn
 Person jim, age 65, lives at new york, has 1 pets
-==19752== 
-==19752== HEAP SUMMARY:
-==19752==     in use at exit: 0 bytes in 0 blocks
-==19752==   total heap usage: 1,718 allocs, 1,718 frees, 321,157 bytes allocated
-==19752== 
-==19752== All heap blocks were freed -- no leaks are possible
-==19752== 
-==19752== For lists of detected and suppressed errors, rerun with: -s
-==19752== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2203== 
+==2203== HEAP SUMMARY:
+==2203==     in use at exit: 120 bytes in 1 blocks
+==2203==   total heap usage: 1,727 allocs, 1,726 frees, 321,039 bytes allocated
+==2203== 
+==2203== LEAK SUMMARY:
+==2203==    definitely lost: 120 bytes in 1 blocks
+==2203==    indirectly lost: 0 bytes in 0 blocks
+==2203==      possibly lost: 0 bytes in 0 blocks
+==2203==    still reachable: 0 bytes in 0 blocks
+==2203==         suppressed: 0 bytes in 0 blocks
+==2203== Rerun with --leak-check=full to see details of leaked memory
+==2203== 
+==2203== For lists of detected and suppressed errors, rerun with: -s
+==2203== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/rtassign.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/rtassign.nn"])
-==19753== Memcheck, a memory error detector
-==19753== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19753== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19753== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/rtassign.nn
-==19753== 
+==2204== Memcheck, a memory error detector
+==2204== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2204== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2204== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/rtassign.nn
+==2204== 
 arg="/mnt/c/cloud/local/dev/langs/neon/rtassign.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/rtassign.nn
 inside camelCase: this=pork
 Pork
 inside funkyCase: this=grey
 funky!
-==19753== 
-==19753== HEAP SUMMARY:
-==19753==     in use at exit: 0 bytes in 0 blocks
-==19753==   total heap usage: 1,479 allocs, 1,479 frees, 298,356 bytes allocated
-==19753== 
-==19753== All heap blocks were freed -- no leaks are possible
-==19753== 
-==19753== For lists of detected and suppressed errors, rerun with: -s
-==19753== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2204== 
+==2204== HEAP SUMMARY:
+==2204==     in use at exit: 120 bytes in 1 blocks
+==2204==   total heap usage: 1,488 allocs, 1,487 frees, 298,390 bytes allocated
+==2204== 
+==2204== LEAK SUMMARY:
+==2204==    definitely lost: 120 bytes in 1 blocks
+==2204==    indirectly lost: 0 bytes in 0 blocks
+==2204==      possibly lost: 0 bytes in 0 blocks
+==2204==    still reachable: 0 bytes in 0 blocks
+==2204==         suppressed: 0 bytes in 0 blocks
+==2204== Rerun with --leak-check=full to see details of leaked memory
+==2204== 
+==2204== For lists of detected and suppressed errors, rerun with: -s
+==2204== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/sanity.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/sanity.nn"])
-==19754== Memcheck, a memory error detector
-==19754== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19754== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19754== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sanity.nn
-==19754== 
+==2205== Memcheck, a memory error detector
+==2205== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2205== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2205== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sanity.nn
+==2205== 
 arg="/mnt/c/cloud/local/dev/langs/neon/sanity.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/sanity.nn
 testing array creation ... 
@@ -1115,61 +1331,79 @@ testing array.map: ok!
 testing exceptions ... 
 testing exceptions: ok!
 all good
-==19754== 
-==19754== HEAP SUMMARY:
-==19754==     in use at exit: 0 bytes in 0 blocks
-==19754==   total heap usage: 1,861 allocs, 1,861 frees, 325,521 bytes allocated
-==19754== 
-==19754== All heap blocks were freed -- no leaks are possible
-==19754== 
-==19754== For lists of detected and suppressed errors, rerun with: -s
-==19754== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2205== 
+==2205== HEAP SUMMARY:
+==2205==     in use at exit: 120 bytes in 1 blocks
+==2205==   total heap usage: 1,868 allocs, 1,867 frees, 325,315 bytes allocated
+==2205== 
+==2205== LEAK SUMMARY:
+==2205==    definitely lost: 120 bytes in 1 blocks
+==2205==    indirectly lost: 0 bytes in 0 blocks
+==2205==      possibly lost: 0 bytes in 0 blocks
+==2205==    still reachable: 0 bytes in 0 blocks
+==2205==         suppressed: 0 bytes in 0 blocks
+==2205== Rerun with --leak-check=full to see details of leaked memory
+==2205== 
+==2205== For lists of detected and suppressed errors, rerun with: -s
+==2205== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/searchtree.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/searchtree.nn"])
-==19755== Memcheck, a memory error detector
-==19755== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19755== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19755== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/searchtree.nn
-==19755== 
+==2206== Memcheck, a memory error detector
+==2206== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2206== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2206== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/searchtree.nn
+==2206== 
 arg="/mnt/c/cloud/local/dev/langs/neon/searchtree.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/searchtree.nn
 true
 true
-==19755== 
-==19755== HEAP SUMMARY:
-==19755==     in use at exit: 0 bytes in 0 blocks
-==19755==   total heap usage: 1,542 allocs, 1,542 frees, 319,378 bytes allocated
-==19755== 
-==19755== All heap blocks were freed -- no leaks are possible
-==19755== 
-==19755== For lists of detected and suppressed errors, rerun with: -s
-==19755== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2206== 
+==2206== HEAP SUMMARY:
+==2206==     in use at exit: 120 bytes in 1 blocks
+==2206==   total heap usage: 1,551 allocs, 1,550 frees, 319,364 bytes allocated
+==2206== 
+==2206== LEAK SUMMARY:
+==2206==    definitely lost: 120 bytes in 1 blocks
+==2206==    indirectly lost: 0 bytes in 0 blocks
+==2206==      possibly lost: 0 bytes in 0 blocks
+==2206==    still reachable: 0 bytes in 0 blocks
+==2206==         suppressed: 0 bytes in 0 blocks
+==2206== Rerun with --leak-check=full to see details of leaked memory
+==2206== 
+==2206== For lists of detected and suppressed errors, rerun with: -s
+==2206== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/self.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/self.nn"])
-==19756== Memcheck, a memory error detector
-==19756== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19756== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19756== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/self.nn
-==19756== 
+==2207== Memcheck, a memory error detector
+==2207== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2207== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2207== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/self.nn
+==2207== 
 arg="/mnt/c/cloud/local/dev/langs/neon/self.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/self.nn
 this.things=42
-==19756== 
-==19756== HEAP SUMMARY:
-==19756==     in use at exit: 0 bytes in 0 blocks
-==19756==   total heap usage: 1,437 allocs, 1,437 frees, 296,444 bytes allocated
-==19756== 
-==19756== All heap blocks were freed -- no leaks are possible
-==19756== 
-==19756== For lists of detected and suppressed errors, rerun with: -s
-==19756== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2207== 
+==2207== HEAP SUMMARY:
+==2207==     in use at exit: 120 bytes in 1 blocks
+==2207==   total heap usage: 1,446 allocs, 1,445 frees, 296,486 bytes allocated
+==2207== 
+==2207== LEAK SUMMARY:
+==2207==    definitely lost: 120 bytes in 1 blocks
+==2207==    indirectly lost: 0 bytes in 0 blocks
+==2207==      possibly lost: 0 bytes in 0 blocks
+==2207==    still reachable: 0 bytes in 0 blocks
+==2207==         suppressed: 0 bytes in 0 blocks
+==2207== Rerun with --leak-check=full to see details of leaked memory
+==2207== 
+==2207== For lists of detected and suppressed errors, rerun with: -s
+==2207== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/sha1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/sha1.nn"])
-==19757== Memcheck, a memory error detector
-==19757== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19757== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19757== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sha1.nn
-==19757== 
+==2208== Memcheck, a memory error detector
+==2208== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2208== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2208== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sha1.nn
+==2208== 
 arg="/mnt/c/cloud/local/dev/langs/neon/sha1.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/sha1.nn
 OK  : "foo" => 0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33
@@ -1177,22 +1411,28 @@ OK  : "bar" => 62cdb7020ff920e5aa642c3d4066950dd1f01f4d
 OK  : "hello world" => 2aae6c35c94fcfb415dbe95f408b9ce91ee846ed
 OK  : "abcdx" => a96e144dfdc6380c8a4ae43bea1c81cb01215020
 OK  : "long text, some spaces, blah blah" => fc0aa2379ecce86eac0dc50d921ab2cef7030d12
-==19757== 
-==19757== HEAP SUMMARY:
-==19757==     in use at exit: 0 bytes in 0 blocks
-==19757==   total heap usage: 2,731 allocs, 2,731 frees, 499,497 bytes allocated
-==19757== 
-==19757== All heap blocks were freed -- no leaks are possible
-==19757== 
-==19757== For lists of detected and suppressed errors, rerun with: -s
-==19757== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2208== 
+==2208== HEAP SUMMARY:
+==2208==     in use at exit: 120 bytes in 1 blocks
+==2208==   total heap usage: 2,740 allocs, 2,739 frees, 499,235 bytes allocated
+==2208== 
+==2208== LEAK SUMMARY:
+==2208==    definitely lost: 120 bytes in 1 blocks
+==2208==    indirectly lost: 0 bytes in 0 blocks
+==2208==      possibly lost: 0 bytes in 0 blocks
+==2208==    still reachable: 0 bytes in 0 blocks
+==2208==         suppressed: 0 bytes in 0 blocks
+==2208== Rerun with --leak-check=full to see details of leaked memory
+==2208== 
+==2208== For lists of detected and suppressed errors, rerun with: -s
+==2208== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/sha256.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/sha256.nn"])
-==19758== Memcheck, a memory error detector
-==19758== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19758== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19758== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sha256.nn
-==19758== 
+==2209== Memcheck, a memory error detector
+==2209== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2209== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2209== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sha256.nn
+==2209== 
 arg="/mnt/c/cloud/local/dev/langs/neon/sha256.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/sha256.nn
 *** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -1209,22 +1449,28 @@ setting value at position 15 (array count: 16)
 FAIL: 'ecmascript' => '56764d341da6404feca289f1fb40dad1332a53e6ece49944a39565feffde804f' (expected: 5168c9577878ef31591e6d0ab9b5ef1ce607c74c57e10b9fd46be00ae75a5b3a)
 setting value at position 15 (array count: 16)
 FAIL: 'what's up doc?' => '6ef9f60ae6a353660c49760ca246c458d576b99a934e96cc5ad0e43d59c1b789' (expected: 6c4ff685d4f8bd026184371f9de4945b2767fe61842bb912cf5b015879d427f9)
-==19758== 
-==19758== HEAP SUMMARY:
-==19758==     in use at exit: 0 bytes in 0 blocks
-==19758==   total heap usage: 4,031 allocs, 4,031 frees, 566,482 bytes allocated
-==19758== 
-==19758== All heap blocks were freed -- no leaks are possible
-==19758== 
-==19758== For lists of detected and suppressed errors, rerun with: -s
-==19758== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2209== 
+==2209== HEAP SUMMARY:
+==2209==     in use at exit: 120 bytes in 1 blocks
+==2209==   total heap usage: 4,040 allocs, 4,039 frees, 566,044 bytes allocated
+==2209== 
+==2209== LEAK SUMMARY:
+==2209==    definitely lost: 120 bytes in 1 blocks
+==2209==    indirectly lost: 0 bytes in 0 blocks
+==2209==      possibly lost: 0 bytes in 0 blocks
+==2209==    still reachable: 0 bytes in 0 blocks
+==2209==         suppressed: 0 bytes in 0 blocks
+==2209== Rerun with --leak-check=full to see details of leaked memory
+==2209== 
+==2209== For lists of detected and suppressed errors, rerun with: -s
+==2209== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/sierpinski.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/sierpinski.nn"])
-==19759== Memcheck, a memory error detector
-==19759== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19759== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19759== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sierpinski.nn
-==19759== 
+==2210== Memcheck, a memory error detector
+==2210== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2210== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2210== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/sierpinski.nn
+==2210== 
 arg="/mnt/c/cloud/local/dev/langs/neon/sierpinski.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/sierpinski.nn
                                * 
@@ -1259,22 +1505,28 @@ nargv[0]=/mnt/c/cloud/local/dev/langs/neon/sierpinski.nn
   * *     * *     * *     * *     * *     * *     * *     * * 
  *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   * 
 * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
-==19759== 
-==19759== HEAP SUMMARY:
-==19759==     in use at exit: 0 bytes in 0 blocks
-==19759==   total heap usage: 1,437 allocs, 1,437 frees, 300,692 bytes allocated
-==19759== 
-==19759== All heap blocks were freed -- no leaks are possible
-==19759== 
-==19759== For lists of detected and suppressed errors, rerun with: -s
-==19759== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2210== 
+==2210== HEAP SUMMARY:
+==2210==     in use at exit: 120 bytes in 1 blocks
+==2210==   total heap usage: 1,446 allocs, 1,445 frees, 300,758 bytes allocated
+==2210== 
+==2210== LEAK SUMMARY:
+==2210==    definitely lost: 120 bytes in 1 blocks
+==2210==    indirectly lost: 0 bytes in 0 blocks
+==2210==      possibly lost: 0 bytes in 0 blocks
+==2210==    still reachable: 0 bytes in 0 blocks
+==2210==         suppressed: 0 bytes in 0 blocks
+==2210== Rerun with --leak-check=full to see details of leaked memory
+==2210== 
+==2210== For lists of detected and suppressed errors, rerun with: -s
+==2210== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/stack.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/stack.nn"])
-==19760== Memcheck, a memory error detector
-==19760== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19760== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19760== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/stack.nn
-==19760== 
+==2211== Memcheck, a memory error detector
+==2211== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2211== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2211== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/stack.nn
+==2211== 
 arg="/mnt/c/cloud/local/dev/langs/neon/stack.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/stack.nn
 *** resizing stack: needed 128 (64), from 64 to 192, allocating 3088 ***
@@ -1282,22 +1534,28 @@ oldcap=64 newsz=192
 *** resizing frames ***
 *** resizing stack: needed 384 (192), from 192 to 576, allocating 9232 ***
 oldcap=192 newsz=576
-==19760== 
-==19760== HEAP SUMMARY:
-==19760==     in use at exit: 0 bytes in 0 blocks
-==19760==   total heap usage: 1,414 allocs, 1,414 frees, 340,358 bytes allocated
-==19760== 
-==19760== All heap blocks were freed -- no leaks are possible
-==19760== 
-==19760== For lists of detected and suppressed errors, rerun with: -s
-==19760== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2211== 
+==2211== HEAP SUMMARY:
+==2211==     in use at exit: 120 bytes in 1 blocks
+==2211==   total heap usage: 1,423 allocs, 1,422 frees, 340,408 bytes allocated
+==2211== 
+==2211== LEAK SUMMARY:
+==2211==    definitely lost: 120 bytes in 1 blocks
+==2211==    indirectly lost: 0 bytes in 0 blocks
+==2211==      possibly lost: 0 bytes in 0 blocks
+==2211==    still reachable: 0 bytes in 0 blocks
+==2211==         suppressed: 0 bytes in 0 blocks
+==2211== Rerun with --leak-check=full to see details of leaked memory
+==2211== 
+==2211== For lists of detected and suppressed errors, rerun with: -s
+==2211== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/substr.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/substr.nn"])
-==19761== Memcheck, a memory error detector
-==19761== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19761== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19761== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/substr.nn
-==19761== 
+==2212== Memcheck, a memory error detector
+==2212== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2212== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2212== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/substr.nn
+==2212== 
 arg="/mnt/c/cloud/local/dev/langs/neon/substr.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/substr.nn
 OK
@@ -1308,22 +1566,28 @@ OK
 OK
 OK
 OK
-==19761== 
-==19761== HEAP SUMMARY:
-==19761==     in use at exit: 0 bytes in 0 blocks
-==19761==   total heap usage: 1,473 allocs, 1,473 frees, 302,185 bytes allocated
-==19761== 
-==19761== All heap blocks were freed -- no leaks are possible
-==19761== 
-==19761== For lists of detected and suppressed errors, rerun with: -s
-==19761== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2212== 
+==2212== HEAP SUMMARY:
+==2212==     in use at exit: 120 bytes in 1 blocks
+==2212==   total heap usage: 1,482 allocs, 1,481 frees, 302,235 bytes allocated
+==2212== 
+==2212== LEAK SUMMARY:
+==2212==    definitely lost: 120 bytes in 1 blocks
+==2212==    indirectly lost: 0 bytes in 0 blocks
+==2212==      possibly lost: 0 bytes in 0 blocks
+==2212==    still reachable: 0 bytes in 0 blocks
+==2212==         suppressed: 0 bytes in 0 blocks
+==2212== Rerun with --leak-check=full to see details of leaked memory
+==2212== 
+==2212== For lists of detected and suppressed errors, rerun with: -s
+==2212== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/template.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/template.nn"])
-==19762== Memcheck, a memory error detector
-==19762== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19762== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19762== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/template.nn
-==19762== 
+==2213== Memcheck, a memory error detector
+==2213== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2213== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2213== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/template.nn
+==2213== 
 arg="/mnt/c/cloud/local/dev/langs/neon/template.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/template.nn
 parsed: <<<return (function(response){
@@ -1344,7 +1608,7 @@ response.write("\n                        </em>\n                    </td>\n    
 response.write("\n            </tbody>\n        </ul>\n    </body>\n</html>");
 
 })>>>
-compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1) at 0x4f58370>
+compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1) at 0x4f586d0>
 
 <!DOCTYPE html>
 <html>
@@ -1411,6 +1675,17 @@ compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1
             
                 <tr>
                     <td>
+                        MOTD_SHOWN
+                    </td>
+                    <td>
+                        <em>
+                            update-motd
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
                         HOME
                     </td>
                     <td>
@@ -1459,7 +1734,7 @@ compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1
                     </td>
                     <td>
                         <em>
-                            [%F{blue}%M%f / %F{blue}%D{%A[%d]/%h/%y | %H:%M:%S}%f] (17) %F{yellow}%~%f
+                            [%F{blue}%M%f / %F{blue}%D{%A[%d]/%h/%y | %H:%M:%S}%f] (20) %F{yellow}%~%f
 %# 
                         </em>
                     </td>
@@ -1515,7 +1790,7 @@ compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1
                     </td>
                     <td>
                         <em>
-                            /run/WSL/16_interop
+                            /run/WSL/19_interop
                         </em>
                     </td>
                 </tr>
@@ -1614,7 +1889,7 @@ compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1
                     </td>
                     <td>
                         <em>
-                            730531cd-e892-4d34-b8c8-4beae2357cc0
+                            03895237-ba15-4106-8c97-5c1d4db526be
                         </em>
                     </td>
                 </tr>
@@ -1864,41 +2139,53 @@ compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/template.nn:1](1
             </tbody>
         </ul>
     </body>
-</html>==19762== 
-==19762== HEAP SUMMARY:
-==19762==     in use at exit: 0 bytes in 0 blocks
-==19762==   total heap usage: 9,959 allocs, 9,959 frees, 965,963 bytes allocated
-==19762== 
-==19762== All heap blocks were freed -- no leaks are possible
-==19762== 
-==19762== For lists of detected and suppressed errors, rerun with: -s
-==19762== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+</html>==2213== 
+==2213== HEAP SUMMARY:
+==2213==     in use at exit: 120 bytes in 1 blocks
+==2213==   total heap usage: 9,981 allocs, 9,980 frees, 964,261 bytes allocated
+==2213== 
+==2213== LEAK SUMMARY:
+==2213==    definitely lost: 120 bytes in 1 blocks
+==2213==    indirectly lost: 0 bytes in 0 blocks
+==2213==      possibly lost: 0 bytes in 0 blocks
+==2213==    still reachable: 0 bytes in 0 blocks
+==2213==         suppressed: 0 bytes in 0 blocks
+==2213== Rerun with --leak-check=full to see details of leaked memory
+==2213== 
+==2213== For lists of detected and suppressed errors, rerun with: -s
+==2213== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/tos.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/tos.nn"])
-==19763== Memcheck, a memory error detector
-==19763== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19763== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19763== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/tos.nn
-==19763== 
+==2214== Memcheck, a memory error detector
+==2214== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2214== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2214== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/tos.nn
+==2214== 
 arg="/mnt/c/cloud/local/dev/langs/neon/tos.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/tos.nn
-<instance of Foo at 0x4e330d0>
-==19763== 
-==19763== HEAP SUMMARY:
-==19763==     in use at exit: 0 bytes in 0 blocks
-==19763==   total heap usage: 1,456 allocs, 1,456 frees, 297,353 bytes allocated
-==19763== 
-==19763== All heap blocks were freed -- no leaks are possible
-==19763== 
-==19763== For lists of detected and suppressed errors, rerun with: -s
-==19763== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+<instance of Foo at 0x4e33430>
+==2214== 
+==2214== HEAP SUMMARY:
+==2214==     in use at exit: 120 bytes in 1 blocks
+==2214==   total heap usage: 1,465 allocs, 1,464 frees, 297,387 bytes allocated
+==2214== 
+==2214== LEAK SUMMARY:
+==2214==    definitely lost: 120 bytes in 1 blocks
+==2214==    indirectly lost: 0 bytes in 0 blocks
+==2214==      possibly lost: 0 bytes in 0 blocks
+==2214==    still reachable: 0 bytes in 0 blocks
+==2214==         suppressed: 0 bytes in 0 blocks
+==2214== Rerun with --leak-check=full to see details of leaked memory
+==2214== 
+==2214== For lists of detected and suppressed errors, rerun with: -s
+==2214== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/try.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/try.nn"])
-==19764== Memcheck, a memory error detector
-==19764== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19764== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19764== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/try.nn
-==19764== 
+==2215== Memcheck, a memory error detector
+==2215== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2215== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2215== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/try.nn
+==2215== 
 arg="/mnt/c/cloud/local/dev/langs/neon/try.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/try.nn
 inner: Second exception thrown
@@ -1916,22 +2203,28 @@ Final block called
 past finally: list are numerically indexed
 Error occurred, but I will still run
 all good
-==19764== 
-==19764== HEAP SUMMARY:
-==19764==     in use at exit: 0 bytes in 0 blocks
-==19764==   total heap usage: 1,563 allocs, 1,563 frees, 309,932 bytes allocated
-==19764== 
-==19764== All heap blocks were freed -- no leaks are possible
-==19764== 
-==19764== For lists of detected and suppressed errors, rerun with: -s
-==19764== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2215== 
+==2215== HEAP SUMMARY:
+==2215==     in use at exit: 120 bytes in 1 blocks
+==2215==   total heap usage: 1,572 allocs, 1,571 frees, 309,958 bytes allocated
+==2215== 
+==2215== LEAK SUMMARY:
+==2215==    definitely lost: 120 bytes in 1 blocks
+==2215==    indirectly lost: 0 bytes in 0 blocks
+==2215==      possibly lost: 0 bytes in 0 blocks
+==2215==    still reachable: 0 bytes in 0 blocks
+==2215==         suppressed: 0 bytes in 0 blocks
+==2215== Rerun with --leak-check=full to see details of leaked memory
+==2215== 
+==2215== For lists of detected and suppressed errors, rerun with: -s
+==2215== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/utf.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/utf.nn"])
-==19765== Memcheck, a memory error detector
-==19765== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19765== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19765== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/utf.nn
-==19765== 
+==2216== Memcheck, a memory error detector
+==2216== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2216== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2216== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/utf.nn
+==2216== 
 arg="/mnt/c/cloud/local/dev/langs/neon/utf.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/utf.nn
 len=8: [104, 228, 117, 223, 108, 101]: häußle:
@@ -1953,26 +2246,32 @@ len=19: [67, 104, 224, 111, 32, 116, 104, 7871, 32, 103, 105, 7899, 105, 33]: Ch
    C,h,à,o, ,t,h,ế, ,g,i,ớ,i,!
 
 all good.
-==19765== 
-==19765== HEAP SUMMARY:
-==19765==     in use at exit: 0 bytes in 0 blocks
-==19765==   total heap usage: 1,976 allocs, 1,976 frees, 318,749 bytes allocated
-==19765== 
-==19765== All heap blocks were freed -- no leaks are possible
-==19765== 
-==19765== For lists of detected and suppressed errors, rerun with: -s
-==19765== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2216== 
+==2216== HEAP SUMMARY:
+==2216==     in use at exit: 120 bytes in 1 blocks
+==2216==   total heap usage: 1,985 allocs, 1,984 frees, 318,751 bytes allocated
+==2216== 
+==2216== LEAK SUMMARY:
+==2216==    definitely lost: 120 bytes in 1 blocks
+==2216==    indirectly lost: 0 bytes in 0 blocks
+==2216==      possibly lost: 0 bytes in 0 blocks
+==2216==    still reachable: 0 bytes in 0 blocks
+==2216==         suppressed: 0 bytes in 0 blocks
+==2216== Rerun with --leak-check=full to see details of leaked memory
+==2216== 
+==2216== For lists of detected and suppressed errors, rerun with: -s
+==2216== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/web.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/web.nn"])
-==19766== Memcheck, a memory error detector
-==19766== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19766== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19766== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/web.nn
-==19766== 
+==2217== Memcheck, a memory error detector
+==2217== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2217== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2217== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/web.nn
+==2217== 
 arg="/mnt/c/cloud/local/dev/langs/neon/web.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/web.nn
 IMPORTIMPORT: name='os'
-IMPORTIMPORT: mod='0x4e2f690'
+IMPORTIMPORT: mod='0x4e2f9f0'
 Status: 200
 Content-Type: text/html
 
@@ -1982,22 +2281,28 @@ Content-Type: text/html
 <li><a href="web.cgi?f=runme.vbs">runme.vbs</a></li>
 <li><a href="web.cgi?f=twitter.php">twitter.php</a></li>
 <li><a href="web.cgi?f=facebook.java">facebook.java</a></li>
-</ul></body></html>==19766== 
-==19766== HEAP SUMMARY:
-==19766==     in use at exit: 0 bytes in 0 blocks
-==19766==   total heap usage: 2,838 allocs, 2,838 frees, 374,123 bytes allocated
-==19766== 
-==19766== All heap blocks were freed -- no leaks are possible
-==19766== 
-==19766== For lists of detected and suppressed errors, rerun with: -s
-==19766== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+</ul></body></html>==2217== 
+==2217== HEAP SUMMARY:
+==2217==     in use at exit: 120 bytes in 1 blocks
+==2217==   total heap usage: 2,847 allocs, 2,846 frees, 373,645 bytes allocated
+==2217== 
+==2217== LEAK SUMMARY:
+==2217==    definitely lost: 120 bytes in 1 blocks
+==2217==    indirectly lost: 0 bytes in 0 blocks
+==2217==      possibly lost: 0 bytes in 0 blocks
+==2217==    still reachable: 0 bytes in 0 blocks
+==2217==         suppressed: 0 bytes in 0 blocks
+==2217== Rerun with --leak-check=full to see details of leaked memory
+==2217== 
+==2217== For lists of detected and suppressed errors, rerun with: -s
+==2217== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/xmlgen.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/xmlgen.nn"])
-==19767== Memcheck, a memory error detector
-==19767== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19767== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19767== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/xmlgen.nn
-==19767== 
+==2218== Memcheck, a memory error detector
+==2218== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2218== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2218== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/xmlgen.nn
+==2218== 
 arg="/mnt/c/cloud/local/dev/langs/neon/xmlgen.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/xmlgen.nn
 obuf=["<", "html"], cnt=0
@@ -2024,31 +2329,43 @@ obuf=["<", "input", " ", "type", "=\"", "submit", "\"", " ", "value", "=\"", "Go
 </body>
 </html>
 
-==19767== 
-==19767== HEAP SUMMARY:
-==19767==     in use at exit: 0 bytes in 0 blocks
-==19767==   total heap usage: 2,027 allocs, 2,027 frees, 366,620 bytes allocated
-==19767== 
-==19767== All heap blocks were freed -- no leaks are possible
-==19767== 
-==19767== For lists of detected and suppressed errors, rerun with: -s
-==19767== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2218== 
+==2218== HEAP SUMMARY:
+==2218==     in use at exit: 120 bytes in 1 blocks
+==2218==   total heap usage: 2,036 allocs, 2,035 frees, 366,246 bytes allocated
+==2218== 
+==2218== LEAK SUMMARY:
+==2218==    definitely lost: 120 bytes in 1 blocks
+==2218==    indirectly lost: 0 bytes in 0 blocks
+==2218==      possibly lost: 0 bytes in 0 blocks
+==2218==    still reachable: 0 bytes in 0 blocks
+==2218==         suppressed: 0 bytes in 0 blocks
+==2218== Rerun with --leak-check=full to see details of leaked memory
+==2218== 
+==2218== For lists of detected and suppressed errors, rerun with: -s
+==2218== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ----------------------------
 >>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/y.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/y.nn"])
-==19768== Memcheck, a memory error detector
-==19768== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
-==19768== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
-==19768== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/y.nn
-==19768== 
+==2219== Memcheck, a memory error detector
+==2219== Copyright (C) 2002-2017, and GNU GPL'd, by Julian Seward et al.
+==2219== Using Valgrind-3.18.1 and LibVEX; rerun with -h for copyright info
+==2219== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/y.nn
+==2219== 
 arg="/mnt/c/cloud/local/dev/langs/neon/y.nn" nargc=0
 nargv[0]=/mnt/c/cloud/local/dev/langs/neon/y.nn
 5! is 120
-==19768== 
-==19768== HEAP SUMMARY:
-==19768==     in use at exit: 0 bytes in 0 blocks
-==19768==   total heap usage: 1,509 allocs, 1,509 frees, 301,678 bytes allocated
-==19768== 
-==19768== All heap blocks were freed -- no leaks are possible
-==19768== 
-==19768== For lists of detected and suppressed errors, rerun with: -s
-==19768== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2219== 
+==2219== HEAP SUMMARY:
+==2219==     in use at exit: 120 bytes in 1 blocks
+==2219==   total heap usage: 1,518 allocs, 1,517 frees, 301,664 bytes allocated
+==2219== 
+==2219== LEAK SUMMARY:
+==2219==    definitely lost: 120 bytes in 1 blocks
+==2219==    indirectly lost: 0 bytes in 0 blocks
+==2219==      possibly lost: 0 bytes in 0 blocks
+==2219==    still reachable: 0 bytes in 0 blocks
+==2219==         suppressed: 0 bytes in 0 blocks
+==2219== Rerun with --leak-check=full to see details of leaked memory
+==2219== 
+==2219== For lists of detected and suppressed errors, rerun with: -s
+==2219== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

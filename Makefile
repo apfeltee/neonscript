@@ -1,7 +1,7 @@
 
 INCFLAGS = -I. -Ithirdparty
 
-CXX = g++
+CXX = g++ -std=c++20
 #WARNFLAGS_OPTIONAL = -Wno-unused-parameter
 WARNFLAGS_NEEDED = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(WARNFLAGS_OPTIONAL)
 CCCMD = $(CXX) $(WARNFLAGS_NEEDED)
