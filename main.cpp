@@ -194,6 +194,20 @@
         state->apiDebugAstCall(__FUNCTION__, __VA_ARGS__); \
     }
 
+
+#define NEON_VMMAC_EXITVM(state) \
+    { \
+        (void)you_are_calling_exit_vm_outside_of_runvm; \
+        return neon::Status::FAIL_RUNTIME; \
+    }        
+
+#define NEON_VMMAC_TRYRAISE(state, rtval, ...) \
+    if(!state->raiseClass(state->m_exceptions.stdexception, ##__VA_ARGS__)) \
+    { \
+        return rtval; \
+    }
+
+
 namespace neon
 {
 
@@ -2500,18 +2514,18 @@ namespace neon
                 state->m_debugprinter->putformat("\n");
                 #endif
                 object->m_mark = state->m_vmstate->m_currentmarkvalue;
-                if(state->m_vmstate->m_gcstate.graycapacity < state->m_vmstate->m_gcstate.graycount + 1)
+                if(state->m_vmstate->m_gcgraycapacity < state->m_vmstate->m_gcgraycount + 1)
                 {
-                    state->m_vmstate->m_gcstate.graycapacity = Util::growCapacity(state->m_vmstate->m_gcstate.graycapacity);
-                    state->m_vmstate->m_gcstate.graystack = (Object**)Memory::osRealloc(state->m_vmstate->m_gcstate.graystack, sizeof(Object*) * state->m_vmstate->m_gcstate.graycapacity);
-                    if(state->m_vmstate->m_gcstate.graystack == nullptr)
+                    state->m_vmstate->m_gcgraycapacity = Util::growCapacity(state->m_vmstate->m_gcgraycapacity);
+                    state->m_vmstate->m_gcgraystack = (Object**)Memory::osRealloc(state->m_vmstate->m_gcgraystack, sizeof(Object*) * state->m_vmstate->m_gcgraycapacity);
+                    if(state->m_vmstate->m_gcgraystack == nullptr)
                     {
                         fflush(stdout);
                         fprintf(stderr, "GC encountered an error");
                         abort();
                     }
                 }
-                state->m_vmstate->m_gcstate.graystack[state->m_vmstate->m_gcstate.graycount++] = object;
+                state->m_vmstate->m_gcgraystack[state->m_vmstate->m_gcgraycount++] = object;
             }
 
             static void markValue(State* state, Value value)
@@ -15001,7 +15015,6 @@ namespace neon
         return retval;
     }
 
-
     State::~State()
     {
         destrdebug("destroying m_modimportpath...");
@@ -15052,12 +15065,12 @@ namespace neon
         m_vmstate->m_currentmarkvalue = true;
         m_vmstate->resetVMState();
         {
-            m_vmstate->m_gcstate.bytesallocated = 0;
+            m_vmstate->m_gcbytesallocated = 0;
             /* default is 1mb. Can be modified via the -g flag. */
-            m_vmstate->m_gcstate.nextgc = NEON_CFG_DEFAULTGCSTART;
-            m_vmstate->m_gcstate.graycount = 0;
-            m_vmstate->m_gcstate.graycapacity = 0;
-            m_vmstate->m_gcstate.graystack = nullptr;
+            m_vmstate->m_gcnextgc = NEON_CFG_DEFAULTGCSTART;
+            m_vmstate->m_gcgraycount = 0;
+            m_vmstate->m_gcgraycapacity = 0;
+            m_vmstate->m_gcgraystack = nullptr;
         }
         {
             m_stdoutprinter = Memory::create<Printer>(this, stdout, false);
@@ -15129,20 +15142,6 @@ namespace neon
         }
     }
 }
-
-
-#define nn_vmmac_exitvm(state) \
-    { \
-        (void)you_are_calling_exit_vm_outside_of_runvm; \
-        return neon::Status::FAIL_RUNTIME; \
-    }        
-
-#define nn_vmmac_tryraise(state, rtval, ...) \
-    if(!state->raiseClass(state->m_exceptions.stdexception, ##__VA_ARGS__)) \
-    { \
-        return rtval; \
-    }
-
 
 
 static NEON_FORCEINLINE neon::ScopeUpvalue* nn_vmutil_upvaluescapture(neon::State* state, neon::Value* local, int stackpos)
@@ -16109,7 +16108,7 @@ static NEON_FORCEINLINE bool nn_vmdo_propertygetself(neon::State* state)
         {
             return true;
         }
-        nn_vmmac_tryraise(state, false, "instance of class %s does not have a property or method named '%s'",
+        NEON_VMMAC_TRYRAISE(state, false, "instance of class %s does not have a property or method named '%s'",
             peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
         return false;
     }
@@ -16138,7 +16137,7 @@ static NEON_FORCEINLINE bool nn_vmdo_propertygetself(neon::State* state)
                 return true;
             }
         }
-        nn_vmmac_tryraise(state, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname->data(), name->data());
+        NEON_VMMAC_TRYRAISE(state, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname->data(), name->data());
         return false;
     }
     else if(peeked.isModule())
@@ -16152,10 +16151,10 @@ static NEON_FORCEINLINE bool nn_vmdo_propertygetself(neon::State* state)
             state->m_vmstate->stackPush(field->m_actualval);
             return true;
         }
-        nn_vmmac_tryraise(state, false, "module %s does not define '%s'", module->m_modname, name->data());
+        NEON_VMMAC_TRYRAISE(state, false, "module %s does not define '%s'", module->m_modname, name->data());
         return false;
     }
-    nn_vmmac_tryraise(state, false, "'%s' of type %s does not have properties", neon::Value::toString(state, peeked)->data(),
+    NEON_VMMAC_TRYRAISE(state, false, "'%s' of type %s does not have properties", neon::Value::toString(state, peeked)->data(),
         neon::Value::Typename(peeked));
     return false;
 }
@@ -16242,7 +16241,7 @@ static NEON_FORCEINLINE bool nn_vmdo_dobinary(neon::State* state)
     );
     if(isfail)
     {
-        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", neon::Instruction::opName(instruction), neon::Value::Typename(binvalleft), neon::Value::Typename(binvalright));
+        NEON_VMMAC_TRYRAISE(state, false, "unsupported operand %s for %s and %s", neon::Instruction::opName(instruction), neon::Value::Typename(binvalleft), neon::Value::Typename(binvalright));
         return false;
     }
     binvalright = state->m_vmstate->stackPop();
@@ -16366,7 +16365,7 @@ static NEON_FORCEINLINE bool nn_vmdo_globaldefine(neon::State* state)
     val = state->m_vmstate->stackPeek(0);
     if(val.isEmpty())
     {
-        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        NEON_VMMAC_TRYRAISE(state, false, "empty cannot be assigned");
         return false;
     }
     tab = state->m_vmstate->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
@@ -16391,7 +16390,7 @@ static NEON_FORCEINLINE bool nn_vmdo_globalget(neon::State* state)
         field = state->m_definedglobals->getByObjString(name);
         if(field == nullptr)
         {
-            nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->data());
+            NEON_VMMAC_TRYRAISE(state, false, "global name '%s' is not defined", name->data());
             return false;
         }
     }
@@ -16405,7 +16404,7 @@ static NEON_FORCEINLINE bool nn_vmdo_globalset(neon::State* state)
     neon::HashTable* table;
     if(state->m_vmstate->stackPeek(0).isEmpty())
     {
-        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        NEON_VMMAC_TRYRAISE(state, false, "empty cannot be assigned");
         return false;
     }
     name = state->m_vmstate->readString();
@@ -16415,7 +16414,7 @@ static NEON_FORCEINLINE bool nn_vmdo_globalset(neon::State* state)
         if(state->m_conf.enablestrictmode)
         {
             table->removeByKey(neon::Value::fromObject(name));
-            nn_vmmac_tryraise(state, false, "global name '%s' was not declared", name->data());
+            NEON_VMMAC_TRYRAISE(state, false, "global name '%s' was not declared", name->data());
             return false;
         }
     }
@@ -16443,7 +16442,7 @@ static NEON_FORCEINLINE bool nn_vmdo_localset(neon::State* state)
     peeked = state->m_vmstate->stackPeek(0);
     if(peeked.isEmpty())
     {
-        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        NEON_VMMAC_TRYRAISE(state, false, "empty cannot be assigned");
         return false;
     }
     ssp = state->m_vmstate->m_currentframe->stackslotpos;
@@ -16473,7 +16472,7 @@ static NEON_FORCEINLINE bool nn_vmdo_funcargset(neon::State* state)
     peeked = state->m_vmstate->stackPeek(0);
     if(peeked.isEmpty())
     {
-        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        NEON_VMMAC_TRYRAISE(state, false, "empty cannot be assigned");
         return false;
     }
     ssp = state->m_vmstate->m_currentframe->stackslotpos;
@@ -16546,7 +16545,7 @@ static NEON_FORCEINLINE bool nn_vmdo_makedict(neon::State* state)
         name = state->m_vmstate->m_stackvalues[state->m_vmstate->m_stackidx + (-count + i)];
         if(!name.isString() && !name.isNumber() && !name.isBool())
         {
-            nn_vmmac_tryraise(state, false, "dictionary key must be one of string, number or boolean");
+            NEON_VMMAC_TRYRAISE(state, false, "dictionary key must be one of string, number or boolean");
             return false;
         }
         value = state->m_vmstate->m_stackvalues[state->m_vmstate->m_stackidx + (-count + i + 1)];
@@ -17070,7 +17069,7 @@ int main(int argc, char* argv[], char** envp)
         }
         state->m_definedglobals->setCStr("ARGV", neon::Value::fromObject(state->m_cliargv));
     }
-    state->m_vmstate->m_gcstate.nextgc = nextgcstart;
+    state->m_vmstate->m_gcnextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);
     if(source != nullptr)
     {

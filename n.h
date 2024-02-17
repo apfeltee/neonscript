@@ -12,7 +12,7 @@
         if((!binvalright.isNumber() && !binvalright.isBool()) \
         || (!binvalleft.isNumber() && !binvalleft.isBool())) \
         { \
-            nn_vmmac_tryraise(state, neon::Status::FAIL_RUNTIME, "unsupported operand %s for %s and %s", #op, neon::Value::Typename(binvalleft), neon::Value::Typename(binvalright)); \
+            NEON_VMMAC_TRYRAISE(state, neon::Status::FAIL_RUNTIME, "unsupported operand %s for %s and %s", #op, neon::Value::Typename(binvalleft), neon::Value::Typename(binvalright)); \
             break; \
         } \
         binvalright = stackPop(); \
@@ -30,7 +30,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
     int ofs;
     /*
     * this variable is a NOP; it only exists to ensure that functions outside of the
-    * switch tree are not calling nn_vmmac_exitvm(), as its behavior could be undefined.
+    * switch tree are not calling NEON_VMMAC_EXITVM(), as its behavior could be undefined.
     */
     bool you_are_calling_exit_vm_outside_of_runvm;
     neon::Value* dbgslot;
@@ -122,7 +122,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     {
                         if(!nn_vmutil_concatenate(m_pvm, false))
                         {
-                            nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "unsupported operand + for %s and %s", neon::Value::Typename(valleft), neon::Value::Typename(valright));
+                            NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "unsupported operand + for %s and %s", neon::Value::Typename(valleft), neon::Value::Typename(valright));
                             break;
                         }
                     }
@@ -205,7 +205,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     peeked = stackPeek(0);
                     if(!peeked.isNumber())
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "operator - not defined for object of type %s", neon::Value::Typename(peeked));
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "operator - not defined for object of type %s", neon::Value::Typename(peeked));
                         break;
                     }
                     stackPush(neon::Value::makeNumber(-stackPop().asNumber()));
@@ -217,7 +217,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 peeked = stackPeek(0);
                 if(!peeked.isNumber())
                 {
-                    nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "operator ~ not defined for object of type %s", neon::Value::Typename(peeked));
+                    NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "operator ~ not defined for object of type %s", neon::Value::Typename(peeked));
                     break;
                 }
                 stackPush(neon::Value::makeInt(~((int)stackPop().asNumber())));
@@ -379,7 +379,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_globaldefine(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -387,7 +387,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_globalget(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -395,7 +395,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_globalset(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -403,7 +403,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_localget(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -411,7 +411,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_localset(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -419,7 +419,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_funcargget(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -427,7 +427,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_funcargset(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -436,7 +436,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_propertyget(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -444,7 +444,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_propertyset(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -452,7 +452,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_propertygetself(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -460,7 +460,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_makeclosure(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -486,7 +486,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     index = readShort();
                     if(stackPeek(0).isEmpty())
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "empty cannot be assigned");
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "empty cannot be assigned");
                         break;
                     }
                     m_currentframe->closure->m_storedupvals[index]->m_location = stackPeek(0);
@@ -500,7 +500,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     func = stackPeek(argcount);
                     if(!vmCallValue(func, neon::Value::makeEmpty(), argcount))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                     m_currentframe = &m_framevalues[m_framecount - 1];
                 }
@@ -513,7 +513,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     argcount = readByte();
                     if(!vmInvokeMethod(method, argcount))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                     m_currentframe = &m_framevalues[m_framecount - 1];
                 }
@@ -526,7 +526,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     argcount = readByte();
                     if(!vmInvokeSelfMethod(method, argcount))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                     m_currentframe = &m_framevalues[m_framecount - 1];
                 }
@@ -588,7 +588,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     neon::ClassObject* subclass;
                     if(!stackPeek(1).isClass())
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "cannot inherit from non-class object");
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "cannot inherit from non-class object");
                         break;
                     }
                     superclass = stackPeek(1).asClass();
@@ -606,7 +606,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     klass = stackPeek(0).asClass();
                     if(!vmBindMethod(klass->m_superclass, name))
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname->data(), name->data());
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname->data(), name->data());
                     }
                 }
                 break;
@@ -620,7 +620,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     klass = stackPop().asClass();
                     if(!vmInvokeMethodFromClass(klass, method, argcount))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                     m_currentframe = &m_framevalues[m_framecount - 1];
                 }
@@ -633,7 +633,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     klass = stackPop().asClass();
                     if(!vmInvokeMethodFromClass(klass, m_pvm->m_constructorname, argcount))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                     m_currentframe = &m_framevalues[m_framecount - 1];
                 }
@@ -642,7 +642,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_makearray(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -656,7 +656,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     vlower = stackPeek(1);
                     if(!vupper.isNumber() || !vlower.isNumber())
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "invalid range boundaries");
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "invalid range boundaries");
                         break;
                     }
                     lower = vlower.asNumber();
@@ -669,7 +669,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_makedict(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -677,7 +677,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_getrangedindex(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -685,7 +685,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_indexget(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -693,7 +693,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                 {
                     if(!nn_vmdo_indexset(m_pvm))
                     {
-                        nn_vmmac_exitvm(m_pvm);
+                        NEON_VMMAC_EXITVM(m_pvm);
                     }
                 }
                 break;
@@ -760,7 +760,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                     );
                     if(!isok)
                     {
-                        nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "instance of Exception expected");
+                        NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "instance of Exception expected");
                         break;
                     }
                     stacktrace = getExceptionStacktrace();
@@ -771,7 +771,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                         m_currentframe = &m_framevalues[m_framecount - 1];
                         break;
                     }
-                    nn_vmmac_exitvm(m_pvm);
+                    NEON_VMMAC_EXITVM(m_pvm);
                 }
             case neon::Instruction::OP_EXTRY:
                 {
@@ -788,7 +788,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                         {
                             if(!m_currentframe->closure->scriptfunc->m_inmodule->m_deftable->get(neon::Value::fromObject(type), &value) || !value.isClass())
                             {
-                                nn_vmmac_tryraise(m_pvm, neon::Status::FAIL_RUNTIME, "object of type '%s' is not an exception", type->data());
+                                NEON_VMMAC_TRYRAISE(m_pvm, neon::Status::FAIL_RUNTIME, "object of type '%s' is not an exception", type->data());
                                 break;
                             }
                         }
@@ -813,7 +813,7 @@ neon::Status neon::VM::runVM(int exitframe, neon::Value* rv)
                         m_currentframe = &m_framevalues[m_framecount - 1];
                         break;
                     }
-                    nn_vmmac_exitvm(m_pvm);
+                    NEON_VMMAC_EXITVM(m_pvm);
                 }
                 break;
             case neon::Instruction::OP_SWITCH:

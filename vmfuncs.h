@@ -539,16 +539,16 @@
                 object = next;
             }
         }
-        Memory::osFree(m_gcstate.graystack);
-        m_gcstate.graystack = nullptr;
+        Memory::osFree(m_gcgraystack);
+        m_gcgraystack = nullptr;
     }
 
     void VM::gcTraceRefs()
     {
         Object* object;
-        while(m_gcstate.graycount > 0)
+        while(m_gcgraycount > 0)
         {
-            object = m_gcstate.graystack[--m_gcstate.graycount];
+            object = m_gcgraystack[--m_gcgraycount];
             Object::blackenObject(m_pvm, object);
         }
     }
@@ -620,23 +620,23 @@
         (void)before;
         #if defined(NEON_CFG_DEBUGGC) && NEON_CFG_DEBUGGC
         m_pvm->m_debugprinter->putformat("GC: gc begins\n");
-        before = m_gcstate.bytesallocated;
+        before = m_gcbytesallocated;
         #endif
         /*
         //  REMOVE THE NEXT LINE TO DISABLE NESTED gcCollectGarbage() POSSIBILITY!
         */
         #if 0
-        m_gcstate.nextgc = m_gcstate.bytesallocated;
+        m_gcnextgc = m_gcbytesallocated;
         #endif
         gcMarkRoots();
         gcTraceRefs();
         HashTable::removeMarked(m_pvm, m_pvm->m_cachedstrings);
         HashTable::removeMarked(m_pvm, m_pvm->m_loadedmodules);
         gcSweep();
-        m_gcstate.nextgc = m_gcstate.bytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
+        m_gcnextgc = m_gcbytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
         m_currentmarkvalue = !m_currentmarkvalue;
         #if defined(NEON_CFG_DEBUGGC) && NEON_CFG_DEBUGGC
         m_pvm->m_debugprinter->putformat("GC: gc ends\n");
-        m_pvm->m_debugprinter->putformat("GC: collected %zu bytes (from %zu to %zu), next at %zu\n", before - m_gcstate.bytesallocated, before, m_gcstate.bytesallocated, m_gcstate.nextgc);
+        m_pvm->m_debugprinter->putformat("GC: collected %zu bytes (from %zu to %zu), next at %zu\n", before - m_gcbytesallocated, before, m_gcbytesallocated, m_gcnextgc);
         #endif
     }

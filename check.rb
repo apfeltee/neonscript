@@ -2,14 +2,21 @@
 
 require "optparse"
 
-# runs the suiteof *.nn files.
+# runs the suite of *.nn files.
 # if the program ends with an error code, abort, etc.
 # it's currently a sit-in for a proper test suite.
+# run with '-v' to run the files with valgrind, i.e.;
+# $ ./check.rb -v |& tee out.txt
+# $ grep 'errors from' out.txt
+# if everything is 0, you're good to go!
 
 begin
   usepause = false
   usevalgrind = false
   iscyg = false
+  # different drive directory prefixes for cygwin:
+  # wsl uses /mnt/ (C: -> /mnt/c/), cygwin uses /cygdrive/ (C: -> /cygdrive/c/)
+  # only matters if the exe is somewhere other than in __dir__
   if system("which cygpath >/dev/null") then
     iscyg = true
   end
@@ -23,6 +30,7 @@ begin
     }
   }.parse!
   if iscyg == true then
+    # without this, starting the process will fail
     thisdir = IO.popen(["cygpath", "-ma", thisdir]){|io| io.read.strip }
   end
   exe = File.join(thisdir, "run")
@@ -38,11 +46,12 @@ begin
     exit(1)
   end
   Dir.glob(File.join(thisdir, "*.nn")) do |file|
-    if file.match(/bintrees/i) then
-      next
-    end
+    #if file.match(/bintrees/i) then
+      #next
+    #end
     execmd = [exe, file]
     fullcmd = []
+    # where the magic happens
     if usevalgrind then
       fullcmd = ["valgrind", *execmd]
     else

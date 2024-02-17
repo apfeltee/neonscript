@@ -67,14 +67,12 @@
             Value* m_stackvalues = nullptr;
             bool m_currentmarkvalue;
 
-            struct
-            {
-                int graycount;
-                int graycapacity;
-                int bytesallocated;
-                int nextgc;
-                Object** graystack;
-            } m_gcstate;
+            int m_gcgraycount;
+            int m_gcgraycapacity;
+            int m_gcbytesallocated;
+            int m_gcnextgc;
+            Object** m_gcgraystack;
+
 
 
         public:
@@ -329,10 +327,10 @@
 
             void gcMaybeCollect(int addsize, bool wasnew)
             {
-                m_gcstate.bytesallocated += addsize;
-                if(m_gcstate.nextgc > 0)
+                m_gcbytesallocated += addsize;
+                if(m_gcnextgc > 0)
                 {
-                    if(wasnew && m_gcstate.bytesallocated > m_gcstate.nextgc)
+                    if(wasnew && m_gcbytesallocated > m_gcnextgc)
                     {
                         if(m_currentframe)
                         {
