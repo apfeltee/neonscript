@@ -383,7 +383,6 @@ namespace neon
                     m_data[0] = '\0';
                 }
 
-
             public:
                 inline StrBuffer()
                 {

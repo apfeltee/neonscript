@@ -36,7 +36,6 @@ namespace neon
                 (void)oldcount;
                 (void)tsz;
                 tsz = sizeof(ValType);
-                //return (ValType*)State::GC::reallocate(state, pointer, tsz * oldcount, tsz * newcount);
                 return (ValType*)Memory::osRealloc(pointer, tsz*newcount);
             }
 
@@ -47,7 +46,6 @@ namespace neon
                 (void)oldcount;
                 (void)tsz;
                 tsz = sizeof(ValType);
-                //State::GC::gcRelease(state, pointer, tsz * oldcount);
                 osFree(pointer);
             }
 
