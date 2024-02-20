@@ -28,7 +28,6 @@ namespace neon
                 free(ptr);
             }
 
-
             template<typename ValType>
             static inline ValType* growArray(ValType* pointer, size_t oldcount, size_t newcount)
             {
@@ -52,11 +51,16 @@ namespace neon
             template<typename Type, typename... ArgsT>
             static inline Type* create(ArgsT&&... args)
             {
+                void* buf;
                 Type* rt;
-                Type* buf;
-                buf = (Type*)osMalloc(sizeof(Type));
-                rt = new(buf) Type(args...);
-                return rt;
+                buf = osMalloc(sizeof(Type));
+                if(buf != nullptr)
+                {
+                    memset(buf, 0, sizeof(Type));
+                    rt = new(buf) Type(args...);
+                    return rt;
+                }
+                return nullptr;
             }
 
             template<typename Type>

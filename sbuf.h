@@ -438,6 +438,15 @@ namespace neon
                     return true;
                 }
 
+                inline bool compare(const char* str, size_t len) const
+                {
+                    if(len == m_length)
+                    {
+                        return (memcmp(str, m_data, len) == 0);
+                    }
+                    return false;
+                }
+
                 /*
                 * Clear the content of an existing StrBuffer (sets size to 0)
                 * but keeps capacity intact.

@@ -67,7 +67,6 @@
 
 #include "os.h"
 
-
 #if 0 //defined(__GNUC__)
     #define NEON_FORCEINLINE __attribute__((always_inline)) inline
 #else
@@ -81,7 +80,7 @@
 
 #if NEON_CFG_BUILDDEBUGMODE == 1
     /*
-    * will print information about get/set operations on neon::HashTable.
+    * will print information about get/set operations on HashTable.
     * very verbose!
     */
     #define NEON_CFG_DEBUGTABLE 0
@@ -178,7 +177,6 @@
     #define NEON_UNLIKELY(x) x
 #endif
 
-
 #define NEON_APIDEBUG(state, ...) \
     if((NEON_UNLIKELY((state)->m_conf.enableapidebug))) \
     { \
@@ -191,11 +189,10 @@
         state->apiDebugAstCall(__FUNCTION__, __VA_ARGS__); \
     }
 
-
 #define NEON_VMMAC_EXITVM(state) \
     { \
         (void)you_are_calling_exit_vm_outside_of_runvm; \
-        return neon::Status::FAIL_RUNTIME; \
+        return Status::FAIL_RUNTIME; \
     }        
 
 #define NEON_VMMAC_TRYRAISE(state, rtval, ...) \
@@ -204,10 +201,8 @@
         return rtval; \
     }
 
-
 namespace neon
 {
-
     enum class Status
     {
         OK,
@@ -463,7 +458,6 @@ namespace neon
                     }
                     return 0;
                 }
-
 
             public:
                 const char* m_plainstr;
@@ -893,7 +887,6 @@ namespace neon
 #include "genericarray.h"
 #include "sbuf.h"
 
-
 namespace neon
 {
     namespace Util
@@ -961,10 +954,10 @@ namespace neon
                     {
                         return -1;
                     }
-                    for(; *optstring && c != *optstring; optstring++)
+                    for(; (*optstring != 0) && c != *optstring; optstring++)
                     {
                     }
-                    if(!*optstring)
+                    if(*optstring == 0)
                     {
                         return -1;
                     }
@@ -977,11 +970,7 @@ namespace neon
 
                 static bool isLongOptsEnd(const LongFlags* longopts, int i)
                 {
-                    if(!longopts[i].longname && !longopts[i].shortname)
-                    {
-                        return true;
-                    }
-                    return false;
+                    return !longopts[i].longname && !longopts[i].shortname;
                 }
 
                 static void fromLong(const LongFlags* longopts, char* optstring)
@@ -992,7 +981,7 @@ namespace neon
                     p = optstring;
                     for(i = 0; !isLongOptsEnd(longopts, i); i++)
                     {
-                        if(longopts[i].shortname && longopts[i].shortname < 127)
+                        if((longopts[i].shortname != 0) && longopts[i].shortname < 127)
                         {
                             *p++ = longopts[i].shortname;
                             for(a = 0; a < (int)longopts[i].argtype; a++)
@@ -1013,13 +1002,13 @@ namespace neon
                     n = longname;
                     if(longname == 0)
                     {
-                        return 0;
+                        return false;
                     }
-                    for(; *a && *n && *a != '='; a++, n++)
+                    for(; (*a != 0) && (*n != 0) && *a != '='; a++, n++)
                     {
                         if(*a != *n)
                         {
-                            return 0;
+                            return false;
                         }
                     }
                     return *n == '\0' && (*a == '\0' || *a == '=');
@@ -1028,7 +1017,7 @@ namespace neon
                 /* Return the part after "=", or NULL. */
                 static char* getLongOptsArg(char* option)
                 {
-                    for(; *option && *option != '='; option++)
+                    for(; (*option != 0) && *option != '='; option++)
                     {
                     }
                     if(*option == '=')
@@ -1057,7 +1046,7 @@ namespace neon
                     this->argv = av;
                     this->argc = ac;
                     this->dopermute = 1;
-                    this->optind = argv[0] != 0;
+                    this->optind = static_cast<int>(argv[0] != 0);
                     this->subopt = 0;
                     this->optarg = 0;
                     this->errmsg[0] = '\0';
@@ -1069,15 +1058,15 @@ namespace neon
                     const char* sep;
                     p = 0;
                     sep = " -- '";
-                    while(*msg)
+                    while(*msg != 0)
                     {
                         this->errmsg[p++] = *msg++;
                     }
-                    while(*sep)
+                    while(*sep != 0)
                     {
                         this->errmsg[p++] = *sep++;
                     }
-                    while(p < sizeof(this->errmsg) - 2 && *data)
+                    while(p < sizeof(this->errmsg) - 2 && (*data != 0))
                     {
                         this->errmsg[p++] = *data++;
                     }
@@ -1128,7 +1117,7 @@ namespace neon
                     }
                     else if(!isLongOpt(option))
                     {
-                        if(this->dopermute)
+                        if(this->dopermute != 0)
                         {
                             index = this->optind++;
                             r = this->nextLong(longopts, longindex);
@@ -1152,7 +1141,7 @@ namespace neon
                         name = longopts[i].longname;
                         if(matchLongOpts(name, option))
                         {
-                            if(longindex)
+                            if(longindex != nullptr)
                             {
                                 *longindex = i;
                             }
@@ -1217,7 +1206,7 @@ namespace neon
                     }
                     else if(!isShortOpt(option))
                     {
-                        if(this->dopermute)
+                        if(this->dopermute != 0)
                         {
                             index = this->optind++;
                             r = this->nextShort(optstring);
@@ -1246,7 +1235,7 @@ namespace neon
                             break;
                         case A_NONE:
                             {
-                                if(option[1])
+                                if(option[1] != 0)
                                 {
                                     this->subopt++;
                                 }
@@ -1262,7 +1251,7 @@ namespace neon
                             {
                                 this->subopt = 0;
                                 this->optind++;
-                                if(option[1])
+                                if(option[1] != 0)
                                 {
                                     this->optarg = option + 1;
                                 }
@@ -1285,7 +1274,7 @@ namespace neon
                             {
                                 this->subopt = 0;
                                 this->optind++;
-                                if(option[1])
+                                if(option[1] != 0)
                                 {
                                     this->optarg = option + 1;
                                 }
@@ -1365,7 +1354,7 @@ namespace neon
 
             NEON_FORCEINLINE bool isTTY() const
             {
-                return osfn_isatty(m_fd);
+                return osfn_isatty(m_fd) != 0;
             }
 
             NEON_FORCEINLINE int fd() const
@@ -1475,6 +1464,7 @@ namespace neon
             }
     };
 
+
     struct Value final
     {
         public:
@@ -1561,42 +1551,10 @@ namespace neon
             {
                 Value v;
                 v = makeValue(VALTYPE_OBJECT);
-                v.m_valunion.obj = (Object*)obj;
+                v.m_valunion.obj = obj;
                 return v;
             }
 
-            static bool getObjNumberVal(Value val, size_t* dest);
-
-            static NEON_FORCEINLINE bool getNumberVal(Value val, size_t* dest)
-            {
-                if(val.isNumber())
-                {
-                    *dest = val.asNumber();
-                    return true;
-                }
-                else if(val.isBool())
-                {
-                    *dest = val.asBool();
-                    return true;
-                }
-                return getObjNumberVal(val, dest);
-            }
-
-            static NEON_FORCEINLINE bool isLessOrEqual(State* state, Value a, Value b)
-            {
-                double ia;
-                double ib;
-                (void)state;
-                if(!Value::getNumberVal(a, (size_t*)&ia))
-                {
-                    return false;
-                }
-                if(!Value::getNumberVal(b, (size_t*)&ib))
-                {
-                    return false;
-                }
-                return (ia <= ib);
-            }
 
             static bool isObjFalse(Value val);
 
@@ -1629,58 +1587,22 @@ namespace neon
                 return isObjFalse(val);
             }
 
-            static Value findGreaterObject(Value a, Value b);
+            static bool isLesserObject(Value a, Value b, bool defval);
 
-            /**
-             * returns the greater of the two values.
-             * this function encapsulates the object hierarchy
-             */
-            NEON_FORCEINLINE static Value findGreater(Value a, Value b)
+            NEON_FORCEINLINE static bool isLesserValue(Value self, Value other)
             {
-                if(a.isNull())
+                if((other.canCoerceToNumber() != 0.0) && (self.canCoerceToNumber() != 0.0))
                 {
-                    return b;
+                    return other.coerceToNumber() < self.coerceToNumber();
                 }
-                else if(a.isBool())
+                else if(other.isObject() && self.isObject())
                 {
-                    if(b.isNull() || (b.isBool() && b.asBool() == false))
-                    {
-                        /* only null, false and false are lower than numbers */
-                        return a;
-                    }
-                    else
-                    {
-                        return b;
-                    }
+                    return isLesserObject(self, other, false);
                 }
-                else if(a.isNumber())
-                {
-                    if(b.isNull() || b.isBool())
-                    {
-                        return a;
-                    }
-                    else if(b.isNumber())
-                    {
-                        if(a.asNumber() >= b.asNumber())
-                        {
-                            return a;
-                        }
-                        return b;
-                    }
-                    else
-                    {
-                        /* every other thing is greater than a number */
-                        return b;
-                    }
-                }
-                else if(a.isObject())
-                {
-                    return findGreaterObject(a, b);
-                }
-                return a;
+                return false;
             }
 
-            static Value copyValue(State* state, Value value);
+            static Value copyValue(Value value);
 
             static String* toString(State* state, Value value);
 
@@ -1781,9 +1703,35 @@ namespace neon
             } m_valunion;
 
         public:
+            #if 0
+            bool operator<(const Value& other) const
+            {
+                return isLesserValue(*this, other);
+            }
+            #endif
+
+            bool operator==(const Value& other) const
+            {
+                return compareActual(other);
+            }
+
+            /*
+            int operator>(const Value& other) const
+            {
+                return isGreaterValue(*this, other);
+            }
+            */
+
             const char* name() const
             {
                 return getTypename(*this);
+            }
+
+            NEON_FORCEINLINE bool canCoerceToNumber()
+            {
+                return (
+                    isNull() || isBool() || isNumber()
+                );
             }
 
             NEON_FORCEINLINE double coerceToNumber()
@@ -1825,11 +1773,11 @@ namespace neon
                 return (long)coerceToNumber();
             }
 
-            bool compareObject(State* state, Value b);
+            bool compareObject(Value other) const;
 
-            NEON_FORCEINLINE bool compareActual(State* state, Value b)
+            NEON_FORCEINLINE bool compareActual(Value other) const
             {
-                if(type() != b.type())
+                if(type() != other.type())
                 {
                     return false;
                 }
@@ -1843,21 +1791,21 @@ namespace neon
                         break;
                     case Value::VALTYPE_BOOL:
                         {
-                            return asBool() == b.asBool();
+                            return asBool() == other.asBool();
                         }
                         break;
                     case Value::VALTYPE_NUMBER:
                         {
-                            return (asNumber() == b.asNumber());
+                            return (asNumber() == other.asNumber());
                         }
                         break;
                     case Value::VALTYPE_OBJECT:
                         {
-                            if(asObject() == b.asObject())
+                            if(asObject() == other.asObject())
                             {
                                 return true;
                             }
-                            return compareObject(state, b);
+                            return compareObject(other);
                         }
                         break;
                     default:
@@ -1867,10 +1815,10 @@ namespace neon
             }
 
 
-            NEON_FORCEINLINE bool compare(State* state, Value b)
+            NEON_FORCEINLINE bool compare(Value other) const
             {
                 bool r;
-                r = compareActual(state, b);
+                r = compareActual(other);
                 return r;
             }
 
@@ -2100,6 +2048,38 @@ namespace neon
                         swapGeneric(varr->m_values, idxleft, idxright);
                     }
 
+                    static bool getObjNumberVal(Value val, size_t* dest);
+
+                    static NEON_FORCEINLINE bool getNumberVal(Value val, size_t* dest)
+                    {
+                        if(val.isNumber())
+                        {
+                            *dest = val.asNumber();
+                            return true;
+                        }
+                        else if(val.isBool())
+                        {
+                            *dest = static_cast<size_t>(val.asBool());
+                            return true;
+                        }
+                        return getObjNumberVal(val, dest);
+                    }
+
+                    static NEON_FORCEINLINE bool isLessOrEqual(Value a, Value b)
+                    {
+                        double ia;
+                        double ib;
+                        if(!getNumberVal(a, (size_t*)&ia))
+                        {
+                            return false;
+                        }
+                        if(!getNumberVal(b, (size_t*)&ib))
+                        {
+                            return false;
+                        }
+                        return (ia <= ib);
+                    }
+
                 private:
                     State* m_pvm;
 
@@ -2119,7 +2099,7 @@ namespace neon
                         for (j = istart; (j <= (iend - 1)); j++)
                         {
                             //if (arr[j] <= x)
-                            if(Value::isLessOrEqual(m_pvm, arr->m_values[j], x))
+                            if(isLessOrEqual(arr->m_values[j], x))
                             {
                                 i++;
                                 swap(arr, i, j);
@@ -2186,7 +2166,7 @@ namespace neon
             };
 
         public:
-            ValArray(): GenericArray()
+            ValArray() 
             {
             }
 
@@ -2436,7 +2416,6 @@ namespace neon
             }
     };
 
-
     struct Arguments
     {
         public:
@@ -2521,9 +2500,10 @@ namespace neon
                     template<typename Type, typename... ArgsT>
                     static Type* gcCreate(State* state, ArgsT&&... args)
                     {
+                        void* buf;
                         Type* rt;
-                        Type* buf;
-                        buf = (Type*)gcAllocMemory(state, sizeof(Type), 1);
+                        buf = gcAllocMemory(state, sizeof(Type), 1);
+                        memset(buf, 0, sizeof(Type));
                         rt = new(buf) Type(args...);
                         return rt;
                     }
@@ -2556,23 +2536,23 @@ namespace neon
                         m_currentframe = nullptr;
                         {
                             m_stackcapacity = NEON_CFG_INITSTACKCOUNT;
-                            m_stackvalues = (neon::Value*)neon::Memory::osMalloc(NEON_CFG_INITSTACKCOUNT * sizeof(neon::Value));
+                            m_stackvalues = (Value*)Memory::osMalloc(NEON_CFG_INITSTACKCOUNT * sizeof(Value));
                             if(m_stackvalues == nullptr)
                             {
                                 fprintf(stderr, "error: failed to allocate stackvalues!\n");
                                 abort();
                             }
-                            memset(m_stackvalues, 0, NEON_CFG_INITSTACKCOUNT * sizeof(neon::Value));
+                            memset(m_stackvalues, 0, NEON_CFG_INITSTACKCOUNT * sizeof(Value));
                         }
                         {
                             m_framecapacity = NEON_CFG_INITFRAMECOUNT;
-                            m_framevalues = (neon::CallFrame*)neon::Memory::osMalloc(NEON_CFG_INITFRAMECOUNT * sizeof(neon::CallFrame));
+                            m_framevalues = (CallFrame*)Memory::osMalloc(NEON_CFG_INITFRAMECOUNT * sizeof(CallFrame));
                             if(m_framevalues == nullptr)
                             {
                                 fprintf(stderr, "error: failed to allocate framevalues!\n");
                                 abort();
                             }
-                            memset(m_framevalues, 0, NEON_CFG_INITFRAMECOUNT * sizeof(neon::CallFrame));
+                            memset(m_framevalues, 0, NEON_CFG_INITFRAMECOUNT * sizeof(CallFrame));
                             for(i=0; i<NEON_CFG_INITFRAMECOUNT; i++)
                             {
                                 for(j=0; j<NEON_CFG_MAXEXCEPTHANDLERS; j++)
@@ -2587,15 +2567,27 @@ namespace neon
                     {
                     }
 
+                    #define raiseAtSourceLocation(a, ...) \
+                        raiseAtSourceLocationActual(a, __FILE__, __LINE__, __VA_ARGS__)
+
+                    #define raiseClass(a, ...) \
+                        raiseClassActual(a, __FILE__, __LINE__, __VA_ARGS__)
+
                     template<typename... ArgsT>
-                    bool raiseAtSourceLocation(ClassObject* exklass, const char* format, ArgsT&&... args)
+                    bool raiseAtSourceLocationActual(ClassObject* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args)
                     {
+                        static auto fn_fprintf = fprintf;
                         static auto fn_snprintf = snprintf;
                         int length;
                         int needed;
                         char* message;
                         Value stacktrace;
                         ClassInstance* instance;
+                        {
+                            fprintf(stderr, "exception raised at %s:%d!!!! message: ", srcfile, srcline);
+                            fn_fprintf(stderr, format, args...);
+                            fprintf(stderr, "\n");
+                        }
                         /* TODO: used to be vasprintf. need to check how much to actually allocate! */
                         needed = fn_snprintf(nullptr, 0, format, args...);
                         needed += 1;
@@ -2611,13 +2603,13 @@ namespace neon
                     }
 
                     template<typename... ArgsT>
-                    bool raiseClass(ClassObject* exklass, const char* format, ArgsT&&... args)
+                    bool raiseClassActual(ClassObject* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args)
                     {
-                        return raiseAtSourceLocation(exklass, format, args...);
+                        return raiseAtSourceLocationActual(exklass, srcfile, srcline, format, args...);
                     }
 
                     template<typename... ArgsT>
-                    bool raiseClass(const char* clname, const char* format, ArgsT&&... args)
+                    bool raiseClassActual(const char* clname, const char* srcfile, int srcline, const char* format, ArgsT&&... args)
                     {
                         ClassObject* tmp;
                         ClassObject* exklass;
@@ -2627,7 +2619,7 @@ namespace neon
                         {
                             exklass = tmp;
                         }
-                        return raiseAtSourceLocation(exklass, format, args...);
+                        return raiseAtSourceLocationActual(exklass, srcfile, srcline, format, args...);
                     }
 
                     template<typename... ArgsT>
@@ -2681,7 +2673,6 @@ namespace neon
                         }
                         frame->gcprotcount = 0;
                     }
-
 
                     NEON_FORCEINLINE uint8_t readByte()
                     {
@@ -2855,7 +2846,7 @@ namespace neon
                         {
                             if(wasnew && m_gcbytesallocated > m_gcnextgc)
                             {
-                                if(m_currentframe)
+                                if(m_currentframe != nullptr)
                                 {
                                     if(m_currentframe->gcprotcount == 0)
                                     {
@@ -2988,11 +2979,10 @@ namespace neon
 
             void gcMarkCompilerRoots();
 
-
             template<typename... ArgsT>
-            bool raiseClass(ArgsT&&... args)
+            bool raiseClassActual(ArgsT&&... args)
             {
-                return m_vmstate->raiseClass(args...);
+                return m_vmstate->raiseClassActual(args...);
             }
 
             template<typename... ArgsT>
@@ -3038,7 +3028,6 @@ namespace neon
 
             ClassObject* makeExceptionClass(Module* module, const char* cstrname);
 
-
             FuncClosure* compileScriptSource(Module* module, bool fromeval, const char* source);
             Value evalSource(const char* source);
             Status execSource(Module* module, const char* source, Value* dest);
@@ -3052,12 +3041,11 @@ namespace neon
             ClassObject* makeNamedClass(const char* name, ClassObject* parent);
     };
 
-
     struct Object
     {
         public:
             template<typename SubObjT, class = std::enable_if_t<std::is_base_of<Object, SubObjT>::value>>
-            static SubObjT* make(State* state, Value::ObjType type)
+            static SubObjT* initBasicObject(State* state, Value::ObjType type)
             {
                 size_t size;
                 Object* plain;
@@ -3082,7 +3070,7 @@ namespace neon
             {
                 if(ptr != nullptr)
                 {
-                    ptr->destroyThisObject();
+                    ptr->~SubObjT();
                     ptr->m_objtype = (Value::ObjType)0;
                     ptr->m_nextobj = nullptr;
                     State::VM::gcFreeMemory(state, ptr, sizeof(SubObjT));
@@ -3145,16 +3133,10 @@ namespace neon
             Object* m_nextobj;
 
         public:
-            //Object() = delete;
-            //~Object() = delete;
-            virtual bool destroyThisObject()
-            {
-                return false;
-            }
     };
 
-
-    struct Property
+    template<typename DataValueT>
+    struct PropBase
     {
         public:
             enum Type
@@ -3175,20 +3157,24 @@ namespace neon
             };
 
         public:
-            Type m_proptype;
-            Value m_actualval;
-            bool m_havegetset;
+            Type m_proptype = PROPTYPE_INVALID;
+            bool m_havegetset = false;
+            DataValueT m_actualval;
             GetSetter m_getset;
 
         public:
-            inline void init(Value val, Type t)
+            inline void init(DataValueT val, Type t)
             {
                 m_proptype = t;
                 m_actualval = val;
                 m_havegetset = false;
             }
 
-            inline Property(Value val, Value getter, Value setter, Type t)
+            inline PropBase()
+            {
+            }
+
+            inline PropBase(DataValueT val, Value getter, Value setter, Type t)
             {
                 bool getisfn;
                 bool setisfn;
@@ -3202,23 +3188,515 @@ namespace neon
                 }
             }
 
-            inline Property(Value val, Type t)
+            inline PropBase(DataValueT val, Type t)
             {
                 init(val, t);
             }
 
-            inline Value value() const
+            inline DataValueT value() const
             {
                 return m_actualval;
             }
 
     };
-}
 
-#include "table.h"
+    struct Property: public PropBase<Value>
+    {
+        public:
+            using PropBase::PropBase;
+    };
 
-namespace neon
-{
+    struct HashTable final
+    {
+        public:
+            struct Entry
+            {
+                Value key;
+                Property value;
+            };
+
+        public:
+            /*
+            * FIXME: extremely stupid hack: $m_active ensures that a table that was destroyed
+            * does not get marked again, et cetera.
+            * since ~HashTable() zeroes the data before freeing, $m_active will be
+            * false, and thus, no further marking occurs.
+            * obviously the reason is that somewhere a table (from ClassInstance) is being
+            * read after being freed, but for now, this will work(-ish).
+            */
+            State* m_pvm;
+            bool m_active;
+            uint64_t m_count;
+            uint64_t m_capacity;
+            Entry* m_entries;
+
+        public:
+            HashTable(State* state): m_pvm(state)
+            {
+                m_active = true;
+                m_count = 0;
+                m_capacity = 0;
+                m_entries = nullptr;
+            }
+
+            ~HashTable()
+            {
+                Memory::freeArray(m_entries, m_capacity);
+            }
+
+            NEON_FORCEINLINE uint64_t size() const
+            {
+                return m_count;
+            }
+
+            NEON_FORCEINLINE uint64_t length() const
+            {
+                return m_count;
+            }
+
+            NEON_FORCEINLINE uint64_t count() const
+            {
+                return m_count;
+            }
+
+            Entry* findEntryByValue(Entry* availents, int availcap, Value key)
+            {
+                uint32_t hash;
+                uint32_t index;
+                Entry* entry;
+                Entry* tombstone;
+                hash = Value::getHash(key);
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "looking for key ");
+                m_pvm->m_debugprinter->printValue(key, true, false);
+                fprintf(stderr, " with hash %u in table...\n", hash);
+                #endif
+                index = hash & (availcap - 1);
+                tombstone = nullptr;
+                while(true)
+                {
+                    entry = &availents[index];
+                    if(entry->key.isEmpty())
+                    {
+                        if(entry->value.m_actualval.isNull())
+                        {
+                            /* empty entry */
+                            if(tombstone != nullptr)
+                            {
+                                return tombstone;
+                            }
+                            else
+                            {
+                                return entry;
+                            }
+                        }
+                        else
+                        {
+                            /* we found a tombstone. */
+                            if(tombstone == nullptr)
+                            {
+                                tombstone = entry;
+                            }
+                        }
+                    }
+                    else if(key.compare(entry->key))
+                    {
+                        return entry;
+                    }
+                    index = (index + 1) & (availcap - 1);
+                }
+                return nullptr;
+            }
+
+            bool compareEntryString(Value vkey, const char* kstr, size_t klen)
+            {
+                size_t oslen;
+                const char* osdata;
+                String* entoskey;
+                entoskey = vkey.asString();
+                oslen = Helper::getStringLength(entoskey);
+                osdata = Helper::getStringData(entoskey);
+                if(oslen == klen)
+                {
+                    if(memcmp(kstr, osdata, klen) == 0)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+
+            Entry* findEntryByStr(Entry* availents, int availcap, Value valkey, const char* kstr, size_t klen, uint32_t hash)
+            {
+                bool havevalhash;
+                uint32_t index;
+                uint32_t valhash;
+                Entry* entry;
+                Entry* tombstone;
+                (void)valhash;
+                (void)havevalhash;
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "looking for key ");
+                m_pvm->m_debugprinter->printValue(key, true, false);
+                fprintf(stderr, " with hash %u in table...\n", hash);
+                #endif
+                valhash = 0;
+                havevalhash = false;
+                index = hash & (availcap - 1);
+                tombstone = nullptr;
+                while(true)
+                {
+                    entry = &availents[index];
+                    if(entry->key.isEmpty())
+                    {
+                        if(entry->value.m_actualval.isNull())
+                        {
+                            /* empty entry */
+                            if(tombstone != nullptr)
+                            {
+                                return tombstone;
+                            }
+                            else
+                            {
+                                return entry;
+                            }
+                        }
+                        else
+                        {
+                            /* we found a tombstone. */
+                            if(tombstone == nullptr)
+                            {
+                                tombstone = entry;
+                            }
+                        }
+                    }
+                    if(entry->key.isString())
+                    {
+                        /*
+                            entoskey = entry->key.asString();
+                            if(entoskey->length() == klen)
+                            {
+                                if(memcmp(kstr, entoskey->data(), klen) == 0)
+                                {
+                                    return entry;
+                                }
+                            }
+                        */
+                        if(compareEntryString(entry->key, kstr, klen))
+                        {
+                            return entry;
+                        }
+                    }
+                    else
+                    {
+                        if(!valkey.isEmpty())
+                        {
+                            if(valkey.compare(entry->key))
+                            {
+                                return entry;
+                            }
+                        }
+                    }
+                    index = (index + 1) & (availcap - 1);
+                }
+                return nullptr;
+            }
+
+            Property* getFieldByValue(Value key)
+            {
+                Entry* entry;
+                if(m_count == 0 || m_entries == nullptr)
+                {
+                    return nullptr;
+                }
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "getting entry with hash %u...\n", Value::getHash(key));
+                #endif
+                entry = findEntryByValue(m_entries, m_capacity, key);
+                if(entry->key.isEmpty() || entry->key.isNull())
+                {
+                    return nullptr;
+                }
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "found entry for hash %u == ", Value::getHash(entry->key));
+                m_pvm->m_debugprinter->printValue(entry->value.m_actualval, true, false);
+                fprintf(stderr, "\n");
+                #endif
+                return &entry->value;
+            }
+
+            Property* getFieldByStr(Value valkey, const char* kstr, size_t klen, uint32_t hash)
+            {
+                Entry* entry;
+                if(m_count == 0 || m_entries == nullptr)
+                {
+                    return nullptr;
+                }
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "getting entry with hash %u...\n", Value::getHash(key));
+                #endif
+                entry = findEntryByStr(m_entries, m_capacity, valkey, kstr, klen, hash);
+                if(entry->key.isEmpty() || entry->key.isNull())
+                {
+                    return nullptr;
+                }
+                #if defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE
+                fprintf(stderr, "found entry for hash %u == ", Value::getHash(entry->key));
+                m_pvm->m_debugprinter->printValue(entry->value.m_actualval, true, false);
+                fprintf(stderr, "\n");
+                #endif
+                return &entry->value;
+            }
+
+            Property* getByObjString(String* str)
+            {
+                uint32_t oshash;
+                size_t oslen;
+                const char* osdata;
+                oslen = Helper::getStringLength(str);
+                osdata = Helper::getStringData(str);
+                oshash = Helper::getStringHash(str);
+                return getFieldByStr(Value::makeEmpty(), osdata, oslen, oshash);
+            }
+
+            Property* getByCStr(const char* kstr)
+            {
+                size_t klen;
+                uint32_t hash;
+                klen = strlen(kstr);
+                hash = Util::hashString(kstr, klen);
+                return getFieldByStr(Value::makeEmpty(), kstr, klen, hash);
+            }
+
+            Property* getField(Value key)
+            {
+                uint32_t oshash;
+                size_t oslen;
+                const char* osdata;
+                String* oskey;
+                if(key.isString())
+                {
+                    oskey = key.asString();
+                    osdata = Helper::getStringData(oskey);
+                    oslen = Helper::getStringLength(oskey);
+                    oshash = Helper::getStringHash(oskey);
+                    return getFieldByStr(key, osdata, oslen, oshash);
+                }
+                return getFieldByValue(key);
+            }
+
+            void adjustCapacity(uint64_t needcap)
+            {
+                uint64_t i;
+                Entry* dest;
+                Entry* entry;
+                Entry* nents;
+                //nents = (Entry*)State::VM::gcAllocMemory(m_pvm, sizeof(Entry), needcap);
+                nents = (Entry*)Memory::osMalloc(sizeof(Entry) * needcap);
+                for(i = 0; i < needcap; i++)
+                {
+                    nents[i].key = Value::makeEmpty();
+                    nents[i].value = Property(Value::makeNull(), Property::PROPTYPE_VALUE);
+                }
+                /* repopulate buckets */
+                m_count = 0;
+                for(i = 0; i < m_capacity; i++)
+                {
+                    entry = &m_entries[i];
+                    if(entry->key.isEmpty())
+                    {
+                        continue;
+                    }
+                    dest = findEntryByValue(nents, needcap, entry->key);
+                    dest->key = entry->key;
+                    dest->value = entry->value;
+                    m_count++;
+                }
+                /* free the old entries... */
+                Memory::freeArray(m_entries, m_capacity);
+                m_entries = nents;
+                m_capacity = needcap;
+            }
+
+            bool setType(Value key, Value value, Property::Type ftyp, bool keyisstring)
+            {
+                bool isnew;
+                uint64_t needcap;
+                Entry* entry;
+                (void)keyisstring;
+                if(m_count + 1 > m_capacity * NEON_CFG_MAXTABLELOAD)
+                {
+                    needcap = Util::growCapacity(m_capacity);
+                    adjustCapacity(needcap);
+                }
+                entry = findEntryByValue(m_entries, m_capacity, key);
+                isnew = entry->key.isEmpty();
+                if(isnew && entry->value.m_actualval.isNull())
+                {
+                    m_count++;
+                }
+                /* overwrites existing entries. */
+                entry->key = key;
+                entry->value = Property(value, ftyp);
+                return isnew;
+            }
+
+            bool set(Value key, Value value)
+            {
+                return setType(key, value, Property::PROPTYPE_VALUE, key.isString());
+            }
+
+            bool setCStrType(const char* cstrkey, Value value, Property::Type ftype)
+            {
+                String* os;
+                os = Helper::copyObjString(m_pvm, cstrkey);
+                return setType(Value::fromObject(os), value, ftype, true);
+            }
+
+            bool setCStr(const char* cstrkey, Value value)
+            {
+                return setCStrType(cstrkey, value, Property::PROPTYPE_VALUE);
+            }
+
+            bool removeByKey(Value key)
+            {
+                Entry* entry;
+                if(m_count == 0)
+                {
+                    return false;
+                }
+                /* find the entry */
+                entry = findEntryByValue(m_entries, m_capacity, key);
+                if(entry->key.isEmpty())
+                {
+                    return false;
+                }
+                /* place a tombstone in the entry. */
+                entry->key = Value::makeEmpty();
+                entry->value = Property(Value::makeBool(true), Property::PROPTYPE_VALUE);
+                return true;
+            }
+
+            void addAll(HashTable* from)
+            {
+                uint64_t i;
+                Entry* entry;
+                for(i = 0; i < from->m_capacity; i++)
+                {
+                    entry = &from->m_entries[i];
+                    if(!entry->key.isEmpty())
+                    {
+                        setType(entry->key, entry->value.m_actualval, entry->value.m_proptype, false);
+                    }
+                }
+            }
+
+            void copyFrom(HashTable* from)
+            {
+                uint64_t i;
+                Entry* entry;
+                for(i = 0; i < from->m_capacity; i++)
+                {
+                    entry = &from->m_entries[i];
+                    if(!entry->key.isEmpty())
+                    {
+                        setType(entry->key, Value::copyValue(entry->value.m_actualval), entry->value.m_proptype, false);
+                    }
+                }
+            }
+
+            String* findString(const char* chars, size_t length, uint32_t hash)
+            {
+                size_t slen;
+                uint32_t shash;
+                uint32_t index;
+                const char* sdata;
+                Entry* entry;
+                String* string;
+                if(m_count == 0)
+                {
+                    return nullptr;
+                }
+                index = hash & (m_capacity - 1);
+                while(true)
+                {
+                    entry = &m_entries[index];
+                    if(entry->key.isEmpty())
+                    {
+                        /*
+                        // stop if we find an empty non-tombstone entry
+                        //if(entry->m_actualval.isNull())
+                        */
+                        {
+                            return nullptr;
+                        }
+                    }
+                    string = entry->key.asString();
+                    slen = Helper::getStringLength(string);
+                    sdata = Helper::getStringData(string);
+                    shash = Helper::getStringHash(string);
+                    if((slen == length) && (shash == hash) && memcmp(sdata, chars, length) == 0)
+                    {
+                        /* we found it */
+                        return string;
+                    }
+                    index = (index + 1) & (m_capacity - 1);
+                }
+            }
+
+            Value findKey(Value value)
+            {
+                uint64_t i;
+                Entry* entry;
+                for(i = 0; i < m_capacity; i++)
+                {
+                    entry = &m_entries[i];
+                    if(!entry->key.isNull() && !entry->key.isEmpty())
+                    {
+                        if(entry->value.m_actualval.compare(value))
+                        {
+                            return entry->key;
+                        }
+                    }
+                }
+                return Value::makeNull();
+            }
+
+            void markTableValues()
+            {
+                uint64_t i;
+                Entry* entry;
+                if(!m_active)
+                {
+                    m_pvm->warn("trying to mark inactive hashtable <%p>!", this);
+                    return;
+                }
+                for(i = 0; i < m_capacity; i++)
+                {
+                    entry = &m_entries[i];
+                    if(entry != nullptr)
+                    {
+                        Object::markValue(m_pvm, entry->key);
+                        Object::markValue(m_pvm, entry->value.m_actualval);
+                    }
+                }
+            }
+
+            void removeMarkedValues()
+            {
+                uint64_t i;
+                Entry* entry;
+                for(i = 0; i < m_capacity; i++)
+                {
+                    entry = &m_entries[i];
+                    if(entry->key.isObject() && entry->key.asObject()->m_mark != m_pvm->m_vmstate->m_currentmarkvalue)
+                    {
+                        removeByKey(entry->key);
+                    }
+                }
+            }
+    };
+
     NEON_FORCEINLINE bool Value::isObjType(Value::ObjType t) const
     {
         return isObject() && asObject()->m_objtype == t;
@@ -3311,7 +3789,7 @@ namespace neon
             static String* makeFromStrbuf(State* state, Util::StrBuffer* sbuf, uint32_t hash)
             {
                 String* rs;
-                rs = Object::make<String>(state, Value::OBJTYPE_STRING);
+                rs = Object::initBasicObject<String>(state, Value::OBJTYPE_STRING);
                 rs->m_sbuf = sbuf;
                 rs->m_hash = hash;
                 //fprintf(stderr, "String: sbuf(%zd)=\"%.*s\"\n", sbuf->m_length, (int)sbuf->m_length, sbuf->data());
@@ -3404,18 +3882,13 @@ namespace neon
             Util::StrBuffer* m_sbuf;
 
         public:
-            //String() = delete;
-            //~String() = delete;
-
-            inline bool destroyThisObject()
+            ~String()
             {
                 if(m_sbuf != nullptr)
                 {
                     Memory::destroy(m_sbuf);
                     m_sbuf = nullptr;
-                    return true;
                 }
-                return false;
             }
 
             NEON_FORCEINLINE uint64_t size() const
@@ -3441,6 +3914,16 @@ namespace neon
             NEON_FORCEINLINE const char* cstr() const
             {
                 return data();
+            }
+
+            NEON_FORCEINLINE bool compare(const char* str, size_t len) const
+            {
+                return m_sbuf->compare(str, len);
+            }
+
+            NEON_FORCEINLINE bool compare(String* other) const
+            {
+                return compare(other->m_sbuf->m_data, other->m_sbuf->m_length);
             }
 
             NEON_FORCEINLINE int at(uint64_t pos) const
@@ -3503,7 +3986,7 @@ namespace neon
             static ScopeUpvalue* make(State* state, Value* slot, int stackpos)
             {
                 ScopeUpvalue* rt;
-                rt = Object::make<ScopeUpvalue>(state, Value::OBJTYPE_UPVALUE);
+                rt = Object::initBasicObject<ScopeUpvalue>(state, Value::OBJTYPE_UPVALUE);
                 rt->m_closed = Value::makeNull();
                 rt->m_location = *slot;
                 rt->m_nextupval = nullptr;
@@ -3518,12 +4001,8 @@ namespace neon
             ScopeUpvalue* m_nextupval;
 
         public:
-            //ScopeUpvalue() = delete;
-            //~ScopeUpvalue() = delete;
-
-            bool destroyThisObject()
+            ~ScopeUpvalue()
             {
-                return true;
             }
     };
 
@@ -3534,7 +4013,7 @@ namespace neon
             {
                 uint64_t i;
                 Array* rt;
-                rt = Object::make<Array>(state, Value::OBJTYPE_ARRAY);
+                rt = Object::initBasicObject<Array>(state, Value::OBJTYPE_ARRAY);
                 rt->m_varray = Memory::create<ValArray>();
                 if(cnt > 0)
                 {
@@ -3555,13 +4034,9 @@ namespace neon
             ValArray* m_varray;
 
         public:
-            //Array() = delete;
-            //~Array() = delete;
-
-            bool destroyThisObject()
+            ~Array()
             {
                 Memory::destroy(m_varray);
-                return true;
             }
 
             NEON_FORCEINLINE size_t size() const
@@ -3627,7 +4102,7 @@ namespace neon
             static Range* make(State* state, int lower, int upper)
             {
                 Range* rt;
-                rt = Object::make<Range>(state, Value::OBJTYPE_RANGE);
+                rt = Object::initBasicObject<Range>(state, Value::OBJTYPE_RANGE);
                 rt->m_lower = lower;
                 rt->m_upper = upper;
                 if(upper > lower)
@@ -3641,19 +4116,14 @@ namespace neon
                 return rt;
             }
 
-
         public:
             int m_lower;
             int m_upper;
             int m_range;
 
         public:
-            //Range() = delete;
-            //~Range() = delete;
-
-            bool destroyThisObject()
+            ~Range()
             {
-                return true;
             }
     };
 
@@ -3663,7 +4133,7 @@ namespace neon
             static Dictionary* make(State* state)
             {
                 Dictionary* rt;
-                rt = Object::make<Dictionary>(state, Value::OBJTYPE_DICT);
+                rt = Object::initBasicObject<Dictionary>(state, Value::OBJTYPE_DICT);
                 rt->m_keynames = Memory::create<ValArray>();
                 rt->m_valtable = Memory::create<HashTable>(state);
                 return rt;
@@ -3674,8 +4144,11 @@ namespace neon
             HashTable* m_valtable;
 
         public:
-            //Dictionary() = delete;
-            //~Dictionary() = delete;
+            ~Dictionary()
+            {
+                Memory::destroy(m_keynames);
+                Memory::destroy(m_valtable);
+            }
 
             NEON_FORCEINLINE size_t size() const
             {
@@ -3690,13 +4163,6 @@ namespace neon
             NEON_FORCEINLINE size_t count() const
             {
                 return m_keynames->size();
-            }
-
-            bool destroyThisObject()
-            {
-                Memory::destroy(m_keynames);
-                Memory::destroy(m_valtable);
-                return true;
             }
 
             bool setEntry(Value key, Value value)
@@ -3742,7 +4208,7 @@ namespace neon
             static File* make(State* state, FILE* handle, bool isstd, const char* path, const char* mode)
             {
                 File* rt;
-                rt = Object::make<File>(state, Value::OBJTYPE_FILE);
+                rt = Object::initBasicObject<File>(state, Value::OBJTYPE_FILE);
                 rt->m_isopen = false;
                 rt->m_filemode = String::copy(state, mode);
                 rt->m_filepath = String::copy(state, path);
@@ -3759,8 +4225,8 @@ namespace neon
 
             static void mark(State* state, File* file)
             {
-                Object::markObject(state, (Object*)file->m_filemode);
-                Object::markObject(state, (Object*)file->m_filepath);
+                Object::markObject(state, file->m_filemode);
+                Object::markObject(state, file->m_filepath);
             }
 
         public:
@@ -3773,13 +4239,9 @@ namespace neon
             String* m_filepath;
 
         public:
-            //File() = delete;
-            //~File() = delete;
-
-            bool destroyThisObject()
+            ~File()
             {
                 selfCloseFile();
-                return true;
             }
 
             bool selfOpenFile()
@@ -3795,7 +4257,7 @@ namespace neon
                     {
                         m_isopen = true;
                         m_filedesc = fileno(m_filehandle);
-                        m_istty = osfn_isatty(m_filedesc);
+                        m_istty = (osfn_isatty(m_filedesc) != 0);
                         return true;
                     }
                     else
@@ -3807,7 +4269,6 @@ namespace neon
                 }
                 return false;
             }
-
 
             int selfCloseFile()
             {
@@ -3901,7 +4362,6 @@ namespace neon
                 return true;
             }
 
-
     };
 
     struct VarSwitch final: public Object
@@ -3910,7 +4370,7 @@ namespace neon
             static VarSwitch* make(State* state)
             {
                 VarSwitch* rt;
-                rt = Object::make<VarSwitch>(state, Value::OBJTYPE_SWITCH);
+                rt = Object::initBasicObject<VarSwitch>(state, Value::OBJTYPE_SWITCH);
                 rt->m_jumppositions = Memory::create<HashTable>(state);
                 rt->m_defaultjump = -1;
                 rt->m_exitjump = -1;
@@ -3924,12 +4384,9 @@ namespace neon
 
         public:
             //VarSwitch() = delete;
-            //~VarSwitch() = delete;
-
-            bool destroyThisObject()
+            ~VarSwitch()
             {
                 Memory::destroy(m_jumppositions);
-                return true;
             }
     };
 
@@ -3942,7 +4399,7 @@ namespace neon
             static Userdata* make(State* state, void* pointer, const char* name)
             {
                 Userdata* rt;
-                rt = Object::make<Userdata>(state, Value::OBJTYPE_USERDATA);
+                rt = Object::initBasicObject<Userdata>(state, Value::OBJTYPE_USERDATA);
                 rt->m_udpointer = pointer;
                 rt->m_udtypename = Util::strCopy(state, name);
                 rt->m_fnondestroy = nullptr;
@@ -3955,17 +4412,12 @@ namespace neon
             CBOnFreeFN m_fnondestroy;
 
         public:
-            //Userdata() = delete;
-            //~Userdata() = delete;
-
-            bool destroyThisObject()
+            ~Userdata()
             {
-                if(m_fnondestroy)
+                if(m_fnondestroy != nullptr)
                 {
                     m_fnondestroy(m_udpointer);
-                    return true;
                 }
-                return false;
             }
     };
 
@@ -3998,7 +4450,7 @@ namespace neon
             static FuncScript* make(State* state, Module* module, FuncCommon::Type type)
             {
                 FuncScript* rt;
-                rt = Object::make<FuncScript>(state, Value::OBJTYPE_FUNCSCRIPT);
+                rt = Object::initBasicObject<FuncScript>(state, Value::OBJTYPE_FUNCSCRIPT);
                 rt->m_arity = 0;
                 rt->m_upvalcount = 0;
                 rt->m_isvariadic = false;
@@ -4017,10 +4469,9 @@ namespace neon
             Module* m_inmodule;
 
         public:
-            bool destroyThisObject()
+            ~FuncScript()
             {
                 Memory::destroy(m_compiledblob);
-                return true;
             }
     };
 
@@ -4038,7 +4489,7 @@ namespace neon
                 {
                     upvals[i] = nullptr;
                 }
-                rt = Object::make<FuncClosure>(state, Value::OBJTYPE_FUNCCLOSURE);
+                rt = Object::initBasicObject<FuncClosure>(state, Value::OBJTYPE_FUNCCLOSURE);
                 rt->scriptfunc = function;
                 rt->m_storedupvals = upvals;
                 rt->m_upvalcount = function->m_upvalcount;
@@ -4051,14 +4502,13 @@ namespace neon
             ScopeUpvalue** m_storedupvals;
 
         public:
-            bool destroyThisObject()
+            ~FuncClosure()
             {
                 Memory::freeArray(m_storedupvals, m_upvalcount);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
                 */
-                return true;
             }
     };
 
@@ -4068,7 +4518,7 @@ namespace neon
             static FuncBound* make(State* state, Value receiver, FuncClosure* method)
             {
                 FuncBound* rt;
-                rt = Object::make<FuncBound>(state, Value::OBJTYPE_FUNCBOUND);
+                rt = Object::initBasicObject<FuncBound>(state, Value::OBJTYPE_FUNCBOUND);
                 rt->receiver = receiver;
                 rt->method = method;
                 return rt;
@@ -4079,12 +4529,8 @@ namespace neon
             FuncClosure* method;
 
         public:
-            //FuncBound() = delete;
-            //~FuncBound() = delete;
-
-            bool destroyThisObject()
+            ~FuncBound()
             {
-                return true;
             }
     };
 
@@ -4094,7 +4540,7 @@ namespace neon
             static FuncNative* make(State* state, NativeCallbackFN function, const char* name, void* uptr)
             {
                 FuncNative* rt;
-                rt = Object::make<FuncNative>(state, Value::OBJTYPE_FUNCNATIVE);
+                rt = Object::initBasicObject<FuncNative>(state, Value::OBJTYPE_FUNCNATIVE);
                 rt->m_natfunc = function;
                 rt->m_nativefnname = name;
                 rt->m_userptrforfn = uptr;
@@ -4113,12 +4559,8 @@ namespace neon
             void* m_userptrforfn;
 
         public:
-            //FuncNative() = delete;
-            //~FuncNative() = delete;
-
-            bool destroyThisObject()
+            ~FuncNative()
             {
-                return true;
             }
     };
 
@@ -4182,7 +4624,7 @@ namespace neon
                 argc = 0;
                 vsz = args.size();
                 argc = m_arity;
-                if(vsz)
+                if(vsz != 0u)
                 {
                     for(i = 0; i < vsz; i++)
                     {
@@ -4213,7 +4655,7 @@ namespace neon
             static ClassObject* make(State* state, String* name, ClassObject* parent)
             {
                 ClassObject* rt;
-                rt = Object::make<ClassObject>(state, Value::OBJTYPE_CLASS);
+                rt = Object::initBasicObject<ClassObject>(state, Value::OBJTYPE_CLASS);
                 rt->m_classname = name;
                 rt->m_instprops = Memory::create<HashTable>(state);
                 rt->m_staticprops = Memory::create<HashTable>(state);
@@ -4244,7 +4686,6 @@ namespace neon
                 }
                 return false;
             }
-
 
         public:
             /*
@@ -4279,16 +4720,12 @@ namespace neon
             ClassObject* m_superclass;
 
         public:
-            //ClassObject() = delete;
-            //~ClassObject() = delete;
-
-            bool destroyThisObject()
+            ~ClassObject()
             {
                 Memory::destroy(m_methods);
                 Memory::destroy(m_staticmethods);
                 Memory::destroy(m_instprops);
                 Memory::destroy(m_staticprops);
-                return true;
             }
 
             void inheritFrom(ClassObject* superclass)
@@ -4391,12 +4828,12 @@ namespace neon
             static ClassInstance* make(State* state, ClassObject* klass)
             {
                 ClassInstance* rt;
-                rt = Object::make<ClassInstance>(state, Value::OBJTYPE_INSTANCE);
+                rt = Object::initBasicObject<ClassInstance>(state, Value::OBJTYPE_INSTANCE);
                 /* gc fix */
                 rt->m_active = true;
                 rt->m_fromclass = klass;
                 rt->m_properties = Memory::create<HashTable>(state);
-                if(rt->m_fromclass->m_instprops->m_count > 0)
+                if(rt->m_fromclass->m_instprops->size() > 0)
                 {
                     rt->m_properties->copyFrom(rt->m_fromclass->m_instprops);
                 }
@@ -4405,13 +4842,13 @@ namespace neon
 
             static void mark(State* state, ClassInstance* instance)
             {
-                if(instance->m_active == false)
+                if(!instance->m_active)
                 {
                     state->warn("trying to mark inactive instance <%p>!", instance);
                     return;
                 }
-                Object::markObject(state, (Object*)instance->m_fromclass);
-                instance->m_properties->markTableValues(state);
+                Object::markObject(state, instance->m_fromclass);
+                instance->m_properties->markTableValues();
             }
 
         public:
@@ -4424,15 +4861,11 @@ namespace neon
             ClassObject* m_fromclass;
 
         public:
-            //ClassInstance() = delete;
-            //~ClassInstance() = delete;
-
-            bool destroyThisObject()
+            ~ClassInstance()
             {
                 Memory::destroy(m_properties);
                 m_properties = nullptr;
                 m_active = false;
-                return true;
             }
 
             void defProperty(const char *cstrname, Value val)
@@ -4501,7 +4934,7 @@ namespace neon
             static Module* make(State* state, const char* name, const char* file, bool imported)
             {
                 Module* rt;
-                rt = Object::make<Module>(state, Value::OBJTYPE_MODULE);
+                rt = Object::initBasicObject<Module>(state, Value::OBJTYPE_MODULE);
                 rt->m_deftable = Memory::create<HashTable>(state);
                 rt->m_modname = String::copy(state, name);
                 rt->m_physlocation = String::copy(state, file);
@@ -4518,7 +4951,7 @@ namespace neon
                 //dlwrap_dlclose(dlw);
             }
 
-            static char* resolvePath(State* state, const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+            static char* resolvePath(State* state, const char* modulename, const char* currentfile, const char* rootfile, bool isrelative)
             {
                 size_t i;
                 size_t mlen;
@@ -4793,10 +5226,7 @@ namespace neon
             void* m_libhandle;
 
         public:
-            //Module() = delete;
-            //~Module() = delete;
-
-            bool destroyThisObject()
+            ~Module()
             {
                 Memory::destroy(m_deftable);
                 /*
@@ -4811,7 +5241,6 @@ namespace neon
                 {
                     closeLibHandle(m_libhandle);
                 }
-                return true;
             }
 
             void setFileField()
@@ -4888,7 +5317,6 @@ namespace neon
                 }
                 return true;
             }
-
 
             void printObjFunction(FuncScript* func)
             {
@@ -5030,22 +5458,20 @@ namespace neon
                 Value resv;
                 Value thisval;
                 Property* field;
-                State* state;
                 String* os;
                 ValArray args;
-                state = m_pvm;
                 if(invmethod)
                 {
                     field = instance->m_fromclass->m_methods->getByCStr("toString");
                     if(field != nullptr)
                     {
-                        NestCall nc(state);
+                        NestCall nc(m_pvm);
                         thisval = Value::fromObject(instance);
                         arity = nc.prepare(field->m_actualval, thisval, args);
                         fprintf(stderr, "arity = %d\n", arity);
                         if(nc.callNested(field->m_actualval, thisval, args, &resv))
                         {
-                            Printer subp(state, &subw);
+                            Printer subp(m_pvm, &subw);
                             subp.printValue(resv, false, false);
                             os = subp.takeString();
                             put(os->data(), os->length());
@@ -5070,7 +5496,9 @@ namespace neon
                         break;
                     case Value::OBJTYPE_USERDATA:
                         {
-                            putformat("<userdata %s>", static_cast<Userdata*>(obj)->m_udtypename);
+                            Userdata* ud;
+                            ud = static_cast<Userdata*>(obj); 
+                            putformat("<userdata %s>", ud->m_udtypename);
                         }
                         break;
                     case Value::OBJTYPE_RANGE:
@@ -5234,11 +5662,9 @@ namespace neon
             String* takeString()
             {
                 uint32_t hash;
-                State* state;
                 String* os;
-                state = m_pvm;
                 hash = Util::hashString(m_ptostring->data(), m_ptostring->length());
-                os = String::makeFromStrbuf(state, m_ptostring, hash);
+                os = String::makeFromStrbuf(m_pvm, m_ptostring, hash);
                 m_stringtaken = true;
                 return os;
             }
@@ -5411,7 +5837,6 @@ namespace neon
             }
     };
 
-
     struct FormatInfo
     {
         public:
@@ -5456,7 +5881,6 @@ namespace neon
             /* destination printer */
             Printer* m_printer = nullptr;
             GetNextFN m_fngetnext = nullptr;
-
 
         private:
             inline void doHandleFlag(FlagParseState& st)
@@ -5699,7 +6123,7 @@ namespace neon
                     index = m_currblob->m_instrucs[offset++].code << 8;
                     index |= m_currblob->m_instrucs[offset++].code;
                     locn = "upvalue";
-                    if(islocal)
+                    if(islocal != 0u)
                     {
                         locn = "local";
                     }
@@ -6131,7 +6555,6 @@ namespace neon
                 }
                 return "?invalid?";
             }
-
 
         public:
             bool isglobal;
@@ -7780,7 +8203,7 @@ namespace neon
                 else
                 {
                     arg = m_currfunccompiler->resolveUpvalue(&name);
-                    if((arg != -1) && (name.isglobal == false))
+                    if((arg != -1) && (!name.isglobal))
                     {
                         getop = Instruction::OP_UPVALUEGET;
                         setop = Instruction::OP_UPVALUESET;
@@ -7794,7 +8217,6 @@ namespace neon
                 }
                 parseAssign(getop, setop, arg, canassign);
             }
-
 
             void emitDefineVariable(int global)
             {
@@ -7843,11 +8265,7 @@ namespace neon
                 lopos = m_currfunccompiler->m_localcount - 1;
                 lodepth = m_currfunccompiler->m_compiledlocals[lopos].depth;
                 scodepth = m_currfunccompiler->m_scopedepth;
-                if(locount > 0 && lodepth > scodepth)
-                {
-                    return true;
-                }
-                return false;
+                return locount > 0 && lodepth > scodepth;
             }
 
             void scopeEnd()
@@ -7879,11 +8297,7 @@ namespace neon
             {
                 Token::Type t;
                 t = m_prevtoken.type;
-                if(t == Token::TOK_LITNUMREG || t == Token::TOK_LITNUMOCT || t == Token::TOK_LITNUMBIN || t == Token::TOK_LITNUMHEX)
-                {
-                    return true;
-                }
-                return false;
+                return t == Token::TOK_LITNUMREG || t == Token::TOK_LITNUMOCT || t == Token::TOK_LITNUMBIN || t == Token::TOK_LITNUMHEX;
             }
 
             bool check(Token::Type t)
@@ -8282,7 +8696,6 @@ namespace neon
                 return function;
             }
 
-
             Rule* getRule(Token::Type type);
 
             /*
@@ -8337,7 +8750,7 @@ namespace neon
                 if(count != 0)
                 {
                     chr = Util::utf8Encode(m_pvm, value, &len);
-                    if(chr)
+                    if(chr != nullptr)
                     {
                         memcpy(string + index, chr, (size_t)count + 1);
                         Memory::osFree(chr);
@@ -8546,7 +8959,6 @@ namespace neon
                 return Value::makeNumber(dbval);
             }
 
-
             bool parseBlock()
             {
                 m_blockcount++;
@@ -8717,7 +9129,7 @@ namespace neon
                 if(match(Token::TOK_LESSTHAN))
                 {
                     consume(Token::TOK_IDENTNORMAL, "name of superclass expected");
-                    //nn_astparser_rulevarnormal(this, false);
+                    //doRuleVarnormal(this, false);
                     emitNamedVar(m_prevtoken, false);
                     if(identsEqual(&classname, &m_prevtoken))
                     {
@@ -9613,12 +10025,6 @@ namespace neon
             }
     };
 
-}
-
-#include "prot.inc"
-
-namespace neon
-{
     FuncScript* Module::compileModuleSource(State* state, Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast)
     {
         return Parser::compileSource(state, module, source, blob, fromimport, keeplast);
@@ -9633,7 +10039,6 @@ namespace neon
         }
     }
 
-
     void Object::blackenObject(State* state, Object* object)
     {
         #if defined(NEON_CFG_DEBUGGC) && NEON_CFG_DEBUGGC
@@ -9647,14 +10052,14 @@ namespace neon
                 {
                     Module* module;
                     module = static_cast<Module*>(object);
-                    module->m_deftable->markTableValues(state);
+                    module->m_deftable->markTableValues();
                 }
                 break;
             case Value::OBJTYPE_SWITCH:
                 {
                     VarSwitch* sw;
                     sw = static_cast<VarSwitch*>(object);
-                    sw->m_jumppositions->markTableValues(state);
+                    sw->m_jumppositions->markTableValues();
                 }
                 break;
             case Value::OBJTYPE_FILE:
@@ -9669,7 +10074,7 @@ namespace neon
                     Dictionary* dict;
                     dict = static_cast<Dictionary*>(object);
                     dict->m_keynames->gcMark(state);
-                    dict->m_valtable->markTableValues(state);
+                    dict->m_valtable->markTableValues();
                 }
                 break;
             case Value::OBJTYPE_ARRAY:
@@ -9684,21 +10089,21 @@ namespace neon
                     FuncBound* bound;
                     bound = static_cast<FuncBound*>(object);
                     Object::markValue(state, bound->receiver);
-                    Object::markObject(state, static_cast<Object*>(bound->method));
+                    Object::markObject(state, bound->method);
                 }
                 break;
             case Value::OBJTYPE_CLASS:
                 {
                     ClassObject* klass;
                     klass = static_cast<ClassObject*>(object);
-                    Object::markObject(state, static_cast<Object*>(klass->m_classname));
-                    klass->m_methods->markTableValues(state);
-                    klass->m_staticmethods->markTableValues(state);
-                    klass->m_staticprops->markTableValues(state);
+                    Object::markObject(state, klass->m_classname);
+                    klass->m_methods->markTableValues();
+                    klass->m_staticmethods->markTableValues();
+                    klass->m_staticprops->markTableValues();
                     Object::markValue(state, klass->m_constructor);
                     if(klass->m_superclass != nullptr)
                     {
-                        Object::markObject(state, static_cast<Object*>(klass->m_superclass));
+                        Object::markObject(state, klass->m_superclass);
                     }
                 }
                 break;
@@ -9707,10 +10112,10 @@ namespace neon
                     int i;
                     FuncClosure* closure;
                     closure = static_cast<FuncClosure*>(object);
-                    Object::markObject(state, static_cast<Object*>(closure->scriptfunc));
+                    Object::markObject(state, closure->scriptfunc);
                     for(i = 0; i < closure->m_upvalcount; i++)
                     {
-                        Object::markObject(state, static_cast<Object*>(closure->m_storedupvals[i]));
+                        Object::markObject(state, closure->m_storedupvals[i]);
                     }
                 }
                 break;
@@ -9718,8 +10123,8 @@ namespace neon
                 {
                     FuncScript* function;
                     function = static_cast<FuncScript*>(object);
-                    Object::markObject(state, static_cast<Object*>(function->m_scriptfnname));
-                    Object::markObject(state, static_cast<Object*>(function->m_inmodule));
+                    Object::markObject(state, function->m_scriptfnname);
+                    Object::markObject(state, function->m_inmodule);
                     function->m_compiledblob->m_constants->gcMark(state);
                 }
                 break;
@@ -9732,7 +10137,9 @@ namespace neon
                 break;
             case Value::OBJTYPE_UPVALUE:
                 {
-                    Object::markValue(state, (static_cast<ScopeUpvalue*>(object))->m_closed);
+                    ScopeUpvalue* sco;
+                    sco = static_cast<ScopeUpvalue*>(object);
+                    Object::markValue(state, sco->m_closed);
                 }
                 break;
             case Value::OBJTYPE_RANGE:
@@ -9872,8 +10279,7 @@ namespace neon
         }
     }
 
-
-    bool Value::getObjNumberVal(Value val, size_t* dest)
+    bool ValArray::QuickSort::getObjNumberVal(Value val, size_t* dest)
     {
         if(val.isString())
         {
@@ -9891,7 +10297,6 @@ namespace neon
         }
         return false;
     }
-
 
     bool Value::isObjFalse(Value val)
     {
@@ -9920,91 +10325,51 @@ namespace neon
         return false;
     }
 
-    Value Value::findGreaterObject(Value a, Value b)
+    bool Value::isLesserObject(Value self, Value other, bool defval)
     {
-        String* osa;
-        String* osb;   
-        if(a.isString() && b.isString())
+        String* osself;
+        String* osother;   
+        if(other.isString() && self.isString())
         {
-            osa = a.asString();
-            osb = b.asString();
-            if(strncmp(osa->data(), osb->data(), osa->length()) >= 0)
-            {
-                return a;
-            }
-            return b;
+            osother = other.asString();
+            osself = self.asString();
+            return osother->length() < osself->length();
         }
-        else if(a.isFuncScript() && b.isFuncScript())
+        else if(other.isFuncScript() && self.isFuncScript())
         {
-            if(a.asFuncScript()->m_arity >= b.asFuncScript()->m_arity)
-            {
-                return a;
-            }
-            return b;
+            return (other.asFuncScript()->m_arity < self.asFuncScript()->m_arity);
         }
-        else if(a.isFuncClosure() && b.isFuncClosure())
+        else if(other.isFuncClosure() && self.isFuncClosure())
         {
-            if(a.asFuncClosure()->scriptfunc->m_arity >= b.asFuncClosure()->scriptfunc->m_arity)
-            {
-                return a;
-            }
-            return b;
+            return (other.asFuncClosure()->scriptfunc->m_arity < self.asFuncClosure()->scriptfunc->m_arity);
         }
-        else if(a.isRange() && b.isRange())
+        else if(other.isRange() && self.isRange())
         {
-            if(a.asRange()->m_lower >= b.asRange()->m_lower)
-            {
-                return a;
-            }
-            return b;
+            return (other.asRange()->m_lower < self.asRange()->m_lower);
         }
-        else if(a.isClass() && b.isClass())
+        else if(other.isClass() && self.isClass())
         {
-            if(a.asClass()->m_methods->m_count >= b.asClass()->m_methods->m_count)
-            {
-                return a;
-            }
-            return b;
+            return (other.asClass()->m_methods->count() < self.asClass()->m_methods->count());
         }
-        else if(a.isArray() && b.isArray())
+        else if(other.isArray() && self.isArray())
         {
-            if(a.asArray()->size() >= b.asArray()->size())
-            {
-                return a;
-            }
-            return b;
+            return (other.asArray()->size() < self.asArray()->size());
         }
-        else if(a.isDict() && b.isDict())
+        else if(other.isDict() && self.isDict())
         {
-            if(a.asDict()->m_keynames->m_count >= b.asDict()->m_keynames->m_count)
-            {
-                return a;
-            }
-            return b;
+            return (other.asDict()->m_keynames->m_count < self.asDict()->m_keynames->m_count);
+            
         }
-        else if(a.isFile() && b.isFile())
+        /*
+        else if(self.isObject())
         {
-            if(strcmp(a.asFile()->m_filepath->data(), b.asFile()->m_filepath->data()) >= 0)
-            {
-                return a;
-            }
-            return b;
+            return (other.asObject()->m_objtype < self.asObject()->m_objtype);
         }
-        else if(b.isObject())
-        {
-            if(a.asObject()->m_objtype >= b.asObject()->m_objtype)
-            {
-                return a;
-            }
-            return b;
-        }
-        else
-        {
-            return a;
-        }
+        */
+        return defval;
     }
 
-    Value Value::copyValue(State* state, Value value)
+    Value Value::copyValue(Value value)
     {
         if(value.isObject())
         {
@@ -10014,6 +10379,7 @@ namespace neon
                     {
                         String* string;
                         string = value.asString();
+                        auto state = string->m_pvm;
                         return Value::fromObject(String::copy(state, string->data(), string->length()));
                     }
                     break;
@@ -10023,6 +10389,7 @@ namespace neon
                     Array* list;
                     Array* newlist;
                     list = value.asArray();
+                    auto state = list->m_pvm;
                     newlist = Array::make(state);
                     for(i = 0; i < list->size(); i++)
                     {
@@ -10036,6 +10403,7 @@ namespace neon
                         Dictionary *dict;
                         Dictionary *newdict;
                         dict = value.asDict();
+                        auto state = dict->m_pvm;
                         newdict = Dictionary::make(state);
                         // @TODO: Figure out how to handle dictionary values correctly
                         // remember that copying keys is redundant and unnecessary
@@ -10049,15 +10417,16 @@ namespace neon
         return value;
     }
 
-
     uint32_t Value::getObjHash(Object* object)
     {
         switch(object->m_objtype)
         {
             case Value::OBJTYPE_CLASS:
                 {
+                    ClassObject* klass;
+                    klass = static_cast<ClassObject*>(object);
                     /* Classes just use their name. */
-                    return (static_cast<ClassObject*>(object))->m_classname->m_hash;
+                    return klass->m_classname->m_hash;
                 }
                 break;
             case Value::OBJTYPE_FUNCSCRIPT:
@@ -10075,7 +10444,9 @@ namespace neon
                 break;
             case Value::OBJTYPE_STRING:
                 {
-                    return (static_cast<String*>(object))->m_hash;
+                    String* str;
+                    str = static_cast<String*>(object);
+                    return str->m_hash;
                 }
                 break;
             default:
@@ -10086,7 +10457,9 @@ namespace neon
 
     const char* Value::objClassTypename(Object* obj)
     {
-        return (static_cast<ClassInstance*>(obj))->m_fromclass->m_classname->data();
+        ClassInstance* inst;
+        inst = static_cast<ClassInstance*>(obj);
+        return inst->m_fromclass->m_classname->data();
     }
 
     String* Value::toString(State* state, Value value)
@@ -10098,45 +10471,41 @@ namespace neon
         return s;
     }
 
-    bool Value::compareObject(State* state, Value b)
+    bool Value::compareObject(Value other) const
     {
         size_t i;
-        Value::ObjType ta;
-        Value::ObjType tb;
-        Object* oa;
-        Object* ob;
-        String* stra;
-        String* strb;
-        Array* arra;
-        Array* arrb;
-        oa = asObject();
-        ob = b.asObject();
-        ta = oa->m_objtype;
-        tb = ob->m_objtype;
-        if(ta == tb)
+        Value::ObjType typself;
+        Value::ObjType typother;
+        Object* selfobj;
+        Object* othobj;
+        String* strself;
+        String* strother;
+        Array* arrself;
+        Array* arrother;
+        selfobj = asObject();
+        othobj = other.asObject();
+        typself = selfobj->m_objtype;
+        typother = othobj->m_objtype;
+        if(typself == typother)
         {
-            if(ta == Value::OBJTYPE_STRING)
+            if(typself == Value::OBJTYPE_STRING)
             {
-                stra = (String*)oa;
-                strb = (String*)ob;
-                if(stra->length() == strb->length())
+                strself = (String*)selfobj;
+                strother = (String*)othobj;
+                if(strself->length() == strother->length())
                 {
-                    if(memcmp(stra->data(), strb->data(), stra->length()) == 0)
-                    {
-                        return true;
-                    }
-                    return false;
+                    return memcmp(strself->data(), strother->data(), strself->length()) == 0;
                 }
             }
-            if(ta == Value::OBJTYPE_ARRAY)
+            if(typself == Value::OBJTYPE_ARRAY)
             {
-                arra = (Array*)oa;
-                arrb = (Array*)ob;
-                if(arra->size() == arrb->size())
+                arrself = (Array*)selfobj;
+                arrother = (Array*)othobj;
+                if(arrself->size() == arrother->size())
                 {
-                    for(i=0; i<(size_t)arra->size(); i++)
+                    for(i=0; i<(size_t)arrself->size(); i++)
                     {
-                        if(!arra->at(i).compare(state, arrb->at(i)))
+                        if(!arrself->at(i).compare(arrother->at(i)))
                         {
                             return false;
                         }
@@ -10211,10 +10580,8 @@ namespace neon
         {
             case Value::OBJTYPE_FUNCNATIVE:
                 return method.asFuncNative()->m_functype;
-                //return static_cast<FuncCommon*>(method.asObject())->m_functype;
             case Value::OBJTYPE_FUNCCLOSURE:
                 return method.asFuncClosure()->scriptfunc->m_functype;
-                //return static_cast<FuncCommon*>(method.asObject())->m_functype;
             default:
                 break;
         }
@@ -10227,7 +10594,6 @@ namespace neon
         idx = readShort();
         return m_currentframe->closure->scriptfunc->m_compiledblob->m_constants->m_values[idx];
     }
-
 
     bool State::VM::callClosure(FuncClosure* closure, Value thisval, int argcount)
     {
@@ -10637,7 +11003,7 @@ namespace neon
                 pd.putformat("from %s() in %s:%d", fnname, physfile, line);
                 os = pd.takeString();
                 oa->push(Value::fromObject(os));
-                if((i > 15) && (m_pvm->m_conf.showfullstack == false))
+                if((i > 15) && (!m_pvm->m_conf.showfullstack))
                 {
                     pd = Printer(m_pvm);
                     pd.putformat("(only upper 15 entries shown)");
@@ -10655,6 +11021,8 @@ namespace neon
     {
         int i;
         int cnt;
+        size_t emsglen;
+        const char* emsgstr;
         const char* colred;
         const char* colreset;
         Value stackitm;
@@ -10670,24 +11038,24 @@ namespace neon
         if(field != nullptr)
         {
             emsg = Value::toString(m_pvm, field->m_actualval);
-            if(emsg->length() > 0)
-            {
-                fprintf(stderr, ": %s", emsg->data());
-            }
-            else
-            {
-                fprintf(stderr, ":");
-            }
-            fprintf(stderr, "\n");
+            emsgstr = emsg->data();
+            emsglen = emsg->length();
         }
         else
         {
-            fprintf(stderr, "\n");
+            emsgstr = "(no message)";
+            emsglen = strlen(emsgstr);
         }
+
+        if(emsglen > 0)
+        {
+            fprintf(stderr, ": %s", emsgstr);
+        }
+        fprintf(stderr, "\n");
+        fprintf(stderr, "  stacktrace:\n");
         field = exception->m_properties->getByCStr("stacktrace");
         if(field != nullptr)
         {
-            fprintf(stderr, "  stacktrace:\n");
             oa = field->m_actualval.asArray();
             cnt = oa->size();
             i = cnt-1;
@@ -10706,6 +11074,10 @@ namespace neon
                     i--;
                 }
             }
+        }
+        else
+        {
+            fprintf(stderr, "  (no traceback)\n");
         }
         return false;
     }        
@@ -10786,20 +11158,20 @@ namespace neon
         }
         for(i = 0; i < (int)m_framecount; i++)
         {
-            Object::markObject(m_pvm, static_cast<Object*>(m_framevalues[i].closure));
+            Object::markObject(m_pvm, m_framevalues[i].closure);
             for(j = 0; j < (int)m_framevalues[i].handlercount; j++)
             {
                 handler = &m_framevalues[i].handlers[j];
-                Object::markObject(m_pvm, static_cast<Object*>(handler->klass));
+                Object::markObject(m_pvm, handler->klass);
             }
         }
         for(upvalue = m_openupvalues; upvalue != nullptr; upvalue = upvalue->m_nextupval)
         {
-            Object::markObject(m_pvm, static_cast<Object*>(upvalue));
+            Object::markObject(m_pvm, upvalue);
         }
-        m_pvm->m_definedglobals->markTableValues(m_pvm);
-        m_pvm->m_loadedmodules->markTableValues(m_pvm);
-        Object::markObject(m_pvm, static_cast<Object*>(m_pvm->m_exceptions.stdexception));
+        m_pvm->m_definedglobals->markTableValues();
+        m_pvm->m_loadedmodules->markTableValues();
+        Object::markObject(m_pvm, m_pvm->m_exceptions.stdexception);
         m_pvm->gcMarkCompilerRoots();
     }
 
@@ -10850,8 +11222,8 @@ namespace neon
         #endif
         gcMarkRoots();
         gcTraceRefs();
-        m_pvm->m_cachedstrings->removeMarkedValues(m_pvm);
-        m_pvm->m_loadedmodules->removeMarkedValues(m_pvm);
+        m_pvm->m_cachedstrings->removeMarkedValues();
+        m_pvm->m_loadedmodules->removeMarkedValues();
         gcSweep();
         m_gcnextgc = m_gcbytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
         m_currentmarkvalue = !m_currentmarkvalue;
@@ -10905,12 +11277,11 @@ namespace neon
             compiler = m_activeparser->m_currfunccompiler;
             while(compiler != nullptr)
             {
-                Object::markObject(this, (Object*)compiler->m_targetfunc);
+                Object::markObject(this, compiler->m_targetfunc);
                 compiler = compiler->m_enclosing;
             }
         }
     }
-
 
     ClassObject* State::findExceptionByName(const char* name)
     {
@@ -11056,737 +11427,729 @@ namespace neon
     }
 
 
-}
-
-bool nn_astparser_rulebinary(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    neon::Token::Type op;
-    neon::Parser::Rule* rule;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    op = prs->m_prevtoken.type;
-    /* compile the right operand */
-    rule = prs->getRule(op);
-    prs->parsePrecedence((neon::Parser::Rule::Precedence)(rule->precedence + 1));
-    /* emit the operator instruction */
-    switch(op)
+    bool doRuleBinary(Parser* prs, Token previous, bool canassign)
     {
-        case neon::Token::TOK_PLUS:
-            prs->emitInstruction(neon::Instruction::OP_PRIMADD);
-            break;
-        case neon::Token::TOK_MINUS:
-            prs->emitInstruction(neon::Instruction::OP_PRIMSUBTRACT);
-            break;
-        case neon::Token::TOK_MULTIPLY:
-            prs->emitInstruction(neon::Instruction::OP_PRIMMULTIPLY);
-            break;
-        case neon::Token::TOK_DIVIDE:
-            prs->emitInstruction(neon::Instruction::OP_PRIMDIVIDE);
-            break;
-        case neon::Token::TOK_MODULO:
-            prs->emitInstruction(neon::Instruction::OP_PRIMMODULO);
-            break;
-        case neon::Token::TOK_POWEROF:
-            prs->emitInstruction(neon::Instruction::OP_PRIMPOW);
-            break;
-        case neon::Token::TOK_FLOOR:
-            prs->emitInstruction(neon::Instruction::OP_PRIMFLOORDIVIDE);
-            break;
-            /* equality */
-        case neon::Token::TOK_EQUAL:
-            prs->emitInstruction(neon::Instruction::OP_EQUAL);
-            break;
-        case neon::Token::TOK_NOTEQUAL:
-            prs->emitInstruction(neon::Instruction::OP_EQUAL);
-            prs->emitInstruction(neon::Instruction::OP_PRIMNOT);
-            break;
-        case neon::Token::TOK_GREATERTHAN:
-            prs->emitInstruction(neon::Instruction::OP_PRIMGREATER);
-            break;
-        case neon::Token::TOK_GREATERASSIGN:
-            prs->emitInstruction(neon::Instruction::OP_PRIMLESSTHAN);
-            prs->emitInstruction(neon::Instruction::OP_PRIMNOT);
-            break;
-        case neon::Token::TOK_LESSTHAN:
-            prs->emitInstruction(neon::Instruction::OP_PRIMLESSTHAN);
-            break;
-        case neon::Token::TOK_LESSEQUAL:
-            prs->emitInstruction(neon::Instruction::OP_PRIMGREATER);
-            prs->emitInstruction(neon::Instruction::OP_PRIMNOT);
-            break;
-            /* bitwise */
-        case neon::Token::TOK_AMPERSAND:
-            prs->emitInstruction(neon::Instruction::OP_PRIMAND);
-            break;
-        case neon::Token::TOK_BARSINGLE:
-            prs->emitInstruction(neon::Instruction::OP_PRIMOR);
-            break;
-        case neon::Token::TOK_XORSINGLE:
-            prs->emitInstruction(neon::Instruction::OP_PRIMBITXOR);
-            break;
-        case neon::Token::TOK_LEFTSHIFT:
-            prs->emitInstruction(neon::Instruction::OP_PRIMSHIFTLEFT);
-            break;
-        case neon::Token::TOK_RIGHTSHIFT:
-            prs->emitInstruction(neon::Instruction::OP_PRIMSHIFTRIGHT);
-            break;
-            /* range */
-        case neon::Token::TOK_DOUBLEDOT:
-            prs->emitInstruction(neon::Instruction::OP_MAKERANGE);
-            break;
-        default:
-            break;
-    }
-    return true;
-}
-
-bool nn_astparser_rulecall(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    uint8_t argcount;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    argcount = prs->parseFuncCallArgs();
-    prs->emitInstruction(neon::Instruction::OP_CALLFUNCTION);
-    prs->emit1byte(argcount);
-    return true;
-}
-
-bool nn_astparser_ruleliteral(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    switch(prs->m_prevtoken.type)
-    {
-        case neon::Token::TOK_KWNULL:
-            prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-            break;
-        case neon::Token::TOK_KWTRUE:
-            prs->emitInstruction(neon::Instruction::OP_PUSHTRUE);
-            break;
-        case neon::Token::TOK_KWFALSE:
-            prs->emitInstruction(neon::Instruction::OP_PUSHFALSE);
-            break;
-        default:
-            /* TODO: assuming this is correct behaviour ... */
-            return false;
-    }
-    return true;
-}
-
-
-bool nn_astparser_ruledot(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    int name;
-    bool caninvoke;
-    uint8_t argcount;
-    neon::Instruction::OpCode getop;
-    neon::Instruction::OpCode setop;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->ignoreSpace();
-    if(!prs->consume(neon::Token::TOK_IDENTNORMAL, "expected property name after '.'"))
-    {
-        return false;
-    }
-    name = prs->makeIdentConst(&prs->m_prevtoken);
-    if(prs->match(neon::Token::TOK_PARENOPEN))
-    {
-        argcount = prs->parseFuncCallArgs();
-        caninvoke = (
-            (prs->m_currclasscompiler != nullptr) &&
-            (
-                (previous.type == neon::Token::TOK_KWTHIS) ||
-                (neon::Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->classname))
-            )
-        );
-        if(caninvoke)
+        Token::Type op;
+        Parser::Rule* rule;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        op = prs->m_prevtoken.type;
+        /* compile the right operand */
+        rule = prs->getRule(op);
+        prs->parsePrecedence((Parser::Rule::Precedence)(rule->precedence + 1));
+        /* emit the operator instruction */
+        switch(op)
         {
-            prs->emitInstruction(neon::Instruction::OP_CLASSINVOKETHIS);
-            prs->emit1short(name);
+            case Token::TOK_PLUS:
+                prs->emitInstruction(Instruction::OP_PRIMADD);
+                break;
+            case Token::TOK_MINUS:
+                prs->emitInstruction(Instruction::OP_PRIMSUBTRACT);
+                break;
+            case Token::TOK_MULTIPLY:
+                prs->emitInstruction(Instruction::OP_PRIMMULTIPLY);
+                break;
+            case Token::TOK_DIVIDE:
+                prs->emitInstruction(Instruction::OP_PRIMDIVIDE);
+                break;
+            case Token::TOK_MODULO:
+                prs->emitInstruction(Instruction::OP_PRIMMODULO);
+                break;
+            case Token::TOK_POWEROF:
+                prs->emitInstruction(Instruction::OP_PRIMPOW);
+                break;
+            case Token::TOK_FLOOR:
+                prs->emitInstruction(Instruction::OP_PRIMFLOORDIVIDE);
+                break;
+                /* equality */
+            case Token::TOK_EQUAL:
+                prs->emitInstruction(Instruction::OP_EQUAL);
+                break;
+            case Token::TOK_NOTEQUAL:
+                prs->emitInstruction(Instruction::OP_EQUAL);
+                prs->emitInstruction(Instruction::OP_PRIMNOT);
+                break;
+            case Token::TOK_GREATERTHAN:
+                prs->emitInstruction(Instruction::OP_PRIMGREATER);
+                break;
+            case Token::TOK_GREATERASSIGN:
+                prs->emitInstruction(Instruction::OP_PRIMLESSTHAN);
+                prs->emitInstruction(Instruction::OP_PRIMNOT);
+                break;
+            case Token::TOK_LESSTHAN:
+                prs->emitInstruction(Instruction::OP_PRIMLESSTHAN);
+                break;
+            case Token::TOK_LESSEQUAL:
+                prs->emitInstruction(Instruction::OP_PRIMGREATER);
+                prs->emitInstruction(Instruction::OP_PRIMNOT);
+                break;
+                /* bitwise */
+            case Token::TOK_AMPERSAND:
+                prs->emitInstruction(Instruction::OP_PRIMAND);
+                break;
+            case Token::TOK_BARSINGLE:
+                prs->emitInstruction(Instruction::OP_PRIMOR);
+                break;
+            case Token::TOK_XORSINGLE:
+                prs->emitInstruction(Instruction::OP_PRIMBITXOR);
+                break;
+            case Token::TOK_LEFTSHIFT:
+                prs->emitInstruction(Instruction::OP_PRIMSHIFTLEFT);
+                break;
+            case Token::TOK_RIGHTSHIFT:
+                prs->emitInstruction(Instruction::OP_PRIMSHIFTRIGHT);
+                break;
+                /* range */
+            case Token::TOK_DOUBLEDOT:
+                prs->emitInstruction(Instruction::OP_MAKERANGE);
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    bool doRuleCall(Parser* prs, Token previous, bool canassign)
+    {
+        uint8_t argcount;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        argcount = prs->parseFuncCallArgs();
+        prs->emitInstruction(Instruction::OP_CALLFUNCTION);
+        prs->emit1byte(argcount);
+        return true;
+    }
+
+    bool doRuleLiteral(Parser* prs, bool canassign)
+    {
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        switch(prs->m_prevtoken.type)
+        {
+            case Token::TOK_KWNULL:
+                prs->emitInstruction(Instruction::OP_PUSHNULL);
+                break;
+            case Token::TOK_KWTRUE:
+                prs->emitInstruction(Instruction::OP_PUSHTRUE);
+                break;
+            case Token::TOK_KWFALSE:
+                prs->emitInstruction(Instruction::OP_PUSHFALSE);
+                break;
+            default:
+                /* TODO: assuming this is correct behaviour ... */
+                return false;
+        }
+        return true;
+    }
+
+    bool doRuleDot(Parser* prs, Token previous, bool canassign)
+    {
+        int name;
+        bool caninvoke;
+        uint8_t argcount;
+        Instruction::OpCode getop;
+        Instruction::OpCode setop;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->ignoreSpace();
+        if(!prs->consume(Token::TOK_IDENTNORMAL, "expected property name after '.'"))
+        {
+            return false;
+        }
+        name = prs->makeIdentConst(&prs->m_prevtoken);
+        if(prs->match(Token::TOK_PARENOPEN))
+        {
+            argcount = prs->parseFuncCallArgs();
+            caninvoke = (
+                (prs->m_currclasscompiler != nullptr) &&
+                (
+                    (previous.type == Token::TOK_KWTHIS) ||
+                    (Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->classname))
+                )
+            );
+            if(caninvoke)
+            {
+                prs->emitInstruction(Instruction::OP_CLASSINVOKETHIS);
+                prs->emit1short(name);
+            }
+            else
+            {
+                prs->emitInstruction(Instruction::OP_CALLMETHOD);
+                prs->emit1short(name);
+            }
+            prs->emit1byte(argcount);
         }
         else
         {
-            prs->emitInstruction(neon::Instruction::OP_CALLMETHOD);
-            prs->emit1short(name);
-        }
-        prs->emit1byte(argcount);
-    }
-    else
-    {
-        getop = neon::Instruction::OP_PROPERTYGET;
-        setop = neon::Instruction::OP_PROPERTYSET;
-        if(prs->m_currclasscompiler != nullptr && (previous.type == neon::Token::TOK_KWTHIS || neon::Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->classname)))
-        {
-            getop = neon::Instruction::OP_PROPERTYGETSELF;
-        }
-        prs->parseAssign(getop, setop, name, canassign);
-    }
-    return true;
-}
-
-
-
-
-bool nn_astparser_rulearray(neon::Parser* prs, bool canassign)
-{
-    int count;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    /* placeholder for the list */
-    prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-    count = 0;
-    prs->ignoreSpace();
-    if(!prs->check(neon::Token::TOK_BRACKETCLOSE))
-    {
-        do
-        {
-            prs->ignoreSpace();
-            if(!prs->check(neon::Token::TOK_BRACKETCLOSE))
+            getop = Instruction::OP_PROPERTYGET;
+            setop = Instruction::OP_PROPERTYSET;
+            if(prs->m_currclasscompiler != nullptr && (previous.type == Token::TOK_KWTHIS || Parser::identsEqual(&prs->m_prevtoken, &prs->m_currclasscompiler->classname)))
             {
-                /* allow comma to end lists */
-                prs->parseExpression();
-                prs->ignoreSpace();
-                count++;
+                getop = Instruction::OP_PROPERTYGETSELF;
             }
-            prs->ignoreSpace();
-        } while(prs->match(neon::Token::TOK_COMMA));
+            prs->parseAssign(getop, setop, name, canassign);
+        }
+        return true;
     }
-    prs->ignoreSpace();
-    prs->consume(neon::Token::TOK_BRACKETCLOSE, "expected ']' at end of list");
-    prs->emitInstruction(neon::Instruction::OP_MAKEARRAY);
-    prs->emit1short(count);
-    return true;
-}
 
-bool nn_astparser_ruledictionary(neon::Parser* prs, bool canassign)
-{
-    bool usedexpression;
-    int itemcount;
-    neon::Parser::CompContext oldctx;
-    (void)canassign;
-    (void)oldctx;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    /* placeholder for the dictionary */
-    prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-    itemcount = 0;
-    prs->ignoreSpace();
-    if(!prs->check(neon::Token::TOK_BRACECLOSE))
+    bool doRuleArray(Parser* prs, bool canassign)
     {
-        do
+        int count;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        /* placeholder for the list */
+        prs->emitInstruction(Instruction::OP_PUSHNULL);
+        count = 0;
+        prs->ignoreSpace();
+        if(!prs->check(Token::TOK_BRACKETCLOSE))
         {
-            prs->ignoreSpace();
-            if(!prs->check(neon::Token::TOK_BRACECLOSE))
+            do
             {
-                /* allow last pair to end with a comma */
-                usedexpression = false;
-                if(prs->check(neon::Token::TOK_IDENTNORMAL))
+                prs->ignoreSpace();
+                if(!prs->check(Token::TOK_BRACKETCLOSE))
                 {
-                    prs->consume(neon::Token::TOK_IDENTNORMAL, "");
-                    prs->emitConst(neon::Value::fromObject(neon::String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length)));
-                }
-                else
-                {
+                    /* allow comma to end lists */
                     prs->parseExpression();
-                    usedexpression = true;
+                    prs->ignoreSpace();
+                    count++;
                 }
                 prs->ignoreSpace();
-                if(!prs->check(neon::Token::TOK_COMMA) && !prs->check(neon::Token::TOK_BRACECLOSE))
+            } while(prs->match(Token::TOK_COMMA));
+        }
+        prs->ignoreSpace();
+        prs->consume(Token::TOK_BRACKETCLOSE, "expected ']' at end of list");
+        prs->emitInstruction(Instruction::OP_MAKEARRAY);
+        prs->emit1short(count);
+        return true;
+    }
+
+    bool doRuleDictionary(Parser* prs, bool canassign)
+    {
+        bool usedexpression;
+        int itemcount;
+        Parser::CompContext oldctx;
+        (void)canassign;
+        (void)oldctx;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        /* placeholder for the dictionary */
+        prs->emitInstruction(Instruction::OP_PUSHNULL);
+        itemcount = 0;
+        prs->ignoreSpace();
+        if(!prs->check(Token::TOK_BRACECLOSE))
+        {
+            do
+            {
+                prs->ignoreSpace();
+                if(!prs->check(Token::TOK_BRACECLOSE))
                 {
-                    prs->consume(neon::Token::TOK_COLON, "expected ':' after dictionary key");
-                    prs->ignoreSpace();
-                    prs->parseExpression();
-                }
-                else
-                {
-                    if(usedexpression)
+                    /* allow last pair to end with a comma */
+                    usedexpression = false;
+                    if(prs->check(Token::TOK_IDENTNORMAL))
                     {
-                        prs->raiseError("cannot infer dictionary values from expressions");
-                        return false;
+                        prs->consume(Token::TOK_IDENTNORMAL, "");
+                        prs->emitConst(Value::fromObject(String::copy(prs->m_pvm, prs->m_prevtoken.start, prs->m_prevtoken.length)));
                     }
                     else
                     {
-                        prs->emitNamedVar(prs->m_prevtoken, false);
+                        prs->parseExpression();
+                        usedexpression = true;
                     }
+                    prs->ignoreSpace();
+                    if(!prs->check(Token::TOK_COMMA) && !prs->check(Token::TOK_BRACECLOSE))
+                    {
+                        prs->consume(Token::TOK_COLON, "expected ':' after dictionary key");
+                        prs->ignoreSpace();
+                        prs->parseExpression();
+                    }
+                    else
+                    {
+                        if(usedexpression)
+                        {
+                            prs->raiseError("cannot infer dictionary values from expressions");
+                            return false;
+                        }
+                        else
+                        {
+                            prs->emitNamedVar(prs->m_prevtoken, false);
+                        }
+                    }
+                    itemcount++;
                 }
-                itemcount++;
-            }
-        } while(prs->match(neon::Token::TOK_COMMA));
-    }
-    prs->ignoreSpace();
-    prs->consume(neon::Token::TOK_BRACECLOSE, "expected '}' after dictionary");
-    prs->emitInstruction(neon::Instruction::OP_MAKEDICT);
-    prs->emit1short(itemcount);
-    return true;
-}
-
-bool nn_astparser_ruleindexing(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    bool assignable;
-    bool commamatch;
-    uint8_t getop;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    assignable = true;
-    commamatch = false;
-    getop = neon::Instruction::OP_INDEXGET;
-    if(prs->match(neon::Token::TOK_COMMA))
-    {
-        prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-        commamatch = true;
-        getop = neon::Instruction::OP_INDEXGETRANGED;
-    }
-    else
-    {
-        prs->parseExpression();
-    }
-    if(!prs->match(neon::Token::TOK_BRACKETCLOSE))
-    {
-        getop = neon::Instruction::OP_INDEXGETRANGED;
-        if(!commamatch)
-        {
-            prs->consume(neon::Token::TOK_COMMA, "expecting ',' or ']'");
+            } while(prs->match(Token::TOK_COMMA));
         }
-        if(prs->match(neon::Token::TOK_BRACKETCLOSE))
+        prs->ignoreSpace();
+        prs->consume(Token::TOK_BRACECLOSE, "expected '}' after dictionary");
+        prs->emitInstruction(Instruction::OP_MAKEDICT);
+        prs->emit1short(itemcount);
+        return true;
+    }
+
+    bool doRuleIndexing(Parser* prs, Token previous, bool canassign)
+    {
+        bool assignable;
+        bool commamatch;
+        uint8_t getop;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        assignable = true;
+        commamatch = false;
+        getop = Instruction::OP_INDEXGET;
+        if(prs->match(Token::TOK_COMMA))
         {
-            prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
+            prs->emitInstruction(Instruction::OP_PUSHNULL);
+            commamatch = true;
+            getop = Instruction::OP_INDEXGETRANGED;
         }
         else
         {
             prs->parseExpression();
-            prs->consume(neon::Token::TOK_BRACKETCLOSE, "expected ']' after indexing");
         }
-        assignable = false;
-    }
-    else
-    {
-        if(commamatch)
+        if(!prs->match(Token::TOK_BRACKETCLOSE))
         {
-            prs->emitInstruction(neon::Instruction::OP_PUSHNULL);
-        }
-    }
-    prs->parseAssign(getop, neon::Instruction::OP_INDEXSET, -1, assignable);
-    return true;
-}
-
-bool nn_astparser_rulevarnormal(neon::Parser* prs, bool canassign)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->emitNamedVar(prs->m_prevtoken, canassign);
-    return true;
-}
-
-bool nn_astparser_rulevarglobal(neon::Parser* prs, bool canassign)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->emitNamedVar(prs->m_prevtoken, canassign);
-    return true;
-}
-
-bool nn_astparser_rulethis(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    #if 0
-    if(prs->m_currclasscompiler == nullptr)
-    {
-        prs->raiseError("cannot use keyword 'this' outside of a class");
-        return false;
-    }
-    #endif
-    //if(prs->m_currclasscompiler != nullptr)
-    {
-        prs->emitNamedVar(prs->m_prevtoken, false);
-        //prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strthis), false);
-    }
-    return true;
-}
-
-bool nn_astparser_rulesuper(neon::Parser* prs, bool canassign)
-{
-    int name;
-    bool invokeself;
-    uint8_t argcount;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    (void)canassign;
-    if(prs->m_currclasscompiler == nullptr)
-    {
-        prs->raiseError("cannot use keyword 'super' outside of a class");
-        return false;
-    }
-    else if(!prs->m_currclasscompiler->hassuperclass)
-    {
-        prs->raiseError("cannot use keyword 'super' in a class without a superclass");
-        return false;
-    }
-    name = -1;
-    invokeself = false;
-    if(!prs->check(neon::Token::TOK_PARENOPEN))
-    {
-        prs->consume(neon::Token::TOK_DOT, "expected '.' or '(' after super");
-        prs->consume(neon::Token::TOK_IDENTNORMAL, "expected super class method name after .");
-        name = prs->makeIdentConst(&prs->m_prevtoken);
-    }
-    else
-    {
-        invokeself = true;
-    }
-    prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strthis), false);
-    if(prs->match(neon::Token::TOK_PARENOPEN))
-    {
-        argcount = prs->parseFuncCallArgs();
-        prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strsuper), false);
-        if(!invokeself)
-        {
-            prs->emitInstruction(neon::Instruction::OP_CLASSINVOKESUPER);
-            prs->emit1short(name);
-            prs->emit1byte(argcount);
+            getop = Instruction::OP_INDEXGETRANGED;
+            if(!commamatch)
+            {
+                prs->consume(Token::TOK_COMMA, "expecting ',' or ']'");
+            }
+            if(prs->match(Token::TOK_BRACKETCLOSE))
+            {
+                prs->emitInstruction(Instruction::OP_PUSHNULL);
+            }
+            else
+            {
+                prs->parseExpression();
+                prs->consume(Token::TOK_BRACKETCLOSE, "expected ']' after indexing");
+            }
+            assignable = false;
         }
         else
         {
-            prs->emitInstruction(neon::Instruction::OP_CLASSINVOKESUPERSELF);
-            prs->emit1byte(argcount);
-        }
-    }
-    else
-    {
-        prs->emitNamedVar(neon::Parser::makeSynthToken(neon::g_strsuper), false);
-        prs->emitInstruction(neon::Instruction::OP_CLASSGETSUPER);
-        prs->emit1short(name);
-    }
-    return true;
-}
-
-bool nn_astparser_rulegrouping(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->ignoreSpace();
-    prs->parseExpression();
-    while(prs->match(neon::Token::TOK_COMMA))
-    {
-        prs->parseExpression();
-    }
-    prs->ignoreSpace();
-    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after grouped expression");
-    return true;
-}
-
-bool nn_astparser_rulenumber(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->emitConst(prs->parseNumber());
-    return true;
-}
-
-bool nn_astparser_rulestring(neon::Parser* prs, bool canassign)
-{
-    int length;
-    char* str;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "canassign=%d", canassign);
-    str = prs->parseString(&length);
-    prs->emitConst(neon::Value::fromObject(neon::String::take(prs->m_pvm, str, length)));
-    return true;
-}
-
-bool nn_astparser_ruleinterpolstring(neon::Parser* prs, bool canassign)
-{
-    int count;
-    bool doadd;
-    bool stringmatched;
-    NEON_ASTDEBUG(prs->m_pvm, "canassign=%d", canassign);
-    count = 0;
-    do
-    {
-        doadd = false;
-        stringmatched = false;
-        if(prs->m_prevtoken.length - 2 > 0)
-        {
-            nn_astparser_rulestring(prs, canassign);
-            doadd = true;
-            stringmatched = true;
-            if(count > 0)
+            if(commamatch)
             {
-                prs->emitInstruction(neon::Instruction::OP_PRIMADD);
+                prs->emitInstruction(Instruction::OP_PUSHNULL);
             }
         }
-        prs->parseExpression();
-        prs->emitInstruction(neon::Instruction::OP_STRINGIFY);
-        if(doadd || (count >= 1 && stringmatched == false))
+        prs->parseAssign(getop, Instruction::OP_INDEXSET, -1, assignable);
+        return true;
+    }
+
+    bool doRuleVarnormal(Parser* prs, bool canassign)
+    {
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->emitNamedVar(prs->m_prevtoken, canassign);
+        return true;
+    }
+
+    bool doRuleVarglobal(Parser* prs, bool canassign)
+    {
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->emitNamedVar(prs->m_prevtoken, canassign);
+        return true;
+    }
+
+    bool doRuleThis(Parser* prs, bool canassign)
+    {
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        #if 0
+        if(prs->m_currclasscompiler == nullptr)
         {
-            prs->emitInstruction(neon::Instruction::OP_PRIMADD);
+            prs->raiseError("cannot use keyword 'this' outside of a class");
+            return false;
         }
-        count++;
-    } while(prs->match(neon::Token::TOK_INTERPOLATION));
-    prs->consume(neon::Token::TOK_LITERAL, "unterminated string interpolation");
-    if(prs->m_prevtoken.length - 2 > 0)
-    {
-        nn_astparser_rulestring(prs, canassign);
-        prs->emitInstruction(neon::Instruction::OP_PRIMADD);
+        #endif
+        //if(prs->m_currclasscompiler != nullptr)
+        {
+            prs->emitNamedVar(prs->m_prevtoken, false);
+            //prs->emitNamedVar(Parser::makeSynthToken(g_strthis), false);
+        }
+        return true;
     }
-    return true;
-}
 
-bool nn_astparser_ruleunary(neon::Parser* prs, bool canassign)
-{
-    neon::Token::Type op;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    op = prs->m_prevtoken.type;
-    /* compile the expression */
-    prs->parsePrecedence(neon::Parser::Rule::PREC_UNARY);
-    /* emit instruction */
-    switch(op)
+    bool doRuleSuper(Parser* prs, bool canassign)
     {
-        case neon::Token::TOK_MINUS:
-            prs->emitInstruction(neon::Instruction::OP_PRIMNEGATE);
-            break;
-        case neon::Token::TOK_EXCLMARK:
-            prs->emitInstruction(neon::Instruction::OP_PRIMNOT);
-            break;
-        case neon::Token::TOK_TILDESINGLE:
-            prs->emitInstruction(neon::Instruction::OP_PRIMBITNOT);
-            break;
-        default:
-            break;
+        int name;
+        bool invokeself;
+        uint8_t argcount;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        (void)canassign;
+        if(prs->m_currclasscompiler == nullptr)
+        {
+            prs->raiseError("cannot use keyword 'super' outside of a class");
+            return false;
+        }
+        else if(!prs->m_currclasscompiler->hassuperclass)
+        {
+            prs->raiseError("cannot use keyword 'super' in a class without a superclass");
+            return false;
+        }
+        name = -1;
+        invokeself = false;
+        if(!prs->check(Token::TOK_PARENOPEN))
+        {
+            prs->consume(Token::TOK_DOT, "expected '.' or '(' after super");
+            prs->consume(Token::TOK_IDENTNORMAL, "expected super class method name after .");
+            name = prs->makeIdentConst(&prs->m_prevtoken);
+        }
+        else
+        {
+            invokeself = true;
+        }
+        prs->emitNamedVar(Parser::makeSynthToken(g_strthis), false);
+        if(prs->match(Token::TOK_PARENOPEN))
+        {
+            argcount = prs->parseFuncCallArgs();
+            prs->emitNamedVar(Parser::makeSynthToken(g_strsuper), false);
+            if(!invokeself)
+            {
+                prs->emitInstruction(Instruction::OP_CLASSINVOKESUPER);
+                prs->emit1short(name);
+                prs->emit1byte(argcount);
+            }
+            else
+            {
+                prs->emitInstruction(Instruction::OP_CLASSINVOKESUPERSELF);
+                prs->emit1byte(argcount);
+            }
+        }
+        else
+        {
+            prs->emitNamedVar(Parser::makeSynthToken(g_strsuper), false);
+            prs->emitInstruction(Instruction::OP_CLASSGETSUPER);
+            prs->emit1short(name);
+        }
+        return true;
     }
-    return true;
-}
 
-bool nn_astparser_ruleand(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    int endjump;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    endjump = prs->emitJump(neon::Instruction::OP_JUMPIFFALSE);
-    prs->emitInstruction(neon::Instruction::OP_POPONE);
-    prs->parsePrecedence(neon::Parser::Rule::PREC_AND);
-    prs->emitPatchJump(endjump);
-    return true;
-}
-
-bool nn_astparser_ruleor(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    int endjump;
-    int elsejump;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    elsejump = prs->emitJump(neon::Instruction::OP_JUMPIFFALSE);
-    endjump = prs->emitJump(neon::Instruction::OP_JUMPNOW);
-    prs->emitPatchJump(elsejump);
-    prs->emitInstruction(neon::Instruction::OP_POPONE);
-    prs->parsePrecedence(neon::Parser::Rule::PREC_OR);
-    prs->emitPatchJump(endjump);
-    return true;
-}
-
-bool nn_astparser_ruleconditional(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    int thenjump;
-    int elsejump;
-    (void)previous;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    thenjump = prs->emitJump(neon::Instruction::OP_JUMPIFFALSE);
-    prs->emitInstruction(neon::Instruction::OP_POPONE);
-    prs->ignoreSpace();
-    /* compile the then expression */
-    prs->parsePrecedence(neon::Parser::Rule::PREC_CONDITIONAL);
-    prs->ignoreSpace();
-    elsejump = prs->emitJump(neon::Instruction::OP_JUMPNOW);
-    prs->emitPatchJump(thenjump);
-    prs->emitInstruction(neon::Instruction::OP_POPONE);
-    prs->consume(neon::Token::TOK_COLON, "expected matching ':' after '?' conditional");
-    prs->ignoreSpace();
-    /*
-    // compile the else expression
-    // here we parse at neon::Parser::Rule::PREC_ASSIGNMENT precedence as
-    // linear conditionals can be nested.
-    */
-    prs->parsePrecedence(neon::Parser::Rule::PREC_ASSIGNMENT);
-    prs->emitPatchJump(elsejump);
-    return true;
-}
-
-bool nn_astparser_ruleimport(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->parseExpression();
-    prs->emitInstruction(neon::Instruction::OP_IMPORTIMPORT);
-    return true;
-}
-
-bool nn_astparser_rulenew(neon::Parser* prs, bool canassign)
-{
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->consume(neon::Token::TOK_IDENTNORMAL, "class name after 'new'");
-    return nn_astparser_rulevarnormal(prs, canassign);
-    //return nn_astparser_rulecall(prs, prs->m_prevtoken, canassign);
-}
-
-bool nn_astparser_ruletypeof(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' after 'typeof'");
-    prs->parseExpression();
-    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after 'typeof'");
-    prs->emitInstruction(neon::Instruction::OP_TYPEOF);
-    return true;
-}
-
-bool nn_astparser_rulenothingprefix(neon::Parser* prs, bool canassign)
-{
-    (void)prs;
-    (void)canassign;
-    NEON_ASTDEBUG(prs->m_pvm, "");
-    return true;
-}
-
-bool nn_astparser_rulenothinginfix(neon::Parser* prs, neon::Token previous, bool canassign)
-{
-    (void)prs;
-    (void)previous;
-    (void)canassign;
-    return true;
-}
-
-#define dorule(tok, prefix, infix, precedence) \
-    case tok: return Parser::Rule::make(&dest, prefix, infix, precedence);
-
-neon::Parser::Rule* neon::Parser::getRule(neon::Token::Type type)
-{
-    static Parser::Rule dest;
-    switch(type)
+    bool doRuleGrouping(Parser* prs, bool canassign)
     {
-        dorule(Token::TOK_NEWLINE, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_PARENOPEN, nn_astparser_rulegrouping, nn_astparser_rulecall, Parser::Rule::PREC_CALL );
-        dorule(Token::TOK_PARENCLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_BRACKETOPEN, nn_astparser_rulearray, nn_astparser_ruleindexing, Parser::Rule::PREC_CALL );
-        dorule(Token::TOK_BRACKETCLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_BRACEOPEN, nn_astparser_ruledictionary, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_BRACECLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_SEMICOLON, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_COMMA, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_BACKSLASH, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_EXCLMARK, nn_astparser_ruleunary, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_NOTEQUAL, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_EQUALITY );
-        dorule(Token::TOK_COLON, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_AT, nn_astparser_ruleanonfunc, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_DOT, nullptr, nn_astparser_ruledot, Parser::Rule::PREC_CALL );
-        dorule(Token::TOK_DOUBLEDOT, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_RANGE );
-        dorule(Token::TOK_TRIPLEDOT, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_PLUS, nn_astparser_ruleunary, nn_astparser_rulebinary, Parser::Rule::PREC_TERM );
-        dorule(Token::TOK_PLUSASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_INCREMENT, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_MINUS, nn_astparser_ruleunary, nn_astparser_rulebinary, Parser::Rule::PREC_TERM );
-        dorule(Token::TOK_MINUSASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_DECREMENT, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_MULTIPLY, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_FACTOR );
-        dorule(Token::TOK_MULTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_POWEROF, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_FACTOR );
-        dorule(Token::TOK_POWASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_DIVIDE, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_FACTOR );
-        dorule(Token::TOK_DIVASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_FLOOR, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_FACTOR );
-        dorule(Token::TOK_ASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_EQUAL, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_EQUALITY );
-        dorule(Token::TOK_LESSTHAN, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_COMPARISON );
-        dorule(Token::TOK_LESSEQUAL, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_COMPARISON );
-        dorule(Token::TOK_LEFTSHIFT, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_SHIFT );
-        dorule(Token::TOK_LEFTSHIFTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_GREATERTHAN, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_COMPARISON );
-        dorule(Token::TOK_GREATERASSIGN, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_COMPARISON );
-        dorule(Token::TOK_RIGHTSHIFT, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_SHIFT );
-        dorule(Token::TOK_RIGHTSHIFTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_MODULO, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_FACTOR );
-        dorule(Token::TOK_MODASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_AMPERSAND, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_BITAND );
-        dorule(Token::TOK_AMPASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_BARSINGLE, /*nn_astparser_ruleanoncompat*/ nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_BITOR );
-        dorule(Token::TOK_BARASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_TILDESINGLE, nn_astparser_ruleunary, nullptr, Parser::Rule::PREC_UNARY );
-        dorule(Token::TOK_TILDEASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_XORSINGLE, nullptr, nn_astparser_rulebinary, Parser::Rule::PREC_BITXOR );
-        dorule(Token::TOK_XORASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_QUESTION, nullptr, nn_astparser_ruleconditional, Parser::Rule::PREC_CONDITIONAL );
-        dorule(Token::TOK_KWAND, nullptr, nn_astparser_ruleand, Parser::Rule::PREC_AND );
-        dorule(Token::TOK_KWAS, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWASSERT, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWBREAK, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWCLASS, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWCONTINUE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWFUNCTION, nn_astparser_ruleanonfunc, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWDEFAULT, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWTHROW, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWDO, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWECHO, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWELSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWFALSE, nn_astparser_ruleliteral, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWFOREACH, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWIF, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWIMPORT, nn_astparser_ruleimport, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWIN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWFOR, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWVAR, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWNULL, nn_astparser_ruleliteral, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWNEW, nn_astparser_rulenew, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWTYPEOF, nn_astparser_ruletypeof, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWOR, nullptr, nn_astparser_ruleor, Parser::Rule::PREC_OR );
-        dorule(Token::TOK_KWSUPER, nn_astparser_rulesuper, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWRETURN, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWTHIS, nn_astparser_rulethis, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWSTATIC, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWTRUE, nn_astparser_ruleliteral, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWSWITCH, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWCASE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWWHILE, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWTRY, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWCATCH, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWFINALLY, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_LITERAL, nn_astparser_rulestring, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_LITNUMREG, nn_astparser_rulenumber, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_LITNUMBIN, nn_astparser_rulenumber, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_LITNUMOCT, nn_astparser_rulenumber, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_LITNUMHEX, nn_astparser_rulenumber, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_IDENTNORMAL, nn_astparser_rulevarnormal, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_INTERPOLATION, nn_astparser_ruleinterpolstring, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_EOF, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_ERROR, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_KWEMPTY, nn_astparser_ruleliteral, nullptr, Parser::Rule::PREC_NONE );
-        dorule(Token::TOK_UNDEFINED, nullptr, nullptr, Parser::Rule::PREC_NONE );
-        default:
-            fprintf(stderr, "missing rule?\n");
-            break;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->ignoreSpace();
+        prs->parseExpression();
+        while(prs->match(Token::TOK_COMMA))
+        {
+            prs->parseExpression();
+        }
+        prs->ignoreSpace();
+        prs->consume(Token::TOK_PARENCLOSE, "expected ')' after grouped expression");
+        return true;
     }
-    return nullptr;
-}
-#undef dorule
 
-
-
-bool nn_astparser_ruleanonfunc(neon::Parser* prs, bool canassign)
-{
-    (void)canassign;
-    neon::Parser::FuncCompiler compiler(prs, neon::FuncCommon::FUNCTYPE_FUNCTION, true);
-    prs->scopeBegin();
-    /* compile parameter list */
-    prs->consume(neon::Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
-    if(!prs->check(neon::Token::TOK_PARENCLOSE))
+    bool doRuleNumber(Parser* prs, bool canassign)
     {
-        prs->parseFuncDeclParamList();
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->emitConst(prs->parseNumber());
+        return true;
     }
-    prs->consume(neon::Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
-    compiler.compileBody(true, true);
-    return true;
-}
 
+    bool doRuleString(Parser* prs, bool canassign)
+    {
+        int length;
+        char* str;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "canassign=%d", canassign);
+        str = prs->parseString(&length);
+        prs->emitConst(Value::fromObject(String::take(prs->m_pvm, str, length)));
+        return true;
+    }
+
+    bool doRuleInterpolstring(Parser* prs, bool canassign)
+    {
+        int count;
+        bool doadd;
+        bool stringmatched;
+        NEON_ASTDEBUG(prs->m_pvm, "canassign=%d", canassign);
+        count = 0;
+        do
+        {
+            doadd = false;
+            stringmatched = false;
+            if(prs->m_prevtoken.length - 2 > 0)
+            {
+                doRuleString(prs, canassign);
+                doadd = true;
+                stringmatched = true;
+                if(count > 0)
+                {
+                    prs->emitInstruction(Instruction::OP_PRIMADD);
+                }
+            }
+            prs->parseExpression();
+            prs->emitInstruction(Instruction::OP_STRINGIFY);
+            if(doadd || (count >= 1 && !stringmatched))
+            {
+                prs->emitInstruction(Instruction::OP_PRIMADD);
+            }
+            count++;
+        } while(prs->match(Token::TOK_INTERPOLATION));
+        prs->consume(Token::TOK_LITERAL, "unterminated string interpolation");
+        if(prs->m_prevtoken.length - 2 > 0)
+        {
+            doRuleString(prs, canassign);
+            prs->emitInstruction(Instruction::OP_PRIMADD);
+        }
+        return true;
+    }
+
+    bool doRuleUnary(Parser* prs, bool canassign)
+    {
+        Token::Type op;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        op = prs->m_prevtoken.type;
+        /* compile the expression */
+        prs->parsePrecedence(Parser::Rule::PREC_UNARY);
+        /* emit instruction */
+        switch(op)
+        {
+            case Token::TOK_MINUS:
+                prs->emitInstruction(Instruction::OP_PRIMNEGATE);
+                break;
+            case Token::TOK_EXCLMARK:
+                prs->emitInstruction(Instruction::OP_PRIMNOT);
+                break;
+            case Token::TOK_TILDESINGLE:
+                prs->emitInstruction(Instruction::OP_PRIMBITNOT);
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    bool doRuleAnd(Parser* prs, Token previous, bool canassign)
+    {
+        int endjump;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        endjump = prs->emitJump(Instruction::OP_JUMPIFFALSE);
+        prs->emitInstruction(Instruction::OP_POPONE);
+        prs->parsePrecedence(Parser::Rule::PREC_AND);
+        prs->emitPatchJump(endjump);
+        return true;
+    }
+
+    bool doRuleOr(Parser* prs, Token previous, bool canassign)
+    {
+        int endjump;
+        int elsejump;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        elsejump = prs->emitJump(Instruction::OP_JUMPIFFALSE);
+        endjump = prs->emitJump(Instruction::OP_JUMPNOW);
+        prs->emitPatchJump(elsejump);
+        prs->emitInstruction(Instruction::OP_POPONE);
+        prs->parsePrecedence(Parser::Rule::PREC_OR);
+        prs->emitPatchJump(endjump);
+        return true;
+    }
+
+    bool doRuleConditional(Parser* prs, Token previous, bool canassign)
+    {
+        int thenjump;
+        int elsejump;
+        (void)previous;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        thenjump = prs->emitJump(Instruction::OP_JUMPIFFALSE);
+        prs->emitInstruction(Instruction::OP_POPONE);
+        prs->ignoreSpace();
+        /* compile the then expression */
+        prs->parsePrecedence(Parser::Rule::PREC_CONDITIONAL);
+        prs->ignoreSpace();
+        elsejump = prs->emitJump(Instruction::OP_JUMPNOW);
+        prs->emitPatchJump(thenjump);
+        prs->emitInstruction(Instruction::OP_POPONE);
+        prs->consume(Token::TOK_COLON, "expected matching ':' after '?' conditional");
+        prs->ignoreSpace();
+        /*
+        // compile the else expression
+        // here we parse at Parser::Rule::PREC_ASSIGNMENT precedence as
+        // linear conditionals can be nested.
+        */
+        prs->parsePrecedence(Parser::Rule::PREC_ASSIGNMENT);
+        prs->emitPatchJump(elsejump);
+        return true;
+    }
+
+    bool doRuleImport(Parser* prs, bool canassign)
+    {
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->parseExpression();
+        prs->emitInstruction(Instruction::OP_IMPORTIMPORT);
+        return true;
+    }
+
+    bool doRuleNew(Parser* prs, bool canassign)
+    {
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->consume(Token::TOK_IDENTNORMAL, "class name after 'new'");
+        return doRuleVarnormal(prs, canassign);
+        //return doRuleCall(prs, prs->m_prevtoken, canassign);
+    }
+
+    bool doRuleTypeof(Parser* prs, bool canassign)
+    {
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        prs->consume(Token::TOK_PARENOPEN, "expected '(' after 'typeof'");
+        prs->parseExpression();
+        prs->consume(Token::TOK_PARENCLOSE, "expected ')' after 'typeof'");
+        prs->emitInstruction(Instruction::OP_TYPEOF);
+        return true;
+    }
+
+    bool doRuleNothingprefix(Parser* prs, bool canassign)
+    {
+        (void)prs;
+        (void)canassign;
+        NEON_ASTDEBUG(prs->m_pvm, "");
+        return true;
+    }
+
+    bool doRuleNothinginfix(Parser* prs, Token previous, bool canassign)
+    {
+        (void)prs;
+        (void)previous;
+        (void)canassign;
+        return true;
+    }
+
+    bool doRuleAnonfunc(Parser* prs, bool canassign)
+    {
+        (void)canassign;
+        Parser::FuncCompiler compiler(prs, FuncCommon::FUNCTYPE_FUNCTION, true);
+        prs->scopeBegin();
+        /* compile parameter list */
+        prs->consume(Token::TOK_PARENOPEN, "expected '(' at start of anonymous function");
+        if(!prs->check(Token::TOK_PARENCLOSE))
+        {
+            prs->parseFuncDeclParamList();
+        }
+        prs->consume(Token::TOK_PARENCLOSE, "expected ')' after anonymous function parameters");
+        compiler.compileBody(true, true);
+        return true;
+    }
+
+    #define dorule(tok, prefix, infix, precedence) \
+        case tok: return Parser::Rule::make(&dest, prefix, infix, precedence);
+
+    Parser::Rule* Parser::getRule(Token::Type type)
+    {
+        static Parser::Rule dest;
+        switch(type)
+        {
+            dorule(Token::TOK_NEWLINE, doRuleNothingprefix, doRuleNothinginfix, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_PARENOPEN, doRuleGrouping, doRuleCall, Parser::Rule::PREC_CALL );
+            dorule(Token::TOK_PARENCLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_BRACKETOPEN, doRuleArray, doRuleIndexing, Parser::Rule::PREC_CALL );
+            dorule(Token::TOK_BRACKETCLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_BRACEOPEN, doRuleDictionary, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_BRACECLOSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_SEMICOLON, doRuleNothingprefix, doRuleNothinginfix, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_COMMA, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_BACKSLASH, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_EXCLMARK, doRuleUnary, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_NOTEQUAL, nullptr, doRuleBinary, Parser::Rule::PREC_EQUALITY );
+            dorule(Token::TOK_COLON, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_AT, doRuleAnonfunc, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_DOT, nullptr, doRuleDot, Parser::Rule::PREC_CALL );
+            dorule(Token::TOK_DOUBLEDOT, nullptr, doRuleBinary, Parser::Rule::PREC_RANGE );
+            dorule(Token::TOK_TRIPLEDOT, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_PLUS, doRuleUnary, doRuleBinary, Parser::Rule::PREC_TERM );
+            dorule(Token::TOK_PLUSASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_INCREMENT, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_MINUS, doRuleUnary, doRuleBinary, Parser::Rule::PREC_TERM );
+            dorule(Token::TOK_MINUSASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_DECREMENT, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_MULTIPLY, nullptr, doRuleBinary, Parser::Rule::PREC_FACTOR );
+            dorule(Token::TOK_MULTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_POWEROF, nullptr, doRuleBinary, Parser::Rule::PREC_FACTOR );
+            dorule(Token::TOK_POWASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_DIVIDE, nullptr, doRuleBinary, Parser::Rule::PREC_FACTOR );
+            dorule(Token::TOK_DIVASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_FLOOR, nullptr, doRuleBinary, Parser::Rule::PREC_FACTOR );
+            dorule(Token::TOK_ASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_EQUAL, nullptr, doRuleBinary, Parser::Rule::PREC_EQUALITY );
+            dorule(Token::TOK_LESSTHAN, nullptr, doRuleBinary, Parser::Rule::PREC_COMPARISON );
+            dorule(Token::TOK_LESSEQUAL, nullptr, doRuleBinary, Parser::Rule::PREC_COMPARISON );
+            dorule(Token::TOK_LEFTSHIFT, nullptr, doRuleBinary, Parser::Rule::PREC_SHIFT );
+            dorule(Token::TOK_LEFTSHIFTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_GREATERTHAN, nullptr, doRuleBinary, Parser::Rule::PREC_COMPARISON );
+            dorule(Token::TOK_GREATERASSIGN, nullptr, doRuleBinary, Parser::Rule::PREC_COMPARISON );
+            dorule(Token::TOK_RIGHTSHIFT, nullptr, doRuleBinary, Parser::Rule::PREC_SHIFT );
+            dorule(Token::TOK_RIGHTSHIFTASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_MODULO, nullptr, doRuleBinary, Parser::Rule::PREC_FACTOR );
+            dorule(Token::TOK_MODASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_AMPERSAND, nullptr, doRuleBinary, Parser::Rule::PREC_BITAND );
+            dorule(Token::TOK_AMPASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_BARSINGLE, /*doRuleAnoncompat*/ nullptr, doRuleBinary, Parser::Rule::PREC_BITOR );
+            dorule(Token::TOK_BARASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_TILDESINGLE, doRuleUnary, nullptr, Parser::Rule::PREC_UNARY );
+            dorule(Token::TOK_TILDEASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_XORSINGLE, nullptr, doRuleBinary, Parser::Rule::PREC_BITXOR );
+            dorule(Token::TOK_XORASSIGN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_QUESTION, nullptr, doRuleConditional, Parser::Rule::PREC_CONDITIONAL );
+            dorule(Token::TOK_KWAND, nullptr, doRuleAnd, Parser::Rule::PREC_AND );
+            dorule(Token::TOK_KWAS, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWASSERT, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWBREAK, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWCLASS, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWCONTINUE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWFUNCTION, doRuleAnonfunc, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWDEFAULT, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWTHROW, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWDO, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWECHO, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWELSE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWFALSE, doRuleLiteral, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWFOREACH, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWIF, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWIMPORT, doRuleImport, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWIN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWFOR, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWVAR, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWNULL, doRuleLiteral, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWNEW, doRuleNew, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWTYPEOF, doRuleTypeof, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWOR, nullptr, doRuleOr, Parser::Rule::PREC_OR );
+            dorule(Token::TOK_KWSUPER, doRuleSuper, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWRETURN, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWTHIS, doRuleThis, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWSTATIC, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWTRUE, doRuleLiteral, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWSWITCH, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWCASE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWWHILE, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWTRY, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWCATCH, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWFINALLY, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_LITERAL, doRuleString, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_LITNUMREG, doRuleNumber, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_LITNUMBIN, doRuleNumber, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_LITNUMOCT, doRuleNumber, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_LITNUMHEX, doRuleNumber, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_IDENTNORMAL, doRuleVarnormal, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_INTERPOLATION, doRuleInterpolstring, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_EOF, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_ERROR, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_KWEMPTY, doRuleLiteral, nullptr, Parser::Rule::PREC_NONE );
+            dorule(Token::TOK_UNDEFINED, nullptr, nullptr, Parser::Rule::PREC_NONE );
+            default:
+                fprintf(stderr, "missing rule?\n");
+                break;
+        }
+        return nullptr;
+    }
+    #undef dorule
+}
 
 neon::RegModule* nn_natmodule_load_null(neon::State* state)
 {
@@ -11938,1643 +12301,1609 @@ void nn_import_loadbuiltinmodules(neon::State* state)
     }
 }
 
-
-
 #define ENFORCE_VALID_DICT_KEY(chp, index) \
     NEON_ARGS_REJECTTYPE(chp, isArray, index); \
     NEON_ARGS_REJECTTYPE(chp, isDict, index); \
     NEON_ARGS_REJECTTYPE(chp, isFile, index);
 
-neon::Value nn_memberfunc_dict_length(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
-}
 
-neon::Value nn_memberfunc_dict_add(neon::State* state, neon::Arguments* args)
+namespace neon
 {
-    neon::Dictionary* dict;
-    NEON_ARGS_CHECKCOUNT(args, 2);
-    ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = args->thisval.asDict();
-    auto field = dict->m_valtable->getField(args->argv[0]);
-    if(field != nullptr)
+    Value memberfn_dict_length(State* state, Arguments* args)
     {
-        return state->raiseFromFunction(args, "duplicate key %s at add()", neon::Value::toString(state, args->argv[0])->data());
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
     }
-    dict->addEntry(args->argv[0], args->argv[1]);
-    return neon::Value::makeEmpty();
-}
 
-neon::Value nn_memberfunc_dict_set(neon::State* state, neon::Arguments* args)
-{
-    neon::Dictionary* dict;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 2);
-    ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = args->thisval.asDict();
-    auto field = dict->m_valtable->getField(args->argv[0]);
-    if(field == nullptr)
+    Value memberfn_dict_add(State* state, Arguments* args)
     {
-        dict->addEntry(args->argv[0], args->argv[1]);
-    }
-    else
-    {
-        dict->setEntry(args->argv[0], args->argv[1]);
-    }
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_dict_clear(neon::State* state, neon::Arguments* args)
-{
-    neon::Dictionary* dict;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    neon::Memory::destroy(dict->m_keynames);
-    neon::Memory::destroy(dict->m_valtable);
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_dict_clone(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Dictionary* newdict;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    newdict = state->m_vmstate->gcProtect(neon::Dictionary::make(state));
-    newdict->m_valtable->addAll(dict->m_valtable);
-    for(i = 0; i < dict->m_keynames->m_count; i++)
-    {
-        newdict->m_keynames->push(dict->m_keynames->m_values[i]);
-    }
-    return neon::Value::fromObject(newdict);
-}
-
-neon::Value nn_memberfunc_dict_compact(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Dictionary* newdict;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    newdict = state->m_vmstate->gcProtect(neon::Dictionary::make(state));
-    for(i = 0; i < dict->m_keynames->m_count; i++)
-    {
-        auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-        if(!field->m_actualval.compare(state, neon::Value::makeNull()))
+        Dictionary* dict;
+        NEON_ARGS_CHECKCOUNT(args, 2);
+        ENFORCE_VALID_DICT_KEY(args, 0);
+        dict = args->thisval.asDict();
+        auto field = dict->m_valtable->getField(args->argv[0]);
+        if(field != nullptr)
         {
-            newdict->addEntry(dict->m_keynames->m_values[i], field->m_actualval);
+            return state->raiseFromFunction(args, "duplicate key %s at add()", Value::toString(state, args->argv[0])->data());
         }
+        dict->addEntry(args->argv[0], args->argv[1]);
+        return Value::makeEmpty();
     }
-    return neon::Value::fromObject(newdict);
-}
 
-neon::Value nn_memberfunc_dict_contains(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    neon::Dictionary* dict;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = args->thisval.asDict();
-    auto field = dict->m_valtable->getField(args->argv[0]);
-    return neon::Value::makeBool(field != nullptr);
-}
-
-neon::Value nn_memberfunc_dict_extend(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Dictionary* dictcpy;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isDict);
-    dict = args->thisval.asDict();
-    dictcpy = args->argv[0].asDict();
-    for(i = 0; i < dictcpy->m_keynames->m_count; i++)
+    Value memberfn_dict_set(State* state, Arguments* args)
     {
-        auto field = dict->m_valtable->getField(dictcpy->m_keynames->m_values[i]);
+        Dictionary* dict;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 2);
+        ENFORCE_VALID_DICT_KEY(args, 0);
+        dict = args->thisval.asDict();
+        auto field = dict->m_valtable->getField(args->argv[0]);
         if(field == nullptr)
         {
-            dict->m_keynames->push(dictcpy->m_keynames->m_values[i]);
-        }
-    }
-    dict->m_valtable->addAll(dictcpy->m_valtable);
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_dict_get(neon::State* state, neon::Arguments* args)
-{
-    neon::Dictionary* dict;
-    neon::Property* field;
-    (void)state;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = args->thisval.asDict();
-    field = dict->getEntry(args->argv[0]);
-    if(field == nullptr)
-    {
-        if(args->argc == 1)
-        {
-            return neon::Value::makeNull();
+            dict->addEntry(args->argv[0], args->argv[1]);
         }
         else
         {
-            return args->argv[1];
+            dict->setEntry(args->argv[0], args->argv[1]);
         }
+        return Value::makeEmpty();
     }
-    return field->m_actualval;
-}
 
-neon::Value nn_memberfunc_dict_keys(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    list = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < dict->m_keynames->m_count; i++)
+    Value memberfn_dict_clear(State* state, Arguments* args)
     {
-        list->push(dict->m_keynames->m_values[i]);
+        Dictionary* dict;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        Memory::destroy(dict->m_keynames);
+        Memory::destroy(dict->m_valtable);
+        return Value::makeEmpty();
     }
-    return neon::Value::fromObject(list);
-}
 
-neon::Value nn_memberfunc_dict_values(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Array* list;
-    neon::Property* field;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    list = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < dict->m_keynames->m_count; i++)
+    Value memberfn_dict_clone(State* state, Arguments* args)
     {
-        field = dict->getEntry(dict->m_keynames->m_values[i]);
-        list->push(field->m_actualval);
-    }
-    return neon::Value::fromObject(list);
-}
-
-neon::Value nn_memberfunc_dict_remove(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int index;
-    neon::Dictionary* dict;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    ENFORCE_VALID_DICT_KEY(args, 0);
-    dict = args->thisval.asDict();
-    auto field = dict->m_valtable->getField(args->argv[0]);
-    if(field != nullptr)
-    {
-        dict->m_valtable->removeByKey(args->argv[0]);
-        index = -1;
+        size_t i;
+        Dictionary* dict;
+        Dictionary* newdict;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        newdict = state->m_vmstate->gcProtect(Dictionary::make(state));
+        newdict->m_valtable->addAll(dict->m_valtable);
         for(i = 0; i < dict->m_keynames->m_count; i++)
         {
-            if(dict->m_keynames->m_values[i].compare(state, args->argv[0]))
+            newdict->m_keynames->push(dict->m_keynames->m_values[i]);
+        }
+        return Value::fromObject(newdict);
+    }
+
+    Value memberfn_dict_compact(State* state, Arguments* args)
+    {
+        size_t i;
+        Dictionary* dict;
+        Dictionary* newdict;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        newdict = state->m_vmstate->gcProtect(Dictionary::make(state));
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+            if(!field->m_actualval.compare(Value::makeNull()))
+            {
+                newdict->addEntry(dict->m_keynames->m_values[i], field->m_actualval);
+            }
+        }
+        return Value::fromObject(newdict);
+    }
+
+    Value memberfn_dict_contains(State* state, Arguments* args)
+    {
+        (void)state;
+        Dictionary* dict;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        ENFORCE_VALID_DICT_KEY(args, 0);
+        dict = args->thisval.asDict();
+        auto field = dict->m_valtable->getField(args->argv[0]);
+        return Value::makeBool(field != nullptr);
+    }
+
+    Value memberfn_dict_extend(State* state, Arguments* args)
+    {
+        size_t i;
+        Dictionary* dict;
+        Dictionary* dictcpy;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isDict);
+        dict = args->thisval.asDict();
+        dictcpy = args->argv[0].asDict();
+        for(i = 0; i < dictcpy->m_keynames->m_count; i++)
+        {
+            auto field = dict->m_valtable->getField(dictcpy->m_keynames->m_values[i]);
+            if(field == nullptr)
+            {
+                dict->m_keynames->push(dictcpy->m_keynames->m_values[i]);
+            }
+        }
+        dict->m_valtable->addAll(dictcpy->m_valtable);
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_dict_get(State* state, Arguments* args)
+    {
+        Dictionary* dict;
+        Property* field;
+        (void)state;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        ENFORCE_VALID_DICT_KEY(args, 0);
+        dict = args->thisval.asDict();
+        field = dict->getEntry(args->argv[0]);
+        if(field == nullptr)
+        {
+            if(args->argc == 1)
+            {
+                return Value::makeNull();
+            }
+            else
+            {
+                return args->argv[1];
+            }
+        }
+        return field->m_actualval;
+    }
+
+    Value memberfn_dict_keys(State* state, Arguments* args)
+    {
+        size_t i;
+        Dictionary* dict;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        list = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            list->push(dict->m_keynames->m_values[i]);
+        }
+        return Value::fromObject(list);
+    }
+
+    Value memberfn_dict_values(State* state, Arguments* args)
+    {
+        size_t i;
+        Dictionary* dict;
+        Array* list;
+        Property* field;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        list = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            field = dict->getEntry(dict->m_keynames->m_values[i]);
+            list->push(field->m_actualval);
+        }
+        return Value::fromObject(list);
+    }
+
+    Value memberfn_dict_remove(State* state, Arguments* args)
+    {
+        size_t i;
+        int index;
+        Dictionary* dict;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        ENFORCE_VALID_DICT_KEY(args, 0);
+        dict = args->thisval.asDict();
+        auto field = dict->m_valtable->getField(args->argv[0]);
+        if(field != nullptr)
+        {
+            dict->m_valtable->removeByKey(args->argv[0]);
+            index = -1;
+            for(i = 0; i < dict->m_keynames->m_count; i++)
+            {
+                if(dict->m_keynames->m_values[i].compare(args->argv[0]))
+                {
+                    index = i;
+                    break;
+                }
+            }
+            for(i = index; i < dict->m_keynames->m_count; i++)
+            {
+                dict->m_keynames->m_values[i] = dict->m_keynames->m_values[i + 1];
+            }
+            dict->m_keynames->m_count--;
+            return field->m_actualval;
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_dict_isempty(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
+    }
+
+    Value memberfn_dict_findkey(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
+    }
+
+    Value memberfn_dict_tolist(State* state, Arguments* args)
+    {
+        size_t i;
+        Array* list;
+        Dictionary* dict;
+        Array* namelist;
+        Array* valuelist;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = args->thisval.asDict();
+        namelist = state->m_vmstate->gcProtect(Array::make(state));
+        valuelist = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            namelist->push(dict->m_keynames->m_values[i]);
+            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+            if(field != nullptr)
+            {
+                valuelist->push(field->value());
+            }
+            else
+            {
+                /* theoretically impossible */
+                valuelist->push(Value::makeNull());
+            }
+        }
+        list = state->m_vmstate->gcProtect(Array::make(state));
+        list->push(Value::fromObject(namelist));
+        list->push(Value::fromObject(valuelist));
+        return Value::fromObject(list);
+    }
+
+    Value memberfn_dict_iter(State* state, Arguments* args)
+    {
+        Dictionary* dict;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        dict = args->thisval.asDict();
+        auto field = dict->m_valtable->getField(args->argv[0]);
+        if(field != nullptr)
+        {
+            return field->value();
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_dict_itern(State* state, Arguments* args)
+    {
+        size_t i;
+        Dictionary* dict;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        dict = args->thisval.asDict();
+        if(args->argv[0].isNull())
+        {
+            if(dict->m_keynames->m_count == 0)
+            {
+                return Value::makeBool(false);
+            }
+            return dict->m_keynames->m_values[0];
+        }
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            if(args->argv[0].compare(dict->m_keynames->m_values[i]) && (i + 1) < dict->m_keynames->m_count)
+            {
+                return dict->m_keynames->m_values[i + 1];
+            }
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_dict_each(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;
+        Value unused;
+        Dictionary* dict;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        dict = args->thisval.asDict();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            if(arity > 0)
+            {
+                auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+                nestargs[0] = field->value();
+                if(arity > 1)
+                {
+                    nestargs[1] = dict->m_keynames->m_values[i];
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &unused);
+        }
+        /* pop the argument list */
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_dict_filter(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;
+        Value result;
+        Dictionary* dict;
+        ValArray nestargs;
+        Dictionary* resultdict;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        dict = args->thisval.asDict();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        resultdict = state->m_vmstate->gcProtect(Dictionary::make(state));
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+            if(arity > 0)
+            {
+                nestargs[0] = field->value();
+                if(arity > 1)
+                {
+                    nestargs[1] = dict->m_keynames->m_values[i];
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &result);
+            if(!Value::isFalse(result))
+            {
+                resultdict->addEntry(dict->m_keynames->m_values[i], field->value());
+            }
+        }
+        /* pop the call list */
+        return Value::fromObject(resultdict);
+    }
+
+    Value memberfn_dict_some(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value result;
+        Value callable;
+        Dictionary* dict;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        dict = args->thisval.asDict();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            if(arity > 0)
+            {
+                auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+                nestargs[0] = field->value();
+                if(arity > 1)
+                {
+                    nestargs[1] = dict->m_keynames->m_values[i];
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &result);
+            if(!Value::isFalse(result))
+            {
+                /* pop the call list */
+                return Value::makeBool(true);
+            }
+        }
+        /* pop the call list */
+        return Value::makeBool(false);
+    }
+
+    Value memberfn_dict_every(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;  
+        Value result;
+        Dictionary* dict;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        dict = args->thisval.asDict();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < dict->m_keynames->m_count; i++)
+        {
+            if(arity > 0)
+            {
+                auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+                nestargs[0] = field->value();
+                if(arity > 1)
+                {
+                    nestargs[1] = dict->m_keynames->m_values[i];
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &result);
+            if(Value::isFalse(result))
+            {
+                /* pop the call list */
+                return Value::makeBool(false);
+            }
+        }
+        /* pop the call list */
+        return Value::makeBool(true);
+    }
+
+    Value memberfn_dict_reduce(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        int startindex;
+        Value callable;
+        Value accumulator;
+        Dictionary* dict;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        dict = args->thisval.asDict();
+        callable = args->argv[0];
+        startindex = 0;
+        accumulator = Value::makeNull();
+        if(args->argc == 2)
+        {
+            accumulator = args->argv[1];
+        }
+        if(accumulator.isNull() && dict->m_keynames->m_count > 0)
+        {
+            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[0]);
+            accumulator = field->value();
+            startindex = 1;
+        }
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = startindex; i < dict->m_keynames->m_count; i++)
+        {
+            /* only call map for non-empty values in a list. */
+            if(!dict->m_keynames->m_values[i].isNull() && !dict->m_keynames->m_values[i].isEmpty())
+            {
+                if(arity > 0)
+                {
+                    nestargs[0] = accumulator;
+                    if(arity > 1)
+                    {
+                        auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
+                        nestargs[1] = field->value();
+                        if(arity > 2)
+                        {
+                            nestargs[2] = dict->m_keynames->m_values[i];
+                            if(arity > 4)
+                            {
+                                nestargs[3] = args->thisval;
+                            }
+                        }
+                    }
+                }
+                nc.callNested(callable, args->thisval, nestargs, &accumulator);
+            }
+        }
+        /* pop the call list */
+        return accumulator;
+    }
+
+    #undef ENFORCE_VALID_DICT_KEY
+
+    #define FILE_ERROR(type, message) \
+        return state->raiseFromFunction(args, #type " -> %s", message, file->m_filepath->data());
+
+    #define RETURN_STATUS(status) \
+        if((status) == 0) \
+        { \
+            return Value::makeBool(true); \
+        } \
+        else \
+        { \
+            FILE_ERROR(File, strerror(errno)); \
+        }
+
+    #define DENY_STD() \
+        if(file->m_isstd) \
+        return state->raiseFromFunction(args, "method not supported for std files");
+
+    Value memberfn_file_constructor(State* state, Arguments* args)
+    {
+        FILE* hnd;
+        const char* path;
+        const char* mode;
+        String* opath;
+        File* file;
+        (void)hnd;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        opath = args->argv[0].asString();
+        if(opath->length() == 0)
+        {
+            return state->raiseFromFunction(args, "file path cannot be empty");
+        }
+        mode = "r";
+        if(args->argc == 2)
+        {
+            NEON_ARGS_CHECKTYPE(args, 1, isString);
+            mode = args->argv[1].asString()->data();
+        }
+        path = opath->data();
+        file = state->m_vmstate->gcProtect(File::make(state, nullptr, false, path, mode));
+        file->selfOpenFile();
+        return Value::fromObject(file);
+    }
+
+    Value memberfn_file_exists(State* state, Arguments* args)
+    {
+        String* file;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        file = args->argv[0].asString();
+        return Value::makeBool(osfn_fileexists(file->data()));
+    }
+
+    Value memberfn_file_isfile(State* state, Arguments* args)
+    {
+        String* file;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        file = args->argv[0].asString();
+        return Value::makeBool(osfn_pathisfile(file->data()));
+    }
+
+    Value memberfn_file_isdirectory(State* state, Arguments* args)
+    {
+        String* file;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        file = args->argv[0].asString();
+        return Value::makeBool(osfn_pathisdirectory(file->data()));
+    }
+
+    Value memberfn_file_close(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->thisval.asFile()->selfCloseFile();
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_file_open(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->thisval.asFile()->selfOpenFile();
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_file_isopen(State* state, Arguments* args)
+    {
+        File* file;
+        (void)state;
+        file = args->thisval.asFile();
+        return Value::makeBool(file->m_isstd || file->m_isopen);
+    }
+
+    Value memberfn_file_isclosed(State* state, Arguments* args)
+    {
+        File* file;
+        (void)state;
+        file = args->thisval.asFile();
+        return Value::makeBool(!file->m_isstd && !file->m_isopen);
+    }
+
+    Value memberfn_file_read(State* state, Arguments* args)
+    {
+        size_t readhowmuch;
+        File::IOResult res;
+        File* file;
+        String* os;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        readhowmuch = -1;
+        if(args->argc == 1)
+        {
+            NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+            readhowmuch = (size_t)args->argv[0].asNumber();
+        }
+        file = args->thisval.asFile();
+        if(!file->readChunk(readhowmuch, &res))
+        {
+            FILE_ERROR(NotFound, strerror(errno));
+        }
+        os = String::take(state, res.data, res.length);
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_file_get(State* state, Arguments* args)
+    {
+        int ch;
+        File* file;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        ch = fgetc(file->m_filehandle);
+        if(ch == EOF)
+        {
+            return Value::makeNull();
+        }
+        return Value::makeNumber(ch);
+    }
+
+    Value memberfn_file_gets(State* state, Arguments* args)
+    {
+        long end;
+        long length;
+        long currentpos;
+        size_t bytesread;
+        char* buffer;
+        File* file;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        length = -1;
+        if(args->argc == 1)
+        {
+            NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+            length = (size_t)args->argv[0].asNumber();
+        }
+        file = args->thisval.asFile();
+        if(!file->m_isstd)
+        {
+            if(!osfn_fileexists(file->m_filepath->data()))
+            {
+                FILE_ERROR(NotFound, "no such file or directory");
+            }
+            else if(strstr(file->m_filemode->data(), "w") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
+            {
+                FILE_ERROR(Unsupported, "cannot read file in write mode");
+            }
+            if(!file->m_isopen)
+            {
+                FILE_ERROR(Read, "file not open");
+            }
+            else if(file->m_filehandle == nullptr)
+            {
+                FILE_ERROR(Read, "could not read file");
+            }
+            if(length == -1)
+            {
+                currentpos = ftell(file->m_filehandle);
+                fseek(file->m_filehandle, 0L, SEEK_END);
+                end = ftell(file->m_filehandle);
+                fseek(file->m_filehandle, currentpos, SEEK_SET);
+                length = end - currentpos;
+            }
+        }
+        else
+        {
+            if(fileno(stdout) == file->m_filedesc || fileno(stderr) == file->m_filedesc)
+            {
+                FILE_ERROR(Unsupported, "cannot read from output file");
+            }
+            /*
+            // for non-file objects such as stdin
+            // minimum read bytes should be 1
+            */
+            if(length == -1)
+            {
+                length = 1;
+            }
+        }
+        buffer = (char*)State::VM::gcAllocMemory(state, sizeof(char), length + 1);
+        if(buffer == nullptr && length != 0)
+        {
+            FILE_ERROR(Buffer, "not enough memory to read file");
+        }
+        bytesread = fread(buffer, sizeof(char), length, file->m_filehandle);
+        if(bytesread == 0 && length != 0)
+        {
+            FILE_ERROR(Read, "could not read file contents");
+        }
+        if(buffer != nullptr)
+        {
+            buffer[bytesread] = '\0';
+        }
+        return Value::fromObject(String::take(state, buffer, bytesread));
+    }
+
+    Value memberfn_file_write(State* state, Arguments* args)
+    {
+        size_t count;
+        int length;
+        unsigned char* data;
+        File* file;
+        String* string;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        file = args->thisval.asFile();
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->argv[0].asString();
+        data = (unsigned char*)string->data();
+        length = string->length();
+        if(!file->m_isstd)
+        {
+            if(strstr(file->m_filemode->data(), "r") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
+            {
+                FILE_ERROR(Unsupported, "cannot write into non-writable file");
+            }
+            else if(length == 0)
+            {
+                FILE_ERROR(Write, "cannot write empty buffer to file");
+            }
+            else if(file->m_filehandle == nullptr || !file->m_isopen)
+            {
+                file->selfOpenFile();
+            }
+            else if(file->m_filehandle == nullptr)
+            {
+                FILE_ERROR(Write, "could not write to file");
+            }
+        }
+        else
+        {
+            if(fileno(stdin) == file->m_filedesc)
+            {
+                FILE_ERROR(Unsupported, "cannot write to input file");
+            }
+        }
+        count = fwrite(data, sizeof(unsigned char), length, file->m_filehandle);
+        fflush(file->m_filehandle);
+        if(count > (size_t)0)
+        {
+            return Value::makeBool(true);
+        }
+        return Value::makeBool(false);
+    }
+
+    Value memberfn_file_puts(State* state, Arguments* args)
+    {
+        size_t count;
+        int length;
+        unsigned char* data;
+        File* file;
+        String* string;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        file = args->thisval.asFile();
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->argv[0].asString();
+        data = (unsigned char*)string->data();
+        length = string->length();
+        if(!file->m_isstd)
+        {
+            if(strstr(file->m_filemode->data(), "r") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
+            {
+                FILE_ERROR(Unsupported, "cannot write into non-writable file");
+            }
+            else if(length == 0)
+            {
+                FILE_ERROR(Write, "cannot write empty buffer to file");
+            }
+            else if(!file->m_isopen)
+            {
+                FILE_ERROR(Write, "file not open");
+            }
+            else if(file->m_filehandle == nullptr)
+            {
+                FILE_ERROR(Write, "could not write to file");
+            }
+        }
+        else
+        {
+            if(fileno(stdin) == file->m_filedesc)
+            {
+                FILE_ERROR(Unsupported, "cannot write to input file");
+            }
+        }
+        count = fwrite(data, sizeof(unsigned char), length, file->m_filehandle);
+        if(count > (size_t)0 || length == 0)
+        {
+            return Value::makeBool(true);
+        }
+        return Value::makeBool(false);
+    }
+
+    Value memberfn_file_printf(State* state, Arguments* args)
+    {
+        File* file;
+        String* ofmt;
+        file = args->thisval.asFile();
+        NEON_ARGS_CHECKMINARG(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        ofmt = args->argv[0].asString();
+        Printer pd(state, file->m_filehandle, false);
+        FormatInfo nfi(state, &pd, ofmt->cstr(), ofmt->length());
+        if(!nfi.format(args->argc, 1, args->argv))
+        {
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_file_number(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeNumber(args->thisval.asFile()->m_filedesc);
+    }
+
+    Value memberfn_file_istty(State* state, Arguments* args)
+    {
+        File* file;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        return Value::makeBool(file->m_istty);
+    }
+
+    Value memberfn_file_flush(State* state, Arguments* args)
+    {
+        File* file;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        if(!file->m_isopen)
+        {
+            FILE_ERROR(Unsupported, "I/O operation on closed file");
+        }
+        #if defined(NEON_PLAT_ISLINUX)
+        if(fileno(stdin) == file->m_filedesc)
+        {
+            while((getchar()) != '\n')
+            {
+            }
+        }
+        else
+        {
+            fflush(file->m_filehandle);
+        }
+        #else
+        fflush(file->m_filehandle);
+        #endif
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_file_stats(State* state, Arguments* args)
+    {
+        struct stat stats;
+        File* file;
+        Dictionary* dict;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        dict = state->m_vmstate->gcProtect(Dictionary::make(state));
+        if(!file->m_isstd)
+        {
+            if(osfn_fileexists(file->m_filepath->data()))
+            {
+                if(osfn_lstat(file->m_filepath->data(), &stats) == 0)
+                {
+                    #if !defined(NEON_PLAT_ISWINDOWS)
+                    dict->addEntryCStr("isreadable", Value::makeBool(((stats.st_mode & S_IRUSR) != 0)));
+                    dict->addEntryCStr("iswritable", Value::makeBool(((stats.st_mode & S_IWUSR) != 0)));
+                    dict->addEntryCStr("isexecutable", Value::makeBool(((stats.st_mode & S_IXUSR) != 0)));
+                    dict->addEntryCStr("issymbolic", Value::makeBool((S_ISLNK(stats.st_mode) != 0)));
+                    #else
+                    dict->addEntryCStr("isreadable", Value::makeBool(((stats.st_mode & S_IREAD) != 0)));
+                    dict->addEntryCStr("iswritable", Value::makeBool(((stats.st_mode & S_IWRITE) != 0)));
+                    dict->addEntryCStr("isexecutable", Value::makeBool(((stats.st_mode & S_IEXEC) != 0)));
+                    dict->addEntryCStr("issymbolic", Value::makeBool(false));
+                    #endif
+                    dict->addEntryCStr("size", Value::makeNumber(stats.st_size));
+                    dict->addEntryCStr("mode", Value::makeNumber(stats.st_mode));
+                    dict->addEntryCStr("dev", Value::makeNumber(stats.st_dev));
+                    dict->addEntryCStr("ino", Value::makeNumber(stats.st_ino));
+                    dict->addEntryCStr("nlink", Value::makeNumber(stats.st_nlink));
+                    dict->addEntryCStr("uid", Value::makeNumber(stats.st_uid));
+                    dict->addEntryCStr("gid", Value::makeNumber(stats.st_gid));
+                    dict->addEntryCStr("mtime", Value::makeNumber(stats.st_mtime));
+                    dict->addEntryCStr("atime", Value::makeNumber(stats.st_atime));
+                    dict->addEntryCStr("ctime", Value::makeNumber(stats.st_ctime));
+                    dict->addEntryCStr("blocks", Value::makeNumber(0));
+                    dict->addEntryCStr("blksize", Value::makeNumber(0));
+                }
+            }
+            else
+            {
+                return state->raiseFromFunction(args, "cannot get stats for non-existing file");
+            }
+        }
+        else
+        {
+            if(fileno(stdin) == file->m_filedesc)
+            {
+                dict->addEntryCStr("isreadable", Value::makeBool(true));
+                dict->addEntryCStr("iswritable", Value::makeBool(false));
+            }
+            else
+            {
+                dict->addEntryCStr("isreadable", Value::makeBool(false));
+                dict->addEntryCStr("iswritable", Value::makeBool(true));
+            }
+            dict->addEntryCStr("isexecutable", Value::makeBool(false));
+            dict->addEntryCStr("size", Value::makeNumber(1));
+        }
+        return Value::fromObject(dict);
+    }
+
+    Value memberfn_file_path(State* state, Arguments* args)
+    {
+        File* file;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        DENY_STD();
+        return Value::fromObject(file->m_filepath);
+    }
+
+    Value memberfn_file_mode(State* state, Arguments* args)
+    {
+        File* file;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        return Value::fromObject(file->m_filemode);
+    }
+
+    Value memberfn_file_name(State* state, Arguments* args)
+    {
+        char* name;
+        File* file;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        if(!file->m_isstd)
+        {
+            name = osfn_basename(file->m_filepath->data());
+            return Value::fromObject(String::copy(state, name));
+        }
+        else if(file->m_istty)
+        {
+            /*name = ttyname(file->m_filedesc);*/
+            name = Util::strCopy(state, "<tty>");
+            if(name != nullptr)
+            {
+                return Value::fromObject(String::copy(state, name));
+            }
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_file_seek(State* state, Arguments* args)
+    {
+        long position;
+        int seektype;
+        File* file;
+        NEON_ARGS_CHECKCOUNT(args, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+        file = args->thisval.asFile();
+        DENY_STD();
+        position = (long)args->argv[0].asNumber();
+        seektype = args->argv[1].asNumber();
+        RETURN_STATUS(fseek(file->m_filehandle, position, seektype));
+    }
+
+    Value memberfn_file_tell(State* state, Arguments* args)
+    {
+        File* file;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        file = args->thisval.asFile();
+        DENY_STD();
+        return Value::makeNumber(ftell(file->m_filehandle));
+    }
+
+    #undef FILE_ERROR
+    #undef RETURN_STATUS
+    #undef DENY_STD
+
+    Value memberfn_array_length(State* state, Arguments* args)
+    {
+        Array* selfarr;
+        (void)state;
+        selfarr = args->thisval.asArray();
+        return Value::makeNumber(selfarr->size());
+    }
+
+    Value memberfn_array_append(State* state, Arguments* args)
+    {
+        int i;
+        (void)state;
+        for(i = 0; i < args->argc; i++)
+        {
+            args->thisval.asArray()->push(args->argv[i]);
+        }
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_array_clear(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->thisval.asArray()->clear();
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_array_clone(State* state, Arguments* args)
+    {
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        return Value::fromObject(list->copy(0, list->size()));
+    }
+
+    Value memberfn_array_count(State* state, Arguments* args)
+    {
+        size_t i;
+        size_t count;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        list = args->thisval.asArray();
+        count = 0;
+        for(i = 0; i < list->size(); i++)
+        {
+            if(list->at(i).compare(args->argv[0]))
+            {
+                count++;
+            }
+        }
+        return Value::makeNumber(count);
+    }
+
+    Value memberfn_array_extend(State* state, Arguments* args)
+    {
+        size_t i;
+        Array* list;
+        Array* list2;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isArray);
+        list = args->thisval.asArray();
+        list2 = args->argv[0].asArray();
+        for(i = 0; i < list2->size(); i++)
+        {
+            list->push(list2->at(i));
+        }
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_array_indexof(State* state, Arguments* args)
+    {
+        size_t i;
+        Array* list;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        list = args->thisval.asArray();
+        i = 0;
+        if(args->argc == 2)
+        {
+            NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+            i = args->argv[1].asNumber();
+        }
+        for(; i < list->size(); i++)
+        {
+            if(list->at(i).compare(args->argv[0]))
+            {
+                return Value::makeNumber(i);
+            }
+        }
+        return Value::makeNumber(-1);
+    }
+
+    Value memberfn_array_insert(State* state, Arguments* args)
+    {
+        size_t index;
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 2);
+        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+        list = args->thisval.asArray();
+        index = args->argv[1].asNumber();
+        list->m_varray->insert(args->argv[0], index);
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_array_pop(State* state, Arguments* args)
+    {
+        Value value;
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        if(list->size() > 0)
+        {
+            value = list->at(list->size() - 1);
+            list->m_varray->m_count--;
+            return value;
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_array_shift(State* state, Arguments* args)
+    {
+        size_t i;
+        size_t j;
+        size_t count;
+        Array* list;
+        Array* newlist;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        count = 1;
+        if(args->argc == 1)
+        {
+            NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+            count = args->argv[0].asNumber();
+        }
+        list = args->thisval.asArray();
+        if(count >= list->size() || list->size() == 1)
+        {
+            list->m_varray->m_count = 0;
+            return Value::makeNull();
+        }
+        else if(count > 0)
+        {
+            newlist = state->m_vmstate->gcProtect(Array::make(state));
+            for(i = 0; i < count; i++)
+            {
+                newlist->push(list->at(0));
+                for(j = 0; j < list->size(); j++)
+                {
+                    list->m_varray->m_values[j] = list->at(j + 1);
+                }
+                list->m_varray->m_count -= 1;
+            }
+            if(count == 1)
+            {
+                return newlist->at(0);
+            }
+            else
+            {
+                return Value::fromObject(newlist);
+            }
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_array_removeat(State* state, Arguments* args)
+    {
+        size_t i;
+        int index;
+        Value value;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        list = args->thisval.asArray();
+        index = args->argv[0].asNumber();
+        if(index < 0 || index >= int(list->size()))
+        {
+            return state->raiseFromFunction(args, "list index %d out of range at remove_at()", index);
+        }
+        value = list->at(index);
+        for(i = index; i < list->size() - 1; i++)
+        {
+            list->m_varray->m_values[i] = list->at(i + 1);
+        }
+        list->m_varray->m_count--;
+        return value;
+    }
+
+    Value memberfn_array_remove(State* state, Arguments* args)
+    {
+        size_t i;
+        int index;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        list = args->thisval.asArray();
+        index = -1;
+        for(i = 0; i < list->size(); i++)
+        {
+            if(list->at(i).compare(args->argv[0]))
             {
                 index = i;
                 break;
             }
         }
-        for(i = index; i < dict->m_keynames->m_count; i++)
+        if(index != -1)
         {
-            dict->m_keynames->m_values[i] = dict->m_keynames->m_values[i + 1];
-        }
-        dict->m_keynames->m_count--;
-        return field->m_actualval;
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_dict_isempty(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
-}
-
-neon::Value nn_memberfunc_dict_findkey(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
-}
-
-neon::Value nn_memberfunc_dict_tolist(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Array* list;
-    neon::Dictionary* dict;
-    neon::Array* namelist;
-    neon::Array* valuelist;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = args->thisval.asDict();
-    namelist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    valuelist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < dict->m_keynames->m_count; i++)
-    {
-        namelist->push(dict->m_keynames->m_values[i]);
-        auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-        if(field != nullptr)
-        {
-            valuelist->push(field->value());
-        }
-        else
-        {
-            /* theoretically impossible */
-            valuelist->push(neon::Value::makeNull());
-        }
-    }
-    list = state->m_vmstate->gcProtect(neon::Array::make(state));
-    list->push(neon::Value::fromObject(namelist));
-    list->push(neon::Value::fromObject(valuelist));
-    return neon::Value::fromObject(list);
-}
-
-neon::Value nn_memberfunc_dict_iter(neon::State* state, neon::Arguments* args)
-{
-    neon::Dictionary* dict;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    dict = args->thisval.asDict();
-    auto field = dict->m_valtable->getField(args->argv[0]);
-    if(field != nullptr)
-    {
-        return field->value();
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_dict_itern(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    dict = args->thisval.asDict();
-    if(args->argv[0].isNull())
-    {
-        if(dict->m_keynames->m_count == 0)
-        {
-            return neon::Value::makeBool(false);
-        }
-        return dict->m_keynames->m_values[0];
-    }
-    for(i = 0; i < dict->m_keynames->m_count; i++)
-    {
-        if(args->argv[0].compare(state, dict->m_keynames->m_values[i]) && (i + 1) < dict->m_keynames->m_count)
-        {
-            return dict->m_keynames->m_values[i + 1];
-        }
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_dict_each(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;
-    neon::Value unused;
-    neon::Dictionary* dict;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = args->thisval.asDict();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < dict->m_keynames->m_count; i++)
-    {
-        if(arity > 0)
-        {
-            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-            nestargs[0] = field->value();
-            if(arity > 1)
+            for(i = index; i < list->size(); i++)
             {
-                nestargs[1] = dict->m_keynames->m_values[i];
+                list->m_varray->m_values[i] = list->at(i + 1);
+            }
+            list->m_varray->m_count--;
+        }
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_array_reverse(State* state, Arguments* args)
+    {
+        int fromtop;
+        Array* list;
+        Array* nlist;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        nlist = state->m_vmstate->gcProtect(Array::make(state));
+        /* in-place reversal:*/
+        /*
+        int start = 0;
+        int end = list->size() - 1;
+        while(start < end)
+        {
+            Value temp = list->at(start);
+            list->m_varray->m_values[start] = list->at(end);
+            list->m_varray->m_values[end] = temp;
+            start++;
+            end--;
+        }
+        */
+        for(fromtop = list->size() - 1; fromtop >= 0; fromtop--)
+        {
+            nlist->push(list->at(fromtop));
+        }
+        return Value::fromObject(nlist);
+    }
+
+    Value memberfn_array_sort(State* state, Arguments* args)
+    {
+        Array* list;
+        ValArray::QuickSort qs(state);
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        qs.runSort(list->m_varray, 0, list->size()-0);
+        return Value::fromObject(list);
+    }
+
+    Value memberfn_array_contains(State* state, Arguments* args)
+    {
+        size_t i;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        list = args->thisval.asArray();
+        for(i = 0; i < list->size(); i++)
+        {
+            if(args->argv[0].compare(list->at(i)))
+            {
+                return Value::makeBool(true);
             }
         }
-        nc.callNested(callable, args->thisval, nestargs, &unused);
+        return Value::makeBool(false);
     }
-    /* pop the argument list */
-    return neon::Value::makeEmpty();
-}
 
-neon::Value nn_memberfunc_dict_filter(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;
-    neon::Value result;
-    neon::Dictionary* dict;
-    neon::ValArray nestargs;
-    neon::Dictionary* resultdict;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = args->thisval.asDict();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    resultdict = state->m_vmstate->gcProtect(neon::Dictionary::make(state));
-    for(i = 0; i < dict->m_keynames->m_count; i++)
+    Value memberfn_array_delete(State* state, Arguments* args)
     {
-        auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-        if(arity > 0)
+        int i;
+        int idxupper;
+        int idxlower;
+        Array* list;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        idxlower = args->argv[0].asNumber();
+        idxupper = idxlower;
+        if(args->argc == 2)
         {
-            nestargs[0] = field->value();
-            if(arity > 1)
+            NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+            idxupper = args->argv[1].asNumber();
+        }
+        list = args->thisval.asArray();
+        if(idxlower < 0 || idxlower >= int(list->size()))
+        {
+            return state->raiseFromFunction(args, "list index %d out of range at delete()", idxlower);
+        }
+        else if(idxupper < idxlower || idxupper >= int(list->size()))
+        {
+            return state->raiseFromFunction(args, "invalid upper limit %d at delete()", idxupper);
+        }
+        for(i = 0; i < int(list->size() - idxupper); i++)
+        {
+            list->m_varray->m_values[idxlower + i] = list->at(i + idxupper + 1);
+        }
+        list->m_varray->m_count -= idxupper - idxlower + 1;
+        return Value::makeNumber((double)idxupper - (double)idxlower + 1);
+    }
+
+    Value memberfn_array_first(State* state, Arguments* args)
+    {
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        if(list->size() > 0)
+        {
+            return list->at(0);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_array_last(State* state, Arguments* args)
+    {
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        if(list->size() > 0)
+        {
+            return list->at(list->size() - 1);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_array_isempty(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeBool(args->thisval.asArray()->size() == 0);
+    }
+
+    Value memberfn_array_take(State* state, Arguments* args)
+    {
+        int count;
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        list = args->thisval.asArray();
+        count = args->argv[0].asNumber();
+        if(count < 0)
+        {
+            count = list->count() + count;
+        }
+        if(int(list->count()) < count)
+        {
+            return Value::fromObject(list->copy(0, list->count()));
+        }
+        return Value::fromObject(list->copy(0, count));
+    }
+
+    Value memberfn_array_get(State* state, Arguments* args)
+    {
+        int index;
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        list = args->thisval.asArray();
+        index = args->argv[0].asNumber();
+        if(index < 0 || index >= int(list->count()))
+        {
+            return Value::makeNull();
+        }
+        return list->at(index);
+    }
+
+    Value memberfn_array_compact(State* state, Arguments* args)
+    {
+        size_t i;
+        Array* list;
+        Array* newlist;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        newlist = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < list->count(); i++)
+        {
+            if(!list->at(i).compare(Value::makeNull()))
             {
-                nestargs[1] = dict->m_keynames->m_values[i];
+                newlist->push(list->at(i));
             }
         }
-        nc.callNested(callable, args->thisval, nestargs, &result);
-        if(!neon::Value::isFalse(result))
-        {
-            resultdict->addEntry(dict->m_keynames->m_values[i], field->value());
-        }
+        return Value::fromObject(newlist);
     }
-    /* pop the call list */
-    return neon::Value::fromObject(resultdict);
-}
 
-neon::Value nn_memberfunc_dict_some(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value result;
-    neon::Value callable;
-    neon::Dictionary* dict;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = args->thisval.asDict();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < dict->m_keynames->m_count; i++)
+    Value memberfn_array_unique(State* state, Arguments* args)
     {
-        if(arity > 0)
+        size_t i;
+        size_t j;
+        bool found;
+        Array* list;
+        Array* newlist;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        list = args->thisval.asArray();
+        newlist = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < list->count(); i++)
         {
-            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-            nestargs[0] = field->value();
-            if(arity > 1)
+            found = false;
+            for(j = 0; j < newlist->count(); j++)
             {
-                nestargs[1] = dict->m_keynames->m_values[i];
+                if(newlist->at(j).compare(list->at(i)))
+                {
+                    found = true;
+                    continue;
+                }
+            }
+            if(!found)
+            {
+                newlist->push(list->at(i));
             }
         }
-        nc.callNested(callable, args->thisval, nestargs, &result);
-        if(!neon::Value::isFalse(result))
-        {
-            /* pop the call list */
-            return neon::Value::makeBool(true);
-        }
+        return Value::fromObject(newlist);
     }
-    /* pop the call list */
-    return neon::Value::makeBool(false);
-}
 
-
-neon::Value nn_memberfunc_dict_every(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;  
-    neon::Value result;
-    neon::Dictionary* dict;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = args->thisval.asDict();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < dict->m_keynames->m_count; i++)
+    Value memberfn_array_zip(State* state, Arguments* args)
     {
-        if(arity > 0)
+        size_t i;
+        size_t j;
+        Array* list;
+        Array* newlist;
+        Array* alist;
+        Array** arglist;
+        list = args->thisval.asArray();
+        newlist = state->m_vmstate->gcProtect(Array::make(state));
+        arglist = (Array**)State::VM::gcAllocMemory(state, sizeof(Array*), args->argc);
+        for(i = 0; i < size_t(args->argc); i++)
         {
-            auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-            nestargs[0] = field->value();
-            if(arity > 1)
+            NEON_ARGS_CHECKTYPE(args, i, isArray);
+            arglist[i] = args->argv[i].asArray();
+        }
+        for(i = 0; i < list->count(); i++)
+        {
+            alist = state->m_vmstate->gcProtect(Array::make(state));
+            /* item of main list*/
+            alist->push(list->at(i));
+            for(j = 0; j < size_t(args->argc); j++)
             {
-                nestargs[1] = dict->m_keynames->m_values[i];
+                if(i < arglist[j]->count())
+                {
+                    alist->push(arglist[j]->at(i));
+                }
+                else
+                {
+                    alist->push(Value::makeNull());
+                }
+            }
+            newlist->push(Value::fromObject(alist));
+        }
+        return Value::fromObject(newlist);
+    }
+
+    Value memberfn_array_zipfrom(State* state, Arguments* args)
+    {
+        size_t i;
+        size_t j;
+        Array* list;
+        Array* newlist;
+        Array* alist;
+        Array* arglist;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isArray);
+        list = args->thisval.asArray();
+        newlist = state->m_vmstate->gcProtect(Array::make(state));
+        arglist = args->argv[0].asArray();
+        for(i = 0; i < arglist->count(); i++)
+        {
+            if(!arglist->at(i).isArray())
+            {
+                return state->raiseFromFunction(args, "invalid list in zip entries");
             }
         }
-        nc.callNested(callable, args->thisval, nestargs, &result);
-        if(neon::Value::isFalse(result))
+        for(i = 0; i < list->count(); i++)
         {
-            /* pop the call list */
-            return neon::Value::makeBool(false);
+            alist = state->m_vmstate->gcProtect(Array::make(state));
+            alist->push(list->at(i));
+            for(j = 0; j < arglist->count(); j++)
+            {
+                if(i < arglist->at(j).asArray()->count())
+                {
+                    alist->push(arglist->at(j).asArray()->at(i));
+                }
+                else
+                {
+                    alist->push(Value::makeNull());
+                }
+            }
+            newlist->push(Value::fromObject(alist));
         }
+        return Value::fromObject(newlist);
     }
-    /* pop the call list */
-    return neon::Value::makeBool(true);
-}
 
-neon::Value nn_memberfunc_dict_reduce(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    int startindex;
-    neon::Value callable;
-    neon::Value accumulator;
-    neon::Dictionary* dict;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    dict = args->thisval.asDict();
-    callable = args->argv[0];
-    startindex = 0;
-    accumulator = neon::Value::makeNull();
-    if(args->argc == 2)
+    Value memberfn_array_todict(State* state, Arguments* args)
     {
-        accumulator = args->argv[1];
+        size_t i;
+        Dictionary* dict;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        dict = state->m_vmstate->gcProtect(Dictionary::make(state));
+        list = args->thisval.asArray();
+        for(i = 0; i < list->count(); i++)
+        {
+            dict->setEntry(Value::makeNumber(i), list->at(i));
+        }
+        return Value::fromObject(dict);
     }
-    if(accumulator.isNull() && dict->m_keynames->m_count > 0)
+
+    Value memberfn_array_iter(State* state, Arguments* args)
     {
-        auto field = dict->m_valtable->getField(dict->m_keynames->m_values[0]);
-        accumulator = field->value();
-        startindex = 1;
+        int index;
+        Array* list;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        list = args->thisval.asArray();
+        index = args->argv[0].asNumber();
+        if(index > -1 && index < int(list->count()))
+        {
+            return list->at(index);
+        }
+        return Value::makeNull();
     }
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = startindex; i < dict->m_keynames->m_count; i++)
+
+    Value memberfn_array_itern(State* state, Arguments* args)
     {
-        /* only call map for non-empty values in a list. */
-        if(!dict->m_keynames->m_values[i].isNull() && !dict->m_keynames->m_values[i].isEmpty())
+        int index;
+        Array* list;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        list = args->thisval.asArray();
+        if(args->argv[0].isNull())
+        {
+            if(list->count() == 0)
+            {
+                return Value::makeBool(false);
+            }
+            return Value::makeNumber(0);
+        }
+        if(!args->argv[0].isNumber())
+        {
+            return state->raiseFromFunction(args, "lists are numerically indexed");
+        }
+        index = args->argv[0].asNumber();
+        if(index < int(list->count() - 1))
+        {
+            return Value::makeNumber((double)index + 1);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_array_each(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;
+        Value unused;
+        Array* list;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        list = args->thisval.asArray();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < list->count(); i++)
         {
             if(arity > 0)
             {
-                nestargs[0] = accumulator;
+                nestargs[0] = list->at(i);
                 if(arity > 1)
                 {
-                    auto field = dict->m_valtable->getField(dict->m_keynames->m_values[i]);
-                    nestargs[1] = field->value();
-                    if(arity > 2)
-                    {
-                        nestargs[2] = dict->m_keynames->m_values[i];
-                        if(arity > 4)
-                        {
-                            nestargs[3] = args->thisval;
-                        }
-                    }
+                    nestargs[1] = Value::makeNumber(i);
                 }
             }
-            nc.callNested(callable, args->thisval, nestargs, &accumulator);
+            nc.callNested(callable, args->thisval, nestargs, &unused);
         }
-    }
-    /* pop the call list */
-    return accumulator;
-}
-
-
-#undef ENFORCE_VALID_DICT_KEY
-
-#define FILE_ERROR(type, message) \
-    return state->raiseFromFunction(args, #type " -> %s", message, file->m_filepath->data());
-
-#define RETURN_STATUS(status) \
-    if((status) == 0) \
-    { \
-        return neon::Value::makeBool(true); \
-    } \
-    else \
-    { \
-        FILE_ERROR(File, strerror(errno)); \
+        return Value::makeEmpty();
     }
 
-#define DENY_STD() \
-    if(file->m_isstd) \
-    return state->raiseFromFunction(args, "method not supported for std files");
-
-neon::Value nn_memberfunc_file_constructor(neon::State* state, neon::Arguments* args)
-{
-    FILE* hnd;
-    const char* path;
-    const char* mode;
-    neon::String* opath;
-    neon::File* file;
-    (void)hnd;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    opath = args->argv[0].asString();
-    if(opath->length() == 0)
+    Value memberfn_array_map(State* state, Arguments* args)
     {
-        return state->raiseFromFunction(args, "file path cannot be empty");
-    }
-    mode = "r";
-    if(args->argc == 2)
-    {
-        NEON_ARGS_CHECKTYPE(args, 1, isString);
-        mode = args->argv[1].asString()->data();
-    }
-    path = opath->data();
-    file = state->m_vmstate->gcProtect(neon::File::make(state, nullptr, false, path, mode));
-    file->selfOpenFile();
-    return neon::Value::fromObject(file);
-}
-
-neon::Value nn_memberfunc_file_exists(neon::State* state, neon::Arguments* args)
-{
-    neon::String* file;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    file = args->argv[0].asString();
-    return neon::Value::makeBool(osfn_fileexists(file->data()));
-}
-
-
-neon::Value nn_memberfunc_file_isfile(neon::State* state, neon::Arguments* args)
-{
-    neon::String* file;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    file = args->argv[0].asString();
-    return neon::Value::makeBool(osfn_pathisfile(file->data()));
-}
-
-neon::Value nn_memberfunc_file_isdirectory(neon::State* state, neon::Arguments* args)
-{
-    neon::String* file;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    file = args->argv[0].asString();
-    return neon::Value::makeBool(osfn_pathisdirectory(file->data()));
-}
-
-neon::Value nn_memberfunc_file_close(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    args->thisval.asFile()->selfCloseFile();
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_file_open(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    args->thisval.asFile()->selfOpenFile();
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_file_isopen(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    (void)state;
-    file = args->thisval.asFile();
-    return neon::Value::makeBool(file->m_isstd || file->m_isopen);
-}
-
-neon::Value nn_memberfunc_file_isclosed(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    (void)state;
-    file = args->thisval.asFile();
-    return neon::Value::makeBool(!file->m_isstd && !file->m_isopen);
-}
-
-neon::Value nn_memberfunc_file_read(neon::State* state, neon::Arguments* args)
-{
-    size_t readhowmuch;
-    neon::File::IOResult res;
-    neon::File* file;
-    neon::String* os;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    readhowmuch = -1;
-    if(args->argc == 1)
-    {
-        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-        readhowmuch = (size_t)args->argv[0].asNumber();
-    }
-    file = args->thisval.asFile();
-    if(!file->readChunk(readhowmuch, &res))
-    {
-        FILE_ERROR(NotFound, strerror(errno));
-    }
-    os = neon::String::take(state, res.data, res.length);
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_file_get(neon::State* state, neon::Arguments* args)
-{
-    int ch;
-    neon::File* file;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    ch = fgetc(file->m_filehandle);
-    if(ch == EOF)
-    {
-        return neon::Value::makeNull();
-    }
-    return neon::Value::makeNumber(ch);
-}
-
-neon::Value nn_memberfunc_file_gets(neon::State* state, neon::Arguments* args)
-{
-    long end;
-    long length;
-    long currentpos;
-    size_t bytesread;
-    char* buffer;
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    length = -1;
-    if(args->argc == 1)
-    {
-        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-        length = (size_t)args->argv[0].asNumber();
-    }
-    file = args->thisval.asFile();
-    if(!file->m_isstd)
-    {
-        if(!osfn_fileexists(file->m_filepath->data()))
+        size_t i;
+        int arity;
+        Value res;
+        Value callable;
+        Array* selfarr;
+        ValArray nestargs;
+        Array* resultlist;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        selfarr = args->thisval.asArray();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        resultlist = state->m_vmstate->gcProtect(Array::make(state));
+        //nestargs->push(Value::makeEmpty());
+        for(i = 0; i < selfarr->count(); i++)
         {
-            FILE_ERROR(NotFound, "no such file or directory");
-        }
-        else if(strstr(file->m_filemode->data(), "w") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
-        {
-            FILE_ERROR(Unsupported, "cannot read file in write mode");
-        }
-        if(!file->m_isopen)
-        {
-            FILE_ERROR(Read, "file not open");
-        }
-        else if(file->m_filehandle == nullptr)
-        {
-            FILE_ERROR(Read, "could not read file");
-        }
-        if(length == -1)
-        {
-            currentpos = ftell(file->m_filehandle);
-            fseek(file->m_filehandle, 0L, SEEK_END);
-            end = ftell(file->m_filehandle);
-            fseek(file->m_filehandle, currentpos, SEEK_SET);
-            length = end - currentpos;
-        }
-    }
-    else
-    {
-        if(fileno(stdout) == file->m_filedesc || fileno(stderr) == file->m_filedesc)
-        {
-            FILE_ERROR(Unsupported, "cannot read from output file");
-        }
-        /*
-        // for non-file objects such as stdin
-        // minimum read bytes should be 1
-        */
-        if(length == -1)
-        {
-            length = 1;
-        }
-    }
-    buffer = (char*)neon::State::VM::gcAllocMemory(state, sizeof(char), length + 1);
-    if(buffer == nullptr && length != 0)
-    {
-        FILE_ERROR(Buffer, "not enough memory to read file");
-    }
-    bytesread = fread(buffer, sizeof(char), length, file->m_filehandle);
-    if(bytesread == 0 && length != 0)
-    {
-        FILE_ERROR(Read, "could not read file contents");
-    }
-    if(buffer != nullptr)
-    {
-        buffer[bytesread] = '\0';
-    }
-    return neon::Value::fromObject(neon::String::take(state, buffer, bytesread));
-}
-
-neon::Value nn_memberfunc_file_write(neon::State* state, neon::Arguments* args)
-{
-    size_t count;
-    int length;
-    unsigned char* data;
-    neon::File* file;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    file = args->thisval.asFile();
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->argv[0].asString();
-    data = (unsigned char*)string->data();
-    length = string->length();
-    if(!file->m_isstd)
-    {
-        if(strstr(file->m_filemode->data(), "r") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
-        {
-            FILE_ERROR(Unsupported, "cannot write into non-writable file");
-        }
-        else if(length == 0)
-        {
-            FILE_ERROR(Write, "cannot write empty buffer to file");
-        }
-        else if(file->m_filehandle == nullptr || !file->m_isopen)
-        {
-            file->selfOpenFile();
-        }
-        else if(file->m_filehandle == nullptr)
-        {
-            FILE_ERROR(Write, "could not write to file");
-        }
-    }
-    else
-    {
-        if(fileno(stdin) == file->m_filedesc)
-        {
-            FILE_ERROR(Unsupported, "cannot write to input file");
-        }
-    }
-    count = fwrite(data, sizeof(unsigned char), length, file->m_filehandle);
-    fflush(file->m_filehandle);
-    if(count > (size_t)0)
-    {
-        return neon::Value::makeBool(true);
-    }
-    return neon::Value::makeBool(false);
-}
-
-neon::Value nn_memberfunc_file_puts(neon::State* state, neon::Arguments* args)
-{
-    size_t count;
-    int length;
-    unsigned char* data;
-    neon::File* file;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    file = args->thisval.asFile();
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->argv[0].asString();
-    data = (unsigned char*)string->data();
-    length = string->length();
-    if(!file->m_isstd)
-    {
-        if(strstr(file->m_filemode->data(), "r") != nullptr && strstr(file->m_filemode->data(), "+") == nullptr)
-        {
-            FILE_ERROR(Unsupported, "cannot write into non-writable file");
-        }
-        else if(length == 0)
-        {
-            FILE_ERROR(Write, "cannot write empty buffer to file");
-        }
-        else if(!file->m_isopen)
-        {
-            FILE_ERROR(Write, "file not open");
-        }
-        else if(file->m_filehandle == nullptr)
-        {
-            FILE_ERROR(Write, "could not write to file");
-        }
-    }
-    else
-    {
-        if(fileno(stdin) == file->m_filedesc)
-        {
-            FILE_ERROR(Unsupported, "cannot write to input file");
-        }
-    }
-    count = fwrite(data, sizeof(unsigned char), length, file->m_filehandle);
-    if(count > (size_t)0 || length == 0)
-    {
-        return neon::Value::makeBool(true);
-    }
-    return neon::Value::makeBool(false);
-}
-
-neon::Value nn_memberfunc_file_printf(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    neon::String* ofmt;
-    file = args->thisval.asFile();
-    NEON_ARGS_CHECKMINARG(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    ofmt = args->argv[0].asString();
-    neon::Printer pd(state, file->m_filehandle, false);
-    neon::FormatInfo nfi(state, &pd, ofmt->cstr(), ofmt->length());
-    if(!nfi.format(args->argc, 1, args->argv))
-    {
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_file_number(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(args->thisval.asFile()->m_filedesc);
-}
-
-neon::Value nn_memberfunc_file_istty(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    return neon::Value::makeBool(file->m_istty);
-}
-
-neon::Value nn_memberfunc_file_flush(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    if(!file->m_isopen)
-    {
-        FILE_ERROR(Unsupported, "I/O operation on closed file");
-    }
-    #if defined(NEON_PLAT_ISLINUX)
-    if(fileno(stdin) == file->m_filedesc)
-    {
-        while((getchar()) != '\n')
-        {
-        }
-    }
-    else
-    {
-        fflush(file->m_filehandle);
-    }
-    #else
-    fflush(file->m_filehandle);
-    #endif
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_file_stats(neon::State* state, neon::Arguments* args)
-{
-    struct stat stats;
-    neon::File* file;
-    neon::Dictionary* dict;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    dict = state->m_vmstate->gcProtect(neon::Dictionary::make(state));
-    if(!file->m_isstd)
-    {
-        if(osfn_fileexists(file->m_filepath->data()))
-        {
-            if(osfn_lstat(file->m_filepath->data(), &stats) == 0)
-            {
-                #if !defined(NEON_PLAT_ISWINDOWS)
-                dict->addEntryCStr("isreadable", neon::Value::makeBool(((stats.st_mode & S_IRUSR) != 0)));
-                dict->addEntryCStr("iswritable", neon::Value::makeBool(((stats.st_mode & S_IWUSR) != 0)));
-                dict->addEntryCStr("isexecutable", neon::Value::makeBool(((stats.st_mode & S_IXUSR) != 0)));
-                dict->addEntryCStr("issymbolic", neon::Value::makeBool((S_ISLNK(stats.st_mode) != 0)));
-                #else
-                dict->addEntryCStr("isreadable", neon::Value::makeBool(((stats.st_mode & S_IREAD) != 0)));
-                dict->addEntryCStr("iswritable", neon::Value::makeBool(((stats.st_mode & S_IWRITE) != 0)));
-                dict->addEntryCStr("isexecutable", neon::Value::makeBool(((stats.st_mode & S_IEXEC) != 0)));
-                dict->addEntryCStr("issymbolic", neon::Value::makeBool(false));
-                #endif
-                dict->addEntryCStr("size", neon::Value::makeNumber(stats.st_size));
-                dict->addEntryCStr("mode", neon::Value::makeNumber(stats.st_mode));
-                dict->addEntryCStr("dev", neon::Value::makeNumber(stats.st_dev));
-                dict->addEntryCStr("ino", neon::Value::makeNumber(stats.st_ino));
-                dict->addEntryCStr("nlink", neon::Value::makeNumber(stats.st_nlink));
-                dict->addEntryCStr("uid", neon::Value::makeNumber(stats.st_uid));
-                dict->addEntryCStr("gid", neon::Value::makeNumber(stats.st_gid));
-                dict->addEntryCStr("mtime", neon::Value::makeNumber(stats.st_mtime));
-                dict->addEntryCStr("atime", neon::Value::makeNumber(stats.st_atime));
-                dict->addEntryCStr("ctime", neon::Value::makeNumber(stats.st_ctime));
-                dict->addEntryCStr("blocks", neon::Value::makeNumber(0));
-                dict->addEntryCStr("blksize", neon::Value::makeNumber(0));
-            }
-        }
-        else
-        {
-            return state->raiseFromFunction(args, "cannot get stats for non-existing file");
-        }
-    }
-    else
-    {
-        if(fileno(stdin) == file->m_filedesc)
-        {
-            dict->addEntryCStr("isreadable", neon::Value::makeBool(true));
-            dict->addEntryCStr("iswritable", neon::Value::makeBool(false));
-        }
-        else
-        {
-            dict->addEntryCStr("isreadable", neon::Value::makeBool(false));
-            dict->addEntryCStr("iswritable", neon::Value::makeBool(true));
-        }
-        dict->addEntryCStr("isexecutable", neon::Value::makeBool(false));
-        dict->addEntryCStr("size", neon::Value::makeNumber(1));
-    }
-    return neon::Value::fromObject(dict);
-}
-
-neon::Value nn_memberfunc_file_path(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    DENY_STD();
-    return neon::Value::fromObject(file->m_filepath);
-}
-
-neon::Value nn_memberfunc_file_mode(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    return neon::Value::fromObject(file->m_filemode);
-}
-
-neon::Value nn_memberfunc_file_name(neon::State* state, neon::Arguments* args)
-{
-    char* name;
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    if(!file->m_isstd)
-    {
-        name = osfn_basename(file->m_filepath->data());
-        return neon::Value::fromObject(neon::String::copy(state, name));
-    }
-    else if(file->m_istty)
-    {
-        /*name = ttyname(file->m_filedesc);*/
-        name = neon::Util::strCopy(state, "<tty>");
-        if(name)
-        {
-            return neon::Value::fromObject(neon::String::copy(state, name));
-        }
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_file_seek(neon::State* state, neon::Arguments* args)
-{
-    long position;
-    int seektype;
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNT(args, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-    file = args->thisval.asFile();
-    DENY_STD();
-    position = (long)args->argv[0].asNumber();
-    seektype = args->argv[1].asNumber();
-    RETURN_STATUS(fseek(file->m_filehandle, position, seektype));
-}
-
-neon::Value nn_memberfunc_file_tell(neon::State* state, neon::Arguments* args)
-{
-    neon::File* file;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    file = args->thisval.asFile();
-    DENY_STD();
-    return neon::Value::makeNumber(ftell(file->m_filehandle));
-}
-
-#undef FILE_ERROR
-#undef RETURN_STATUS
-#undef DENY_STD
-
-neon::Value nn_memberfunc_array_length(neon::State* state, neon::Arguments* args)
-{
-    neon::Array* selfarr;
-    (void)state;
-    selfarr = args->thisval.asArray();
-    return neon::Value::makeNumber(selfarr->size());
-}
-
-neon::Value nn_memberfunc_array_append(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    (void)state;
-    for(i = 0; i < args->argc; i++)
-    {
-        args->thisval.asArray()->push(args->argv[i]);
-    }
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_array_clear(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    args->thisval.asArray()->clear();
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_array_clone(neon::State* state, neon::Arguments* args)
-{
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    return neon::Value::fromObject(list->copy(0, list->size()));
-}
-
-neon::Value nn_memberfunc_array_count(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    size_t count;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    list = args->thisval.asArray();
-    count = 0;
-    for(i = 0; i < list->size(); i++)
-    {
-        if(list->at(i).compare(state, args->argv[0]))
-        {
-            count++;
-        }
-    }
-    return neon::Value::makeNumber(count);
-}
-
-neon::Value nn_memberfunc_array_extend(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Array* list;
-    neon::Array* list2;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isArray);
-    list = args->thisval.asArray();
-    list2 = args->argv[0].asArray();
-    for(i = 0; i < list2->size(); i++)
-    {
-        list->push(list2->at(i));
-    }
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_array_indexof(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    list = args->thisval.asArray();
-    i = 0;
-    if(args->argc == 2)
-    {
-        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-        i = args->argv[1].asNumber();
-    }
-    for(; i < list->size(); i++)
-    {
-        if(list->at(i).compare(state, args->argv[0]))
-        {
-            return neon::Value::makeNumber(i);
-        }
-    }
-    return neon::Value::makeNumber(-1);
-}
-
-neon::Value nn_memberfunc_array_insert(neon::State* state, neon::Arguments* args)
-{
-    size_t index;
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 2);
-    NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-    list = args->thisval.asArray();
-    index = args->argv[1].asNumber();
-    list->m_varray->insert(args->argv[0], index);
-    return neon::Value::makeEmpty();
-}
-
-
-neon::Value nn_memberfunc_array_pop(neon::State* state, neon::Arguments* args)
-{
-    neon::Value value;
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    if(list->size() > 0)
-    {
-        value = list->at(list->size() - 1);
-        list->m_varray->m_count--;
-        return value;
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_shift(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    size_t j;
-    size_t count;
-    neon::Array* list;
-    neon::Array* newlist;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    count = 1;
-    if(args->argc == 1)
-    {
-        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-        count = args->argv[0].asNumber();
-    }
-    list = args->thisval.asArray();
-    if(count >= list->size() || list->size() == 1)
-    {
-        list->m_varray->m_count = 0;
-        return neon::Value::makeNull();
-    }
-    else if(count > 0)
-    {
-        newlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-        for(i = 0; i < count; i++)
-        {
-            newlist->push(list->at(0));
-            for(j = 0; j < list->size(); j++)
-            {
-                list->m_varray->m_values[j] = list->at(j + 1);
-            }
-            list->m_varray->m_count -= 1;
-        }
-        if(count == 1)
-        {
-            return newlist->at(0);
-        }
-        else
-        {
-            return neon::Value::fromObject(newlist);
-        }
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_removeat(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int index;
-    neon::Value value;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    list = args->thisval.asArray();
-    index = args->argv[0].asNumber();
-    if(index < 0 || index >= int(list->size()))
-    {
-        return state->raiseFromFunction(args, "list index %d out of range at remove_at()", index);
-    }
-    value = list->at(index);
-    for(i = index; i < list->size() - 1; i++)
-    {
-        list->m_varray->m_values[i] = list->at(i + 1);
-    }
-    list->m_varray->m_count--;
-    return value;
-}
-
-neon::Value nn_memberfunc_array_remove(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int index;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    list = args->thisval.asArray();
-    index = -1;
-    for(i = 0; i < list->size(); i++)
-    {
-        if(list->at(i).compare(state, args->argv[0]))
-        {
-            index = i;
-            break;
-        }
-    }
-    if(index != -1)
-    {
-        for(i = index; i < list->size(); i++)
-        {
-            list->m_varray->m_values[i] = list->at(i + 1);
-        }
-        list->m_varray->m_count--;
-    }
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_array_reverse(neon::State* state, neon::Arguments* args)
-{
-    int fromtop;
-    neon::Array* list;
-    neon::Array* nlist;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    nlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    /* in-place reversal:*/
-    /*
-    int start = 0;
-    int end = list->size() - 1;
-    while(start < end)
-    {
-        neon::Value temp = list->at(start);
-        list->m_varray->m_values[start] = list->at(end);
-        list->m_varray->m_values[end] = temp;
-        start++;
-        end--;
-    }
-    */
-    for(fromtop = list->size() - 1; fromtop >= 0; fromtop--)
-    {
-        nlist->push(list->at(fromtop));
-    }
-    return neon::Value::fromObject(nlist);
-}
-
-
-neon::Value nn_memberfunc_array_sort(neon::State* state, neon::Arguments* args)
-{
-    neon::Array* list;
-    neon::ValArray::QuickSort qs(state);
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    qs.runSort(list->m_varray, 0, list->size()-0);
-    return neon::Value::fromObject(list);
-}
-
-neon::Value nn_memberfunc_array_contains(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    list = args->thisval.asArray();
-    for(i = 0; i < list->size(); i++)
-    {
-        if(args->argv[0].compare(state, list->at(i)))
-        {
-            return neon::Value::makeBool(true);
-        }
-    }
-    return neon::Value::makeBool(false);
-}
-
-neon::Value nn_memberfunc_array_delete(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int idxupper;
-    int idxlower;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    idxlower = args->argv[0].asNumber();
-    idxupper = idxlower;
-    if(args->argc == 2)
-    {
-        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-        idxupper = args->argv[1].asNumber();
-    }
-    list = args->thisval.asArray();
-    if(idxlower < 0 || idxlower >= int(list->size()))
-    {
-        return state->raiseFromFunction(args, "list index %d out of range at delete()", idxlower);
-    }
-    else if(idxupper < idxlower || idxupper >= int(list->size()))
-    {
-        return state->raiseFromFunction(args, "invalid upper limit %d at delete()", idxupper);
-    }
-    for(i = 0; i < int(list->size() - idxupper); i++)
-    {
-        list->m_varray->m_values[idxlower + i] = list->at(i + idxupper + 1);
-    }
-    list->m_varray->m_count -= idxupper - idxlower + 1;
-    return neon::Value::makeNumber((double)idxupper - (double)idxlower + 1);
-}
-
-neon::Value nn_memberfunc_array_first(neon::State* state, neon::Arguments* args)
-{
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    if(list->size() > 0)
-    {
-        return list->at(0);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_last(neon::State* state, neon::Arguments* args)
-{
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    if(list->size() > 0)
-    {
-        return list->at(list->size() - 1);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_isempty(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeBool(args->thisval.asArray()->size() == 0);
-}
-
-neon::Value nn_memberfunc_array_take(neon::State* state, neon::Arguments* args)
-{
-    int count;
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    list = args->thisval.asArray();
-    count = args->argv[0].asNumber();
-    if(count < 0)
-    {
-        count = list->count() + count;
-    }
-    if(int(list->count()) < count)
-    {
-        return neon::Value::fromObject(list->copy(0, list->count()));
-    }
-    return neon::Value::fromObject(list->copy(0, count));
-}
-
-neon::Value nn_memberfunc_array_get(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    list = args->thisval.asArray();
-    index = args->argv[0].asNumber();
-    if(index < 0 || index >= int(list->count()))
-    {
-        return neon::Value::makeNull();
-    }
-    return list->at(index);
-}
-
-neon::Value nn_memberfunc_array_compact(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Array* list;
-    neon::Array* newlist;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    newlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->count(); i++)
-    {
-        if(!list->at(i).compare(state, neon::Value::makeNull()))
-        {
-            newlist->push(list->at(i));
-        }
-    }
-    return neon::Value::fromObject(newlist);
-}
-
-neon::Value nn_memberfunc_array_unique(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    size_t j;
-    bool found;
-    neon::Array* list;
-    neon::Array* newlist;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    list = args->thisval.asArray();
-    newlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < list->count(); i++)
-    {
-        found = false;
-        for(j = 0; j < newlist->count(); j++)
-        {
-            if(newlist->at(j).compare(state, list->at(i)))
-            {
-                found = true;
-                continue;
-            }
-        }
-        if(!found)
-        {
-            newlist->push(list->at(i));
-        }
-    }
-    return neon::Value::fromObject(newlist);
-}
-
-neon::Value nn_memberfunc_array_zip(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    size_t j;
-    neon::Array* list;
-    neon::Array* newlist;
-    neon::Array* alist;
-    neon::Array** arglist;
-    list = args->thisval.asArray();
-    newlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    arglist = (neon::Array**)neon::State::VM::gcAllocMemory(state, sizeof(neon::Array*), args->argc);
-    for(i = 0; i < size_t(args->argc); i++)
-    {
-        NEON_ARGS_CHECKTYPE(args, i, isArray);
-        arglist[i] = args->argv[i].asArray();
-    }
-    for(i = 0; i < list->count(); i++)
-    {
-        alist = state->m_vmstate->gcProtect(neon::Array::make(state));
-        /* item of main list*/
-        alist->push(list->at(i));
-        for(j = 0; j < size_t(args->argc); j++)
-        {
-            if(i < arglist[j]->count())
-            {
-                alist->push(arglist[j]->at(i));
-            }
-            else
-            {
-                alist->push(neon::Value::makeNull());
-            }
-        }
-        newlist->push(neon::Value::fromObject(alist));
-    }
-    return neon::Value::fromObject(newlist);
-}
-
-
-neon::Value nn_memberfunc_array_zipfrom(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    size_t j;
-    neon::Array* list;
-    neon::Array* newlist;
-    neon::Array* alist;
-    neon::Array* arglist;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isArray);
-    list = args->thisval.asArray();
-    newlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    arglist = args->argv[0].asArray();
-    for(i = 0; i < arglist->count(); i++)
-    {
-        if(!arglist->at(i).isArray())
-        {
-            return state->raiseFromFunction(args, "invalid list in zip entries");
-        }
-    }
-    for(i = 0; i < list->count(); i++)
-    {
-        alist = state->m_vmstate->gcProtect(neon::Array::make(state));
-        alist->push(list->at(i));
-        for(j = 0; j < arglist->count(); j++)
-        {
-            if(i < arglist->at(j).asArray()->count())
-            {
-                alist->push(arglist->at(j).asArray()->at(i));
-            }
-            else
-            {
-                alist->push(neon::Value::makeNull());
-            }
-        }
-        newlist->push(neon::Value::fromObject(alist));
-    }
-    return neon::Value::fromObject(newlist);
-}
-
-neon::Value nn_memberfunc_array_todict(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    neon::Dictionary* dict;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    dict = state->m_vmstate->gcProtect(neon::Dictionary::make(state));
-    list = args->thisval.asArray();
-    for(i = 0; i < list->count(); i++)
-    {
-        dict->setEntry(neon::Value::makeNumber(i), list->at(i));
-    }
-    return neon::Value::fromObject(dict);
-}
-
-neon::Value nn_memberfunc_array_iter(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    neon::Array* list;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    list = args->thisval.asArray();
-    index = args->argv[0].asNumber();
-    if(index > -1 && index < int(list->count()))
-    {
-        return list->at(index);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_itern(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    neon::Array* list;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    list = args->thisval.asArray();
-    if(args->argv[0].isNull())
-    {
-        if(list->count() == 0)
-        {
-            return neon::Value::makeBool(false);
-        }
-        return neon::Value::makeNumber(0);
-    }
-    if(!args->argv[0].isNumber())
-    {
-        return state->raiseFromFunction(args, "lists are numerically indexed");
-    }
-    index = args->argv[0].asNumber();
-    if(index < int(list->count() - 1))
-    {
-        return neon::Value::makeNumber((double)index + 1);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_array_each(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;
-    neon::Value unused;
-    neon::Array* list;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    list = args->thisval.asArray();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < list->count(); i++)
-    {
-        if(arity > 0)
-        {
-            nestargs[0] = list->at(i);
-            if(arity > 1)
-            {
-                nestargs[1] = neon::Value::makeNumber(i);
-            }
-        }
-        nc.callNested(callable, args->thisval, nestargs, &unused);
-    }
-    return neon::Value::makeEmpty();
-}
-
-
-neon::Value nn_memberfunc_array_map(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value res;
-    neon::Value callable;
-    neon::Array* selfarr;
-    neon::ValArray nestargs;
-    neon::Array* resultlist;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    selfarr = args->thisval.asArray();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    resultlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    //nestargs->push(neon::Value::makeEmpty());
-    for(i = 0; i < selfarr->count(); i++)
-    {
-        #if 0
-            if(!selfarr->at(i).isEmpty())
-            {
-                if(arity > 0 || arity == -1)
-                {
-                    nestargs[0] = selfarr->at(i);
-                    if(arity > 1)
-                    {
-                        nestargs[1] = neon::Value::makeNumber(i);
-                    }
-                }
-                nc.callNested(callable, args->thisval, nestargs, &res);
-                resultlist->push(res);
-            }
-            else
-            {
-                resultlist->push(neon::Value::makeEmpty());
-            }
-        #else
-            #if 1
-                //nestargs.push(selfarr->at(i));
-                nestargs[0] = selfarr->at(i);
-                if(arity > 1)
-                {
-                    nestargs[1] = neon::Value::makeNumber(i);
-                }
-                nc.callNested(callable, args->thisval, nestargs, &res);
-                resultlist->push(res);
-            #else
+            #if 0
                 if(!selfarr->at(i).isEmpty())
                 {
-                    //if(arity > 0 || arity == -1)
+                    if(arity > 0 || arity == -1)
                     {
                         nestargs[0] = selfarr->at(i);
                         if(arity > 1)
                         {
-                            nestargs[1] = neon::Value::makeNumber(i);
+                            nestargs[1] = Value::makeNumber(i);
                         }
                     }
                     nc.callNested(callable, args->thisval, nestargs, &res);
@@ -13582,1598 +13911,1623 @@ neon::Value nn_memberfunc_array_map(neon::State* state, neon::Arguments* args)
                 }
                 else
                 {
-                    resultlist->push(neon::Value::makeEmpty());
+                    resultlist->push(Value::makeEmpty());
                 }
-            #endif
-        #endif
-    }
-    return neon::Value::fromObject(resultlist);
-}
-
-
-neon::Value nn_memberfunc_array_filter(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;
-    neon::Value result;
-    neon::Array* selfarr;
-    neon::ValArray nestargs;
-    neon::Array* resultlist;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    selfarr = args->thisval.asArray();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    resultlist = state->m_vmstate->gcProtect(neon::Array::make(state));
-    for(i = 0; i < selfarr->count(); i++)
-    {
-        if(!selfarr->at(i).isEmpty())
-        {
-            if(arity > 0)
-            {
-                nestargs[0] = selfarr->at(i);
-                if(arity > 1)
-                {
-                    nestargs[1] = neon::Value::makeNumber(i);
-                }
-            }
-            nc.callNested(callable, args->thisval, nestargs, &result);
-            if(!neon::Value::isFalse(result))
-            {
-                resultlist->push(selfarr->at(i));
-            }
-        }
-    }
-    return neon::Value::fromObject(resultlist);
-}
-
-neon::Value nn_memberfunc_array_some(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value callable;
-    neon::Value result;
-    neon::Array* selfarr;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    selfarr = args->thisval.asArray();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < selfarr->count(); i++)
-    {
-        if(!selfarr->at(i).isEmpty())
-        {
-            if(arity > 0)
-            {
-                nestargs[0] = selfarr->at(i);
-                if(arity > 1)
-                {
-                    nestargs[1] = neon::Value::makeNumber(i);
-                }
-            }
-            nc.callNested(callable, args->thisval, nestargs, &result);
-            if(!neon::Value::isFalse(result))
-            {
-                return neon::Value::makeBool(true);
-            }
-        }
-    }
-    return neon::Value::makeBool(false);
-}
-
-
-neon::Value nn_memberfunc_array_every(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    neon::Value result;
-    neon::Value callable;
-    neon::Array* selfarr;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    selfarr = args->thisval.asArray();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < selfarr->count(); i++)
-    {
-        if(!selfarr->at(i).isEmpty())
-        {
-            if(arity > 0)
-            {
-                nestargs[0] = selfarr->at(i);
-                if(arity > 1)
-                {
-                    nestargs[1] = neon::Value::makeNumber(i);
-                }
-            }
-            nc.callNested(callable, args->thisval, nestargs, &result);
-            if(neon::Value::isFalse(result))
-            {
-                return neon::Value::makeBool(false);
-            }
-        }
-    }
-    return neon::Value::makeBool(true);
-}
-
-neon::Value nn_memberfunc_array_reduce(neon::State* state, neon::Arguments* args)
-{
-    size_t i;
-    int arity;
-    int startindex;
-    neon::Value callable;
-    neon::Value accumulator;
-    neon::Array* selfarr;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    selfarr = args->thisval.asArray();
-    callable = args->argv[0];
-    startindex = 0;
-    accumulator = neon::Value::makeNull();
-    if(args->argc == 2)
-    {
-        accumulator = args->argv[1];
-    }
-    if(accumulator.isNull() && selfarr->count() > 0)
-    {
-        accumulator = selfarr->at(0);
-        startindex = 1;
-    }
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = startindex; i < selfarr->count(); i++)
-    {
-        if(!selfarr->at(i).isNull() && !selfarr->at(i).isEmpty())
-        {
-            if(arity > 0)
-            {
-                nestargs[0] = accumulator;
-                if(arity > 1)
-                {
-                    nestargs[1] = selfarr->at(i);
-                    if(arity > 2)
+            #else
+                #if 1
+                    //nestargs.push(selfarr->at(i));
+                    nestargs[0] = selfarr->at(i);
+                    if(arity > 1)
                     {
-                        nestargs[2] = neon::Value::makeNumber(i);
-                        if(arity > 4)
+                        nestargs[1] = Value::makeNumber(i);
+                    }
+                    nc.callNested(callable, args->thisval, nestargs, &res);
+                    resultlist->push(res);
+                #else
+                    if(!selfarr->at(i).isEmpty())
+                    {
+                        //if(arity > 0 || arity == -1)
                         {
-                            nestargs[3] = args->thisval;
+                            nestargs[0] = selfarr->at(i);
+                            if(arity > 1)
+                            {
+                                nestargs[1] = Value::makeNumber(i);
+                            }
+                        }
+                        nc.callNested(callable, args->thisval, nestargs, &res);
+                        resultlist->push(res);
+                    }
+                    else
+                    {
+                        resultlist->push(Value::makeEmpty());
+                    }
+                #endif
+            #endif
+        }
+        return Value::fromObject(resultlist);
+    }
+
+    Value memberfn_array_filter(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;
+        Value result;
+        Array* selfarr;
+        ValArray nestargs;
+        Array* resultlist;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        selfarr = args->thisval.asArray();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        resultlist = state->m_vmstate->gcProtect(Array::make(state));
+        for(i = 0; i < selfarr->count(); i++)
+        {
+            if(!selfarr->at(i).isEmpty())
+            {
+                if(arity > 0)
+                {
+                    nestargs[0] = selfarr->at(i);
+                    if(arity > 1)
+                    {
+                        nestargs[1] = Value::makeNumber(i);
+                    }
+                }
+                nc.callNested(callable, args->thisval, nestargs, &result);
+                if(!Value::isFalse(result))
+                {
+                    resultlist->push(selfarr->at(i));
+                }
+            }
+        }
+        return Value::fromObject(resultlist);
+    }
+
+    Value memberfn_array_some(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value callable;
+        Value result;
+        Array* selfarr;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        selfarr = args->thisval.asArray();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < selfarr->count(); i++)
+        {
+            if(!selfarr->at(i).isEmpty())
+            {
+                if(arity > 0)
+                {
+                    nestargs[0] = selfarr->at(i);
+                    if(arity > 1)
+                    {
+                        nestargs[1] = Value::makeNumber(i);
+                    }
+                }
+                nc.callNested(callable, args->thisval, nestargs, &result);
+                if(!Value::isFalse(result))
+                {
+                    return Value::makeBool(true);
+                }
+            }
+        }
+        return Value::makeBool(false);
+    }
+
+    Value memberfn_array_every(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        Value result;
+        Value callable;
+        Array* selfarr;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        selfarr = args->thisval.asArray();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < selfarr->count(); i++)
+        {
+            if(!selfarr->at(i).isEmpty())
+            {
+                if(arity > 0)
+                {
+                    nestargs[0] = selfarr->at(i);
+                    if(arity > 1)
+                    {
+                        nestargs[1] = Value::makeNumber(i);
+                    }
+                }
+                nc.callNested(callable, args->thisval, nestargs, &result);
+                if(Value::isFalse(result))
+                {
+                    return Value::makeBool(false);
+                }
+            }
+        }
+        return Value::makeBool(true);
+    }
+
+    Value memberfn_array_reduce(State* state, Arguments* args)
+    {
+        size_t i;
+        int arity;
+        int startindex;
+        Value callable;
+        Value accumulator;
+        Array* selfarr;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        selfarr = args->thisval.asArray();
+        callable = args->argv[0];
+        startindex = 0;
+        accumulator = Value::makeNull();
+        if(args->argc == 2)
+        {
+            accumulator = args->argv[1];
+        }
+        if(accumulator.isNull() && selfarr->count() > 0)
+        {
+            accumulator = selfarr->at(0);
+            startindex = 1;
+        }
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = startindex; i < selfarr->count(); i++)
+        {
+            if(!selfarr->at(i).isNull() && !selfarr->at(i).isEmpty())
+            {
+                if(arity > 0)
+                {
+                    nestargs[0] = accumulator;
+                    if(arity > 1)
+                    {
+                        nestargs[1] = selfarr->at(i);
+                        if(arity > 2)
+                        {
+                            nestargs[2] = Value::makeNumber(i);
+                            if(arity > 4)
+                            {
+                                nestargs[3] = args->thisval;
+                            }
                         }
                     }
                 }
+                nc.callNested(callable, args->thisval, nestargs, &accumulator);
             }
-            nc.callNested(callable, args->thisval, nestargs, &accumulator);
         }
+        return accumulator;
     }
-    return accumulator;
-}
 
-neon::Value nn_memberfunc_range_lower(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(args->thisval.asRange()->m_lower);
-}
-
-neon::Value nn_memberfunc_range_upper(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(args->thisval.asRange()->m_upper);
-}
-
-neon::Value nn_memberfunc_range_range(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    return neon::Value::makeNumber(args->thisval.asRange()->m_range);
-}
-
-neon::Value nn_memberfunc_range_iter(neon::State* state, neon::Arguments* args)
-{
-    int val;
-    int index;
-    neon::Range* range;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    range = args->thisval.asRange();
-    index = args->argv[0].asNumber();
-    if(index >= 0 && index < range->m_range)
+    Value memberfn_range_lower(State* state, Arguments* args)
     {
-        if(index == 0)
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeNumber(args->thisval.asRange()->m_lower);
+    }
+
+    Value memberfn_range_upper(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeNumber(args->thisval.asRange()->m_upper);
+    }
+
+    Value memberfn_range_range(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        return Value::makeNumber(args->thisval.asRange()->m_range);
+    }
+
+    Value memberfn_range_iter(State* state, Arguments* args)
+    {
+        int val;
+        int index;
+        Range* range;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        range = args->thisval.asRange();
+        index = args->argv[0].asNumber();
+        if(index >= 0 && index < range->m_range)
         {
-            return neon::Value::makeNumber(range->m_lower);
+            if(index == 0)
+            {
+                return Value::makeNumber(range->m_lower);
+            }
+            if(range->m_lower > range->m_upper)
+            {
+                val = --range->m_lower;
+            }
+            else
+            {
+                val = ++range->m_lower;
+            }
+            return Value::makeNumber(val);
         }
-        if(range->m_lower > range->m_upper)
+        return Value::makeNull();
+    }
+
+    Value memberfn_range_itern(State* state, Arguments* args)
+    {
+        int index;
+        Range* range;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        range = args->thisval.asRange();
+        if(args->argv[0].isNull())
         {
-            val = --range->m_lower;
+            if(range->m_range == 0)
+            {
+                return Value::makeNull();
+            }
+            return Value::makeNumber(0);
+        }
+        if(!args->argv[0].isNumber())
+        {
+            return state->raiseFromFunction(args, "ranges are numerically indexed");
+        }
+        index = (int)args->argv[0].asNumber() + 1;
+        if(index < range->m_range)
+        {
+            return Value::makeNumber(index);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_range_loop(State* state, Arguments* args)
+    {
+        int i;
+        int arity;
+        Value callable;
+        Value unused;
+        Range* range;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        range = args->thisval.asRange();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < range->m_range; i++)
+        {
+            if(arity > 0)
+            {
+                nestargs[0] = Value::makeNumber(i);
+                if(arity > 1)
+                {
+                    nestargs[1] = Value::makeNumber(i);
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &unused);
+        }
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_range_expand(State* state, Arguments* args)
+    {
+        int i;
+        Value val;
+        Range* range;
+        Array* oa;
+        range = args->thisval.asRange();
+        oa = Array::make(state);
+        for(i = 0; i < range->m_range; i++)
+        {
+            val = Value::makeNumber(i);
+            oa->push(val);
+        }
+        return Value::fromObject(oa);
+    }
+
+    Value memberfn_range_constructor(State* state, Arguments* args)
+    {
+        int a;
+        int b;
+        Range* orng;
+        a = args->argv[0].asNumber();
+        b = args->argv[1].asNumber();
+        orng = Range::make(state, a, b);
+        return Value::fromObject(orng);
+    }
+
+    Value memberfn_string_utf8numbytes(State* state, Arguments* args)
+    {
+        int incode;
+        int res;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        incode = args->argv[0].asNumber();
+        //static int utf8NumBytes(int value)
+        res = Util::utf8NumBytes(incode);
+        return Value::makeNumber(res);
+    }
+
+    Value memberfn_string_utf8decode(State* state, Arguments* args)
+    {
+        int res;
+        String* instr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        instr = args->argv[0].asString();
+        //static int utf8Decode(const uint8_t* bytes, uint32_t length)
+        res = Util::utf8Decode((const uint8_t*)instr->data(), instr->length());
+        return Value::makeNumber(res);
+    }
+
+    Value memberfn_string_utf8encode(State* state, Arguments* args)
+    {
+        int incode;
+        size_t len;
+        String* res;
+        char* buf;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        incode = args->argv[0].asNumber();
+        //static char* utf8Encode(unsigned int code)
+        buf = Util::utf8Encode(state, incode, &len);
+        res = String::take(state, buf, len);
+        return Value::fromObject(res);
+    }
+
+    Value nn_util_stringutf8chars(State* state, Arguments* args, bool onlycodepoint)
+    {
+        int cp;
+        const char* cstr;
+        Array* res;
+        String* os;
+        String* instr;
+        (void)state;
+        instr = args->thisval.asString();
+        res = Array::make(state);
+        Util::Utf8Iterator iter(instr->data(), instr->length());
+        while(iter.next() != 0u)
+        {
+            cp = iter.m_codepoint;
+            cstr = iter.getCharStr();
+            if(onlycodepoint)
+            {
+                res->push(Value::makeNumber(cp));
+            }
+            else
+            {
+                os = String::copy(state, cstr, iter.m_charsize);
+                res->push(Value::fromObject(os));
+            }
+        }
+        return Value::fromObject(res);
+    }
+
+    Value memberfn_string_utf8chars(State* state, Arguments* args)
+    {
+        return nn_util_stringutf8chars(state, args, false);
+    }
+
+    Value memberfn_string_utf8codepoints(State* state, Arguments* args)
+    {
+        return nn_util_stringutf8chars(state, args, true);
+    }
+
+    Value memberfn_string_fromcharcode(State* state, Arguments* args)
+    {
+        char ch;
+        String* os;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        ch = args->argv[0].asNumber();
+        os = String::copy(state, &ch, 1);
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_string_constructor(State* state, Arguments* args)
+    {
+        String* os;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        os = String::copy(state, "", 0);
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_string_length(State* state, Arguments* args)
+    {
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        return Value::makeNumber(selfstr->length());
+    }
+
+    Value memberfn_string_substring(State* state, Arguments* args)
+    {
+        size_t end;
+        size_t start;
+        size_t maxlen;
+        String* nos;
+        String* selfstr;
+        (void)state;
+        selfstr = args->thisval.asString();
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        maxlen = selfstr->length();
+        end = maxlen;
+        start = args->argv[0].asNumber();
+        if(args->argc > 1)
+        {
+            NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+            end = args->argv[1].asNumber();
+        }
+        nos = selfstr->substr(start, end, true);
+        return Value::fromObject(nos);
+    }
+
+    Value memberfn_string_charcodeat(State* state, Arguments* args)
+    {
+        int ch;
+        int idx;
+        int selflen;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        selfstr = args->thisval.asString();
+        idx = args->argv[0].asNumber();
+        selflen = (int)selfstr->length();
+        if((idx < 0) || (idx >= selflen))
+        {
+            ch = -1;
         }
         else
         {
-            val = ++range->m_lower;
+            ch = selfstr->data()[idx];
         }
-        return neon::Value::makeNumber(val);
+        return Value::makeNumber(ch);
     }
-    return neon::Value::makeNull();
-}
 
-neon::Value nn_memberfunc_range_itern(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    neon::Range* range;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    range = args->thisval.asRange();
-    if(args->argv[0].isNull())
+    Value memberfn_string_charat(State* state, Arguments* args)
     {
-        if(range->m_range == 0)
+        char ch;
+        int idx;
+        int selflen;
+        String* selfstr;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        selfstr = args->thisval.asString();
+        idx = args->argv[0].asNumber();
+        selflen = (int)selfstr->length();
+        if((idx < 0) || (idx >= selflen))
         {
-            return neon::Value::makeNull();
-        }
-        return neon::Value::makeNumber(0);
-    }
-    if(!args->argv[0].isNumber())
-    {
-        return state->raiseFromFunction(args, "ranges are numerically indexed");
-    }
-    index = (int)args->argv[0].asNumber() + 1;
-    if(index < range->m_range)
-    {
-        return neon::Value::makeNumber(index);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_range_loop(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int arity;
-    neon::Value callable;
-    neon::Value unused;
-    neon::Range* range;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    range = args->thisval.asRange();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < range->m_range; i++)
-    {
-        if(arity > 0)
-        {
-            nestargs[0] = neon::Value::makeNumber(i);
-            if(arity > 1)
-            {
-                nestargs[1] = neon::Value::makeNumber(i);
-            }
-        }
-        nc.callNested(callable, args->thisval, nestargs, &unused);
-    }
-    return neon::Value::makeEmpty();
-}
-
-neon::Value nn_memberfunc_range_expand(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    neon::Value val;
-    neon::Range* range;
-    neon::Array* oa;
-    range = args->thisval.asRange();
-    oa = neon::Array::make(state);
-    for(i = 0; i < range->m_range; i++)
-    {
-        val = neon::Value::makeNumber(i);
-        oa->push(val);
-    }
-    return neon::Value::fromObject(oa);
-}
-
-neon::Value nn_memberfunc_range_constructor(neon::State* state, neon::Arguments* args)
-{
-    int a;
-    int b;
-    neon::Range* orng;
-    a = args->argv[0].asNumber();
-    b = args->argv[1].asNumber();
-    orng = neon::Range::make(state, a, b);
-    return neon::Value::fromObject(orng);
-}
-
-neon::Value nn_memberfunc_string_utf8numbytes(neon::State* state, neon::Arguments* args)
-{
-    int incode;
-    int res;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    incode = args->argv[0].asNumber();
-    //static int utf8NumBytes(int value)
-    res = neon::Util::utf8NumBytes(incode);
-    return neon::Value::makeNumber(res);
-}
-
-neon::Value nn_memberfunc_string_utf8decode(neon::State* state, neon::Arguments* args)
-{
-    int res;
-    neon::String* instr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    instr = args->argv[0].asString();
-    //static int utf8Decode(const uint8_t* bytes, uint32_t length)
-    res = neon::Util::utf8Decode((const uint8_t*)instr->data(), instr->length());
-    return neon::Value::makeNumber(res);
-}
-
-neon::Value nn_memberfunc_string_utf8encode(neon::State* state, neon::Arguments* args)
-{
-    int incode;
-    size_t len;
-    neon::String* res;
-    char* buf;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    incode = args->argv[0].asNumber();
-    //static char* utf8Encode(unsigned int code)
-    buf = neon::Util::utf8Encode(state, incode, &len);
-    res = neon::String::take(state, buf, len);
-    return neon::Value::fromObject(res);
-}
-
-neon::Value nn_util_stringutf8chars(neon::State* state, neon::Arguments* args, bool onlycodepoint)
-{
-    int cp;
-    const char* cstr;
-    neon::Array* res;
-    neon::String* os;
-    neon::String* instr;
-    (void)state;
-    instr = args->thisval.asString();
-    res = neon::Array::make(state);
-    neon::Util::Utf8Iterator iter(instr->data(), instr->length());
-    while(iter.next())
-    {
-        cp = iter.m_codepoint;
-        cstr = iter.getCharStr();
-        if(onlycodepoint)
-        {
-            res->push(neon::Value::makeNumber(cp));
+            return Value::fromObject(String::copy(state, "", 0));
         }
         else
         {
-            os = neon::String::copy(state, cstr, iter.m_charsize);
-            res->push(neon::Value::fromObject(os));
+            ch = selfstr->data()[idx];
         }
+        return Value::fromObject(String::copy(state, &ch, 1));
     }
-    return neon::Value::fromObject(res);
-}
 
-neon::Value nn_memberfunc_string_utf8chars(neon::State* state, neon::Arguments* args)
-{
-    return nn_util_stringutf8chars(state, args, false);
-}
-
-neon::Value nn_memberfunc_string_utf8codepoints(neon::State* state, neon::Arguments* args)
-{
-    return nn_util_stringutf8chars(state, args, true);
-}
-
-neon::Value nn_memberfunc_string_fromcharcode(neon::State* state, neon::Arguments* args)
-{
-    char ch;
-    neon::String* os;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    ch = args->argv[0].asNumber();
-    os = neon::String::copy(state, &ch, 1);
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_string_constructor(neon::State* state, neon::Arguments* args)
-{
-    neon::String* os;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    os = neon::String::copy(state, "", 0);
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_string_length(neon::State* state, neon::Arguments* args)
-{
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    return neon::Value::makeNumber(selfstr->length());
-}
-
-neon::Value nn_memberfunc_string_substring(neon::State* state, neon::Arguments* args)
-{
-    size_t end;
-    size_t start;
-    size_t maxlen;
-    neon::String* nos;
-    neon::String* selfstr;
-    (void)state;
-    selfstr = args->thisval.asString();
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    maxlen = selfstr->length();
-    end = maxlen;
-    start = args->argv[0].asNumber();
-    if(args->argc > 1)
+    Value memberfn_string_upper(State* state, Arguments* args)
     {
-        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-        end = args->argv[1].asNumber();
+        size_t slen;
+        String* str;
+        String* copied;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        str = args->thisval.asString();
+        copied = String::copy(state, str->data(), str->length());
+        slen = copied->length();
+        (void)Util::strToUpperInplace(copied->mutableData(), slen);
+        return Value::fromObject(copied);
     }
-    nos = selfstr->substr(start, end, true);
-    return neon::Value::fromObject(nos);
-}
 
-neon::Value nn_memberfunc_string_charcodeat(neon::State* state, neon::Arguments* args)
-{
-    int ch;
-    int idx;
-    int selflen;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    selfstr = args->thisval.asString();
-    idx = args->argv[0].asNumber();
-    selflen = (int)selfstr->length();
-    if((idx < 0) || (idx >= selflen))
+    Value memberfn_string_lower(State* state, Arguments* args)
     {
-        ch = -1;
+        size_t slen;
+        String* str;
+        String* copied;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        str = args->thisval.asString();
+        copied = String::copy(state, str->data(), str->length());
+        slen = copied->length();
+        (void)Util::strToLowerInplace(copied->mutableData(), slen);
+        return Value::fromObject(copied);
     }
-    else
-    {
-        ch = selfstr->data()[idx];
-    }
-    return neon::Value::makeNumber(ch);
-}
 
-neon::Value nn_memberfunc_string_charat(neon::State* state, neon::Arguments* args)
-{
-    char ch;
-    int idx;
-    int selflen;
-    neon::String* selfstr;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    selfstr = args->thisval.asString();
-    idx = args->argv[0].asNumber();
-    selflen = (int)selfstr->length();
-    if((idx < 0) || (idx >= selflen))
+    Value memberfn_string_isalpha(State* state, Arguments* args)
     {
-        return neon::Value::fromObject(neon::String::copy(state, "", 0));
-    }
-    else
-    {
-        ch = selfstr->data()[idx];
-    }
-    return neon::Value::fromObject(neon::String::copy(state, &ch, 1));
-}
-
-neon::Value nn_memberfunc_string_upper(neon::State* state, neon::Arguments* args)
-{
-    size_t slen;
-    neon::String* str;
-    neon::String* copied;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    str = args->thisval.asString();
-    copied = neon::String::copy(state, str->data(), str->length());
-    slen = copied->length();
-    (void)neon::Util::strToUpperInplace(copied->mutableData(), slen);
-    return neon::Value::fromObject(copied);
-}
-
-neon::Value nn_memberfunc_string_lower(neon::State* state, neon::Arguments* args)
-{
-    size_t slen;
-    neon::String* str;
-    neon::String* copied;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    str = args->thisval.asString();
-    copied = neon::String::copy(state, str->data(), str->length());
-    slen = copied->length();
-    (void)neon::Util::strToLowerInplace(copied->mutableData(), slen);
-    return neon::Value::fromObject(copied);
-}
-
-neon::Value nn_memberfunc_string_isalpha(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    for(i = 0; i < (int)selfstr->length(); i++)
-    {
-        if(!isalpha((unsigned char)selfstr->data()[i]))
+        int i;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        for(i = 0; i < (int)selfstr->length(); i++)
         {
-            return neon::Value::makeBool(false);
+            if(isalpha((unsigned char)selfstr->data()[i]) == 0)
+            {
+                return Value::makeBool(false);
+            }
         }
+        return Value::makeBool(selfstr->length() != 0);
     }
-    return neon::Value::makeBool(selfstr->length() != 0);
-}
 
-neon::Value nn_memberfunc_string_isalnum(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    for(i = 0; i < (int)selfstr->length(); i++)
+    Value memberfn_string_isalnum(State* state, Arguments* args)
     {
-        if(!isalnum((unsigned char)selfstr->data()[i]))
+        int i;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        for(i = 0; i < (int)selfstr->length(); i++)
         {
-            return neon::Value::makeBool(false);
+            if(isalnum((unsigned char)selfstr->data()[i]) == 0)
+            {
+                return Value::makeBool(false);
+            }
         }
+        return Value::makeBool(selfstr->length() != 0);
     }
-    return neon::Value::makeBool(selfstr->length() != 0);
-}
 
-neon::Value nn_memberfunc_string_isfloat(neon::State* state, neon::Arguments* args)
-{
-    double f;
-    char* p;
-    neon::String* selfstr;
-    (void)f;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    errno = 0;
-    if(selfstr->length() ==0)
+    Value memberfn_string_isfloat(State* state, Arguments* args)
     {
-        return neon::Value::makeBool(false);
-    }
-    f = strtod(selfstr->data(), &p);
-    if(errno)
-    {
-        return neon::Value::makeBool(false);
-    }
-    else
-    {
-        if(*p == 0)
+        double f;
+        char* p;
+        String* selfstr;
+        (void)f;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        errno = 0;
+        if(selfstr->length() ==0)
         {
-            return neon::Value::makeBool(true);
+            return Value::makeBool(false);
         }
-    }
-    return neon::Value::makeBool(false);
-}
-
-neon::Value nn_memberfunc_string_isnumber(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    for(i = 0; i < (int)selfstr->length(); i++)
-    {
-        if(!isdigit((unsigned char)selfstr->data()[i]))
+        f = strtod(selfstr->data(), &p);
+        if(errno)
         {
-            return neon::Value::makeBool(false);
-        }
-    }
-    return neon::Value::makeBool(selfstr->length() != 0);
-}
-
-neon::Value nn_memberfunc_string_islower(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    bool alphafound;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    alphafound = false;
-    for(i = 0; i < (int)selfstr->length(); i++)
-    {
-        if(!alphafound && !isdigit(selfstr->data()[0]))
-        {
-            alphafound = true;
-        }
-        if(isupper(selfstr->data()[0]))
-        {
-            return neon::Value::makeBool(false);
-        }
-    }
-    return neon::Value::makeBool(alphafound);
-}
-
-neon::Value nn_memberfunc_string_isupper(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    bool alphafound;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    alphafound = false;
-    for(i = 0; i < (int)selfstr->length(); i++)
-    {
-        if(!alphafound && !isdigit(selfstr->data()[0]))
-        {
-            alphafound = true;
-        }
-        if(islower(selfstr->data()[0]))
-        {
-            return neon::Value::makeBool(false);
-        }
-    }
-    return neon::Value::makeBool(alphafound);
-}
-
-neon::Value nn_memberfunc_string_isspace(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    for(i = 0; i < (int)selfstr->length(); i++)
-    {
-        if(!isspace((unsigned char)selfstr->data()[i]))
-        {
-            return neon::Value::makeBool(false);
-        }
-    }
-    return neon::Value::makeBool(selfstr->length() != 0);
-}
-
-neon::Value nn_memberfunc_string_trim(neon::State* state, neon::Arguments* args)
-{
-    char trimmer;
-    char* end;
-    char* string;
-    neon::String* selfstr;
-    neon::String* copied;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    trimmer = '\0';
-    if(args->argc == 1)
-    {
-        trimmer = (char)args->argv[0].asString()->data()[0];
-    }
-    selfstr = args->thisval.asString();
-    copied = neon::String::copy(state, selfstr->data(), selfstr->length());
-    string = copied->mutableData();
-    end = nullptr;
-    /* Trim leading space*/
-    if(trimmer == '\0')
-    {
-        while(isspace((unsigned char)*string))
-        {
-            string++;
-        }
-    }
-    else
-    {
-        while(trimmer == *string)
-        {
-            string++;
-        }
-    }
-    /* All spaces? */
-    if(*string == 0)
-    {
-        return neon::Value::fromObject(neon::String::copy(state, "", 0));
-    }
-    /* Trim trailing space */
-    end = string + strlen(string) - 1;
-    if(trimmer == '\0')
-    {
-        while(end > string && isspace((unsigned char)*end))
-        {
-            end--;
-        }
-    }
-    else
-    {
-        while(end > string && trimmer == *end)
-        {
-            end--;
-        }
-    }
-    end[1] = '\0';
-    return neon::Value::fromObject(neon::String::copy(state, string));
-}
-
-neon::Value nn_memberfunc_string_ltrim(neon::State* state, neon::Arguments* args)
-{
-    char trimmer;
-    char* end;
-    char* string;
-    neon::String* selfstr;
-    neon::String* copied;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    trimmer = '\0';
-    if(args->argc == 1)
-    {
-        trimmer = (char)args->argv[0].asString()->data()[0];
-    }
-    selfstr = args->thisval.asString();
-    copied = neon::String::copy(state, selfstr->data(), selfstr->length());
-    string = copied->mutableData();
-    end = nullptr;
-    /* Trim leading space */
-    if(trimmer == '\0')
-    {
-        while(isspace((unsigned char)*string))
-        {
-            string++;
-        }
-    }
-    else
-    {
-        while(trimmer == *string)
-        {
-            string++;
-        }
-    }
-    /* All spaces? */
-    if(*string == 0)
-    {
-        return neon::Value::fromObject(neon::String::copy(state, "", 0));
-    }
-    end = string + strlen(string) - 1;
-    end[1] = '\0';
-    return neon::Value::fromObject(neon::String::copy(state, string));
-}
-
-neon::Value nn_memberfunc_string_rtrim(neon::State* state, neon::Arguments* args)
-{
-    char trimmer;
-    char* end;
-    char* string;
-    neon::String* selfstr;
-    neon::String* copied;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    trimmer = '\0';
-    if(args->argc == 1)
-    {
-        trimmer = (char)args->argv[0].asString()->data()[0];
-    }
-    selfstr = args->thisval.asString();
-    copied = neon::String::copy(state, selfstr->data(), selfstr->length());
-    string = copied->mutableData();
-    end = nullptr;
-    /* All spaces? */
-    if(*string == 0)
-    {
-        return neon::Value::fromObject(neon::String::copy(state, "", 0));
-    }
-    end = string + strlen(string) - 1;
-    if(trimmer == '\0')
-    {
-        while(end > string && isspace((unsigned char)*end))
-        {
-            end--;
-        }
-    }
-    else
-    {
-        while(end > string && trimmer == *end)
-        {
-            end--;
-        }
-    }
-    /* Write new null terminator character */
-    end[1] = '\0';
-    return neon::Value::fromObject(neon::String::copy(state, string));
-}
-
-
-neon::Value nn_memberfunc_array_constructor(neon::State* state, neon::Arguments* args)
-{
-    int cnt;
-    neon::Value filler;
-    neon::Array* arr;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    filler = neon::Value::makeEmpty();
-    if(args->argc > 1)
-    {
-        filler = args->argv[1];
-    }
-    cnt = args->argv[0].asNumber();
-    arr = neon::Array::make(state, cnt, filler);
-    return neon::Value::fromObject(arr);
-}
-
-neon::Value nn_memberfunc_array_join(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int count;
-    neon::Value vjoinee;
-    neon::Array* selfarr;
-    neon::String* joinee;
-    neon::Value* list;
-    selfarr = args->thisval.asArray();
-    joinee = nullptr;
-    if(args->argc > 0)
-    {
-        vjoinee = args->argv[0];
-        if(vjoinee.isString())
-        {
-            joinee = vjoinee.asString();
+            return Value::makeBool(false);
         }
         else
         {
-            joinee = neon::Value::toString(state, vjoinee);
-        }
-    }
-    list = selfarr->m_varray->m_values;
-    count = selfarr->count();
-    if(count == 0)
-    {
-        return neon::Value::fromObject(neon::String::copy(state, ""));
-    }
-    neon::Printer pd(state);
-    for(i = 0; i < count; i++)
-    {
-        pd.printValue(list[i], false, true);
-        if((joinee != nullptr) && ((i+1) < count))
-        {
-            pd.put(joinee->data(), joinee->length());
-        }
-    }
-    return neon::Value::fromObject(pd.takeString());
-}
-
-neon::Value nn_memberfunc_string_indexof(neon::State* state, neon::Arguments* args)
-{
-    int startindex;
-    const char* result;
-    const char* haystack;
-    neon::String* string;
-    neon::String* needle;
-    (void)state;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->thisval.asString();
-    needle = args->argv[0].asString();
-    startindex = 0;
-    if(args->argc == 2)
-    {
-        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-        startindex = args->argv[1].asNumber();
-    }
-    if(string->length() > 0 && needle->length() > 0)
-    {
-        haystack = string->data();
-        result = strstr(haystack + startindex, needle->data());
-        if(result != nullptr)
-        {
-            return neon::Value::makeNumber((int)(result - haystack));
-        }
-    }
-    return neon::Value::makeNumber(-1);
-}
-
-neon::Value nn_memberfunc_string_startswith(neon::State* state, neon::Arguments* args)
-{
-    neon::String* substr;
-    neon::String* string;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->thisval.asString();
-    substr = args->argv[0].asString();
-    if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
-    {
-        return neon::Value::makeBool(false);
-    }
-    return neon::Value::makeBool(memcmp(substr->data(), string->data(), substr->length()) == 0);
-}
-
-neon::Value nn_memberfunc_string_endswith(neon::State* state, neon::Arguments* args)
-{
-    int difference;
-    neon::String* substr;
-    neon::String* string;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->thisval.asString();
-    substr = args->argv[0].asString();
-    if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
-    {
-        return neon::Value::makeBool(false);
-    }
-    difference = string->length() - substr->length();
-    return neon::Value::makeBool(memcmp(substr->data(), string->data() + difference, substr->length()) == 0);
-}
-
-neon::Value nn_memberfunc_string_count(neon::State* state, neon::Arguments* args)
-{
-    int count;
-    const char* tmp;
-    neon::String* substr;
-    neon::String* string;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->thisval.asString();
-    substr = args->argv[0].asString();
-    if(substr->length() == 0 || string->length() == 0)
-    {
-        return neon::Value::makeNumber(0);
-    }
-    count = 0;
-    tmp = string->data();
-    while((tmp = neon::Util::utf8Find(tmp, string->length(), substr->data(), substr->length())))
-    {
-        count++;
-        tmp++;
-    }
-    return neon::Value::makeNumber(count);
-}
-
-neon::Value nn_memberfunc_string_tonumber(neon::State* state, neon::Arguments* args)
-{
-    neon::String* selfstr;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    selfstr = args->thisval.asString();
-    return neon::Value::makeNumber(strtod(selfstr->data(), nullptr));
-}
-
-neon::Value nn_memberfunc_string_isascii(neon::State* state, neon::Arguments* args)
-{
-    neon::String* string;
-    (void)state;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    if(args->argc == 1)
-    {
-        NEON_ARGS_CHECKTYPE(args, 0, isBool);
-    }
-    string = args->thisval.asString();
-    return neon::Value::fromObject(string);
-}
-
-neon::Value nn_memberfunc_string_tolist(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int end;
-    int start;
-    int length;
-    neon::Array* list;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    string = args->thisval.asString();
-    list = state->m_vmstate->gcProtect(neon::Array::make(state));
-    length = string->length();
-    if(length > 0)
-    {
-        for(i = 0; i < length; i++)
-        {
-            start = i;
-            end = i + 1;
-            list->push(neon::Value::fromObject(neon::String::copy(state, string->data() + start, (int)(end - start))));
-        }
-    }
-    return neon::Value::fromObject(list);
-}
-
-// TODO: lpad and rpad modify m_sbuf members!!!
-neon::Value nn_memberfunc_string_lpad(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int width;
-    int fillsize;
-    int finalsize;
-    int finalutf8size;
-    char fillchar;
-    char* str;
-    char* fill;
-    neon::String* ofillstr;
-    neon::String* result;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    string = args->thisval.asString();
-    width = args->argv[0].asNumber();
-    fillchar = ' ';
-    if(args->argc == 2)
-    {
-        ofillstr = args->argv[1].asString();
-        fillchar = ofillstr->m_sbuf->m_data[0];
-    }
-    if(width <= (int)string->m_sbuf->m_length)
-    {
-        return args->thisval;
-    }
-    fillsize = width - string->m_sbuf->m_length;
-    fill = (char*)neon::State::VM::gcAllocMemory(state, sizeof(char), (size_t)fillsize + 1);
-    finalsize = string->m_sbuf->m_length + fillsize;
-    finalutf8size = string->m_sbuf->m_length + fillsize;
-    for(i = 0; i < fillsize; i++)
-    {
-        fill[i] = fillchar;
-    }
-    str = (char*)neon::State::VM::gcAllocMemory(state, sizeof(char), (size_t)finalsize + 1);
-    memcpy(str, fill, fillsize);
-    memcpy(str + fillsize, string->m_sbuf->m_data, string->m_sbuf->m_length);
-    str[finalsize] = '\0';
-    neon::Memory::freeArray(fill, fillsize + 1);
-    result = neon::String::take(state, str, finalsize);
-    result->m_sbuf->m_length = finalutf8size;
-    result->m_sbuf->m_length = finalsize;
-    return neon::Value::fromObject(result);
-}
-
-neon::Value nn_memberfunc_string_rpad(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int width;
-    int fillsize;
-    int finalsize;
-    int finalutf8size;
-    char fillchar;
-    char* str;
-    char* fill;
-    neon::String* ofillstr;
-    neon::String* string;
-    neon::String* result;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    string = args->thisval.asString();
-    width = args->argv[0].asNumber();
-    fillchar = ' ';
-    if(args->argc == 2)
-    {
-        ofillstr = args->argv[1].asString();
-        fillchar = ofillstr->m_sbuf->m_data[0];
-    }
-    if(width <= (int)string->m_sbuf->m_length)
-    {
-        return args->thisval;
-    }
-    fillsize = width - string->m_sbuf->m_length;
-    fill = (char*)neon::State::VM::gcAllocMemory(state, sizeof(char), (size_t)fillsize + 1);
-    finalsize = string->m_sbuf->m_length + fillsize;
-    finalutf8size = string->m_sbuf->m_length + fillsize;
-    for(i = 0; i < fillsize; i++)
-    {
-        fill[i] = fillchar;
-    }
-    str = (char*)neon::State::VM::gcAllocMemory(state, sizeof(char), (size_t)finalsize + 1);
-    memcpy(str, string->m_sbuf->m_data, string->m_sbuf->m_length);
-    memcpy(str + string->m_sbuf->m_length, fill, fillsize);
-    str[finalsize] = '\0';
-    neon::Memory::freeArray(fill, fillsize + 1);
-    result = neon::String::take(state, str, finalsize);
-    result->m_sbuf->m_length = finalutf8size;
-    result->m_sbuf->m_length = finalsize;
-    return neon::Value::fromObject(result);
-}
-
-neon::Value nn_memberfunc_string_split(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int end;
-    int start;
-    int length;
-    neon::Array* list;
-    neon::String* string;
-    neon::String* delimeter;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->thisval.asString();
-    delimeter = args->argv[0].asString();
-    /* empty string matches empty string to empty list */
-    if(((string->length() == 0) && (delimeter->length() == 0)) || (string->length() == 0) || (delimeter->length() == 0))
-    {
-        return neon::Value::fromObject(neon::Array::make(state));
-    }
-    list = state->m_vmstate->gcProtect(neon::Array::make(state));
-    if(delimeter->length() > 0)
-    {
-        start = 0;
-        for(i = 0; i <= (int)string->length(); i++)
-        {
-            /* match found. */
-            if(memcmp(string->data() + i, delimeter->data(), delimeter->length()) == 0 || i == (int)string->length())
+            if(*p == 0)
             {
-                list->push(neon::Value::fromObject(neon::String::copy(state, string->data() + start, i - start)));
-                i += delimeter->length() - 1;
-                start = i + 1;
+                return Value::makeBool(true);
             }
         }
+        return Value::makeBool(false);
     }
-    else
-    {
-        length = (int)string->length();
-        for(i = 0; i < length; i++)
-        {
-            start = i;
-            end = i + 1;
-            list->push(neon::Value::fromObject(neon::String::copy(state, string->data() + start, (int)(end - start))));
-        }
-    }
-    return neon::Value::fromObject(list);
-}
 
-
-neon::Value nn_memberfunc_string_replace(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int totallength;
-    neon::Util::StrBuffer* result;
-    neon::String* substr;
-    neon::String* string;
-    neon::String* repsubstr;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 2, 3);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    NEON_ARGS_CHECKTYPE(args, 1, isString);
-    string = args->thisval.asString();
-    substr = args->argv[0].asString();
-    repsubstr = args->argv[1].asString();
-    if((string->length() == 0 && substr->length() == 0) || string->length() == 0 || substr->length() == 0)
+    Value memberfn_string_isnumber(State* state, Arguments* args)
     {
-        return neon::Value::fromObject(neon::String::copy(state, string->data(), string->length()));
-    }
-    result = neon::Memory::create<neon::Util::StrBuffer>(0);
-    totallength = 0;
-    for(i = 0; i < (int)string->length(); i++)
-    {
-        if(memcmp(string->data() + i, substr->data(), substr->length()) == 0)
+        int i;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        for(i = 0; i < (int)selfstr->length(); i++)
         {
-            if(substr->length() > 0)
+            if(isdigit((unsigned char)selfstr->data()[i]) == 0)
             {
-                result->append(repsubstr->data(), repsubstr->length());
+                return Value::makeBool(false);
             }
-            i += substr->length() - 1;
-            totallength += repsubstr->length();
+        }
+        return Value::makeBool(selfstr->length() != 0);
+    }
+
+    Value memberfn_string_islower(State* state, Arguments* args)
+    {
+        int i;
+        bool alphafound;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        alphafound = false;
+        for(i = 0; i < (int)selfstr->length(); i++)
+        {
+            if(!alphafound && (isdigit(selfstr->data()[0]) == 0))
+            {
+                alphafound = true;
+            }
+            if(isupper(selfstr->data()[0]) != 0)
+            {
+                return Value::makeBool(false);
+            }
+        }
+        return Value::makeBool(alphafound);
+    }
+
+    Value memberfn_string_isupper(State* state, Arguments* args)
+    {
+        int i;
+        bool alphafound;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        alphafound = false;
+        for(i = 0; i < (int)selfstr->length(); i++)
+        {
+            if(!alphafound && (isdigit(selfstr->data()[0]) == 0))
+            {
+                alphafound = true;
+            }
+            if(islower(selfstr->data()[0]) != 0)
+            {
+                return Value::makeBool(false);
+            }
+        }
+        return Value::makeBool(alphafound);
+    }
+
+    Value memberfn_string_isspace(State* state, Arguments* args)
+    {
+        int i;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        for(i = 0; i < (int)selfstr->length(); i++)
+        {
+            if(isspace((unsigned char)selfstr->data()[i]) == 0)
+            {
+                return Value::makeBool(false);
+            }
+        }
+        return Value::makeBool(selfstr->length() != 0);
+    }
+
+    Value memberfn_string_trim(State* state, Arguments* args)
+    {
+        char trimmer;
+        char* end;
+        char* string;
+        String* selfstr;
+        String* copied;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        trimmer = '\0';
+        if(args->argc == 1)
+        {
+            trimmer = (char)args->argv[0].asString()->data()[0];
+        }
+        selfstr = args->thisval.asString();
+        copied = String::copy(state, selfstr->data(), selfstr->length());
+        string = copied->mutableData();
+        end = nullptr;
+        /* Trim leading space*/
+        if(trimmer == '\0')
+        {
+            while(isspace((unsigned char)*string) != 0)
+            {
+                string++;
+            }
         }
         else
         {
-            result->append(string->data()[i]);
-            totallength++;
-        }
-    }
-    return neon::Value::fromObject(neon::String::makeFromStrbuf(state, result, neon::Util::hashString(result->m_data, result->m_length)));
-}
-
-neon::Value nn_memberfunc_string_iter(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    int length;
-    neon::String* string;
-    neon::String* result;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    string = args->thisval.asString();
-    length = string->length();
-    index = args->argv[0].asNumber();
-    if(index > -1 && index < length)
-    {
-        result = neon::String::copy(state, &string->data()[index], 1);
-        return neon::Value::fromObject(result);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_string_itern(neon::State* state, neon::Arguments* args)
-{
-    int index;
-    int length;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    string = args->thisval.asString();
-    length = string->length();
-    if(args->argv[0].isNull())
-    {
-        if(length == 0)
-        {
-            return neon::Value::makeBool(false);
-        }
-        return neon::Value::makeNumber(0);
-    }
-    if(!args->argv[0].isNumber())
-    {
-        return state->raiseFromFunction(args, "strings are numerically indexed");
-    }
-    index = args->argv[0].asNumber();
-    if(index < length - 1)
-    {
-        return neon::Value::makeNumber((double)index + 1);
-    }
-    return neon::Value::makeNull();
-}
-
-neon::Value nn_memberfunc_string_each(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    int arity;
-    neon::Value callable;
-    neon::Value unused;
-    neon::String* string;
-    neon::ValArray nestargs;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isCallable);
-    string = args->thisval.asString();
-    callable = args->argv[0];
-    neon::NestCall nc(state);
-    arity = nc.prepare(callable, args->thisval, nestargs);
-    for(i = 0; i < (int)string->length(); i++)
-    {
-        if(arity > 0)
-        {
-            nestargs[0] = neon::Value::fromObject(neon::String::copy(state, string->data() + i, 1));
-            if(arity > 1)
+            while(trimmer == *string)
             {
-                nestargs[1] = neon::Value::makeNumber(i);
+                string++;
             }
         }
-        nc.callNested(callable, args->thisval, nestargs, &unused);
+        /* All spaces? */
+        if(*string == 0)
+        {
+            return Value::fromObject(String::copy(state, "", 0));
+        }
+        /* Trim trailing space */
+        end = string + strlen(string) - 1;
+        if(trimmer == '\0')
+        {
+            while(end > string && (isspace((unsigned char)*end) != 0))
+            {
+                end--;
+            }
+        }
+        else
+        {
+            while(end > string && trimmer == *end)
+            {
+                end--;
+            }
+        }
+        end[1] = '\0';
+        return Value::fromObject(String::copy(state, string));
     }
-    /* pop the argument list */
-    return neon::Value::makeEmpty();
-}
 
-neon::Value nn_memberfunc_object_dump(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    neon::String* os;
-    v = args->thisval;
-    neon::Printer pd(state);
-    pd.printValue(v, true, false);
-    os = pd.takeString();
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_object_tostring(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    neon::String* os;
-    v = args->thisval;
-    neon::Printer pd(state);
-    pd.printValue(v, false, true);
-    os = pd.takeString();
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_object_typename(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    neon::String* os;
-    v = args->argv[0];
-    os = neon::String::copy(state, v.name());
-    return neon::Value::fromObject(os);
-}
-
-neon::Value nn_memberfunc_object_isstring(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    (void)state;
-    v = args->thisval;
-    return neon::Value::makeBool(v.isString());
-}
-
-neon::Value nn_memberfunc_object_isarray(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    (void)state;
-    v = args->thisval;
-    return neon::Value::makeBool(v.isArray());
-}
-
-neon::Value nn_memberfunc_object_iscallable(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(
-        selfval.isClass() ||
-        selfval.isFuncScript() ||
-        selfval.isFuncClosure() ||
-        selfval.isFuncBound() ||
-        selfval.isFuncNative()
-    );
-}
-
-neon::Value nn_memberfunc_object_isbool(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isBool());
-}
-
-neon::Value nn_memberfunc_object_isnumber(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isNumber());
-}
-
-neon::Value nn_memberfunc_object_isint(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
-}
-
-neon::Value nn_memberfunc_object_isdict(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isDict());
-}
-
-neon::Value nn_memberfunc_object_isobject(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isObject());
-}
-
-neon::Value nn_memberfunc_object_isfunction(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(
-        selfval.isFuncScript() ||
-        selfval.isFuncClosure() ||
-        selfval.isFuncBound() ||
-        selfval.isFuncNative()
-    );
-}
-
-neon::Value nn_memberfunc_object_isiterable(neon::State* state, neon::Arguments* args)
-{
-    bool isiterable;
-    neon::ClassObject* klass;
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    isiterable = selfval.isArray() || selfval.isDict() || selfval.isString();
-    if(!isiterable && selfval.isInstance())
+    Value memberfn_string_ltrim(State* state, Arguments* args)
     {
-        klass = selfval.asInstance()->m_fromclass;
-        isiterable = (
-            (klass->m_methods->getField(neon::Value::fromObject(neon::String::copy(state, "@iter"))) != nullptr) &&
-            (klass->m_methods->getField(neon::Value::fromObject(neon::String::copy(state, "@itern"))) != nullptr)
+        char trimmer;
+        char* end;
+        char* string;
+        String* selfstr;
+        String* copied;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        trimmer = '\0';
+        if(args->argc == 1)
+        {
+            trimmer = (char)args->argv[0].asString()->data()[0];
+        }
+        selfstr = args->thisval.asString();
+        copied = String::copy(state, selfstr->data(), selfstr->length());
+        string = copied->mutableData();
+        end = nullptr;
+        /* Trim leading space */
+        if(trimmer == '\0')
+        {
+            while(isspace((unsigned char)*string) != 0)
+            {
+                string++;
+            }
+        }
+        else
+        {
+            while(trimmer == *string)
+            {
+                string++;
+            }
+        }
+        /* All spaces? */
+        if(*string == 0)
+        {
+            return Value::fromObject(String::copy(state, "", 0));
+        }
+        end = string + strlen(string) - 1;
+        end[1] = '\0';
+        return Value::fromObject(String::copy(state, string));
+    }
+
+    Value memberfn_string_rtrim(State* state, Arguments* args)
+    {
+        char trimmer;
+        char* end;
+        char* string;
+        String* selfstr;
+        String* copied;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        trimmer = '\0';
+        if(args->argc == 1)
+        {
+            trimmer = (char)args->argv[0].asString()->data()[0];
+        }
+        selfstr = args->thisval.asString();
+        copied = String::copy(state, selfstr->data(), selfstr->length());
+        string = copied->mutableData();
+        end = nullptr;
+        /* All spaces? */
+        if(*string == 0)
+        {
+            return Value::fromObject(String::copy(state, "", 0));
+        }
+        end = string + strlen(string) - 1;
+        if(trimmer == '\0')
+        {
+            while(end > string && (isspace((unsigned char)*end) != 0))
+            {
+                end--;
+            }
+        }
+        else
+        {
+            while(end > string && trimmer == *end)
+            {
+                end--;
+            }
+        }
+        /* Write new null terminator character */
+        end[1] = '\0';
+        return Value::fromObject(String::copy(state, string));
+    }
+
+    Value memberfn_array_constructor(State* state, Arguments* args)
+    {
+        int cnt;
+        Value filler;
+        Array* arr;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        filler = Value::makeEmpty();
+        if(args->argc > 1)
+        {
+            filler = args->argv[1];
+        }
+        cnt = args->argv[0].asNumber();
+        arr = Array::make(state, cnt, filler);
+        return Value::fromObject(arr);
+    }
+
+    Value memberfn_array_join(State* state, Arguments* args)
+    {
+        int i;
+        int count;
+        Value vjoinee;
+        Array* selfarr;
+        String* joinee;
+        Value* list;
+        selfarr = args->thisval.asArray();
+        joinee = nullptr;
+        if(args->argc > 0)
+        {
+            vjoinee = args->argv[0];
+            if(vjoinee.isString())
+            {
+                joinee = vjoinee.asString();
+            }
+            else
+            {
+                joinee = Value::toString(state, vjoinee);
+            }
+        }
+        list = selfarr->m_varray->m_values;
+        count = selfarr->count();
+        if(count == 0)
+        {
+            return Value::fromObject(String::copy(state, ""));
+        }
+        Printer pd(state);
+        for(i = 0; i < count; i++)
+        {
+            pd.printValue(list[i], false, true);
+            if((joinee != nullptr) && ((i+1) < count))
+            {
+                pd.put(joinee->data(), joinee->length());
+            }
+        }
+        return Value::fromObject(pd.takeString());
+    }
+
+    Value memberfn_string_indexof(State* state, Arguments* args)
+    {
+        int startindex;
+        const char* result;
+        const char* haystack;
+        String* string;
+        String* needle;
+        (void)state;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->thisval.asString();
+        needle = args->argv[0].asString();
+        startindex = 0;
+        if(args->argc == 2)
+        {
+            NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+            startindex = args->argv[1].asNumber();
+        }
+        if(string->length() > 0 && needle->length() > 0)
+        {
+            haystack = string->data();
+            result = strstr(haystack + startindex, needle->data());
+            if(result != nullptr)
+            {
+                return Value::makeNumber((int)(result - haystack));
+            }
+        }
+        return Value::makeNumber(-1);
+    }
+
+    Value memberfn_string_startswith(State* state, Arguments* args)
+    {
+        String* substr;
+        String* string;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->thisval.asString();
+        substr = args->argv[0].asString();
+        if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
+        {
+            return Value::makeBool(false);
+        }
+        return Value::makeBool(memcmp(substr->data(), string->data(), substr->length()) == 0);
+    }
+
+    Value memberfn_string_endswith(State* state, Arguments* args)
+    {
+        int difference;
+        String* substr;
+        String* string;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->thisval.asString();
+        substr = args->argv[0].asString();
+        if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
+        {
+            return Value::makeBool(false);
+        }
+        difference = string->length() - substr->length();
+        return Value::makeBool(memcmp(substr->data(), string->data() + difference, substr->length()) == 0);
+    }
+
+    Value memberfn_string_count(State* state, Arguments* args)
+    {
+        int count;
+        const char* tmp;
+        String* substr;
+        String* string;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->thisval.asString();
+        substr = args->argv[0].asString();
+        if(substr->length() == 0 || string->length() == 0)
+        {
+            return Value::makeNumber(0);
+        }
+        count = 0;
+        tmp = string->data();
+        while((tmp = Util::utf8Find(tmp, string->length(), substr->data(), substr->length())) != nullptr)
+        {
+            count++;
+            tmp++;
+        }
+        return Value::makeNumber(count);
+    }
+
+    Value memberfn_string_tonumber(State* state, Arguments* args)
+    {
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        selfstr = args->thisval.asString();
+        return Value::makeNumber(strtod(selfstr->data(), nullptr));
+    }
+
+    Value memberfn_string_isascii(State* state, Arguments* args)
+    {
+        String* string;
+        (void)state;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        if(args->argc == 1)
+        {
+            NEON_ARGS_CHECKTYPE(args, 0, isBool);
+        }
+        string = args->thisval.asString();
+        return Value::fromObject(string);
+    }
+
+    Value memberfn_string_tolist(State* state, Arguments* args)
+    {
+        int i;
+        int end;
+        int start;
+        int length;
+        Array* list;
+        String* string;
+        NEON_ARGS_CHECKCOUNT(args, 0);
+        string = args->thisval.asString();
+        list = state->m_vmstate->gcProtect(Array::make(state));
+        length = string->length();
+        if(length > 0)
+        {
+            for(i = 0; i < length; i++)
+            {
+                start = i;
+                end = i + 1;
+                list->push(Value::fromObject(String::copy(state, string->data() + start, (int)(end - start))));
+            }
+        }
+        return Value::fromObject(list);
+    }
+
+    // TODO: lpad and rpad modify m_sbuf members!!!
+    Value memberfn_string_lpad(State* state, Arguments* args)
+    {
+        int i;
+        int width;
+        int fillsize;
+        int finalsize;
+        int finalutf8size;
+        char fillchar;
+        char* str;
+        char* fill;
+        String* ofillstr;
+        String* result;
+        String* string;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        string = args->thisval.asString();
+        width = args->argv[0].asNumber();
+        fillchar = ' ';
+        if(args->argc == 2)
+        {
+            ofillstr = args->argv[1].asString();
+            fillchar = ofillstr->m_sbuf->m_data[0];
+        }
+        if(width <= (int)string->m_sbuf->m_length)
+        {
+            return args->thisval;
+        }
+        fillsize = width - string->m_sbuf->m_length;
+        fill = (char*)State::VM::gcAllocMemory(state, sizeof(char), (size_t)fillsize + 1);
+        finalsize = string->m_sbuf->m_length + fillsize;
+        finalutf8size = string->m_sbuf->m_length + fillsize;
+        for(i = 0; i < fillsize; i++)
+        {
+            fill[i] = fillchar;
+        }
+        str = (char*)State::VM::gcAllocMemory(state, sizeof(char), (size_t)finalsize + 1);
+        memcpy(str, fill, fillsize);
+        memcpy(str + fillsize, string->m_sbuf->m_data, string->m_sbuf->m_length);
+        str[finalsize] = '\0';
+        Memory::freeArray(fill, fillsize + 1);
+        result = String::take(state, str, finalsize);
+        result->m_sbuf->m_length = finalutf8size;
+        result->m_sbuf->m_length = finalsize;
+        return Value::fromObject(result);
+    }
+
+    Value memberfn_string_rpad(State* state, Arguments* args)
+    {
+        int i;
+        int width;
+        int fillsize;
+        int finalsize;
+        int finalutf8size;
+        char fillchar;
+        char* str;
+        char* fill;
+        String* ofillstr;
+        String* string;
+        String* result;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        string = args->thisval.asString();
+        width = args->argv[0].asNumber();
+        fillchar = ' ';
+        if(args->argc == 2)
+        {
+            ofillstr = args->argv[1].asString();
+            fillchar = ofillstr->m_sbuf->m_data[0];
+        }
+        if(width <= (int)string->m_sbuf->m_length)
+        {
+            return args->thisval;
+        }
+        fillsize = width - string->m_sbuf->m_length;
+        fill = (char*)State::VM::gcAllocMemory(state, sizeof(char), (size_t)fillsize + 1);
+        finalsize = string->m_sbuf->m_length + fillsize;
+        finalutf8size = string->m_sbuf->m_length + fillsize;
+        for(i = 0; i < fillsize; i++)
+        {
+            fill[i] = fillchar;
+        }
+        str = (char*)State::VM::gcAllocMemory(state, sizeof(char), (size_t)finalsize + 1);
+        memcpy(str, string->m_sbuf->m_data, string->m_sbuf->m_length);
+        memcpy(str + string->m_sbuf->m_length, fill, fillsize);
+        str[finalsize] = '\0';
+        Memory::freeArray(fill, fillsize + 1);
+        result = String::take(state, str, finalsize);
+        result->m_sbuf->m_length = finalutf8size;
+        result->m_sbuf->m_length = finalsize;
+        return Value::fromObject(result);
+    }
+
+    Value memberfn_string_split(State* state, Arguments* args)
+    {
+        int i;
+        int end;
+        int start;
+        int length;
+        Array* list;
+        String* string;
+        String* delimeter;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->thisval.asString();
+        delimeter = args->argv[0].asString();
+        /* empty string matches empty string to empty list */
+        if(((string->length() == 0) && (delimeter->length() == 0)) || (string->length() == 0) || (delimeter->length() == 0))
+        {
+            return Value::fromObject(Array::make(state));
+        }
+        list = state->m_vmstate->gcProtect(Array::make(state));
+        if(delimeter->length() > 0)
+        {
+            start = 0;
+            for(i = 0; i <= (int)string->length(); i++)
+            {
+                /* match found. */
+                if(memcmp(string->data() + i, delimeter->data(), delimeter->length()) == 0 || i == (int)string->length())
+                {
+                    list->push(Value::fromObject(String::copy(state, string->data() + start, i - start)));
+                    i += delimeter->length() - 1;
+                    start = i + 1;
+                }
+            }
+        }
+        else
+        {
+            length = (int)string->length();
+            for(i = 0; i < length; i++)
+            {
+                start = i;
+                end = i + 1;
+                list->push(Value::fromObject(String::copy(state, string->data() + start, (int)(end - start))));
+            }
+        }
+        return Value::fromObject(list);
+    }
+
+    Value memberfn_string_replace(State* state, Arguments* args)
+    {
+        int i;
+        int totallength;
+        Util::StrBuffer* result;
+        String* substr;
+        String* string;
+        String* repsubstr;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 2, 3);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        NEON_ARGS_CHECKTYPE(args, 1, isString);
+        string = args->thisval.asString();
+        substr = args->argv[0].asString();
+        repsubstr = args->argv[1].asString();
+        if((string->length() == 0 && substr->length() == 0) || string->length() == 0 || substr->length() == 0)
+        {
+            return Value::fromObject(String::copy(state, string->data(), string->length()));
+        }
+        result = Memory::create<Util::StrBuffer>(0);
+        totallength = 0;
+        for(i = 0; i < (int)string->length(); i++)
+        {
+            if(memcmp(string->data() + i, substr->data(), substr->length()) == 0)
+            {
+                if(substr->length() > 0)
+                {
+                    result->append(repsubstr->data(), repsubstr->length());
+                }
+                i += substr->length() - 1;
+                totallength += repsubstr->length();
+            }
+            else
+            {
+                result->append(string->data()[i]);
+                totallength++;
+            }
+        }
+        return Value::fromObject(String::makeFromStrbuf(state, result, Util::hashString(result->m_data, result->m_length)));
+    }
+
+    Value memberfn_string_iter(State* state, Arguments* args)
+    {
+        int index;
+        int length;
+        String* string;
+        String* result;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        string = args->thisval.asString();
+        length = string->length();
+        index = args->argv[0].asNumber();
+        if(index > -1 && index < length)
+        {
+            result = String::copy(state, &string->data()[index], 1);
+            return Value::fromObject(result);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_string_itern(State* state, Arguments* args)
+    {
+        int index;
+        int length;
+        String* string;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        string = args->thisval.asString();
+        length = string->length();
+        if(args->argv[0].isNull())
+        {
+            if(length == 0)
+            {
+                return Value::makeBool(false);
+            }
+            return Value::makeNumber(0);
+        }
+        if(!args->argv[0].isNumber())
+        {
+            return state->raiseFromFunction(args, "strings are numerically indexed");
+        }
+        index = args->argv[0].asNumber();
+        if(index < length - 1)
+        {
+            return Value::makeNumber((double)index + 1);
+        }
+        return Value::makeNull();
+    }
+
+    Value memberfn_string_each(State* state, Arguments* args)
+    {
+        int i;
+        int arity;
+        Value callable;
+        Value unused;
+        String* string;
+        ValArray nestargs;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isCallable);
+        string = args->thisval.asString();
+        callable = args->argv[0];
+        NestCall nc(state);
+        arity = nc.prepare(callable, args->thisval, nestargs);
+        for(i = 0; i < (int)string->length(); i++)
+        {
+            if(arity > 0)
+            {
+                nestargs[0] = Value::fromObject(String::copy(state, string->data() + i, 1));
+                if(arity > 1)
+                {
+                    nestargs[1] = Value::makeNumber(i);
+                }
+            }
+            nc.callNested(callable, args->thisval, nestargs, &unused);
+        }
+        /* pop the argument list */
+        return Value::makeEmpty();
+    }
+
+    Value memberfn_object_dump(State* state, Arguments* args)
+    {
+        Value v;
+        String* os;
+        v = args->thisval;
+        Printer pd(state);
+        pd.printValue(v, true, false);
+        os = pd.takeString();
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_object_tostring(State* state, Arguments* args)
+    {
+        Value v;
+        String* os;
+        v = args->thisval;
+        Printer pd(state);
+        pd.printValue(v, false, true);
+        os = pd.takeString();
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_object_typename(State* state, Arguments* args)
+    {
+        Value v;
+        String* os;
+        v = args->argv[0];
+        os = String::copy(state, v.name());
+        return Value::fromObject(os);
+    }
+
+    Value memberfn_object_isstring(State* state, Arguments* args)
+    {
+        Value v;
+        (void)state;
+        v = args->thisval;
+        return Value::makeBool(v.isString());
+    }
+
+    Value memberfn_object_isarray(State* state, Arguments* args)
+    {
+        Value v;
+        (void)state;
+        v = args->thisval;
+        return Value::makeBool(v.isArray());
+    }
+
+    Value memberfn_object_iscallable(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(
+            selfval.isClass() ||
+            selfval.isFuncScript() ||
+            selfval.isFuncClosure() ||
+            selfval.isFuncBound() ||
+            selfval.isFuncNative()
         );
     }
-    return neon::Value::makeBool(isiterable);
-}
 
-neon::Value nn_memberfunc_object_isclass(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isClass());
-}
-
-neon::Value nn_memberfunc_object_isfile(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isFile());
-}
-
-neon::Value nn_memberfunc_object_isinstance(neon::State* state, neon::Arguments* args)
-{
-    neon::Value selfval;
-    (void)state;
-    selfval = args->thisval;
-    return neon::Value::makeBool(selfval.isInstance());
-}
-
-neon::Value nn_memberfunc_number_tobinstring(neon::State* state, neon::Arguments* args)
-{
-    return neon::Value::fromObject(neon::String::numToBinString(state, args->thisval.asNumber()));
-}
-
-neon::Value nn_memberfunc_number_tooctstring(neon::State* state, neon::Arguments* args)
-{
-    return neon::Value::fromObject(neon::String::numToOctString(state, args->thisval.asNumber(), false));
-}
-
-neon::Value nn_memberfunc_number_tohexstring(neon::State* state, neon::Arguments* args)
-{
-    return neon::Value::fromObject(neon::String::numToHexString(state, args->thisval.asNumber(), false));
-}
-
-void nn_state_initbuiltinmethods(neon::State* state)
-{
+    Value memberfn_object_isbool(State* state, Arguments* args)
     {
-        state->m_classprimprocess->setStaticPropertyCstr("env", neon::Value::fromObject(state->m_envdict));
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isBool());
     }
-    {
-        state->m_classprimobject->defStaticNativeMethod("typename", nn_memberfunc_object_typename);
-        state->m_classprimobject->defNativeMethod("dump", nn_memberfunc_object_dump);
-        state->m_classprimobject->defNativeMethod("toString", nn_memberfunc_object_tostring);
-        state->m_classprimobject->defNativeMethod("isArray", nn_memberfunc_object_isarray);        
-        state->m_classprimobject->defNativeMethod("isString", nn_memberfunc_object_isstring);
-        state->m_classprimobject->defNativeMethod("isCallable", nn_memberfunc_object_iscallable);
-        state->m_classprimobject->defNativeMethod("isBool", nn_memberfunc_object_isbool);
-        state->m_classprimobject->defNativeMethod("isNumber", nn_memberfunc_object_isnumber);
-        state->m_classprimobject->defNativeMethod("isInt", nn_memberfunc_object_isint);
-        state->m_classprimobject->defNativeMethod("isDict", nn_memberfunc_object_isdict);
-        state->m_classprimobject->defNativeMethod("isObject", nn_memberfunc_object_isobject);
-        state->m_classprimobject->defNativeMethod("isFunction", nn_memberfunc_object_isfunction);
-        state->m_classprimobject->defNativeMethod("isIterable", nn_memberfunc_object_isiterable);
-        state->m_classprimobject->defNativeMethod("isClass", nn_memberfunc_object_isclass);
-        state->m_classprimobject->defNativeMethod("isFile", nn_memberfunc_object_isfile);
-        state->m_classprimobject->defNativeMethod("isInstance", nn_memberfunc_object_isinstance);
 
-    }
-    
+    Value memberfn_object_isnumber(State* state, Arguments* args)
     {
-        state->m_classprimnumber->defNativeMethod("toHexString", nn_memberfunc_number_tohexstring);
-        state->m_classprimnumber->defNativeMethod("toOctString", nn_memberfunc_number_tooctstring);
-        state->m_classprimnumber->defNativeMethod("toBinString", nn_memberfunc_number_tobinstring);
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isNumber());
     }
+
+    Value memberfn_object_isint(State* state, Arguments* args)
     {
-        state->m_classprimstring->defNativeConstructor(nn_memberfunc_string_constructor);
-        state->m_classprimstring->defStaticNativeMethod("fromCharCode", nn_memberfunc_string_fromcharcode);
-        state->m_classprimstring->defStaticNativeMethod("utf8Decode", nn_memberfunc_string_utf8decode);
-        state->m_classprimstring->defStaticNativeMethod("utf8Encode", nn_memberfunc_string_utf8encode);
-        state->m_classprimstring->defStaticNativeMethod("utf8NumBytes", nn_memberfunc_string_utf8numbytes);
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
+    }
+
+    Value memberfn_object_isdict(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isDict());
+    }
+
+    Value memberfn_object_isobject(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isObject());
+    }
+
+    Value memberfn_object_isfunction(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(
+            selfval.isFuncScript() ||
+            selfval.isFuncClosure() ||
+            selfval.isFuncBound() ||
+            selfval.isFuncNative()
+        );
+    }
+
+    Value memberfn_object_isiterable(State* state, Arguments* args)
+    {
+        bool isiterable;
+        ClassObject* klass;
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        isiterable = selfval.isArray() || selfval.isDict() || selfval.isString();
+        if(!isiterable && selfval.isInstance())
+        {
+            klass = selfval.asInstance()->m_fromclass;
+            isiterable = (
+                (klass->m_methods->getField(Value::fromObject(String::copy(state, "@iter"))) != nullptr) &&
+                (klass->m_methods->getField(Value::fromObject(String::copy(state, "@itern"))) != nullptr)
+            );
+        }
+        return Value::makeBool(isiterable);
+    }
+
+    Value memberfn_object_isclass(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isClass());
+    }
+
+    Value memberfn_object_isfile(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isFile());
+    }
+
+    Value memberfn_object_isinstance(State* state, Arguments* args)
+    {
+        Value selfval;
+        (void)state;
+        selfval = args->thisval;
+        return Value::makeBool(selfval.isInstance());
+    }
+
+    Value memberfn_number_tobinstring(State* state, Arguments* args)
+    {
+        return Value::fromObject(String::numToBinString(state, args->thisval.asNumber()));
+    }
+
+    Value memberfn_number_tooctstring(State* state, Arguments* args)
+    {
+        return Value::fromObject(String::numToOctString(state, args->thisval.asNumber(), false));
+    }
+
+    Value memberfn_number_tohexstring(State* state, Arguments* args)
+    {
+        return Value::fromObject(String::numToHexString(state, args->thisval.asNumber(), false));
+    }
+
+    void nn_state_initbuiltinmethods(State* state)
+    {
+        {
+            state->m_classprimprocess->setStaticPropertyCstr("env", Value::fromObject(state->m_envdict));
+        }
+        {
+            state->m_classprimobject->defStaticNativeMethod("typename", memberfn_object_typename);
+            state->m_classprimobject->defNativeMethod("dump", memberfn_object_dump);
+            state->m_classprimobject->defNativeMethod("toString", memberfn_object_tostring);
+            state->m_classprimobject->defNativeMethod("isArray", memberfn_object_isarray);        
+            state->m_classprimobject->defNativeMethod("isString", memberfn_object_isstring);
+            state->m_classprimobject->defNativeMethod("isCallable", memberfn_object_iscallable);
+            state->m_classprimobject->defNativeMethod("isBool", memberfn_object_isbool);
+            state->m_classprimobject->defNativeMethod("isNumber", memberfn_object_isnumber);
+            state->m_classprimobject->defNativeMethod("isInt", memberfn_object_isint);
+            state->m_classprimobject->defNativeMethod("isDict", memberfn_object_isdict);
+            state->m_classprimobject->defNativeMethod("isObject", memberfn_object_isobject);
+            state->m_classprimobject->defNativeMethod("isFunction", memberfn_object_isfunction);
+            state->m_classprimobject->defNativeMethod("isIterable", memberfn_object_isiterable);
+            state->m_classprimobject->defNativeMethod("isClass", memberfn_object_isclass);
+            state->m_classprimobject->defNativeMethod("isFile", memberfn_object_isfile);
+            state->m_classprimobject->defNativeMethod("isInstance", memberfn_object_isinstance);
+
+        }
         
-        state->m_classprimstring->defCallableField("length", nn_memberfunc_string_length);
-        state->m_classprimstring->defNativeMethod("utf8Chars", nn_memberfunc_string_utf8chars);
-        state->m_classprimstring->defNativeMethod("utf8Codepoints", nn_memberfunc_string_utf8codepoints);
-        state->m_classprimstring->defNativeMethod("utf8Bytes", nn_memberfunc_string_utf8codepoints);
+        {
+            state->m_classprimnumber->defNativeMethod("toHexString", memberfn_number_tohexstring);
+            state->m_classprimnumber->defNativeMethod("toOctString", memberfn_number_tooctstring);
+            state->m_classprimnumber->defNativeMethod("toBinString", memberfn_number_tobinstring);
+        }
+        {
+            state->m_classprimstring->defNativeConstructor(memberfn_string_constructor);
+            state->m_classprimstring->defStaticNativeMethod("fromCharCode", memberfn_string_fromcharcode);
+            state->m_classprimstring->defStaticNativeMethod("utf8Decode", memberfn_string_utf8decode);
+            state->m_classprimstring->defStaticNativeMethod("utf8Encode", memberfn_string_utf8encode);
+            state->m_classprimstring->defStaticNativeMethod("utf8NumBytes", memberfn_string_utf8numbytes);
+            
+            state->m_classprimstring->defCallableField("length", memberfn_string_length);
+            state->m_classprimstring->defNativeMethod("utf8Chars", memberfn_string_utf8chars);
+            state->m_classprimstring->defNativeMethod("utf8Codepoints", memberfn_string_utf8codepoints);
+            state->m_classprimstring->defNativeMethod("utf8Bytes", memberfn_string_utf8codepoints);
 
-        state->m_classprimstring->defNativeMethod("@iter", nn_memberfunc_string_iter);
-        state->m_classprimstring->defNativeMethod("@itern", nn_memberfunc_string_itern);
-        state->m_classprimstring->defNativeMethod("size", nn_memberfunc_string_length);
-        state->m_classprimstring->defNativeMethod("substr", nn_memberfunc_string_substring);
-        state->m_classprimstring->defNativeMethod("substring", nn_memberfunc_string_substring);
-        state->m_classprimstring->defNativeMethod("charCodeAt", nn_memberfunc_string_charcodeat);
-        state->m_classprimstring->defNativeMethod("charAt", nn_memberfunc_string_charat);
-        state->m_classprimstring->defNativeMethod("upper", nn_memberfunc_string_upper);
-        state->m_classprimstring->defNativeMethod("lower", nn_memberfunc_string_lower);
-        state->m_classprimstring->defNativeMethod("trim", nn_memberfunc_string_trim);
-        state->m_classprimstring->defNativeMethod("ltrim", nn_memberfunc_string_ltrim);
-        state->m_classprimstring->defNativeMethod("rtrim", nn_memberfunc_string_rtrim);
-        state->m_classprimstring->defNativeMethod("split", nn_memberfunc_string_split);
-        state->m_classprimstring->defNativeMethod("indexOf", nn_memberfunc_string_indexof);
-        state->m_classprimstring->defNativeMethod("count", nn_memberfunc_string_count);
-        state->m_classprimstring->defNativeMethod("toNumber", nn_memberfunc_string_tonumber);
-        state->m_classprimstring->defNativeMethod("toList", nn_memberfunc_string_tolist);
-        state->m_classprimstring->defNativeMethod("lpad", nn_memberfunc_string_lpad);
-        state->m_classprimstring->defNativeMethod("rpad", nn_memberfunc_string_rpad);
-        state->m_classprimstring->defNativeMethod("replace", nn_memberfunc_string_replace);
-        state->m_classprimstring->defNativeMethod("each", nn_memberfunc_string_each);
-        state->m_classprimstring->defNativeMethod("startswith", nn_memberfunc_string_startswith);
-        state->m_classprimstring->defNativeMethod("endswith", nn_memberfunc_string_endswith);
-        state->m_classprimstring->defNativeMethod("isAscii", nn_memberfunc_string_isascii);
-        state->m_classprimstring->defNativeMethod("isAlpha", nn_memberfunc_string_isalpha);
-        state->m_classprimstring->defNativeMethod("isAlnum", nn_memberfunc_string_isalnum);
-        state->m_classprimstring->defNativeMethod("isNumber", nn_memberfunc_string_isnumber);
-        state->m_classprimstring->defNativeMethod("isFloat", nn_memberfunc_string_isfloat);
-        state->m_classprimstring->defNativeMethod("isLower", nn_memberfunc_string_islower);
-        state->m_classprimstring->defNativeMethod("isUpper", nn_memberfunc_string_isupper);
-        state->m_classprimstring->defNativeMethod("isSpace", nn_memberfunc_string_isspace);
-        
+            state->m_classprimstring->defNativeMethod("@iter", memberfn_string_iter);
+            state->m_classprimstring->defNativeMethod("@itern", memberfn_string_itern);
+            state->m_classprimstring->defNativeMethod("size", memberfn_string_length);
+            state->m_classprimstring->defNativeMethod("substr", memberfn_string_substring);
+            state->m_classprimstring->defNativeMethod("substring", memberfn_string_substring);
+            state->m_classprimstring->defNativeMethod("charCodeAt", memberfn_string_charcodeat);
+            state->m_classprimstring->defNativeMethod("charAt", memberfn_string_charat);
+            state->m_classprimstring->defNativeMethod("upper", memberfn_string_upper);
+            state->m_classprimstring->defNativeMethod("lower", memberfn_string_lower);
+            state->m_classprimstring->defNativeMethod("trim", memberfn_string_trim);
+            state->m_classprimstring->defNativeMethod("ltrim", memberfn_string_ltrim);
+            state->m_classprimstring->defNativeMethod("rtrim", memberfn_string_rtrim);
+            state->m_classprimstring->defNativeMethod("split", memberfn_string_split);
+            state->m_classprimstring->defNativeMethod("indexOf", memberfn_string_indexof);
+            state->m_classprimstring->defNativeMethod("count", memberfn_string_count);
+            state->m_classprimstring->defNativeMethod("toNumber", memberfn_string_tonumber);
+            state->m_classprimstring->defNativeMethod("toList", memberfn_string_tolist);
+            state->m_classprimstring->defNativeMethod("lpad", memberfn_string_lpad);
+            state->m_classprimstring->defNativeMethod("rpad", memberfn_string_rpad);
+            state->m_classprimstring->defNativeMethod("replace", memberfn_string_replace);
+            state->m_classprimstring->defNativeMethod("each", memberfn_string_each);
+            state->m_classprimstring->defNativeMethod("startswith", memberfn_string_startswith);
+            state->m_classprimstring->defNativeMethod("endswith", memberfn_string_endswith);
+            state->m_classprimstring->defNativeMethod("isAscii", memberfn_string_isascii);
+            state->m_classprimstring->defNativeMethod("isAlpha", memberfn_string_isalpha);
+            state->m_classprimstring->defNativeMethod("isAlnum", memberfn_string_isalnum);
+            state->m_classprimstring->defNativeMethod("isNumber", memberfn_string_isnumber);
+            state->m_classprimstring->defNativeMethod("isFloat", memberfn_string_isfloat);
+            state->m_classprimstring->defNativeMethod("isLower", memberfn_string_islower);
+            state->m_classprimstring->defNativeMethod("isUpper", memberfn_string_isupper);
+            state->m_classprimstring->defNativeMethod("isSpace", memberfn_string_isspace);
+            
+        }
+        {
+            #if 1
+            state->m_classprimarray->defNativeConstructor(memberfn_array_constructor);
+            #endif
+            state->m_classprimarray->defCallableField("length", memberfn_array_length);
+            state->m_classprimarray->defNativeMethod("size", memberfn_array_length);
+            state->m_classprimarray->defNativeMethod("join", memberfn_array_join);
+            state->m_classprimarray->defNativeMethod("append", memberfn_array_append);
+            state->m_classprimarray->defNativeMethod("push", memberfn_array_append);
+            state->m_classprimarray->defNativeMethod("clear", memberfn_array_clear);
+            state->m_classprimarray->defNativeMethod("clone", memberfn_array_clone);
+            state->m_classprimarray->defNativeMethod("count", memberfn_array_count);
+            state->m_classprimarray->defNativeMethod("extend", memberfn_array_extend);
+            state->m_classprimarray->defNativeMethod("indexOf", memberfn_array_indexof);
+            state->m_classprimarray->defNativeMethod("insert", memberfn_array_insert);
+            state->m_classprimarray->defNativeMethod("pop", memberfn_array_pop);
+            state->m_classprimarray->defNativeMethod("shift", memberfn_array_shift);
+            state->m_classprimarray->defNativeMethod("removeAt", memberfn_array_removeat);
+            state->m_classprimarray->defNativeMethod("remove", memberfn_array_remove);
+            state->m_classprimarray->defNativeMethod("reverse", memberfn_array_reverse);
+            state->m_classprimarray->defNativeMethod("sort", memberfn_array_sort);
+            state->m_classprimarray->defNativeMethod("contains", memberfn_array_contains);
+            state->m_classprimarray->defNativeMethod("delete", memberfn_array_delete);
+            state->m_classprimarray->defNativeMethod("first", memberfn_array_first);
+            state->m_classprimarray->defNativeMethod("last", memberfn_array_last);
+            state->m_classprimarray->defNativeMethod("isEmpty", memberfn_array_isempty);
+            state->m_classprimarray->defNativeMethod("take", memberfn_array_take);
+            state->m_classprimarray->defNativeMethod("get", memberfn_array_get);
+            state->m_classprimarray->defNativeMethod("compact", memberfn_array_compact);
+            state->m_classprimarray->defNativeMethod("unique", memberfn_array_unique);
+            state->m_classprimarray->defNativeMethod("zip", memberfn_array_zip);
+            state->m_classprimarray->defNativeMethod("zipFrom", memberfn_array_zipfrom);
+            state->m_classprimarray->defNativeMethod("toDict", memberfn_array_todict);
+            state->m_classprimarray->defNativeMethod("each", memberfn_array_each);
+            state->m_classprimarray->defNativeMethod("map", memberfn_array_map);
+            state->m_classprimarray->defNativeMethod("filter", memberfn_array_filter);
+            state->m_classprimarray->defNativeMethod("some", memberfn_array_some);
+            state->m_classprimarray->defNativeMethod("every", memberfn_array_every);
+            state->m_classprimarray->defNativeMethod("reduce", memberfn_array_reduce);
+            state->m_classprimarray->defNativeMethod("@iter", memberfn_array_iter);
+            state->m_classprimarray->defNativeMethod("@itern", memberfn_array_itern);
+        }
+        {
+            #if 0
+            state->m_classprimdict->defNativeConstructor(memberfn_dict_constructor);
+            state->m_classprimdict->defStaticNativeMethod("keys", memberfn_dict_keys);
+            #endif
+            state->m_classprimdict->defNativeMethod("keys", memberfn_dict_keys);
+            state->m_classprimdict->defNativeMethod("size", memberfn_dict_length);
+            state->m_classprimdict->defNativeMethod("add", memberfn_dict_add);
+            state->m_classprimdict->defNativeMethod("set", memberfn_dict_set);
+            state->m_classprimdict->defNativeMethod("clear", memberfn_dict_clear);
+            state->m_classprimdict->defNativeMethod("clone", memberfn_dict_clone);
+            state->m_classprimdict->defNativeMethod("compact", memberfn_dict_compact);
+            state->m_classprimdict->defNativeMethod("contains", memberfn_dict_contains);
+            state->m_classprimdict->defNativeMethod("extend", memberfn_dict_extend);
+            state->m_classprimdict->defNativeMethod("get", memberfn_dict_get);
+            state->m_classprimdict->defNativeMethod("values", memberfn_dict_values);
+            state->m_classprimdict->defNativeMethod("remove", memberfn_dict_remove);
+            state->m_classprimdict->defNativeMethod("isEmpty", memberfn_dict_isempty);
+            state->m_classprimdict->defNativeMethod("findKey", memberfn_dict_findkey);
+            state->m_classprimdict->defNativeMethod("toList", memberfn_dict_tolist);
+            state->m_classprimdict->defNativeMethod("each", memberfn_dict_each);
+            state->m_classprimdict->defNativeMethod("filter", memberfn_dict_filter);
+            state->m_classprimdict->defNativeMethod("some", memberfn_dict_some);
+            state->m_classprimdict->defNativeMethod("every", memberfn_dict_every);
+            state->m_classprimdict->defNativeMethod("reduce", memberfn_dict_reduce);
+            state->m_classprimdict->defNativeMethod("@iter", memberfn_dict_iter);
+            state->m_classprimdict->defNativeMethod("@itern", memberfn_dict_itern);
+        }
+        {
+            state->m_classprimfile->defNativeConstructor(memberfn_file_constructor);
+            state->m_classprimfile->defStaticNativeMethod("exists", memberfn_file_exists);
+            state->m_classprimfile->defNativeMethod("close", memberfn_file_close);
+            state->m_classprimfile->defNativeMethod("open", memberfn_file_open);
+            state->m_classprimfile->defNativeMethod("read", memberfn_file_read);
+            state->m_classprimfile->defNativeMethod("get", memberfn_file_get);
+            state->m_classprimfile->defNativeMethod("gets", memberfn_file_gets);
+            state->m_classprimfile->defNativeMethod("write", memberfn_file_write);
+            state->m_classprimfile->defNativeMethod("puts", memberfn_file_puts);
+            state->m_classprimfile->defNativeMethod("printf", memberfn_file_printf);
+            state->m_classprimfile->defNativeMethod("number", memberfn_file_number);
+            state->m_classprimfile->defNativeMethod("isTTY", memberfn_file_istty);
+            state->m_classprimfile->defNativeMethod("isOpen", memberfn_file_isopen);
+            state->m_classprimfile->defNativeMethod("isClosed", memberfn_file_isclosed);
+            state->m_classprimfile->defNativeMethod("flush", memberfn_file_flush);
+            state->m_classprimfile->defNativeMethod("stats", memberfn_file_stats);
+            state->m_classprimfile->defNativeMethod("path", memberfn_file_path);
+            state->m_classprimfile->defNativeMethod("seek", memberfn_file_seek);
+            state->m_classprimfile->defNativeMethod("tell", memberfn_file_tell);
+            state->m_classprimfile->defNativeMethod("mode", memberfn_file_mode);
+            state->m_classprimfile->defNativeMethod("name", memberfn_file_name);
+        }
+        {
+            state->m_classprimrange->defNativeConstructor(memberfn_range_constructor);
+            state->m_classprimrange->defNativeMethod("lower", memberfn_range_lower);
+            state->m_classprimrange->defNativeMethod("upper", memberfn_range_upper);
+            state->m_classprimrange->defNativeMethod("range", memberfn_range_range);
+            state->m_classprimrange->defNativeMethod("loop", memberfn_range_loop);
+            state->m_classprimrange->defNativeMethod("expand", memberfn_range_expand);
+            state->m_classprimrange->defNativeMethod("toArray", memberfn_range_expand);
+            state->m_classprimrange->defNativeMethod("@iter", memberfn_range_iter);
+            state->m_classprimrange->defNativeMethod("@itern", memberfn_range_itern);
+        }
     }
-    {
-        #if 1
-        state->m_classprimarray->defNativeConstructor(nn_memberfunc_array_constructor);
-        #endif
-        state->m_classprimarray->defCallableField("length", nn_memberfunc_array_length);
-        state->m_classprimarray->defNativeMethod("size", nn_memberfunc_array_length);
-        state->m_classprimarray->defNativeMethod("join", nn_memberfunc_array_join);
-        state->m_classprimarray->defNativeMethod("append", nn_memberfunc_array_append);
-        state->m_classprimarray->defNativeMethod("push", nn_memberfunc_array_append);
-        state->m_classprimarray->defNativeMethod("clear", nn_memberfunc_array_clear);
-        state->m_classprimarray->defNativeMethod("clone", nn_memberfunc_array_clone);
-        state->m_classprimarray->defNativeMethod("count", nn_memberfunc_array_count);
-        state->m_classprimarray->defNativeMethod("extend", nn_memberfunc_array_extend);
-        state->m_classprimarray->defNativeMethod("indexOf", nn_memberfunc_array_indexof);
-        state->m_classprimarray->defNativeMethod("insert", nn_memberfunc_array_insert);
-        state->m_classprimarray->defNativeMethod("pop", nn_memberfunc_array_pop);
-        state->m_classprimarray->defNativeMethod("shift", nn_memberfunc_array_shift);
-        state->m_classprimarray->defNativeMethod("removeAt", nn_memberfunc_array_removeat);
-        state->m_classprimarray->defNativeMethod("remove", nn_memberfunc_array_remove);
-        state->m_classprimarray->defNativeMethod("reverse", nn_memberfunc_array_reverse);
-        state->m_classprimarray->defNativeMethod("sort", nn_memberfunc_array_sort);
-        state->m_classprimarray->defNativeMethod("contains", nn_memberfunc_array_contains);
-        state->m_classprimarray->defNativeMethod("delete", nn_memberfunc_array_delete);
-        state->m_classprimarray->defNativeMethod("first", nn_memberfunc_array_first);
-        state->m_classprimarray->defNativeMethod("last", nn_memberfunc_array_last);
-        state->m_classprimarray->defNativeMethod("isEmpty", nn_memberfunc_array_isempty);
-        state->m_classprimarray->defNativeMethod("take", nn_memberfunc_array_take);
-        state->m_classprimarray->defNativeMethod("get", nn_memberfunc_array_get);
-        state->m_classprimarray->defNativeMethod("compact", nn_memberfunc_array_compact);
-        state->m_classprimarray->defNativeMethod("unique", nn_memberfunc_array_unique);
-        state->m_classprimarray->defNativeMethod("zip", nn_memberfunc_array_zip);
-        state->m_classprimarray->defNativeMethod("zipFrom", nn_memberfunc_array_zipfrom);
-        state->m_classprimarray->defNativeMethod("toDict", nn_memberfunc_array_todict);
-        state->m_classprimarray->defNativeMethod("each", nn_memberfunc_array_each);
-        state->m_classprimarray->defNativeMethod("map", nn_memberfunc_array_map);
-        state->m_classprimarray->defNativeMethod("filter", nn_memberfunc_array_filter);
-        state->m_classprimarray->defNativeMethod("some", nn_memberfunc_array_some);
-        state->m_classprimarray->defNativeMethod("every", nn_memberfunc_array_every);
-        state->m_classprimarray->defNativeMethod("reduce", nn_memberfunc_array_reduce);
-        state->m_classprimarray->defNativeMethod("@iter", nn_memberfunc_array_iter);
-        state->m_classprimarray->defNativeMethod("@itern", nn_memberfunc_array_itern);
-    }
-    {
-        #if 0
-        state->m_classprimdict->defNativeConstructor(nn_memberfunc_dict_constructor);
-        state->m_classprimdict->defStaticNativeMethod("keys", nn_memberfunc_dict_keys);
-        #endif
-        state->m_classprimdict->defNativeMethod("keys", nn_memberfunc_dict_keys);
-        state->m_classprimdict->defNativeMethod("size", nn_memberfunc_dict_length);
-        state->m_classprimdict->defNativeMethod("add", nn_memberfunc_dict_add);
-        state->m_classprimdict->defNativeMethod("set", nn_memberfunc_dict_set);
-        state->m_classprimdict->defNativeMethod("clear", nn_memberfunc_dict_clear);
-        state->m_classprimdict->defNativeMethod("clone", nn_memberfunc_dict_clone);
-        state->m_classprimdict->defNativeMethod("compact", nn_memberfunc_dict_compact);
-        state->m_classprimdict->defNativeMethod("contains", nn_memberfunc_dict_contains);
-        state->m_classprimdict->defNativeMethod("extend", nn_memberfunc_dict_extend);
-        state->m_classprimdict->defNativeMethod("get", nn_memberfunc_dict_get);
-        state->m_classprimdict->defNativeMethod("values", nn_memberfunc_dict_values);
-        state->m_classprimdict->defNativeMethod("remove", nn_memberfunc_dict_remove);
-        state->m_classprimdict->defNativeMethod("isEmpty", nn_memberfunc_dict_isempty);
-        state->m_classprimdict->defNativeMethod("findKey", nn_memberfunc_dict_findkey);
-        state->m_classprimdict->defNativeMethod("toList", nn_memberfunc_dict_tolist);
-        state->m_classprimdict->defNativeMethod("each", nn_memberfunc_dict_each);
-        state->m_classprimdict->defNativeMethod("filter", nn_memberfunc_dict_filter);
-        state->m_classprimdict->defNativeMethod("some", nn_memberfunc_dict_some);
-        state->m_classprimdict->defNativeMethod("every", nn_memberfunc_dict_every);
-        state->m_classprimdict->defNativeMethod("reduce", nn_memberfunc_dict_reduce);
-        state->m_classprimdict->defNativeMethod("@iter", nn_memberfunc_dict_iter);
-        state->m_classprimdict->defNativeMethod("@itern", nn_memberfunc_dict_itern);
-    }
-    {
-        state->m_classprimfile->defNativeConstructor(nn_memberfunc_file_constructor);
-        state->m_classprimfile->defStaticNativeMethod("exists", nn_memberfunc_file_exists);
-        state->m_classprimfile->defNativeMethod("close", nn_memberfunc_file_close);
-        state->m_classprimfile->defNativeMethod("open", nn_memberfunc_file_open);
-        state->m_classprimfile->defNativeMethod("read", nn_memberfunc_file_read);
-        state->m_classprimfile->defNativeMethod("get", nn_memberfunc_file_get);
-        state->m_classprimfile->defNativeMethod("gets", nn_memberfunc_file_gets);
-        state->m_classprimfile->defNativeMethod("write", nn_memberfunc_file_write);
-        state->m_classprimfile->defNativeMethod("puts", nn_memberfunc_file_puts);
-        state->m_classprimfile->defNativeMethod("printf", nn_memberfunc_file_printf);
-        state->m_classprimfile->defNativeMethod("number", nn_memberfunc_file_number);
-        state->m_classprimfile->defNativeMethod("isTTY", nn_memberfunc_file_istty);
-        state->m_classprimfile->defNativeMethod("isOpen", nn_memberfunc_file_isopen);
-        state->m_classprimfile->defNativeMethod("isClosed", nn_memberfunc_file_isclosed);
-        state->m_classprimfile->defNativeMethod("flush", nn_memberfunc_file_flush);
-        state->m_classprimfile->defNativeMethod("stats", nn_memberfunc_file_stats);
-        state->m_classprimfile->defNativeMethod("path", nn_memberfunc_file_path);
-        state->m_classprimfile->defNativeMethod("seek", nn_memberfunc_file_seek);
-        state->m_classprimfile->defNativeMethod("tell", nn_memberfunc_file_tell);
-        state->m_classprimfile->defNativeMethod("mode", nn_memberfunc_file_mode);
-        state->m_classprimfile->defNativeMethod("name", nn_memberfunc_file_name);
-    }
-    {
-        state->m_classprimrange->defNativeConstructor(nn_memberfunc_range_constructor);
-        state->m_classprimrange->defNativeMethod("lower", nn_memberfunc_range_lower);
-        state->m_classprimrange->defNativeMethod("upper", nn_memberfunc_range_upper);
-        state->m_classprimrange->defNativeMethod("range", nn_memberfunc_range_range);
-        state->m_classprimrange->defNativeMethod("loop", nn_memberfunc_range_loop);
-        state->m_classprimrange->defNativeMethod("expand", nn_memberfunc_range_expand);
-        state->m_classprimrange->defNativeMethod("toArray", nn_memberfunc_range_expand);
-        state->m_classprimrange->defNativeMethod("@iter", nn_memberfunc_range_iter);
-        state->m_classprimrange->defNativeMethod("@itern", nn_memberfunc_range_itern);
-    }
+
 }
-
 neon::Value nn_nativefn_time(neon::State* state, neon::Arguments* args)
 {
     struct timeval tv;
@@ -15248,7 +15602,6 @@ neon::Value nn_nativefn_ord(neon::State* state, neon::Arguments* args)
     return neon::Value::makeNumber(ord);
 }
 
-
 neon::Value nn_nativefn_rand(neon::State* state, neon::Arguments* args)
 {
     int tmp;
@@ -15318,7 +15671,6 @@ neon::Value nn_nativefn_instanceof(neon::State* state, neon::Arguments* args)
     return neon::Value::makeBool(neon::ClassObject::instanceOf(args->argv[0].asInstance()->m_fromclass, args->argv[1].asClass()));
 }
 
-
 neon::Value nn_nativefn_sprintf(neon::State* state, neon::Arguments* args)
 {
     neon::String* res;
@@ -15373,21 +15725,20 @@ neon::Value nn_nativefn_println(neon::State* state, neon::Arguments* args)
 
 void nn_state_initbuiltinfunctions(neon::State* state)
 {
+    state->defNativeFunction("print", nn_nativefn_print);
+    state->defNativeFunction("println", nn_nativefn_println);
+    state->defNativeFunction("sprintf", nn_nativefn_sprintf);
+    state->defNativeFunction("printf", nn_nativefn_printf);
     state->defNativeFunction("chr", nn_nativefn_chr);
     state->defNativeFunction("id", nn_nativefn_id);
     state->defNativeFunction("int", nn_nativefn_int);
     state->defNativeFunction("instanceof", nn_nativefn_instanceof);
     state->defNativeFunction("microtime", nn_nativefn_microtime);
     state->defNativeFunction("ord", nn_nativefn_ord);
-    state->defNativeFunction("sprintf", nn_nativefn_sprintf);
-    state->defNativeFunction("printf", nn_nativefn_printf);
-    state->defNativeFunction("print", nn_nativefn_print);
-    state->defNativeFunction("println", nn_nativefn_println);
     state->defNativeFunction("rand", nn_nativefn_rand);
     state->defNativeFunction("time", nn_nativefn_time);
     state->defNativeFunction("eval", nn_nativefn_eval);    
 }
-
 
 namespace neon
 {
@@ -15401,7 +15752,6 @@ namespace neon
     #else
         #define destrdebug(...)     
     #endif
-
 
     void State::defGlobalValue(const char* name, Value val)
     {
@@ -15430,7 +15780,6 @@ namespace neon
     {
         return addSearchPathObjString(String::copy(this, path));
     }
-
 
     ClassObject* State::makeNamedClass(const char* name, ClassObject* parent)
     {
@@ -15638,1446 +15987,1440 @@ namespace neon
             }
         }
     }
-}
 
 
-static NEON_FORCEINLINE neon::ScopeUpvalue* nn_vmutil_upvaluescapture(neon::State::VM* vm, neon::Value* local, int stackpos)
-{
-    neon::ScopeUpvalue* upvalue;
-    neon::ScopeUpvalue* prevupvalue;
-    neon::ScopeUpvalue* createdupvalue;
-    prevupvalue = nullptr;
-    upvalue = vm->m_openupvalues;
-    while(upvalue != nullptr && (&upvalue->m_location) > local)
+    static NEON_FORCEINLINE ScopeUpvalue* vmutil_upvaluescapture(State::VM* vm, Value* local, int stackpos)
     {
-        prevupvalue = upvalue;
-        upvalue = upvalue->m_nextupval;
-    }
-    if(upvalue != nullptr && (&upvalue->m_location) == local)
-    {
-        return upvalue;
-    }
-    createdupvalue = neon::ScopeUpvalue::make(vm->m_pvm, local, stackpos);
-    createdupvalue->m_nextupval = upvalue;
-    if(prevupvalue == nullptr)
-    {
-        vm->m_openupvalues = createdupvalue;
-    }
-    else
-    {
-        prevupvalue->m_nextupval = createdupvalue;
-    }
-    return createdupvalue;
-}
-
-static NEON_FORCEINLINE void nn_vmutil_upvaluesclose(neon::State::VM* vm, const neon::Value* last)
-{
-    neon::ScopeUpvalue* upvalue;
-    while(vm->m_openupvalues != nullptr && (&vm->m_openupvalues->m_location) >= last)
-    {
+        ScopeUpvalue* upvalue;
+        ScopeUpvalue* prevupvalue;
+        ScopeUpvalue* createdupvalue;
+        prevupvalue = nullptr;
         upvalue = vm->m_openupvalues;
-        upvalue->m_closed = upvalue->m_location;
-        upvalue->m_location = upvalue->m_closed;
-        vm->m_openupvalues = upvalue->m_nextupval;
-    }
-}
-
-static NEON_FORCEINLINE void nn_vmutil_definemethod(neon::State::VM* vm, neon::String* name)
-{
-    neon::Value method;
-    neon::ClassObject* klass;
-    method = vm->stackPeek(0);
-    klass = vm->stackPeek(1).asClass();
-    klass->m_methods->set(neon::Value::fromObject(name), method);
-    if(neon::FuncCommon::getMethodType(method) == neon::FuncCommon::FUNCTYPE_INITIALIZER)
-    {
-        klass->m_constructor = method;
-    }
-    vm->stackPop();
-}
-
-static NEON_FORCEINLINE void nn_vmutil_defineproperty(neon::State::VM* vm, neon::String* name, bool isstatic)
-{
-    neon::Value property;
-    neon::ClassObject* klass;
-    property = vm->stackPeek(0);
-    klass = vm->stackPeek(1).asClass();
-    if(!isstatic)
-    {
-        klass->defProperty(name->data(), property);
-    }
-    else
-    {
-        klass->setStaticProperty(name, property);
-    }
-    vm->stackPop();
-}
-
-static NEON_FORCEINLINE neon::String* nn_vmutil_multiplystring(neon::State::VM* vm, neon::String* str, double number)
-{
-    int i;
-    int times;
-    times = (int)number;
-    /* 'str' * 0 == '', 'str' * -1 == '' */
-    if(times <= 0)
-    {
-        return neon::String::copy(vm->m_pvm, "", 0);
-    }
-    /* 'str' * 1 == 'str' */
-    else if(times == 1)
-    {
-        return str;
-    }
-    neon::Printer pd(vm->m_pvm);
-    for(i = 0; i < times; i++)
-    {
-        pd.put(str->data(), str->length());
-    }
-    return pd.takeString();
-}
-
-static NEON_FORCEINLINE neon::Array* nn_vmutil_combinearrays(neon::State::VM* vm, neon::Array* a, neon::Array* b)
-{
-    size_t i;
-    neon::Array* list;
-    list = neon::Array::make(vm->m_pvm);
-    vm->stackPush(neon::Value::fromObject(list));
-    for(i = 0; i < a->count(); i++)
-    {
-        list->push(a->at(i));
-    }
-    for(i = 0; i < b->count(); i++)
-    {
-        list->push(b->at(i));
-    }
-    vm->stackPop();
-    return list;
-}
-
-static NEON_FORCEINLINE void nn_vmutil_multiplyarray(neon::State::VM* vm, neon::Array* from, neon::Array* newlist, size_t times)
-{
-    size_t i;
-    size_t j;
-    (void)vm;
-    for(i = 0; i < times; i++)
-    {
-        for(j = 0; j < from->count(); j++)
+        while(upvalue != nullptr && (&upvalue->m_location) > local)
         {
-            newlist->push(from->at(j));
+            prevupvalue = upvalue;
+            upvalue = upvalue->m_nextupval;
+        }
+        if(upvalue != nullptr && (&upvalue->m_location) == local)
+        {
+            return upvalue;
+        }
+        createdupvalue = ScopeUpvalue::make(vm->m_pvm, local, stackpos);
+        createdupvalue->m_nextupval = upvalue;
+        if(prevupvalue == nullptr)
+        {
+            vm->m_openupvalues = createdupvalue;
+        }
+        else
+        {
+            prevupvalue->m_nextupval = createdupvalue;
+        }
+        return createdupvalue;
+    }
+
+    static NEON_FORCEINLINE void vmutil_upvaluesclose(State::VM* vm, const Value* last)
+    {
+        ScopeUpvalue* upvalue;
+        while(vm->m_openupvalues != nullptr && (&vm->m_openupvalues->m_location) >= last)
+        {
+            upvalue = vm->m_openupvalues;
+            upvalue->m_closed = upvalue->m_location;
+            upvalue->m_location = upvalue->m_closed;
+            vm->m_openupvalues = upvalue->m_nextupval;
         }
     }
-}
 
-static NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(neon::State::VM* vm, neon::Array* list, bool willassign)
-{
-    int i;
-    int idxlower;
-    int idxupper;
-    neon::Value valupper;
-    neon::Value vallower;
-    neon::Array* newlist;
-    valupper = vm->stackPeek(0);
-    vallower = vm->stackPeek(1);
-    if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
+    static NEON_FORCEINLINE void vmutil_definemethod(State::VM* vm, String* name)
     {
-        vm->stackPop(2);
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list range index expects upper and lower to be numbers, but got '%s', '%s'", vallower.name(), valupper.name());
+        Value method;
+        ClassObject* klass;
+        method = vm->stackPeek(0);
+        klass = vm->stackPeek(1).asClass();
+        klass->m_methods->set(Value::fromObject(name), method);
+        if(FuncCommon::getMethodType(method) == FuncCommon::FUNCTYPE_INITIALIZER)
+        {
+            klass->m_constructor = method;
+        }
+        vm->stackPop();
     }
-    idxlower = 0;
-    if(vallower.isNumber())
+
+    static NEON_FORCEINLINE void vmutil_defineproperty(State::VM* vm, String* name, bool isstatic)
     {
-        idxlower = vallower.asNumber();
+        Value property;
+        ClassObject* klass;
+        property = vm->stackPeek(0);
+        klass = vm->stackPeek(1).asClass();
+        if(!isstatic)
+        {
+            klass->defProperty(name->data(), property);
+        }
+        else
+        {
+            klass->setStaticProperty(name, property);
+        }
+        vm->stackPop();
     }
-    if(valupper.isNull())
+
+    static NEON_FORCEINLINE String* vmutil_multiplystring(State::VM* vm, String* str, double number)
     {
-        idxupper = list->count();
+        int i;
+        int times;
+        times = (int)number;
+        /* 'str' * 0 == '', 'str' * -1 == '' */
+        if(times <= 0)
+        {
+            return String::copy(vm->m_pvm, "", 0);
+        }
+        /* 'str' * 1 == 'str' */
+        else if(times == 1)
+        {
+            return str;
+        }
+        Printer pd(vm->m_pvm);
+        for(i = 0; i < times; i++)
+        {
+            pd.put(str->data(), str->length());
+        }
+        return pd.takeString();
     }
-    else
+
+    static NEON_FORCEINLINE Array* vmutil_combinearrays(State::VM* vm, Array* a, Array* b)
     {
-        idxupper = valupper.asNumber();
+        size_t i;
+        Array* list;
+        list = Array::make(vm->m_pvm);
+        vm->stackPush(Value::fromObject(list));
+        for(i = 0; i < a->count(); i++)
+        {
+            list->push(a->at(i));
+        }
+        for(i = 0; i < b->count(); i++)
+        {
+            list->push(b->at(i));
+        }
+        vm->stackPop();
+        return list;
     }
-    if(idxlower < 0 || (idxupper < 0 && (int(list->count() + idxupper) < 0)) || idxlower >= int(list->count()))
+
+    static NEON_FORCEINLINE void vmutil_multiplyarray(State::VM* vm, Array* from, Array* newlist, size_t times)
     {
-        /* always return an empty list... */
+        size_t i;
+        size_t j;
+        (void)vm;
+        for(i = 0; i < times; i++)
+        {
+            for(j = 0; j < from->count(); j++)
+            {
+                newlist->push(from->at(j));
+            }
+        }
+    }
+
+    static NEON_FORCEINLINE bool vmutil_dogetrangedindexofarray(State::VM* vm, Array* list, bool willassign)
+    {
+        int i;
+        int idxlower;
+        int idxupper;
+        Value valupper;
+        Value vallower;
+        Array* newlist;
+        valupper = vm->stackPeek(0);
+        vallower = vm->stackPeek(1);
+        if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
+        {
+            vm->stackPop(2);
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list range index expects upper and lower to be numbers, but got '%s', '%s'", vallower.name(), valupper.name());
+        }
+        idxlower = 0;
+        if(vallower.isNumber())
+        {
+            idxlower = vallower.asNumber();
+        }
+        if(valupper.isNull())
+        {
+            idxupper = list->count();
+        }
+        else
+        {
+            idxupper = valupper.asNumber();
+        }
+        if(idxlower < 0 || (idxupper < 0 && (int(list->count() + idxupper) < 0)) || idxlower >= int(list->count()))
+        {
+            /* always return an empty list... */
+            if(!willassign)
+            {
+                /* +1 for the list itself */
+                vm->stackPop(3);
+            }
+            vm->stackPush(Value::fromObject(Array::make(vm->m_pvm)));
+            return true;
+        }
+        if(idxupper < 0)
+        {
+            idxupper = list->count() + idxupper;
+        }
+        if(idxupper > int(list->count()))
+        {
+            idxupper = list->count();
+        }
+        newlist = Array::make(vm->m_pvm);
+        vm->stackPush(Value::fromObject(newlist));
+        for(i = idxlower; i < idxupper; i++)
+        {
+            newlist->push(list->at(i));
+        }
+        /* clear gc protect */
+        vm->stackPop();
         if(!willassign)
         {
             /* +1 for the list itself */
             vm->stackPop(3);
         }
-        vm->stackPush(neon::Value::fromObject(neon::Array::make(vm->m_pvm)));
+        vm->stackPush(Value::fromObject(newlist));
         return true;
     }
-    if(idxupper < 0)
-    {
-        idxupper = list->count() + idxupper;
-    }
-    if(idxupper > int(list->count()))
-    {
-        idxupper = list->count();
-    }
-    newlist = neon::Array::make(vm->m_pvm);
-    vm->stackPush(neon::Value::fromObject(newlist));
-    for(i = idxlower; i < idxupper; i++)
-    {
-        newlist->push(list->at(i));
-    }
-    /* clear gc protect */
-    vm->stackPop();
-    if(!willassign)
-    {
-        /* +1 for the list itself */
-        vm->stackPop(3);
-    }
-    vm->stackPush(neon::Value::fromObject(newlist));
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(neon::State::VM* vm, neon::String* string, bool willassign)
-{
-    int end;
-    int start;
-    int length;
-    int idxupper;
-    int idxlower;
-    neon::Value valupper;
-    neon::Value vallower;
-    valupper = vm->stackPeek(0);
-    vallower = vm->stackPeek(1);
-    if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
+    static NEON_FORCEINLINE bool vmutil_dogetrangedindexofstring(State::VM* vm, String* string, bool willassign)
     {
-        vm->stackPop(2);
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "string range index expects upper and lower to be numbers, but got '%s', '%s'", vallower.name(), valupper.name());
-    }
-    length = string->length();
-    idxlower = 0;
-    if(vallower.isNumber())
-    {
-        idxlower = vallower.asNumber();
-    }
-    if(valupper.isNull())
-    {
-        idxupper = length;
-    }
-    else
-    {
-        idxupper = valupper.asNumber();
-    }
-    if(idxlower < 0 || (idxupper < 0 && ((length + idxupper) < 0)) || idxlower >= length)
-    {
-        /* always return an empty string... */
+        int end;
+        int start;
+        int length;
+        int idxupper;
+        int idxlower;
+        Value valupper;
+        Value vallower;
+        valupper = vm->stackPeek(0);
+        vallower = vm->stackPeek(1);
+        if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
+        {
+            vm->stackPop(2);
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "string range index expects upper and lower to be numbers, but got '%s', '%s'", vallower.name(), valupper.name());
+        }
+        length = string->length();
+        idxlower = 0;
+        if(vallower.isNumber())
+        {
+            idxlower = vallower.asNumber();
+        }
+        if(valupper.isNull())
+        {
+            idxupper = length;
+        }
+        else
+        {
+            idxupper = valupper.asNumber();
+        }
+        if(idxlower < 0 || (idxupper < 0 && ((length + idxupper) < 0)) || idxlower >= length)
+        {
+            /* always return an empty string... */
+            if(!willassign)
+            {
+                /* +1 for the string itself */
+                vm->stackPop(3);
+            }
+            vm->stackPush(Value::fromObject(String::copy(vm->m_pvm, "", 0)));
+            return true;
+        }
+        if(idxupper < 0)
+        {
+            idxupper = length + idxupper;
+        }
+        if(idxupper > length)
+        {
+            idxupper = length;
+        }
+        start = idxlower;
+        end = idxupper;
         if(!willassign)
         {
             /* +1 for the string itself */
             vm->stackPop(3);
         }
-        vm->stackPush(neon::Value::fromObject(neon::String::copy(vm->m_pvm, "", 0)));
+        vm->stackPush(Value::fromObject(String::copy(vm->m_pvm, string->data() + start, end - start)));
         return true;
     }
-    if(idxupper < 0)
-    {
-        idxupper = length + idxupper;
-    }
-    if(idxupper > length)
-    {
-        idxupper = length;
-    }
-    start = idxlower;
-    end = idxupper;
-    if(!willassign)
-    {
-        /* +1 for the string itself */
-        vm->stackPop(3);
-    }
-    vm->stackPush(neon::Value::fromObject(neon::String::copy(vm->m_pvm, string->data() + start, end - start)));
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_getrangedindex(neon::State::VM* vm)
-{
-    bool isgotten;
-    uint8_t willassign;
-    neon::Value vfrom;
-    willassign = vm->readByte();
-    isgotten = true;
-    vfrom = vm->stackPeek(2);
-    if(vfrom.isObject())
+    static NEON_FORCEINLINE bool vmdo_getrangedindex(State::VM* vm)
     {
-        switch(vfrom.asObject()->m_objtype)
+        bool isgotten;
+        uint8_t willassign;
+        Value vfrom;
+        willassign = vm->readByte();
+        isgotten = true;
+        vfrom = vm->stackPeek(2);
+        if(vfrom.isObject())
         {
-            case neon::Value::OBJTYPE_STRING:
+            switch(vfrom.asObject()->m_objtype)
             {
-                if(!nn_vmutil_dogetrangedindexofstring(vm, vfrom.asString(), willassign))
+                case Value::OBJTYPE_STRING:
                 {
-                    return false;
+                    if(!vmutil_dogetrangedindexofstring(vm, vfrom.asString(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
                 }
-                break;
-            }
-            case neon::Value::OBJTYPE_ARRAY:
-            {
-                if(!nn_vmutil_dogetrangedindexofarray(vm, vfrom.asArray(), willassign))
+                case Value::OBJTYPE_ARRAY:
                 {
-                    return false;
+                    if(!vmutil_dogetrangedindexofarray(vm, vfrom.asArray(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
                 }
-                break;
+                default:
+                {
+                    isgotten = false;
+                    break;
+                }
             }
-            default:
+        }
+        else
+        {
+            isgotten = false;
+        }
+        if(!isgotten)
+        {
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot range index object of type %s", vfrom.name());
+        }
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmutil_doindexgetdict(State::VM* vm, Dictionary* dict, bool willassign)
+    {
+        Value vindex;
+        Property* field;
+        vindex = vm->stackPeek(0);
+        field = dict->getEntry(vindex);
+        if(field != nullptr)
+        {
+            if(!willassign)
             {
-                isgotten = false;
-                break;
+                /* we can safely get rid of the index from the stack */
+                vm->stackPop(2);
             }
-        }
-    }
-    else
-    {
-        isgotten = false;
-    }
-    if(!isgotten)
-    {
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot range index object of type %s", vfrom.name());
-    }
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_doindexgetdict(neon::State::VM* vm, neon::Dictionary* dict, bool willassign)
-{
-    neon::Value vindex;
-    neon::Property* field;
-    vindex = vm->stackPeek(0);
-    field = dict->getEntry(vindex);
-    if(field != nullptr)
-    {
-        if(!willassign)
-        {
-            /* we can safely get rid of the index from the stack */
-            vm->stackPop(2);
-        }
-        vm->stackPush(field->m_actualval);
-        return true;
-    }
-    vm->stackPop(1);
-    vm->stackPush(neon::Value::makeEmpty());
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(neon::State::VM* vm, neon::Module* module, bool willassign)
-{
-    neon::Value vindex;
-    vindex = vm->stackPeek(0);
-    auto field = module->m_deftable->getField(vindex);
-    if(field != nullptr)
-    {
-        if(!willassign)
-        {
-            /* we can safely get rid of the index from the stack */
-            vm->stackPop(2);
-        }
-        vm->stackPush(field->value());
-        return true;
-    }
-    vm->stackPop();
-    return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "%s is undefined in module %s", neon::Value::toString(vm->m_pvm, vindex)->data(), module->m_modname);
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(neon::State::VM* vm, neon::String* string, bool willassign)
-{
-    int end;
-    int start;
-    int index;
-    int maxlength;
-    int realindex;
-    neon::Value vindex;
-    neon::Range* rng;
-    (void)realindex;
-    vindex = vm->stackPeek(0);
-    if(!vindex.isNumber())
-    {
-        if(vindex.isRange())
-        {
-            rng = vindex.asRange();
-            vm->stackPop();
-            vm->stackPush(neon::Value::makeNumber(rng->m_lower));
-            vm->stackPush(neon::Value::makeNumber(rng->m_upper));
-            return nn_vmutil_dogetrangedindexofstring(vm, string, willassign);
+            vm->stackPush(field->m_actualval);
+            return true;
         }
         vm->stackPop(1);
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "strings are numerically indexed");
+        vm->stackPush(Value::makeEmpty());
+        return true;
     }
-    index = vindex.asNumber();
-    maxlength = string->length();
-    realindex = index;
-    if(index < 0)
+
+    static NEON_FORCEINLINE bool vmutil_doindexgetmodule(State::VM* vm, Module* module, bool willassign)
     {
-        index = maxlength + index;
+        Value vindex;
+        vindex = vm->stackPeek(0);
+        auto field = module->m_deftable->getField(vindex);
+        if(field != nullptr)
+        {
+            if(!willassign)
+            {
+                /* we can safely get rid of the index from the stack */
+                vm->stackPop(2);
+            }
+            vm->stackPush(field->value());
+            return true;
+        }
+        vm->stackPop();
+        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "%s is undefined in module %s", Value::toString(vm->m_pvm, vindex)->data(), module->m_modname);
     }
-    if(index < maxlength && index >= 0)
+
+    static NEON_FORCEINLINE bool vmutil_doindexgetstring(State::VM* vm, String* string, bool willassign)
     {
-        start = index;
-        end = index + 1;
+        int end;
+        int start;
+        int index;
+        int maxlength;
+        int realindex;
+        Value vindex;
+        Range* rng;
+        (void)realindex;
+        vindex = vm->stackPeek(0);
+        if(!vindex.isNumber())
+        {
+            if(vindex.isRange())
+            {
+                rng = vindex.asRange();
+                vm->stackPop();
+                vm->stackPush(Value::makeNumber(rng->m_lower));
+                vm->stackPush(Value::makeNumber(rng->m_upper));
+                return vmutil_dogetrangedindexofstring(vm, string, willassign);
+            }
+            vm->stackPop(1);
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "strings are numerically indexed");
+        }
+        index = vindex.asNumber();
+        maxlength = string->length();
+        realindex = index;
+        if(index < 0)
+        {
+            index = maxlength + index;
+        }
+        if(index < maxlength && index >= 0)
+        {
+            start = index;
+            end = index + 1;
+            if(!willassign)
+            {
+                /*
+                // we can safely get rid of the index from the stack
+                // +1 for the string itself
+                */
+                vm->stackPop(2);
+            }
+            vm->stackPush(Value::fromObject(String::copy(vm->m_pvm, string->data() + start, end - start)));
+            return true;
+        }
+        vm->stackPop(1);
+        vm->stackPush(Value::makeEmpty());
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmutil_doindexgetarray(State::VM* vm, Array* list, bool willassign)
+    {
+        int index;
+        Value finalval;
+        Value vindex;
+        Range* rng;
+        vindex = vm->stackPeek(0);
+        if(NEON_UNLIKELY(!vindex.isNumber()))
+        {
+            if(vindex.isRange())
+            {
+                rng = vindex.asRange();
+                vm->stackPop();
+                vm->stackPush(Value::makeNumber(rng->m_lower));
+                vm->stackPush(Value::makeNumber(rng->m_upper));
+                return vmutil_dogetrangedindexofarray(vm, list, willassign);
+            }
+            vm->stackPop();
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed");
+        }
+        index = vindex.asNumber();
+        if(NEON_UNLIKELY(index < 0))
+        {
+            index = list->size() + index;
+        }
+        if((index < int(list->size())) && (index >= 0))
+        {
+            finalval = list->at(index);
+        }
+        else
+        {
+            finalval = Value::makeNull();
+        }
         if(!willassign)
         {
             /*
             // we can safely get rid of the index from the stack
-            // +1 for the string itself
+            // +1 for the list itself
             */
             vm->stackPop(2);
         }
-        vm->stackPush(neon::Value::fromObject(neon::String::copy(vm->m_pvm, string->data() + start, end - start)));
+        vm->stackPush(finalval);
         return true;
     }
-    vm->stackPop(1);
-    vm->stackPush(neon::Value::makeEmpty());
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(neon::State::VM* vm, neon::Array* list, bool willassign)
-{
-    int index;
-    neon::Value finalval;
-    neon::Value vindex;
-    neon::Range* rng;
-    vindex = vm->stackPeek(0);
-    if(NEON_UNLIKELY(!vindex.isNumber()))
+    static NEON_FORCEINLINE bool vmdo_indexget(State::VM* vm)
     {
-        if(vindex.isRange())
+        bool isgotten;
+        uint8_t willassign;
+        Value peeked;
+        willassign = vm->readByte();
+        isgotten = true;
+        peeked = vm->stackPeek(1);
+        if(NEON_LIKELY(peeked.isObject()))
         {
-            rng = vindex.asRange();
-            vm->stackPop();
-            vm->stackPush(neon::Value::makeNumber(rng->m_lower));
-            vm->stackPush(neon::Value::makeNumber(rng->m_upper));
-            return nn_vmutil_dogetrangedindexofarray(vm, list, willassign);
+            switch(peeked.asObject()->m_objtype)
+            {
+                case Value::OBJTYPE_STRING:
+                {
+                    if(!vmutil_doindexgetstring(vm, peeked.asString(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
+                }
+                case Value::OBJTYPE_ARRAY:
+                {
+                    if(!vmutil_doindexgetarray(vm, peeked.asArray(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
+                }
+                case Value::OBJTYPE_DICT:
+                {
+                    if(!vmutil_doindexgetdict(vm, peeked.asDict(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
+                }
+                case Value::OBJTYPE_MODULE:
+                {
+                    if(!vmutil_doindexgetmodule(vm, peeked.asModule(), willassign != 0u))
+                    {
+                        return false;
+                    }
+                    break;
+                }
+                default:
+                {
+                    isgotten = false;
+                    break;
+                }
+            }
         }
-        vm->stackPop();
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed");
+        else
+        {
+            isgotten = false;
+        }
+        if(!isgotten)
+        {
+            vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot index object of type %s", peeked.name());
+        }
+        return true;
     }
-    index = vindex.asNumber();
-    if(NEON_UNLIKELY(index < 0))
+
+    static NEON_FORCEINLINE bool vmutil_dosetindexdict(State::VM* vm, Dictionary* dict, Value index, Value value)
     {
-        index = list->size() + index;
-    }
-    if((index < int(list->size())) && (index >= 0))
-    {
-        finalval = list->at(index);
-    }
-    else
-    {
-        finalval = neon::Value::makeNull();
-    }
-    if(!willassign)
-    {
+        dict->setEntry(index, value);
+        /* pop the value, index and dict out */
+        vm->stackPop(3);
         /*
-        // we can safely get rid of the index from the stack
-        // +1 for the list itself
+        // leave the value on the stack for consumption
+        // e.g. variable = dict[index] = 10
         */
-        vm->stackPop(2);
+        vm->stackPush(value);
+        return true;
     }
-    vm->stackPush(finalval);
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_indexget(neon::State::VM* vm)
-{
-    bool isgotten;
-    uint8_t willassign;
-    neon::Value peeked;
-    willassign = vm->readByte();
-    isgotten = true;
-    peeked = vm->stackPeek(1);
-    if(NEON_LIKELY(peeked.isObject()))
+    static NEON_FORCEINLINE bool vmutil_dosetindexmodule(State::VM* vm, Module* module, Value index, Value value)
     {
-        switch(peeked.asObject()->m_objtype)
+        module->m_deftable->set(index, value);
+        /* pop the value, index and dict out */
+        vm->stackPop(3);
+        /*
+        // leave the value on the stack for consumption
+        // e.g. variable = dict[index] = 10
+        */
+        vm->stackPush(value);
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmutil_doindexsetarray(State::VM* vm, Array* list, Value index, Value value)
+    {
+        int tmp;
+        int rawpos;
+        int position;
+        int ocnt;
+        int ocap;
+        int vasz;
+        if(NEON_UNLIKELY(!index.isNumber()))
         {
-            case neon::Value::OBJTYPE_STRING:
+            vm->stackPop(3);
+            /* pop the value, index and list out */
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed");
+        }
+        ocap = list->m_varray->m_capacity;
+        ocnt = list->count();
+        rawpos = index.asNumber();
+        position = rawpos;
+        if(rawpos < 0)
+        {
+            rawpos = list->count() + rawpos;
+        }
+        if(position < ocap && position > -(ocap))
+        {
+            list->m_varray->m_values[position] = value;
+            if(position >= ocnt)
             {
-                if(!nn_vmutil_doindexgetstring(vm, peeked.asString(), willassign))
-                {
-                    return false;
-                }
-                break;
-            }
-            case neon::Value::OBJTYPE_ARRAY:
-            {
-                if(!nn_vmutil_doindexgetarray(vm, peeked.asArray(), willassign))
-                {
-                    return false;
-                }
-                break;
-            }
-            case neon::Value::OBJTYPE_DICT:
-            {
-                if(!nn_vmutil_doindexgetdict(vm, peeked.asDict(), willassign))
-                {
-                    return false;
-                }
-                break;
-            }
-            case neon::Value::OBJTYPE_MODULE:
-            {
-                if(!nn_vmutil_doindexgetmodule(vm, peeked.asModule(), willassign))
-                {
-                    return false;
-                }
-                break;
-            }
-            default:
-            {
-                isgotten = false;
-                break;
+                list->m_varray->m_count++;
             }
         }
-    }
-    else
-    {
-        isgotten = false;
-    }
-    if(!isgotten)
-    {
-        vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot index object of type %s", peeked.name());
-    }
-    return true;
-}
-
-
-static NEON_FORCEINLINE bool nn_vmutil_dosetindexdict(neon::State::VM* vm, neon::Dictionary* dict, neon::Value index, neon::Value value)
-{
-    dict->setEntry(index, value);
-    /* pop the value, index and dict out */
-    vm->stackPop(3);
-    /*
-    // leave the value on the stack for consumption
-    // e.g. variable = dict[index] = 10
-    */
-    vm->stackPush(value);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_dosetindexmodule(neon::State::VM* vm, neon::Module* module, neon::Value index, neon::Value value)
-{
-    module->m_deftable->set(index, value);
-    /* pop the value, index and dict out */
-    vm->stackPop(3);
-    /*
-    // leave the value on the stack for consumption
-    // e.g. variable = dict[index] = 10
-    */
-    vm->stackPush(value);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(neon::State::VM* vm, neon::Array* list, neon::Value index, neon::Value value)
-{
-    int tmp;
-    int rawpos;
-    int position;
-    int ocnt;
-    int ocap;
-    int vasz;
-    if(NEON_UNLIKELY(!index.isNumber()))
-    {
-        vm->stackPop(3);
-        /* pop the value, index and list out */
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed");
-    }
-    ocap = list->m_varray->m_capacity;
-    ocnt = list->count();
-    rawpos = index.asNumber();
-    position = rawpos;
-    if(rawpos < 0)
-    {
-        rawpos = list->count() + rawpos;
-    }
-    if(position < ocap && position > -(ocap))
-    {
+        else
+        {
+            if(position < 0)
+            {
+                fprintf(stderr, "inverting negative position %d\n", position);
+                position = (~position) + 1;
+            }
+            tmp = 0;
+            vasz = list->count();
+            if((position > vasz) || ((position == 0) && (vasz == 0)))
+            {
+                if(position == 0)
+                {
+                    list->push(Value::makeEmpty());
+                }
+                else
+                {
+                    tmp = position + 1;
+                    while(tmp > vasz)
+                    {
+                        list->push(Value::makeEmpty());
+                        tmp--;
+                    }
+                }
+            }
+            fprintf(stderr, "setting value at position %ld (array count: %ld)\n", size_t(position), size_t(list->count()));
+        }
         list->m_varray->m_values[position] = value;
-        if(position >= ocnt)
-        {
-            list->m_varray->m_count++;
-        }
-    }
-    else
-    {
-        if(position < 0)
-        {
-            fprintf(stderr, "inverting negative position %d\n", position);
-            position = (~position) + 1;
-        }
-        tmp = 0;
-        vasz = list->count();
-        if((position > vasz) || ((position == 0) && (vasz == 0)))
-        {
-            if(position == 0)
-            {
-                list->push(neon::Value::makeEmpty());
-            }
-            else
-            {
-                tmp = position + 1;
-                while(tmp > vasz)
-                {
-                    list->push(neon::Value::makeEmpty());
-                    tmp--;
-                }
-            }
-        }
-        fprintf(stderr, "setting value at position %ld (array count: %ld)\n", size_t(position), size_t(list->count()));
-    }
-    list->m_varray->m_values[position] = value;
-    /* pop the value, index and list out */
-    vm->stackPop(3);
-    /*
-    // leave the value on the stack for consumption
-    // e.g. variable = list[index] = 10    
-    */
-    vm->stackPush(value);
-    return true;
-    /*
-    // pop the value, index and list out
-    //vm->stackPop(3);
-    //return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "lists index %d out of range", rawpos);
-    //vm->stackPush(Value::makeEmpty());
-    //return true;
-    */
-}
-
-static NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(neon::State::VM* vm, neon::String* os, neon::Value index, neon::Value value)
-{
-    neon::String* instr;
-    int inchar;
-    int rawpos;
-    int position;
-    int oslen;
-    bool ischar;
-    bool isstring;
-    isstring = false;
-    ischar = false;
-    if(!index.isNumber())
-    {
-        vm->stackPop(3);
-        /* pop the value, index and list out */
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "strings are numerically indexed");
-    }
-    inchar = 0;
-    if(value.isNumber())
-    {
-        inchar = value.asNumber();
-        ischar = true;
-    }
-    if(value.isString())
-    {
-        instr = value.asString();
-        isstring = true;
-    }
-    rawpos = index.asNumber();
-    oslen = os->length();
-    position = rawpos;
-    if(rawpos < 0)
-    {
-        position = (oslen + rawpos);
-    }
-    if(!isstring && !ischar)
-    {
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot set string with type '%s'", value.name());
-    }
-    if(position < oslen && position > -oslen)
-    {
-        if(isstring)
-        {
-            if(instr->length() > 1)
-            {
-                return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "expected a single-character string", value.name());
-            }
-            inchar = instr->at(0);
-            ischar = true;
-        }
-        if(ischar)
-        {
-            os->set(position, inchar);
-        }
-        else if(isstring)
-        {
-            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "string prepending by set-assignment not supported yet");
-        }
         /* pop the value, index and list out */
         vm->stackPop(3);
         /*
         // leave the value on the stack for consumption
-        // e.g. variable = list[index] = 10
+        // e.g. variable = list[index] = 10    
         */
         vm->stackPush(value);
         return true;
+        /*
+        // pop the value, index and list out
+        //vm->stackPop(3);
+        //return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "lists index %d out of range", rawpos);
+        //vm->stackPush(Value::makeEmpty());
+        //return true;
+        */
     }
-    else
-    {
-        os->append(inchar);
-        vm->stackPop(3);
-        vm->stackPush(value);
-    }
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_indexset(neon::State::VM* vm)
-{
-    bool isset;
-    neon::Value value;
-    neon::Value index;
-    neon::Value target;
-    isset = true;
-    target = vm->stackPeek(2);
-    if(NEON_LIKELY(target.isObject()))
+    static NEON_FORCEINLINE bool vmutil_dosetindexstring(State::VM* vm, String* os, Value index, Value value)
     {
-        value = vm->stackPeek(0);
-        index = vm->stackPeek(1);
-        if(NEON_UNLIKELY(value.isEmpty()))
+        String* instr;
+        int inchar;
+        int rawpos;
+        int position;
+        int oslen;
+        bool ischar;
+        bool isstring;
+        isstring = false;
+        ischar = false;
+        if(!index.isNumber())
         {
-            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "empty cannot be assigned");
+            vm->stackPop(3);
+            /* pop the value, index and list out */
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "strings are numerically indexed");
         }
-        switch(target.asObject()->m_objtype)
+        inchar = 0;
+        if(value.isNumber())
         {
-            case neon::Value::OBJTYPE_ARRAY:
+            inchar = value.asNumber();
+            ischar = true;
+        }
+        if(value.isString())
+        {
+            instr = value.asString();
+            isstring = true;
+        }
+        rawpos = index.asNumber();
+        oslen = os->length();
+        position = rawpos;
+        if(rawpos < 0)
+        {
+            position = (oslen + rawpos);
+        }
+        if(!isstring && !ischar)
+        {
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "cannot set string with type '%s'", value.name());
+        }
+        if(position < oslen && position > -oslen)
+        {
+            if(isstring)
+            {
+                if(instr->length() > 1)
                 {
-                    if(!nn_vmutil_doindexsetarray(vm, target.asArray(), index, value))
+                    return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "expected a single-character string", value.name());
+                }
+                inchar = instr->at(0);
+                ischar = true;
+            }
+            if(ischar)
+            {
+                os->set(position, inchar);
+            }
+            else if(isstring)
+            {
+                return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "string prepending by set-assignment not supported yet");
+            }
+            /* pop the value, index and list out */
+            vm->stackPop(3);
+            /*
+            // leave the value on the stack for consumption
+            // e.g. variable = list[index] = 10
+            */
+            vm->stackPush(value);
+            return true;
+        }
+        else
+        {
+            os->append(inchar);
+            vm->stackPop(3);
+            vm->stackPush(value);
+        }
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_indexset(State::VM* vm)
+    {
+        bool isset;
+        Value value;
+        Value index;
+        Value target;
+        isset = true;
+        target = vm->stackPeek(2);
+        if(NEON_LIKELY(target.isObject()))
+        {
+            value = vm->stackPeek(0);
+            index = vm->stackPeek(1);
+            if(NEON_UNLIKELY(value.isEmpty()))
+            {
+                return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "empty cannot be assigned");
+            }
+            switch(target.asObject()->m_objtype)
+            {
+                case Value::OBJTYPE_ARRAY:
                     {
-                        return false;
+                        if(!vmutil_doindexsetarray(vm, target.asArray(), index, value))
+                        {
+                            return false;
+                        }
                     }
-                }
-                break;
-            case neon::Value::OBJTYPE_STRING:
-                {
-                    if(!nn_vmutil_dosetindexstring(vm, target.asString(), index, value))
+                    break;
+                case Value::OBJTYPE_STRING:
                     {
-                        return false;
+                        if(!vmutil_dosetindexstring(vm, target.asString(), index, value))
+                        {
+                            return false;
+                        }
                     }
+                    break;
+                case Value::OBJTYPE_DICT:
+                    {
+                        return vmutil_dosetindexdict(vm, target.asDict(), index, value);
+                    }
+                    break;
+                case Value::OBJTYPE_MODULE:
+                    {
+                        return vmutil_dosetindexmodule(vm, target.asModule(), index, value);
+                    }
+                    break;
+                default:
+                    {
+                        isset = false;
+                    }
+                    break;
+            }
+        }
+        else
+        {
+            isset = false;
+        }
+        if(!isset)
+        {
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "type of %s is not a valid iterable", vm->stackPeek(3).name());
+        }
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmutil_concatenate(State::VM* vm, bool ontoself)
+    {
+        Value vleft;
+        Value vright;
+        String* result;
+        (void)ontoself;
+        vright = vm->stackPeek(0);
+        vleft = vm->stackPeek(1);
+        Printer pd(vm->m_pvm);
+        pd.printValue(vleft, false, true);
+        pd.printValue(vright, false, true);
+        result = pd.takeString();
+        vm->stackPop(2);
+        vm->stackPush(Value::fromObject(result));
+        return true;
+    }
+
+    static NEON_FORCEINLINE int vmutil_floordiv(double a, double b)
+    {
+        int d;
+        d = (int(a) / int(b));
+        return (d - (int(((d * b) == a)) & ((a < 0) ^ (b < 0))));
+    }
+
+    static NEON_FORCEINLINE double vmutil_modulo(double a, double b)
+    {
+        double r;
+        r = fmod(a, b);
+        if(r != 0 && ((r < 0) != (b < 0)))
+        {
+            r += b;
+        }
+        return r;
+    }
+
+    static NEON_FORCEINLINE Property* vmutil_getproperty(State::VM* vm, Value peeked, String* name)
+    {
+        Property* field;
+        switch(peeked.asObject()->m_objtype)
+        {
+            case Value::OBJTYPE_MODULE:
+                {
+                    Module* module;
+                    module = peeked.asModule();
+                    field = module->m_deftable->getByObjString(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "%s module does not define '%s'", module->m_modname, name->data());
+                    return nullptr;
                 }
                 break;
-            case neon::Value::OBJTYPE_DICT:
+            case Value::OBJTYPE_CLASS:
                 {
-                    return nn_vmutil_dosetindexdict(vm, target.asDict(), index, value);
+                    ClassObject* klass;
+                    klass = peeked.asClass();
+                    field = klass->m_methods->getByObjString(name);
+                    if(field != nullptr)
+                    {
+                        if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_STATIC)
+                        {
+                            return field;
+                        }
+                        return field;
+                    }
+                    field = klass->getStaticProperty(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    field = klass->m_staticmethods->getByObjString(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class '%s' does not have a static property or method named '%s'",
+                        klass->m_classname->data(), name->data());
+                    return nullptr;
                 }
                 break;
-            case neon::Value::OBJTYPE_MODULE:
+            case Value::OBJTYPE_INSTANCE:
                 {
-                    return nn_vmutil_dosetindexmodule(vm, target.asModule(), index, value);
+                    ClassInstance* instance;
+                    instance = peeked.asInstance();
+                    field = instance->m_properties->getByObjString(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    if(vm->vmBindMethod(instance->m_fromclass, name))
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "instance of class '%s' does not have a property or method named '%s'",
+                        peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
+                    return nullptr;
+                }
+                break;
+            case Value::OBJTYPE_STRING:
+                {
+                    field = vm->m_pvm->m_classprimstring->getPropertyField(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class String has no named property '%s'", name->data());
+                    return nullptr;
+                }
+                break;
+            case Value::OBJTYPE_ARRAY:
+                {
+                    field = vm->m_pvm->m_classprimarray->getPropertyField(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Array has no named property '%s'", name->data());
+                    return nullptr;
+                }
+                break;
+            case Value::OBJTYPE_RANGE:
+                {
+                    field = vm->m_pvm->m_classprimrange->getPropertyField(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Range has no named property '%s'", name->data());
+                    return nullptr;
+                }
+                break;
+            case Value::OBJTYPE_DICT:
+                {
+                    field = peeked.asDict()->m_valtable->getByObjString(name);
+                    if(field == nullptr)
+                    {
+                        field = vm->m_pvm->m_classprimdict->getPropertyField(name);
+                    }
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "unknown key or class Dict property '%s'", name->data());
+                    return nullptr;
+                }
+                break;
+            case Value::OBJTYPE_FILE:
+                {
+                    field = vm->m_pvm->m_classprimfile->getPropertyField(name);
+                    if(field != nullptr)
+                    {
+                        return field;
+                    }
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class File has no named property '%s'", name->data());
+                    return nullptr;
                 }
                 break;
             default:
                 {
-                    isset = false;
+                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type %s does not carry properties", peeked.name());
+                    return nullptr;
                 }
                 break;
         }
+        return nullptr;
     }
-    else
-    {
-        isset = false;
-    }
-    if(!isset)
-    {
-        return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "type of %s is not a valid iterable", vm->stackPeek(3).name());
-    }
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmutil_concatenate(neon::State::VM* vm, bool ontoself)
-{
-    neon::Value vleft;
-    neon::Value vright;
-    neon::String* result;
-    (void)ontoself;
-    vright = vm->stackPeek(0);
-    vleft = vm->stackPeek(1);
-    neon::Printer pd(vm->m_pvm);
-    pd.printValue(vleft, false, true);
-    pd.printValue(vright, false, true);
-    result = pd.takeString();
-    vm->stackPop(2);
-    vm->stackPush(neon::Value::fromObject(result));
-    return true;
-}
-
-static NEON_FORCEINLINE int nn_vmutil_floordiv(double a, double b)
-{
-    int d;
-    d = (int)a / (int)b;
-    return d - ((d * b == a) & ((a < 0) ^ (b < 0)));
-}
-
-static NEON_FORCEINLINE double nn_vmutil_modulo(double a, double b)
-{
-    double r;
-    r = fmod(a, b);
-    if(r != 0 && ((r < 0) != (b < 0)))
+    static NEON_FORCEINLINE bool vmdo_propertyget(State::VM* vm)
     {
-        r += b;
-    }
-    return r;
-}
-
-static NEON_FORCEINLINE neon::Property* nn_vmutil_getproperty(neon::State::VM* vm, neon::Value peeked, neon::String* name)
-{
-    neon::Property* field;
-    switch(peeked.asObject()->m_objtype)
-    {
-        case neon::Value::OBJTYPE_MODULE:
-            {
-                neon::Module* module;
-                module = peeked.asModule();
-                field = module->m_deftable->getByObjString(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "%s module does not define '%s'", module->m_modname, name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_CLASS:
-            {
-                neon::ClassObject* klass;
-                klass = peeked.asClass();
-                field = klass->m_methods->getByObjString(name);
-                if(field != nullptr)
-                {
-                    if(neon::FuncCommon::getMethodType(field->m_actualval) == neon::FuncCommon::FUNCTYPE_STATIC)
-                    {
-                        return field;
-                    }
-                    return field;
-                }
-                field = klass->getStaticProperty(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                field = klass->m_staticmethods->getByObjString(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class '%s' does not have a static property or method named '%s'",
-                    klass->m_classname->data(), name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_INSTANCE:
-            {
-                neon::ClassInstance* instance;
-                instance = peeked.asInstance();
-                field = instance->m_properties->getByObjString(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                if(vm->vmBindMethod(instance->m_fromclass, name))
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "instance of class '%s' does not have a property or method named '%s'",
-                    peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_STRING:
-            {
-                field = vm->m_pvm->m_classprimstring->getPropertyField(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class String has no named property '%s'", name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_ARRAY:
-            {
-                field = vm->m_pvm->m_classprimarray->getPropertyField(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Array has no named property '%s'", name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_RANGE:
-            {
-                field = vm->m_pvm->m_classprimrange->getPropertyField(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Range has no named property '%s'", name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_DICT:
-            {
-                field = peeked.asDict()->m_valtable->getByObjString(name);
-                if(field == nullptr)
-                {
-                    field = vm->m_pvm->m_classprimdict->getPropertyField(name);
-                }
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "unknown key or class Dict property '%s'", name->data());
-                return nullptr;
-            }
-            break;
-        case neon::Value::OBJTYPE_FILE:
-            {
-                field = vm->m_pvm->m_classprimfile->getPropertyField(name);
-                if(field != nullptr)
-                {
-                    return field;
-                }
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class File has no named property '%s'", name->data());
-                return nullptr;
-            }
-            break;
-        default:
-            {
-                vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type %s does not carry properties", peeked.name());
-                return nullptr;
-            }
-            break;
-    }
-    return nullptr;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_propertyget(neon::State::VM* vm)
-{
-    neon::Value peeked;
-    neon::Property* field;
-    neon::String* name;
-    name = vm->readString();
-    peeked = vm->stackPeek(0);
-    if(peeked.isObject())
-    {
-        field = nn_vmutil_getproperty(vm, peeked, name);
-        if(field == nullptr)
+        Value peeked;
+        Property* field;
+        String* name;
+        name = vm->readString();
+        peeked = vm->stackPeek(0);
+        if(peeked.isObject())
         {
-            return false;
-        }
-        else
-        {
-            if(field->m_proptype == neon::Property::PROPTYPE_FUNCTION)
+            field = vmutil_getproperty(vm, peeked, name);
+            if(field == nullptr)
             {
-                vm->vmCallBoundValue(field->m_actualval, peeked, 0);
+                return false;
             }
             else
             {
+                if(field->m_proptype == Property::PROPTYPE_FUNCTION)
+                {
+                    vm->vmCallBoundValue(field->m_actualval, peeked, 0);
+                }
+                else
+                {
+                    vm->stackPop();
+                    vm->stackPush(field->m_actualval);
+                }
+            }
+            return true;
+        }
+        else
+        {
+            vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "'%s' of type %s does not have properties", Value::toString(vm->m_pvm, peeked)->data(),
+                peeked.name());
+        }
+        return false;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_propertygetself(State::VM* vm)
+    {
+        Value peeked;
+        String* name;
+        ClassObject* klass;
+        ClassInstance* instance;
+        Module* module;
+        Property* field;
+        name = vm->readString();
+        peeked = vm->stackPeek(0);
+        if(peeked.isInstance())
+        {
+            instance = peeked.asInstance();
+            field = instance->m_properties->getByObjString(name);
+            if(field != nullptr)
+            {
+                /* pop the instance... */
                 vm->stackPop();
                 vm->stackPush(field->m_actualval);
+                return true;
+            }
+            if(vm->vmBindMethod(instance->m_fromclass, name))
+            {
+                return true;
+            }
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "instance of class %s does not have a property or method named '%s'",
+                peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
+            return false;
+        }
+        else if(peeked.isClass())
+        {
+            klass = peeked.asClass();
+            field = klass->m_methods->getByObjString(name);
+            if(field != nullptr)
+            {
+                if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_STATIC)
+                {
+                    /* pop the class... */
+                    vm->stackPop();
+                    vm->stackPush(field->m_actualval);
+                    return true;
+                }
+            }
+            else
+            {
+                field = klass->getStaticProperty(name);
+                if(field != nullptr)
+                {
+                    /* pop the class... */
+                    vm->stackPop();
+                    vm->stackPush(field->m_actualval);
+                    return true;
+                }
+            }
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname->data(), name->data());
+            return false;
+        }
+        else if(peeked.isModule())
+        {
+            module = peeked.asModule();
+            field = module->m_deftable->getByObjString(name);
+            if(field != nullptr)
+            {
+                /* pop the module... */
+                vm->stackPop();
+                vm->stackPush(field->m_actualval);
+                return true;
+            }
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "module %s does not define '%s'", module->m_modname, name->data());
+            return false;
+        }
+        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "'%s' of type %s does not have properties", Value::toString(vm->m_pvm, peeked)->data(),
+            peeked.name());
+        return false;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_propertyset(State::VM* vm)
+    {
+        Value value;
+        Value vtarget;
+        Value vpeek;
+        ClassObject* klass;
+        String* name;
+        Dictionary* dict;
+        ClassInstance* instance;
+        vtarget = vm->stackPeek(1);
+        if(!vtarget.isClass() && !vtarget.isInstance() && !vtarget.isDict())
+        {
+            vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type %s cannot carry properties", vtarget.name());
+            return false;
+        }
+        else if(vm->stackPeek(0).isEmpty())
+        {
+            vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "empty cannot be assigned");
+            return false;
+        }
+        name = vm->readString();
+        vpeek = vm->stackPeek(0);
+        if(vtarget.isClass())
+        {
+            klass = vtarget.asClass();
+            if(vpeek.isCallable())
+            {
+                //fprintf(stderr, "setting '%s' as method\n", name->data());
+                klass->defMethod(name->data(), vpeek);
+            }
+            else
+            {
+                klass->defProperty(name->data(), vpeek);
+            }
+            value = vm->stackPop();
+            /* removing the class object */
+            vm->stackPop();
+            vm->stackPush(value);
+        }
+        else if(vtarget.isInstance())
+        {
+            instance = vtarget.asInstance();
+            instance->defProperty(name->data(), vpeek);
+            value = vm->stackPop();
+            /* removing the instance object */
+            vm->stackPop();
+            vm->stackPush(value);
+        }
+        else
+        {
+            dict = vtarget.asDict();
+            dict->setEntry(Value::fromObject(name), vpeek);
+            value = vm->stackPop();
+            /* removing the dictionary object */
+            vm->stackPop();
+            vm->stackPush(value);
+        }
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_dobinary(State::VM* vm)
+    {
+        bool isfail;
+        long ibinright;
+        long ibinleft;
+        uint32_t ubinright;
+        uint32_t ubinleft;
+        double dbinright;
+        double dbinleft;
+        Instruction::OpCode instruction;
+        Value res;
+        Value binvalleft;
+        Value binvalright;
+        instruction = (Instruction::OpCode)vm->m_currentinstr.code;
+        binvalright = vm->stackPeek(0);
+        binvalleft = vm->stackPeek(1);
+        isfail = (
+            (!binvalright.isNumber() && !binvalright.isBool() && !binvalright.isNull()) ||
+            (!binvalleft.isNumber() && !binvalleft.isBool() && !binvalleft.isNull())
+        );
+        if(isfail)
+        {
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "unsupported operand %s for %s and %s", Instruction::opName(instruction), binvalleft.name(), binvalright.name());
+            return false;
+        }
+        binvalright = vm->stackPop();
+        binvalleft = vm->stackPop();
+        res = Value::makeEmpty();
+        switch(instruction)
+        {
+            case Instruction::OP_PRIMADD:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeNumber(dbinleft + dbinright);
+                }
+                break;
+            case Instruction::OP_PRIMSUBTRACT:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeNumber(dbinleft - dbinright);
+                }
+                break;
+            case Instruction::OP_PRIMDIVIDE:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeNumber(dbinleft / dbinright);
+                }
+                break;
+            case Instruction::OP_PRIMMULTIPLY:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeNumber(dbinleft * dbinright);
+                }
+                break;
+            case Instruction::OP_PRIMAND:
+                {
+                    ibinright = binvalright.coerceToInt();
+                    ibinleft = binvalleft.coerceToInt();
+                    res = Value::makeInt(ibinleft & ibinright);
+                }
+                break;
+            case Instruction::OP_PRIMOR:
+                {
+                    ibinright = binvalright.coerceToInt();
+                    ibinleft = binvalleft.coerceToInt();
+                    res = Value::makeInt(ibinleft | ibinright);
+                }
+                break;
+            case Instruction::OP_PRIMBITXOR:
+                {
+                    ibinright = binvalright.coerceToInt();
+                    ibinleft = binvalleft.coerceToInt();
+                    res = Value::makeInt(ibinleft ^ ibinright);
+                }
+                break;
+            case Instruction::OP_PRIMSHIFTLEFT:
+                {
+                    /*
+                    via quickjs:
+                        uint32_t v1;
+                        uint32_t v2;
+                        v1 = JS_VALUE_GET_INT(op1);
+                        v2 = JS_VALUE_GET_INT(op2);
+                        v2 &= 0x1f;
+                        sp[-2] = JS_NewInt32(ctx, v1 << v2);
+                    */
+                    ubinright = binvalright.coerceToUInt();
+                    ubinleft = binvalleft.coerceToUInt();
+                    ubinright &= 0x1f;
+                    //res = Value::makeInt(ibinleft << ibinright);
+                    res = Value::makeInt(ubinleft << ubinright);
+
+                }
+                break;
+            case Instruction::OP_PRIMSHIFTRIGHT:
+                {
+                    /*
+                        uint32_t v2;
+                        v2 = JS_VALUE_GET_INT(op2);
+                        v2 &= 0x1f;
+                        sp[-2] = JS_NewUint32(ctx, (uint32_t)JS_VALUE_GET_INT(op1) >> v2);
+                    */
+                    ubinright = binvalright.coerceToUInt();
+                    ubinleft = binvalleft.coerceToUInt();
+                    ubinright &= 0x1f;
+                    res = Value::makeInt(ubinleft >> ubinright);
+                }
+                break;
+            case Instruction::OP_PRIMGREATER:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeBool(dbinleft > dbinright);
+                }
+                break;
+            case Instruction::OP_PRIMLESSTHAN:
+                {
+                    dbinright = binvalright.coerceToNumber();
+                    dbinleft = binvalleft.coerceToNumber();
+                    res = Value::makeBool(dbinleft < dbinright);
+                }
+                break;
+            default:
+                {
+                    fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, Instruction::opName(instruction));
+                    return false;
+                }
+                break;
+        }
+        vm->stackPush(res);
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_globaldefine(State::VM* vm)
+    {
+        Value val;
+        String* name;
+        HashTable* tab;
+        name = vm->readString();
+        val = vm->stackPeek(0);
+        if(val.isEmpty())
+        {
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
+            return false;
+        }
+        tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        tab->set(Value::fromObject(name), val);
+        vm->stackPop();
+        #if (defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE) || 0
+        Helper::printTableTo(vm->m_pvm->m_debugprinter, vm->m_pvm->m_definedglobals, "globals");
+        #endif
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_globalget(State::VM* vm)
+    {
+        String* name;
+        HashTable* tab;
+        Property* field;
+        name = vm->readString();
+        tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        field = tab->getByObjString(name);
+        if(field == nullptr)
+        {
+            field = vm->m_pvm->m_definedglobals->getByObjString(name);
+            if(field == nullptr)
+            {
+                NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "global name '%s' is not defined", name->data());
+                return false;
+            }
+        }
+        vm->stackPush(field->m_actualval);
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_globalset(State::VM* vm)
+    {
+        String* name;
+        HashTable* table;
+        if(vm->stackPeek(0).isEmpty())
+        {
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
+            return false;
+        }
+        name = vm->readString();
+        table = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        if(table->set(Value::fromObject(name), vm->stackPeek(0)))
+        {
+            if(vm->m_pvm->m_conf.enablestrictmode)
+            {
+                table->removeByKey(Value::fromObject(name));
+                NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "global name '%s' was not declared", name->data());
+                return false;
             }
         }
         return true;
     }
-    else
-    {
-        vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "'%s' of type %s does not have properties", neon::Value::toString(vm->m_pvm, peeked)->data(),
-            peeked.name());
-    }
-    return false;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_propertygetself(neon::State::VM* vm)
-{
-    neon::Value peeked;
-    neon::String* name;
-    neon::ClassObject* klass;
-    neon::ClassInstance* instance;
-    neon::Module* module;
-    neon::Property* field;
-    name = vm->readString();
-    peeked = vm->stackPeek(0);
-    if(peeked.isInstance())
+    static NEON_FORCEINLINE bool vmdo_localget(State::VM* vm)
     {
-        instance = peeked.asInstance();
-        field = instance->m_properties->getByObjString(name);
-        if(field != nullptr)
-        {
-            /* pop the instance... */
-            vm->stackPop();
-            vm->stackPush(field->m_actualval);
-            return true;
-        }
-        if(vm->vmBindMethod(instance->m_fromclass, name))
-        {
-            return true;
-        }
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "instance of class %s does not have a property or method named '%s'",
-            peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
-        return false;
+        size_t ssp;
+        uint16_t slot;
+        Value val;
+        slot = vm->readShort();
+        ssp = vm->m_currentframe->stackslotpos;
+        val = vm->m_stackvalues[ssp + slot];
+        vm->stackPush(val);
+        return true;
     }
-    else if(peeked.isClass())
-    {
-        klass = peeked.asClass();
-        field = klass->m_methods->getByObjString(name);
-        if(field != nullptr)
-        {
-            if(neon::FuncCommon::getMethodType(field->m_actualval) == neon::FuncCommon::FUNCTYPE_STATIC)
-            {
-                /* pop the class... */
-                vm->stackPop();
-                vm->stackPush(field->m_actualval);
-                return true;
-            }
-        }
-        else
-        {
-            field = klass->getStaticProperty(name);
-            if(field != nullptr)
-            {
-                /* pop the class... */
-                vm->stackPop();
-                vm->stackPush(field->m_actualval);
-                return true;
-            }
-        }
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname->data(), name->data());
-        return false;
-    }
-    else if(peeked.isModule())
-    {
-        module = peeked.asModule();
-        field = module->m_deftable->getByObjString(name);
-        if(field != nullptr)
-        {
-            /* pop the module... */
-            vm->stackPop();
-            vm->stackPush(field->m_actualval);
-            return true;
-        }
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "module %s does not define '%s'", module->m_modname, name->data());
-        return false;
-    }
-    NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "'%s' of type %s does not have properties", neon::Value::toString(vm->m_pvm, peeked)->data(),
-        peeked.name());
-    return false;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_propertyset(neon::State::VM* vm)
-{
-    neon::Value value;
-    neon::Value vtarget;
-    neon::Value vpeek;
-    neon::ClassObject* klass;
-    neon::String* name;
-    neon::Dictionary* dict;
-    neon::ClassInstance* instance;
-    vtarget = vm->stackPeek(1);
-    if(!vtarget.isClass() && !vtarget.isInstance() && !vtarget.isDict())
+    static NEON_FORCEINLINE bool vmdo_localset(State::VM* vm)
     {
-        vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type %s cannot carry properties", vtarget.name());
-        return false;
-    }
-    else if(vm->stackPeek(0).isEmpty())
-    {
-        vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "empty cannot be assigned");
-        return false;
-    }
-    name = vm->readString();
-    vpeek = vm->stackPeek(0);
-    if(vtarget.isClass())
-    {
-        klass = vtarget.asClass();
-        if(vpeek.isCallable())
+        size_t ssp;
+        uint16_t slot;
+        Value peeked;
+        slot = vm->readShort();
+        peeked = vm->stackPeek(0);
+        if(peeked.isEmpty())
         {
-            //fprintf(stderr, "setting '%s' as method\n", name->data());
-            klass->defMethod(name->data(), vpeek);
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
+            return false;
         }
-        else
-        {
-            klass->defProperty(name->data(), vpeek);
-        }
-        value = vm->stackPop();
-        /* removing the class object */
-        vm->stackPop();
-        vm->stackPush(value);
+        ssp = vm->m_currentframe->stackslotpos;
+        vm->m_stackvalues[ssp + slot] = peeked;
+        return true;
     }
-    else if(vtarget.isInstance())
-    {
-        instance = vtarget.asInstance();
-        instance->defProperty(name->data(), vpeek);
-        value = vm->stackPop();
-        /* removing the instance object */
-        vm->stackPop();
-        vm->stackPush(value);
-    }
-    else
-    {
-        dict = vtarget.asDict();
-        dict->setEntry(neon::Value::fromObject(name), vpeek);
-        value = vm->stackPop();
-        /* removing the dictionary object */
-        vm->stackPop();
-        vm->stackPush(value);
-    }
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_dobinary(neon::State::VM* vm)
-{
-    bool isfail;
-    long ibinright;
-    long ibinleft;
-    uint32_t ubinright;
-    uint32_t ubinleft;
-    double dbinright;
-    double dbinleft;
-    neon::Instruction::OpCode instruction;
-    neon::Value res;
-    neon::Value binvalleft;
-    neon::Value binvalright;
-    instruction = (neon::Instruction::OpCode)vm->m_currentinstr.code;
-    binvalright = vm->stackPeek(0);
-    binvalleft = vm->stackPeek(1);
-    isfail = (
-        (!binvalright.isNumber() && !binvalright.isBool() && !binvalright.isNull()) ||
-        (!binvalleft.isNumber() && !binvalleft.isBool() && !binvalleft.isNull())
-    );
-    if(isfail)
+    static NEON_FORCEINLINE bool vmdo_funcargget(State::VM* vm)
     {
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "unsupported operand %s for %s and %s", neon::Instruction::opName(instruction), binvalleft.name(), binvalright.name());
-        return false;
+        size_t ssp;
+        uint16_t slot;
+        Value val;
+        slot = vm->readShort();
+        ssp = vm->m_currentframe->stackslotpos;
+        //fprintf(stderr, "FUNCARGGET: %s\n", vm->m_currentframe->closure->scriptfunc->m_scriptfnname->data());
+        val = vm->m_stackvalues[ssp + slot];
+        vm->stackPush(val);
+        return true;
     }
-    binvalright = vm->stackPop();
-    binvalleft = vm->stackPop();
-    res = neon::Value::makeEmpty();
-    switch(instruction)
+
+    static NEON_FORCEINLINE bool vmdo_funcargset(State::VM* vm)
     {
-        case neon::Instruction::OP_PRIMADD:
+        size_t ssp;
+        uint16_t slot;
+        Value peeked;
+        slot = vm->readShort();
+        peeked = vm->stackPeek(0);
+        if(peeked.isEmpty())
+        {
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
+            return false;
+        }
+        ssp = vm->m_currentframe->stackslotpos;
+        vm->m_stackvalues[ssp + slot] = peeked;
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_makeclosure(State::VM* vm)
+    {
+        int i;
+        int index;
+        size_t ssp;
+        uint8_t islocal;
+        Value* upvals;
+        FuncScript* function;
+        FuncClosure* closure;
+        function = vm->readConst().asFuncScript();
+        closure = FuncClosure::make(vm->m_pvm, function);
+        vm->stackPush(Value::fromObject(closure));
+        for(i = 0; i < closure->m_upvalcount; i++)
+        {
+            islocal = vm->readByte();
+            index = vm->readShort();
+            if(islocal != 0u)
             {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeNumber(dbinleft + dbinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMSUBTRACT:
-            {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeNumber(dbinleft - dbinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMDIVIDE:
-            {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeNumber(dbinleft / dbinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMMULTIPLY:
-            {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeNumber(dbinleft * dbinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMAND:
-            {
-                ibinright = binvalright.coerceToInt();
-                ibinleft = binvalleft.coerceToInt();
-                res = neon::Value::makeInt(ibinleft & ibinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMOR:
-            {
-                ibinright = binvalright.coerceToInt();
-                ibinleft = binvalleft.coerceToInt();
-                res = neon::Value::makeInt(ibinleft | ibinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMBITXOR:
-            {
-                ibinright = binvalright.coerceToInt();
-                ibinleft = binvalleft.coerceToInt();
-                res = neon::Value::makeInt(ibinleft ^ ibinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMSHIFTLEFT:
-            {
-                /*
-                via quickjs:
-                    uint32_t v1;
-                    uint32_t v2;
-                    v1 = JS_VALUE_GET_INT(op1);
-                    v2 = JS_VALUE_GET_INT(op2);
-                    v2 &= 0x1f;
-                    sp[-2] = JS_NewInt32(ctx, v1 << v2);
-                */
-                ubinright = binvalright.coerceToUInt();
-                ubinleft = binvalleft.coerceToUInt();
-                ubinright &= 0x1f;
-                //res = neon::Value::makeInt(ibinleft << ibinright);
-                res = neon::Value::makeInt(ubinleft << ubinright);
+                ssp = vm->m_currentframe->stackslotpos;
+                upvals = &vm->m_stackvalues[ssp + index];
+                closure->m_storedupvals[i] = vmutil_upvaluescapture(vm, upvals, index);
 
             }
-            break;
-        case neon::Instruction::OP_PRIMSHIFTRIGHT:
+            else
             {
-                /*
-                    uint32_t v2;
-                    v2 = JS_VALUE_GET_INT(op2);
-                    v2 &= 0x1f;
-                    sp[-2] = JS_NewUint32(ctx, (uint32_t)JS_VALUE_GET_INT(op1) >> v2);
-                */
-                ubinright = binvalright.coerceToUInt();
-                ubinleft = binvalleft.coerceToUInt();
-                ubinright &= 0x1f;
-                res = neon::Value::makeInt(ubinleft >> ubinright);
+                closure->m_storedupvals[i] = vm->m_currentframe->closure->m_storedupvals[index];
             }
-            break;
-        case neon::Instruction::OP_PRIMGREATER:
+        }
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_makearray(State::VM* vm)
+    {
+        int i;
+        int count;
+        Array* array;
+        count = vm->readShort();
+        array = Array::make(vm->m_pvm);
+        vm->m_stackvalues[vm->m_stackidx + (-count - 1)] = Value::fromObject(array);
+        for(i = count - 1; i >= 0; i--)
+        {
+            array->push(vm->stackPeek(i));
+        }
+        vm->stackPop(count);
+        return true;
+    }
+
+    static NEON_FORCEINLINE bool vmdo_makedict(State::VM* vm)
+    {
+        int i;
+        int count;
+        int realcount;
+        Value name;
+        Value value;
+        Dictionary* dict;
+        /* 1 for key, 1 for value */
+        realcount = vm->readShort();
+        count = realcount * 2;
+        dict = Dictionary::make(vm->m_pvm);
+        vm->m_stackvalues[vm->m_stackidx + (-count - 1)] = Value::fromObject(dict);
+        for(i = 0; i < count; i += 2)
+        {
+            name = vm->m_stackvalues[vm->m_stackidx + (-count + i)];
+            if(!name.isString() && !name.isNumber() && !name.isBool())
             {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeBool(dbinleft > dbinright);
-            }
-            break;
-        case neon::Instruction::OP_PRIMLESSTHAN:
-            {
-                dbinright = binvalright.coerceToNumber();
-                dbinleft = binvalleft.coerceToNumber();
-                res = neon::Value::makeBool(dbinleft < dbinright);
-            }
-            break;
-        default:
-            {
-                fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, neon::Instruction::opName(instruction));
+                NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "dictionary key must be one of string, number or boolean");
                 return false;
             }
-            break;
-    }
-    vm->stackPush(res);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_globaldefine(neon::State::VM* vm)
-{
-    neon::Value val;
-    neon::String* name;
-    neon::HashTable* tab;
-    name = vm->readString();
-    val = vm->stackPeek(0);
-    if(val.isEmpty())
-    {
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
-        return false;
-    }
-    tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
-    tab->set(neon::Value::fromObject(name), val);
-    vm->stackPop();
-    #if (defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE) || 0
-    neon::Helper::printTableTo(vm->m_pvm->m_debugprinter, vm->m_pvm->m_definedglobals, "globals");
-    #endif
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_globalget(neon::State::VM* vm)
-{
-    neon::String* name;
-    neon::HashTable* tab;
-    neon::Property* field;
-    name = vm->readString();
-    tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
-    field = tab->getByObjString(name);
-    if(field == nullptr)
-    {
-        field = vm->m_pvm->m_definedglobals->getByObjString(name);
-        if(field == nullptr)
-        {
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "global name '%s' is not defined", name->data());
-            return false;
+            value = vm->m_stackvalues[vm->m_stackidx + (-count + i + 1)];
+            dict->setEntry(name, value);
         }
+        vm->stackPop(count);
+        return true;
     }
-    vm->stackPush(field->m_actualval);
-    return true;
-}
 
-static NEON_FORCEINLINE bool nn_vmdo_globalset(neon::State::VM* vm)
-{
-    neon::String* name;
-    neon::HashTable* table;
-    if(vm->stackPeek(0).isEmpty())
-    {
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
-        return false;
-    }
-    name = vm->readString();
-    table = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
-    if(table->set(neon::Value::fromObject(name), vm->stackPeek(0)))
-    {
-        if(vm->m_pvm->m_conf.enablestrictmode)
-        {
-            table->removeByKey(neon::Value::fromObject(name));
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "global name '%s' was not declared", name->data());
-            return false;
-        }
-    }
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_localget(neon::State::VM* vm)
-{
-    size_t ssp;
-    uint16_t slot;
-    neon::Value val;
-    slot = vm->readShort();
-    ssp = vm->m_currentframe->stackslotpos;
-    val = vm->m_stackvalues[ssp + slot];
-    vm->stackPush(val);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_localset(neon::State::VM* vm)
-{
-    size_t ssp;
-    uint16_t slot;
-    neon::Value peeked;
-    slot = vm->readShort();
-    peeked = vm->stackPeek(0);
-    if(peeked.isEmpty())
-    {
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
-        return false;
-    }
-    ssp = vm->m_currentframe->stackslotpos;
-    vm->m_stackvalues[ssp + slot] = peeked;
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_funcargget(neon::State::VM* vm)
-{
-    size_t ssp;
-    uint16_t slot;
-    neon::Value val;
-    slot = vm->readShort();
-    ssp = vm->m_currentframe->stackslotpos;
-    //fprintf(stderr, "FUNCARGGET: %s\n", vm->m_currentframe->closure->scriptfunc->m_scriptfnname->data());
-    val = vm->m_stackvalues[ssp + slot];
-    vm->stackPush(val);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_funcargset(neon::State::VM* vm)
-{
-    size_t ssp;
-    uint16_t slot;
-    neon::Value peeked;
-    slot = vm->readShort();
-    peeked = vm->stackPeek(0);
-    if(peeked.isEmpty())
-    {
-        NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
-        return false;
-    }
-    ssp = vm->m_currentframe->stackslotpos;
-    vm->m_stackvalues[ssp + slot] = peeked;
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_makeclosure(neon::State::VM* vm)
-{
-    int i;
-    int index;
-    size_t ssp;
-    uint8_t islocal;
-    neon::Value* upvals;
-    neon::FuncScript* function;
-    neon::FuncClosure* closure;
-    function = vm->readConst().asFuncScript();
-    closure = neon::FuncClosure::make(vm->m_pvm, function);
-    vm->stackPush(neon::Value::fromObject(closure));
-    for(i = 0; i < closure->m_upvalcount; i++)
-    {
-        islocal = vm->readByte();
-        index = vm->readShort();
-        if(islocal)
-        {
-            ssp = vm->m_currentframe->stackslotpos;
-            upvals = &vm->m_stackvalues[ssp + index];
-            closure->m_storedupvals[i] = nn_vmutil_upvaluescapture(vm, upvals, index);
-
-        }
-        else
-        {
-            closure->m_storedupvals[i] = vm->m_currentframe->closure->m_storedupvals[index];
-        }
-    }
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_makearray(neon::State::VM* vm)
-{
-    int i;
-    int count;
-    neon::Array* array;
-    count = vm->readShort();
-    array = neon::Array::make(vm->m_pvm);
-    vm->m_stackvalues[vm->m_stackidx + (-count - 1)] = neon::Value::fromObject(array);
-    for(i = count - 1; i >= 0; i--)
-    {
-        array->push(vm->stackPeek(i));
-    }
-    vm->stackPop(count);
-    return true;
-}
-
-static NEON_FORCEINLINE bool nn_vmdo_makedict(neon::State::VM* vm)
-{
-    int i;
-    int count;
-    int realcount;
-    neon::Value name;
-    neon::Value value;
-    neon::Dictionary* dict;
-    /* 1 for key, 1 for value */
-    realcount = vm->readShort();
-    count = realcount * 2;
-    dict = neon::Dictionary::make(vm->m_pvm);
-    vm->m_stackvalues[vm->m_stackidx + (-count - 1)] = neon::Value::fromObject(dict);
-    for(i = 0; i < count; i += 2)
-    {
-        name = vm->m_stackvalues[vm->m_stackidx + (-count + i)];
-        if(!name.isString() && !name.isNumber() && !name.isBool())
-        {
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "dictionary key must be one of string, number or boolean");
-            return false;
-        }
-        value = vm->m_stackvalues[vm->m_stackidx + (-count + i + 1)];
-        dict->setEntry(name, value);
-    }
-    vm->stackPop(count);
-    return true;
-}
-
-
-
-#define BINARY_MOD_OP(vm, type, op) \
-    do \
-    { \
-        double dbinright; \
-        double dbinleft; \
-        neon::Value binvalright; \
-        neon::Value binvalleft; \
-        binvalright = stackPeek(0); \
-        binvalleft = stackPeek(1);\
-        if((!binvalright.isNumber() && !binvalright.isBool()) \
-        || (!binvalleft.isNumber() && !binvalleft.isBool())) \
+    #define BINARY_MOD_OP(vm, type, op) \
+        do \
         { \
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, neon::Status::FAIL_RUNTIME, "unsupported operand %s for %s and %s", #op, binvalleft.name(), binvalright.name()); \
-            break; \
-        } \
-        binvalright = stackPop(); \
-        dbinright = binvalright.isBool() ? (binvalright.asBool() ? 1 : 0) : binvalright.asNumber(); \
-        binvalleft = stackPop(); \
-        dbinleft = binvalleft.isBool() ? (binvalleft.asBool() ? 1 : 0) : binvalleft.asNumber(); \
-        stackPush(type(op(dbinleft, dbinright))); \
-    } while(false)
+            double dbinright; \
+            double dbinleft; \
+            Value binvalright; \
+            Value binvalleft; \
+            binvalright = stackPeek(0); \
+            binvalleft = stackPeek(1);\
+            if((!binvalright.isNumber() && !binvalright.isBool()) \
+            || (!binvalleft.isNumber() && !binvalleft.isBool())) \
+            { \
+                NEON_VMMAC_TRYRAISE(vm->m_pvm, Status::FAIL_RUNTIME, "unsupported operand %s for %s and %s", #op, binvalleft.name(), binvalright.name()); \
+                break; \
+            } \
+            binvalright = stackPop(); \
+            dbinright = binvalright.isBool() ? (binvalright.asBool() ? 1 : 0) : binvalright.asNumber(); \
+            binvalleft = stackPop(); \
+            dbinleft = binvalleft.isBool() ? (binvalleft.asBool() ? 1 : 0) : binvalleft.asNumber(); \
+            stackPush(type(op(dbinleft, dbinright))); \
+        } while(false)
 
-namespace neon
-{
     
     Status State::VM::runVM(int exitframe, Value* rv)
     {
@@ -17143,7 +17486,7 @@ namespace neon
                             *rv = result;
                         }
                         ssp = m_currentframe->stackslotpos;
-                        nn_vmutil_upvaluesclose(this, &m_stackvalues[ssp]);
+                        vmutil_upvaluesclose(this, &m_stackvalues[ssp]);
                         m_framecount--;
                         if(m_framecount == 0)
                         {
@@ -17176,7 +17519,7 @@ namespace neon
                         valleft = stackPeek(1);
                         if(valright.isString() || valleft.isString())
                         {
-                            if(!nn_vmutil_concatenate(this, false))
+                            if(!vmutil_concatenate(this, false))
                             {
                                 NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "unsupported operand + for %s and %s", valleft.name(), valright.name());
                                 break;
@@ -17184,19 +17527,19 @@ namespace neon
                         }
                         else if(valleft.isArray() && valright.isArray())
                         {
-                            result = Value::fromObject(nn_vmutil_combinearrays(this, valleft.asArray(), valright.asArray()));
+                            result = Value::fromObject(vmutil_combinearrays(this, valleft.asArray(), valright.asArray()));
                             stackPop(2);
                             stackPush(result);
                         }
                         else
                         {
-                            nn_vmdo_dobinary(this);
+                            vmdo_dobinary(this);
                         }
                     }
                     break;
                 case Instruction::OP_PRIMSUBTRACT:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMMULTIPLY:
@@ -17215,7 +17558,7 @@ namespace neon
                         {
                             dbnum = peekright.asNumber();
                             string = stackPeek(1).asString();
-                            result = Value::fromObject(nn_vmutil_multiplystring(this, string, dbnum));
+                            result = Value::fromObject(vmutil_multiplystring(this, string, dbnum));
                             stackPop(2);
                             stackPush(result);
                             break;
@@ -17227,22 +17570,22 @@ namespace neon
                             list = peekleft.asArray();
                             newlist = Array::make(m_pvm);
                             stackPush(Value::fromObject(newlist));
-                            nn_vmutil_multiplyarray(this, list, newlist, intnum);
+                            vmutil_multiplyarray(this, list, newlist, intnum);
                             stackPop(2);
                             stackPush(Value::fromObject(newlist));
                             break;
                         }
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMDIVIDE:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMMODULO:
                     {
-                        BINARY_MOD_OP(this, Value::makeNumber, nn_vmutil_modulo);
+                        BINARY_MOD_OP(this, Value::makeNumber, vmutil_modulo);
                     }
                     break;
                 case Instruction::OP_PRIMPOW:
@@ -17252,7 +17595,7 @@ namespace neon
                     break;
                 case Instruction::OP_PRIMFLOORDIVIDE:
                     {
-                        BINARY_MOD_OP(this, Value::makeNumber, nn_vmutil_floordiv);
+                        BINARY_MOD_OP(this, Value::makeNumber, vmutil_floordiv);
                     }
                     break;
                 case Instruction::OP_PRIMNEGATE:
@@ -17281,27 +17624,27 @@ namespace neon
                 }
                 case Instruction::OP_PRIMAND:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMOR:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMBITXOR:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMSHIFTLEFT:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMSHIFTRIGHT:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PUSHONE:
@@ -17316,17 +17659,17 @@ namespace neon
                         Value b;
                         b = stackPop();
                         a = stackPop();
-                        stackPush(Value::makeBool(a.compare(m_pvm, b)));
+                        stackPush(Value::makeBool(a.compare(b)));
                     }
                     break;
                 case Instruction::OP_PRIMGREATER:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMLESSTHAN:
                     {
-                        nn_vmdo_dobinary(this);
+                        vmdo_dobinary(this);
                     }
                     break;
                 case Instruction::OP_PRIMNOT:
@@ -17427,13 +17770,13 @@ namespace neon
                     break;
                 case Instruction::OP_UPVALUECLOSE:
                     {
-                        nn_vmutil_upvaluesclose(this, &m_stackvalues[m_stackidx - 1]);
+                        vmutil_upvaluesclose(this, &m_stackvalues[m_stackidx - 1]);
                         stackPop();
                     }
                     break;
                 case Instruction::OP_GLOBALDEFINE:
                     {
-                        if(!nn_vmdo_globaldefine(this))
+                        if(!vmdo_globaldefine(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17441,7 +17784,7 @@ namespace neon
                     break;
                 case Instruction::OP_GLOBALGET:
                     {
-                        if(!nn_vmdo_globalget(this))
+                        if(!vmdo_globalget(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17449,7 +17792,7 @@ namespace neon
                     break;
                 case Instruction::OP_GLOBALSET:
                     {
-                        if(!nn_vmdo_globalset(this))
+                        if(!vmdo_globalset(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17457,7 +17800,7 @@ namespace neon
                     break;
                 case Instruction::OP_LOCALGET:
                     {
-                        if(!nn_vmdo_localget(this))
+                        if(!vmdo_localget(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17465,7 +17808,7 @@ namespace neon
                     break;
                 case Instruction::OP_LOCALSET:
                     {
-                        if(!nn_vmdo_localset(this))
+                        if(!vmdo_localset(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17473,7 +17816,7 @@ namespace neon
                     break;
                 case Instruction::OP_FUNCARGGET:
                     {
-                        if(!nn_vmdo_funcargget(this))
+                        if(!vmdo_funcargget(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17481,7 +17824,7 @@ namespace neon
                     break;
                 case Instruction::OP_FUNCARGSET:
                     {
-                        if(!nn_vmdo_funcargset(this))
+                        if(!vmdo_funcargset(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17490,7 +17833,7 @@ namespace neon
 
                 case Instruction::OP_PROPERTYGET:
                     {
-                        if(!nn_vmdo_propertyget(this))
+                        if(!vmdo_propertyget(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17498,7 +17841,7 @@ namespace neon
                     break;
                 case Instruction::OP_PROPERTYSET:
                     {
-                        if(!nn_vmdo_propertyset(this))
+                        if(!vmdo_propertyset(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17506,7 +17849,7 @@ namespace neon
                     break;
                 case Instruction::OP_PROPERTYGETSELF:
                     {
-                        if(!nn_vmdo_propertygetself(this))
+                        if(!vmdo_propertygetself(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17514,7 +17857,7 @@ namespace neon
                     break;
                 case Instruction::OP_MAKECLOSURE:
                     {
-                        if(!nn_vmdo_makeclosure(this))
+                        if(!vmdo_makeclosure(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17626,7 +17969,7 @@ namespace neon
                     {
                         String* name;
                         name = readString();
-                        nn_vmutil_definemethod(this, name);
+                        vmutil_definemethod(this, name);
                     }
                     break;
                 case Instruction::OP_CLASSPROPERTYDEFINE:
@@ -17635,7 +17978,7 @@ namespace neon
                         String* name;
                         name = readString();
                         isstatic = readByte();
-                        nn_vmutil_defineproperty(this, name, isstatic == 1);
+                        vmutil_defineproperty(this, name, isstatic == 1);
                     }
                     break;
                 case Instruction::OP_CLASSINHERIT:
@@ -17696,7 +18039,7 @@ namespace neon
                     break;
                 case Instruction::OP_MAKEARRAY:
                     {
-                        if(!nn_vmdo_makearray(this))
+                        if(!vmdo_makearray(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17723,7 +18066,7 @@ namespace neon
                     break;
                 case Instruction::OP_MAKEDICT:
                     {
-                        if(!nn_vmdo_makedict(this))
+                        if(!vmdo_makedict(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17731,7 +18074,7 @@ namespace neon
                     break;
                 case Instruction::OP_INDEXGETRANGED:
                     {
-                        if(!nn_vmdo_getrangedindex(this))
+                        if(!vmdo_getrangedindex(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17739,7 +18082,7 @@ namespace neon
                     break;
                 case Instruction::OP_INDEXGET:
                     {
-                        if(!nn_vmdo_indexget(this))
+                        if(!vmdo_indexget(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17747,7 +18090,7 @@ namespace neon
                     break;
                 case Instruction::OP_INDEXSET:
                     {
-                        if(!nn_vmdo_indexset(this))
+                        if(!vmdo_indexset(this))
                         {
                             NEON_VMMAC_EXITVM(m_pvm);
                         }
@@ -17907,6 +18250,7 @@ namespace neon
         }
     }
 
+
 }
 
 static char* nn_cli_getinput(const char* prompt)
@@ -17928,7 +18272,7 @@ static void nn_cli_addhistoryline(const char* line)
     (void)line;
 }
 
-static void nn_cli_freeline(char* line)
+static void nn_cli_freeline(const char* line)
 {
     (void)line;
 }
@@ -18445,5 +18789,4 @@ int main(int argc, char* argv[], char** envp)
     }
     return 1;
 }
-
 

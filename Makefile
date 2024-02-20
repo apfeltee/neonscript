@@ -1,7 +1,7 @@
 
 INCFLAGS = -I. -Ithirdparty
 
-CXX = g++ -fpermissive -std=c++20
+CXX = g++ -std=c++20
 #WARNFLAGS_OPTIONAL = -Wno-unused-parameter
 WARNFLAGS_NEEDED = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(WARNFLAGS_OPTIONAL)
 CCCMD = $(CXX) $(WARNFLAGS_NEEDED)
@@ -24,28 +24,20 @@ target = run
 
 srcfiles_all = $(wildcard *.cpp)
 
-srcfiles_prot = $(wildcard *.cpp)
-
 headerfiles_all =
 
 objfiles_all = $(srcfiles_all:.cpp=.o)
 depfiles_all = $(objfiles_all:.o=.d)
-protofile = prot.inc
 
 # janky mess
-havecproto = 1
-ifeq (, $(shell which cproto))
-havecproto = 0
-endif
 
-all: $(protofile) $(target)
-
+all: $(target)
 
 $(target): $(objfiles_all)
 	$(CCCMD) -o $@ $^ $(LDFLAGS)
 
 
--include $(depfiles_all)
+#-include $(depfiles_all)
 
 
 # rule to generate a dep file by using the C preprocessor
