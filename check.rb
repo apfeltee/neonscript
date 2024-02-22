@@ -36,6 +36,9 @@ begin
   exe = File.join(thisdir, "run")
   if  ARGV.length > 0 then
     exe = ARGV[0]
+    if !exe.include?('/') then
+      exe = File.absolute_path(exe)
+    end
   end
   if ! File.file?(exe) then
     $stderr.printf("error: not a file: %p\n", exe)

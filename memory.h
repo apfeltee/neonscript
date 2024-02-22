@@ -56,7 +56,6 @@ namespace neon
                 buf = osMalloc(sizeof(Type));
                 if(buf != nullptr)
                 {
-                    memset(buf, 0, sizeof(Type));
                     rt = new(buf) Type(args...);
                     return rt;
                 }

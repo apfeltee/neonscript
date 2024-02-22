@@ -67,7 +67,7 @@
 
 #include "os.h"
 
-#if 0 //defined(__GNUC__)
+#if defined(__GNUC__)
     #define NEON_FORCEINLINE __attribute__((always_inline)) inline
 #else
     #define NEON_FORCEINLINE inline
@@ -2588,6 +2588,8 @@ namespace neon
                     #define raiseClass(a, ...) \
                         raiseClassActual(a, __FILE__, __LINE__, __VA_ARGS__)
 
+                    void setInstanceProperty(ClassInstance* instance, const char* propname, Value value);
+
                     template<typename... ArgsT>
                     bool raiseAtSourceLocationActual(ClassObject* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args)
                     {
@@ -2612,7 +2614,7 @@ namespace neon
                         stackPush(Value::fromObject(instance));
                         stacktrace = getExceptionStacktrace();
                         stackPush(stacktrace);
-                        instance->defProperty("stacktrace", stacktrace);
+                        setInstanceProperty(instance, "stacktrace", stacktrace);
                         stackPop();
                         return exceptionPropagate();
                     }
@@ -4718,6 +4720,10 @@ namespace neon
                 size_t elen;
                 const char* kname;
                 const char* ename;
+                if(expected == nullptr)
+                {
+                    return false;
+                }
                 while(klass1 != nullptr)
                 {
                     elen = expected->m_classname->length();
@@ -11149,12 +11155,18 @@ namespace neon
         return false;
     }        
 
+    void State::VM::setInstanceProperty(ClassInstance* instance, const char* propname, Value value)
+    {
+        instance->defProperty("stacktrace", value);
+    }
+
     bool State::VM::exceptionPropagate()
     {
         int i;
         FuncScript* function;
         ExceptionFrame* handler;
         ClassInstance* exception;
+        ClassObject* klassraised;
         exception = stackPeek(0).asInstance();
         while(m_framecount > 0)
         {
@@ -11163,7 +11175,12 @@ namespace neon
             {
                 handler = &m_currentframe->handlers[i - 1];
                 function = m_currentframe->closure->scriptfunc;
-                if(handler->address != 0 && ClassObject::instanceOf(exception->m_fromclass, handler->klass))
+                klassraised = handler->klass;
+                if(klassraised == nullptr)
+                {
+                    klassraised = m_pvm->m_exceptions.stdexception;
+                }
+                if(handler->address != 0 && ClassObject::instanceOf(exception->m_fromclass, klassraised))
                 {
                     m_currentframe->inscode = &function->m_compiledblob->m_instrucs[handler->address];
                     return true;

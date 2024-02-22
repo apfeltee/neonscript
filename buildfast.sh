@@ -8,9 +8,9 @@ gottagofast=(
   -faggressive-loop-optimizations
   # stuff and stuff.
   -fomit-frame-pointer
-  -march=native
+  #-march=native
 )
 
 set -x
-g++ -Wall -Wextra ${gottagofast[@]} main.cpp -lm -ldl
+g++ -g3 -ggdb3 -Wall -Wextra ${gottagofast[@]} main.cpp -lm -ldl
  
