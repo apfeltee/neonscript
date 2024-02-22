@@ -20,7 +20,7 @@ try
     echo i
     try
     {
-        echo [1,2,3][10]
+        echo {}[10]()
     }
     catch(Exception e)
     {

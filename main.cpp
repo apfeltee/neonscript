@@ -1475,6 +1475,7 @@ namespace neon
                 VALTYPE_BOOL,
                 VALTYPE_NUMBER,
                 VALTYPE_OBJECT,
+                VALTYPE_LIGHTSTRING,
             };
 
             enum ObjType
@@ -1530,7 +1531,8 @@ namespace neon
                 return v;
             }
 
-            static NEON_FORCEINLINE Value makeNumber(double d)
+            template<typename NumT>
+            static NEON_FORCEINLINE Value makeNumber(NumT d)
             {
                 Value v;
                 v = makeValue(VALTYPE_NUMBER);
@@ -1554,7 +1556,6 @@ namespace neon
                 v.m_valunion.obj = obj;
                 return v;
             }
-
 
             static bool isObjFalse(Value val);
 
@@ -1702,7 +1703,15 @@ namespace neon
                 Object* obj;
             } m_valunion;
 
+            #if 0
+            union
+            {
+                Util::StrBuffer string;
+            } m_lightunion;
+            #endif
+
         public:
+
             #if 0
             bool operator<(const Value& other) const
             {
@@ -2435,6 +2444,12 @@ namespace neon
                 this->argv = vargv;
                 this->userptr = uptr;
             }
+
+            NEON_FORCEINLINE Value at(size_t pos)
+            {
+                return this->argv[pos];
+            }
+
     };
 
     struct ExceptionFrame
@@ -2950,6 +2965,8 @@ namespace neon
             ClassObject* m_classprimdict;
             ClassObject* m_classprimfile;
             ClassObject* m_classprimrange;
+            ClassObject* m_classprimcallable;
+            ClassObject* m_classprimmath;
 
             bool m_isreplmode;
             Array* m_cliargv;
@@ -3840,6 +3857,12 @@ namespace neon
                 return copy(state, os->data(), os->length());
             }
 
+            static String* make(State* state)
+            {
+                return copy(state, "", 0);
+            }
+
+
             // FIXME: does not actually return the range yet
             static String* fromRange(State* state, const char* buf, size_t len, size_t begin, size_t end)
             {
@@ -3973,11 +3996,23 @@ namespace neon
                 return String::take(m_pvm, raw, len);
             }
 
-            template<typename... ArgsT>
-            void append(ArgsT&&... args)
+            void append(char ch)
             {
-                m_sbuf->append(args...);
+                m_sbuf->append(ch);
             }
+
+            void append(const char* str, size_t len)
+            {
+                m_sbuf->append(str, len);
+
+            }
+
+            void append(String* os)
+            {
+                append(os->m_sbuf->m_data, os->m_sbuf->m_length);
+            }
+
+
     };
 
     struct ScopeUpvalue final: public Object
@@ -4617,6 +4652,7 @@ namespace neon
                 size_t argc;
                 size_t pidx;
                 size_t vsz;
+                bool b;
                 Status status;
                 pidx = m_pvm->m_vmstate->m_stackidx;
                 /* set the closure before the args */
@@ -4631,7 +4667,17 @@ namespace neon
                         m_pvm->m_vmstate->stackPush(args.at(i));
                     }
                 }
-                if(!m_pvm->m_vmstate->vmCallBoundValue(callable, thisval, argc))
+                b = false;
+                if(callable.isFuncNative())
+                {
+                    fprintf(stderr, "calling native...\n");
+                    b = m_pvm->m_vmstate->vmCallValue(callable, thisval, argc);
+                }
+                else
+                {
+                    b = m_pvm->m_vmstate->vmCallBoundValue(callable, thisval, argc);
+                }
+                if(!b)
                 {
                     fprintf(stderr, "nestcall: vmCallValue() (argc=%zd) failed\n", argc);
                     abort();
@@ -6557,7 +6603,8 @@ namespace neon
             }
 
         public:
-            bool isglobal;
+            bool isglobal = false;
+            bool iskeyident = false;
             Type type;
             const char* start;
             int length;
@@ -7021,6 +7068,7 @@ namespace neon
                 }
                 tok = makeToken(getIdentType());
                 tok.isglobal = isdollar;
+                tok.iskeyident = true;
                 return tok;
             }
 
@@ -8393,11 +8441,30 @@ namespace neon
                 return m_currfunccompiler->m_localcount;
             }
 
+            bool consumeIdent(const char* msg)
+            {
+                Token tok;
+                advance();
+                if(m_prevtoken.iskeyident)
+                {
+                    return true;
+                }
+                else
+                {
+                    if(!consume(Token::TOK_IDENTNORMAL, msg))
+                    {
+                        // what to do here?
+                        return false;
+                    }
+                }
+                return true;
+            }
+
             int parseIdentVar(const char* message)
             {
-                if(!consume(Token::TOK_IDENTNORMAL, message))
+                if(!consumeIdent(message))
                 {
-                    /* what to do here? */
+                    // what to do here?
                 }
                 declareVariable();
                 /* we are in a local scope... */
@@ -11253,12 +11320,12 @@ namespace neon
                     return m_classprimdict;
                 case Value::OBJTYPE_FILE:
                     return m_classprimfile;
-                /*
+                case Value::OBJTYPE_FUNCNATIVE:
                 case Value::OBJTYPE_FUNCBOUND:
                 case Value::OBJTYPE_FUNCCLOSURE:
                 case Value::OBJTYPE_FUNCSCRIPT:
                     return m_classprimcallable;
-                */
+                
                 default:
                     {
                         fprintf(stderr, "getclassfor: unhandled type!\n");
@@ -11553,7 +11620,8 @@ namespace neon
         Instruction::OpCode setop;
         NEON_ASTDEBUG(prs->m_pvm, "");
         prs->ignoreSpace();
-        if(!prs->consume(Token::TOK_IDENTNORMAL, "expected property name after '.'"))
+        //if(!prs->consume(Token::TOK_IDENTNORMAL, "expected property name after '.'"))
+        if(!prs->consumeIdent("expected property name after '.'"))
         {
             return false;
         }
@@ -12309,14 +12377,14 @@ void nn_import_loadbuiltinmodules(neon::State* state)
 
 namespace neon
 {
-    Value memberfn_dict_length(State* state, Arguments* args)
+    Value objfn_member_dict_length(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
     }
 
-    Value memberfn_dict_add(State* state, Arguments* args)
+    Value objfn_member_dict_add(State* state, Arguments* args)
     {
         Dictionary* dict;
         NEON_ARGS_CHECKCOUNT(args, 2);
@@ -12331,7 +12399,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_dict_set(State* state, Arguments* args)
+    Value objfn_member_dict_set(State* state, Arguments* args)
     {
         Dictionary* dict;
         (void)state;
@@ -12350,7 +12418,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_dict_clear(State* state, Arguments* args)
+    Value objfn_member_dict_clear(State* state, Arguments* args)
     {
         Dictionary* dict;
         (void)state;
@@ -12361,7 +12429,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_dict_clone(State* state, Arguments* args)
+    Value objfn_member_dict_clone(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12377,7 +12445,7 @@ namespace neon
         return Value::fromObject(newdict);
     }
 
-    Value memberfn_dict_compact(State* state, Arguments* args)
+    Value objfn_member_dict_compact(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12396,7 +12464,7 @@ namespace neon
         return Value::fromObject(newdict);
     }
 
-    Value memberfn_dict_contains(State* state, Arguments* args)
+    Value objfn_member_dict_contains(State* state, Arguments* args)
     {
         (void)state;
         Dictionary* dict;
@@ -12407,7 +12475,7 @@ namespace neon
         return Value::makeBool(field != nullptr);
     }
 
-    Value memberfn_dict_extend(State* state, Arguments* args)
+    Value objfn_member_dict_extend(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12429,7 +12497,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_dict_get(State* state, Arguments* args)
+    Value objfn_member_dict_get(State* state, Arguments* args)
     {
         Dictionary* dict;
         Property* field;
@@ -12452,7 +12520,7 @@ namespace neon
         return field->m_actualval;
     }
 
-    Value memberfn_dict_keys(State* state, Arguments* args)
+    Value objfn_member_dict_keys(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12467,7 +12535,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value memberfn_dict_values(State* state, Arguments* args)
+    Value objfn_member_dict_values(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12484,7 +12552,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value memberfn_dict_remove(State* state, Arguments* args)
+    Value objfn_member_dict_remove(State* state, Arguments* args)
     {
         size_t i;
         int index;
@@ -12515,21 +12583,21 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_dict_isempty(State* state, Arguments* args)
+    Value objfn_member_dict_isempty(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
     }
 
-    Value memberfn_dict_findkey(State* state, Arguments* args)
+    Value objfn_member_dict_findkey(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 1);
         return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
     }
 
-    Value memberfn_dict_tolist(State* state, Arguments* args)
+    Value objfn_member_dict_tolist(State* state, Arguments* args)
     {
         size_t i;
         Array* list;
@@ -12560,7 +12628,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value memberfn_dict_iter(State* state, Arguments* args)
+    Value objfn_member_dict_iter(State* state, Arguments* args)
     {
         Dictionary* dict;
         (void)state;
@@ -12574,7 +12642,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_dict_itern(State* state, Arguments* args)
+    Value objfn_member_dict_itern(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -12598,7 +12666,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_dict_each(State* state, Arguments* args)
+    Value objfn_member_dict_each(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -12629,7 +12697,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_dict_filter(State* state, Arguments* args)
+    Value objfn_member_dict_filter(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -12666,7 +12734,7 @@ namespace neon
         return Value::fromObject(resultdict);
     }
 
-    Value memberfn_dict_some(State* state, Arguments* args)
+    Value objfn_member_dict_some(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -12702,7 +12770,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_dict_every(State* state, Arguments* args)
+    Value objfn_member_dict_every(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -12738,7 +12806,7 @@ namespace neon
         return Value::makeBool(true);
     }
 
-    Value memberfn_dict_reduce(State* state, Arguments* args)
+    Value objfn_member_dict_reduce(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -12813,7 +12881,7 @@ namespace neon
         if(file->m_isstd) \
         return state->raiseFromFunction(args, "method not supported for std files");
 
-    Value memberfn_file_constructor(State* state, Arguments* args)
+    Value objfn_member_file_constructor(State* state, Arguments* args)
     {
         FILE* hnd;
         const char* path;
@@ -12840,7 +12908,7 @@ namespace neon
         return Value::fromObject(file);
     }
 
-    Value memberfn_file_exists(State* state, Arguments* args)
+    Value objfn_static_file_exists(State* state, Arguments* args)
     {
         String* file;
         NEON_ARGS_CHECKCOUNT(args, 1);
@@ -12849,7 +12917,7 @@ namespace neon
         return Value::makeBool(osfn_fileexists(file->data()));
     }
 
-    Value memberfn_file_isfile(State* state, Arguments* args)
+    Value objfn_member_file_isfile(State* state, Arguments* args)
     {
         String* file;
         NEON_ARGS_CHECKCOUNT(args, 1);
@@ -12858,7 +12926,7 @@ namespace neon
         return Value::makeBool(osfn_pathisfile(file->data()));
     }
 
-    Value memberfn_file_isdirectory(State* state, Arguments* args)
+    Value objfn_member_file_isdirectory(State* state, Arguments* args)
     {
         String* file;
         NEON_ARGS_CHECKCOUNT(args, 1);
@@ -12867,7 +12935,7 @@ namespace neon
         return Value::makeBool(osfn_pathisdirectory(file->data()));
     }
 
-    Value memberfn_file_close(State* state, Arguments* args)
+    Value objfn_member_file_close(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -12875,7 +12943,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_file_open(State* state, Arguments* args)
+    Value objfn_member_file_open(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -12883,7 +12951,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_file_isopen(State* state, Arguments* args)
+    Value objfn_member_file_isopen(State* state, Arguments* args)
     {
         File* file;
         (void)state;
@@ -12891,7 +12959,7 @@ namespace neon
         return Value::makeBool(file->m_isstd || file->m_isopen);
     }
 
-    Value memberfn_file_isclosed(State* state, Arguments* args)
+    Value objfn_member_file_isclosed(State* state, Arguments* args)
     {
         File* file;
         (void)state;
@@ -12899,7 +12967,7 @@ namespace neon
         return Value::makeBool(!file->m_isstd && !file->m_isopen);
     }
 
-    Value memberfn_file_read(State* state, Arguments* args)
+    Value objfn_member_file_read(State* state, Arguments* args)
     {
         size_t readhowmuch;
         File::IOResult res;
@@ -12921,7 +12989,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_file_get(State* state, Arguments* args)
+    Value objfn_member_file_get(State* state, Arguments* args)
     {
         int ch;
         File* file;
@@ -12936,7 +13004,7 @@ namespace neon
         return Value::makeNumber(ch);
     }
 
-    Value memberfn_file_gets(State* state, Arguments* args)
+    Value objfn_member_file_gets(State* state, Arguments* args)
     {
         long end;
         long length;
@@ -13011,7 +13079,7 @@ namespace neon
         return Value::fromObject(String::take(state, buffer, bytesread));
     }
 
-    Value memberfn_file_write(State* state, Arguments* args)
+    Value objfn_member_file_write(State* state, Arguments* args)
     {
         size_t count;
         int length;
@@ -13059,7 +13127,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_file_puts(State* state, Arguments* args)
+    Value objfn_member_file_puts(State* state, Arguments* args)
     {
         size_t count;
         int length;
@@ -13106,7 +13174,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_file_printf(State* state, Arguments* args)
+    Value objfn_member_file_printf(State* state, Arguments* args)
     {
         File* file;
         String* ofmt;
@@ -13122,14 +13190,14 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_file_number(State* state, Arguments* args)
+    Value objfn_member_file_number(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeNumber(args->thisval.asFile()->m_filedesc);
     }
 
-    Value memberfn_file_istty(State* state, Arguments* args)
+    Value objfn_member_file_istty(State* state, Arguments* args)
     {
         File* file;
         (void)state;
@@ -13138,7 +13206,7 @@ namespace neon
         return Value::makeBool(file->m_istty);
     }
 
-    Value memberfn_file_flush(State* state, Arguments* args)
+    Value objfn_member_file_flush(State* state, Arguments* args)
     {
         File* file;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -13164,7 +13232,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_file_stats(State* state, Arguments* args)
+    Value objfn_member_file_stats(State* state, Arguments* args)
     {
         struct stat stats;
         File* file;
@@ -13226,7 +13294,7 @@ namespace neon
         return Value::fromObject(dict);
     }
 
-    Value memberfn_file_path(State* state, Arguments* args)
+    Value objfn_member_file_path(State* state, Arguments* args)
     {
         File* file;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -13235,7 +13303,7 @@ namespace neon
         return Value::fromObject(file->m_filepath);
     }
 
-    Value memberfn_file_mode(State* state, Arguments* args)
+    Value objfn_member_file_mode(State* state, Arguments* args)
     {
         File* file;
         (void)state;
@@ -13244,7 +13312,7 @@ namespace neon
         return Value::fromObject(file->m_filemode);
     }
 
-    Value memberfn_file_name(State* state, Arguments* args)
+    Value objfn_member_file_name(State* state, Arguments* args)
     {
         char* name;
         File* file;
@@ -13267,7 +13335,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_file_seek(State* state, Arguments* args)
+    Value objfn_member_file_seek(State* state, Arguments* args)
     {
         long position;
         int seektype;
@@ -13282,7 +13350,7 @@ namespace neon
         RETURN_STATUS(fseek(file->m_filehandle, position, seektype));
     }
 
-    Value memberfn_file_tell(State* state, Arguments* args)
+    Value objfn_member_file_tell(State* state, Arguments* args)
     {
         File* file;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -13295,7 +13363,7 @@ namespace neon
     #undef RETURN_STATUS
     #undef DENY_STD
 
-    Value memberfn_array_length(State* state, Arguments* args)
+    Value objfn_member_array_length(State* state, Arguments* args)
     {
         Array* selfarr;
         (void)state;
@@ -13303,7 +13371,7 @@ namespace neon
         return Value::makeNumber(selfarr->size());
     }
 
-    Value memberfn_array_append(State* state, Arguments* args)
+    Value objfn_member_array_append(State* state, Arguments* args)
     {
         int i;
         (void)state;
@@ -13314,7 +13382,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_clear(State* state, Arguments* args)
+    Value objfn_member_array_clear(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -13322,7 +13390,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_clone(State* state, Arguments* args)
+    Value objfn_member_array_clone(State* state, Arguments* args)
     {
         Array* list;
         (void)state;
@@ -13331,7 +13399,7 @@ namespace neon
         return Value::fromObject(list->copy(0, list->size()));
     }
 
-    Value memberfn_array_count(State* state, Arguments* args)
+    Value objfn_member_array_count(State* state, Arguments* args)
     {
         size_t i;
         size_t count;
@@ -13349,7 +13417,7 @@ namespace neon
         return Value::makeNumber(count);
     }
 
-    Value memberfn_array_extend(State* state, Arguments* args)
+    Value objfn_member_array_extend(State* state, Arguments* args)
     {
         size_t i;
         Array* list;
@@ -13366,7 +13434,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_indexof(State* state, Arguments* args)
+    Value objfn_member_array_indexof(State* state, Arguments* args)
     {
         size_t i;
         Array* list;
@@ -13388,7 +13456,7 @@ namespace neon
         return Value::makeNumber(-1);
     }
 
-    Value memberfn_array_insert(State* state, Arguments* args)
+    Value objfn_member_array_insert(State* state, Arguments* args)
     {
         size_t index;
         Array* list;
@@ -13401,7 +13469,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_pop(State* state, Arguments* args)
+    Value objfn_member_array_pop(State* state, Arguments* args)
     {
         Value value;
         Array* list;
@@ -13417,7 +13485,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_shift(State* state, Arguments* args)
+    Value objfn_member_array_shift(State* state, Arguments* args)
     {
         size_t i;
         size_t j;
@@ -13461,7 +13529,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_removeat(State* state, Arguments* args)
+    Value objfn_member_array_removeat(State* state, Arguments* args)
     {
         size_t i;
         int index;
@@ -13484,7 +13552,7 @@ namespace neon
         return value;
     }
 
-    Value memberfn_array_remove(State* state, Arguments* args)
+    Value objfn_member_array_remove(State* state, Arguments* args)
     {
         size_t i;
         int index;
@@ -13511,7 +13579,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_reverse(State* state, Arguments* args)
+    Value objfn_member_array_reverse(State* state, Arguments* args)
     {
         int fromtop;
         Array* list;
@@ -13539,7 +13607,7 @@ namespace neon
         return Value::fromObject(nlist);
     }
 
-    Value memberfn_array_sort(State* state, Arguments* args)
+    Value objfn_member_array_sort(State* state, Arguments* args)
     {
         Array* list;
         ValArray::QuickSort qs(state);
@@ -13549,7 +13617,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value memberfn_array_contains(State* state, Arguments* args)
+    Value objfn_member_array_contains(State* state, Arguments* args)
     {
         size_t i;
         Array* list;
@@ -13565,7 +13633,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_array_delete(State* state, Arguments* args)
+    Value objfn_member_array_delete(State* state, Arguments* args)
     {
         int i;
         int idxupper;
@@ -13597,7 +13665,7 @@ namespace neon
         return Value::makeNumber((double)idxupper - (double)idxlower + 1);
     }
 
-    Value memberfn_array_first(State* state, Arguments* args)
+    Value objfn_member_array_first(State* state, Arguments* args)
     {
         Array* list;
         (void)state;
@@ -13610,7 +13678,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_last(State* state, Arguments* args)
+    Value objfn_member_array_last(State* state, Arguments* args)
     {
         Array* list;
         (void)state;
@@ -13623,14 +13691,14 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_isempty(State* state, Arguments* args)
+    Value objfn_member_array_isempty(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeBool(args->thisval.asArray()->size() == 0);
     }
 
-    Value memberfn_array_take(State* state, Arguments* args)
+    Value objfn_member_array_take(State* state, Arguments* args)
     {
         int count;
         Array* list;
@@ -13650,7 +13718,7 @@ namespace neon
         return Value::fromObject(list->copy(0, count));
     }
 
-    Value memberfn_array_get(State* state, Arguments* args)
+    Value objfn_member_array_get(State* state, Arguments* args)
     {
         int index;
         Array* list;
@@ -13666,7 +13734,7 @@ namespace neon
         return list->at(index);
     }
 
-    Value memberfn_array_compact(State* state, Arguments* args)
+    Value objfn_member_array_compact(State* state, Arguments* args)
     {
         size_t i;
         Array* list;
@@ -13684,7 +13752,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value memberfn_array_unique(State* state, Arguments* args)
+    Value objfn_member_array_unique(State* state, Arguments* args)
     {
         size_t i;
         size_t j;
@@ -13713,7 +13781,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value memberfn_array_zip(State* state, Arguments* args)
+    Value objfn_member_array_zip(State* state, Arguments* args)
     {
         size_t i;
         size_t j;
@@ -13750,7 +13818,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value memberfn_array_zipfrom(State* state, Arguments* args)
+    Value objfn_member_array_zipfrom(State* state, Arguments* args)
     {
         size_t i;
         size_t j;
@@ -13790,7 +13858,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value memberfn_array_todict(State* state, Arguments* args)
+    Value objfn_member_array_todict(State* state, Arguments* args)
     {
         size_t i;
         Dictionary* dict;
@@ -13805,7 +13873,7 @@ namespace neon
         return Value::fromObject(dict);
     }
 
-    Value memberfn_array_iter(State* state, Arguments* args)
+    Value objfn_member_array_iter(State* state, Arguments* args)
     {
         int index;
         Array* list;
@@ -13821,7 +13889,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_itern(State* state, Arguments* args)
+    Value objfn_member_array_itern(State* state, Arguments* args)
     {
         int index;
         Array* list;
@@ -13847,7 +13915,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_array_each(State* state, Arguments* args)
+    Value objfn_member_array_each(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -13876,7 +13944,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_array_map(State* state, Arguments* args)
+    Value objfn_member_array_map(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -13895,59 +13963,19 @@ namespace neon
         //nestargs->push(Value::makeEmpty());
         for(i = 0; i < selfarr->count(); i++)
         {
-            #if 0
-                if(!selfarr->at(i).isEmpty())
-                {
-                    if(arity > 0 || arity == -1)
-                    {
-                        nestargs[0] = selfarr->at(i);
-                        if(arity > 1)
-                        {
-                            nestargs[1] = Value::makeNumber(i);
-                        }
-                    }
-                    nc.callNested(callable, args->thisval, nestargs, &res);
-                    resultlist->push(res);
-                }
-                else
-                {
-                    resultlist->push(Value::makeEmpty());
-                }
-            #else
-                #if 1
-                    //nestargs.push(selfarr->at(i));
-                    nestargs[0] = selfarr->at(i);
-                    if(arity > 1)
-                    {
-                        nestargs[1] = Value::makeNumber(i);
-                    }
-                    nc.callNested(callable, args->thisval, nestargs, &res);
-                    resultlist->push(res);
-                #else
-                    if(!selfarr->at(i).isEmpty())
-                    {
-                        //if(arity > 0 || arity == -1)
-                        {
-                            nestargs[0] = selfarr->at(i);
-                            if(arity > 1)
-                            {
-                                nestargs[1] = Value::makeNumber(i);
-                            }
-                        }
-                        nc.callNested(callable, args->thisval, nestargs, &res);
-                        resultlist->push(res);
-                    }
-                    else
-                    {
-                        resultlist->push(Value::makeEmpty());
-                    }
-                #endif
-            #endif
+            //nestargs.push(selfarr->at(i));
+            nestargs[0] = selfarr->at(i);
+            if(arity > 1)
+            {
+                nestargs[1] = Value::makeNumber(i);
+            }
+            nc.callNested(callable, args->thisval, nestargs, &res);
+            resultlist->push(res);
         }
         return Value::fromObject(resultlist);
     }
 
-    Value memberfn_array_filter(State* state, Arguments* args)
+    Value objfn_member_array_filter(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -13985,7 +14013,7 @@ namespace neon
         return Value::fromObject(resultlist);
     }
 
-    Value memberfn_array_some(State* state, Arguments* args)
+    Value objfn_member_array_some(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -14021,7 +14049,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_array_every(State* state, Arguments* args)
+    Value objfn_member_array_every(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -14057,7 +14085,7 @@ namespace neon
         return Value::makeBool(true);
     }
 
-    Value memberfn_array_reduce(State* state, Arguments* args)
+    Value objfn_member_array_reduce(State* state, Arguments* args)
     {
         size_t i;
         int arity;
@@ -14109,28 +14137,28 @@ namespace neon
         return accumulator;
     }
 
-    Value memberfn_range_lower(State* state, Arguments* args)
+    Value objfn_member_range_lower(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeNumber(args->thisval.asRange()->m_lower);
     }
 
-    Value memberfn_range_upper(State* state, Arguments* args)
+    Value objfn_member_range_upper(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeNumber(args->thisval.asRange()->m_upper);
     }
 
-    Value memberfn_range_range(State* state, Arguments* args)
+    Value objfn_member_range_range(State* state, Arguments* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNT(args, 0);
         return Value::makeNumber(args->thisval.asRange()->m_range);
     }
 
-    Value memberfn_range_iter(State* state, Arguments* args)
+    Value objfn_member_range_iter(State* state, Arguments* args)
     {
         int val;
         int index;
@@ -14159,7 +14187,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_range_itern(State* state, Arguments* args)
+    Value objfn_member_range_itern(State* state, Arguments* args)
     {
         int index;
         Range* range;
@@ -14185,7 +14213,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_range_loop(State* state, Arguments* args)
+    Value objfn_member_range_loop(State* state, Arguments* args)
     {
         int i;
         int arity;
@@ -14214,7 +14242,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_range_expand(State* state, Arguments* args)
+    Value objfn_member_range_expand(State* state, Arguments* args)
     {
         int i;
         Value val;
@@ -14230,7 +14258,7 @@ namespace neon
         return Value::fromObject(oa);
     }
 
-    Value memberfn_range_constructor(State* state, Arguments* args)
+    Value objfn_member_range_constructor(State* state, Arguments* args)
     {
         int a;
         int b;
@@ -14241,7 +14269,7 @@ namespace neon
         return Value::fromObject(orng);
     }
 
-    Value memberfn_string_utf8numbytes(State* state, Arguments* args)
+    Value objfn_static_string_utf8numbytes(State* state, Arguments* args)
     {
         int incode;
         int res;
@@ -14254,7 +14282,7 @@ namespace neon
         return Value::makeNumber(res);
     }
 
-    Value memberfn_string_utf8decode(State* state, Arguments* args)
+    Value objfn_static_string_utf8decode(State* state, Arguments* args)
     {
         int res;
         String* instr;
@@ -14267,7 +14295,7 @@ namespace neon
         return Value::makeNumber(res);
     }
 
-    Value memberfn_string_utf8encode(State* state, Arguments* args)
+    Value objfn_static_string_utf8encode(State* state, Arguments* args)
     {
         int incode;
         size_t len;
@@ -14311,17 +14339,17 @@ namespace neon
         return Value::fromObject(res);
     }
 
-    Value memberfn_string_utf8chars(State* state, Arguments* args)
+    Value objfn_member_string_utf8chars(State* state, Arguments* args)
     {
         return nn_util_stringutf8chars(state, args, false);
     }
 
-    Value memberfn_string_utf8codepoints(State* state, Arguments* args)
+    Value objfn_member_string_utf8codepoints(State* state, Arguments* args)
     {
         return nn_util_stringutf8chars(state, args, true);
     }
 
-    Value memberfn_string_fromcharcode(State* state, Arguments* args)
+    Value objfn_static_string_fromcharcode(State* state, Arguments* args)
     {
         char ch;
         String* os;
@@ -14332,7 +14360,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_string_constructor(State* state, Arguments* args)
+    Value objfn_member_string_constructor(State* state, Arguments* args)
     {
         String* os;
         NEON_ARGS_CHECKCOUNT(args, 0);
@@ -14340,7 +14368,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_string_length(State* state, Arguments* args)
+    Value objfn_member_string_length(State* state, Arguments* args)
     {
         String* selfstr;
         (void)state;
@@ -14349,7 +14377,7 @@ namespace neon
         return Value::makeNumber(selfstr->length());
     }
 
-    Value memberfn_string_substring(State* state, Arguments* args)
+    Value objfn_member_string_substring(State* state, Arguments* args)
     {
         size_t end;
         size_t start;
@@ -14371,7 +14399,7 @@ namespace neon
         return Value::fromObject(nos);
     }
 
-    Value memberfn_string_charcodeat(State* state, Arguments* args)
+    Value objfn_member_string_charcodeat(State* state, Arguments* args)
     {
         int ch;
         int idx;
@@ -14394,7 +14422,7 @@ namespace neon
         return Value::makeNumber(ch);
     }
 
-    Value memberfn_string_charat(State* state, Arguments* args)
+    Value objfn_member_string_charat(State* state, Arguments* args)
     {
         char ch;
         int idx;
@@ -14416,7 +14444,7 @@ namespace neon
         return Value::fromObject(String::copy(state, &ch, 1));
     }
 
-    Value memberfn_string_upper(State* state, Arguments* args)
+    Value objfn_member_string_upper(State* state, Arguments* args)
     {
         size_t slen;
         String* str;
@@ -14429,7 +14457,7 @@ namespace neon
         return Value::fromObject(copied);
     }
 
-    Value memberfn_string_lower(State* state, Arguments* args)
+    Value objfn_member_string_lower(State* state, Arguments* args)
     {
         size_t slen;
         String* str;
@@ -14442,7 +14470,7 @@ namespace neon
         return Value::fromObject(copied);
     }
 
-    Value memberfn_string_isalpha(State* state, Arguments* args)
+    Value objfn_member_string_isalpha(State* state, Arguments* args)
     {
         int i;
         String* selfstr;
@@ -14459,7 +14487,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value memberfn_string_isalnum(State* state, Arguments* args)
+    Value objfn_member_string_isalnum(State* state, Arguments* args)
     {
         int i;
         String* selfstr;
@@ -14476,7 +14504,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value memberfn_string_isfloat(State* state, Arguments* args)
+    Value objfn_member_string_isfloat(State* state, Arguments* args)
     {
         double f;
         char* p;
@@ -14505,7 +14533,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value memberfn_string_isnumber(State* state, Arguments* args)
+    Value objfn_member_string_isnumber(State* state, Arguments* args)
     {
         int i;
         String* selfstr;
@@ -14522,7 +14550,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value memberfn_string_islower(State* state, Arguments* args)
+    Value objfn_member_string_islower(State* state, Arguments* args)
     {
         int i;
         bool alphafound;
@@ -14545,7 +14573,7 @@ namespace neon
         return Value::makeBool(alphafound);
     }
 
-    Value memberfn_string_isupper(State* state, Arguments* args)
+    Value objfn_member_string_isupper(State* state, Arguments* args)
     {
         int i;
         bool alphafound;
@@ -14568,7 +14596,7 @@ namespace neon
         return Value::makeBool(alphafound);
     }
 
-    Value memberfn_string_isspace(State* state, Arguments* args)
+    Value objfn_member_string_isspace(State* state, Arguments* args)
     {
         int i;
         String* selfstr;
@@ -14585,7 +14613,25 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value memberfn_string_trim(State* state, Arguments* args)
+    Value objfn_member_string_repeat(State* state, Arguments* args)
+    {
+        size_t i;
+        size_t cnt;
+        String* selfstr;
+        (void)state;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        selfstr = args->thisval.asString();
+        cnt = args->at(0).asNumber();
+        auto os = String::make(state);
+        for(i = 0; i < cnt; i++)
+        {
+            os->append(selfstr);
+        }
+        return Value::fromObject(os);
+    }
+
+
+    Value objfn_member_string_trim(State* state, Arguments* args)
     {
         char trimmer;
         char* end;
@@ -14642,7 +14688,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value memberfn_string_ltrim(State* state, Arguments* args)
+    Value objfn_member_string_ltrim(State* state, Arguments* args)
     {
         char trimmer;
         char* end;
@@ -14684,7 +14730,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value memberfn_string_rtrim(State* state, Arguments* args)
+    Value objfn_member_string_rtrim(State* state, Arguments* args)
     {
         char trimmer;
         char* end;
@@ -14726,7 +14772,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value memberfn_array_constructor(State* state, Arguments* args)
+    Value objfn_member_array_constructor(State* state, Arguments* args)
     {
         int cnt;
         Value filler;
@@ -14743,7 +14789,7 @@ namespace neon
         return Value::fromObject(arr);
     }
 
-    Value memberfn_array_join(State* state, Arguments* args)
+    Value objfn_member_array_join(State* state, Arguments* args)
     {
         int i;
         int count;
@@ -14783,7 +14829,7 @@ namespace neon
         return Value::fromObject(pd.takeString());
     }
 
-    Value memberfn_string_indexof(State* state, Arguments* args)
+    Value objfn_member_string_indexof(State* state, Arguments* args)
     {
         int startindex;
         const char* result;
@@ -14813,7 +14859,7 @@ namespace neon
         return Value::makeNumber(-1);
     }
 
-    Value memberfn_string_startswith(State* state, Arguments* args)
+    Value objfn_member_string_startswith(State* state, Arguments* args)
     {
         String* substr;
         String* string;
@@ -14829,7 +14875,7 @@ namespace neon
         return Value::makeBool(memcmp(substr->data(), string->data(), substr->length()) == 0);
     }
 
-    Value memberfn_string_endswith(State* state, Arguments* args)
+    Value objfn_member_string_endswith(State* state, Arguments* args)
     {
         int difference;
         String* substr;
@@ -14847,7 +14893,7 @@ namespace neon
         return Value::makeBool(memcmp(substr->data(), string->data() + difference, substr->length()) == 0);
     }
 
-    Value memberfn_string_count(State* state, Arguments* args)
+    Value objfn_member_string_count(State* state, Arguments* args)
     {
         int count;
         const char* tmp;
@@ -14872,7 +14918,7 @@ namespace neon
         return Value::makeNumber(count);
     }
 
-    Value memberfn_string_tonumber(State* state, Arguments* args)
+    Value objfn_member_string_tonumber(State* state, Arguments* args)
     {
         String* selfstr;
         (void)state;
@@ -14881,7 +14927,7 @@ namespace neon
         return Value::makeNumber(strtod(selfstr->data(), nullptr));
     }
 
-    Value memberfn_string_isascii(State* state, Arguments* args)
+    Value objfn_member_string_isascii(State* state, Arguments* args)
     {
         String* string;
         (void)state;
@@ -14894,7 +14940,7 @@ namespace neon
         return Value::fromObject(string);
     }
 
-    Value memberfn_string_tolist(State* state, Arguments* args)
+    Value objfn_member_string_tolist(State* state, Arguments* args)
     {
         int i;
         int end;
@@ -14919,7 +14965,7 @@ namespace neon
     }
 
     // TODO: lpad and rpad modify m_sbuf members!!!
-    Value memberfn_string_lpad(State* state, Arguments* args)
+    Value objfn_member_string_lpad(State* state, Arguments* args)
     {
         int i;
         int width;
@@ -14965,7 +15011,7 @@ namespace neon
         return Value::fromObject(result);
     }
 
-    Value memberfn_string_rpad(State* state, Arguments* args)
+    Value objfn_member_string_rpad(State* state, Arguments* args)
     {
         int i;
         int width;
@@ -15011,7 +15057,7 @@ namespace neon
         return Value::fromObject(result);
     }
 
-    Value memberfn_string_split(State* state, Arguments* args)
+    Value objfn_member_string_split(State* state, Arguments* args)
     {
         int i;
         int end;
@@ -15057,7 +15103,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value memberfn_string_replace(State* state, Arguments* args)
+    Value objfn_member_string_replace(State* state, Arguments* args)
     {
         int i;
         int totallength;
@@ -15097,7 +15143,19 @@ namespace neon
         return Value::fromObject(String::makeFromStrbuf(state, result, Util::hashString(result->m_data, result->m_length)));
     }
 
-    Value memberfn_string_iter(State* state, Arguments* args)
+    #if 0
+    Value objfn_member_string_chr(State* state, Arguments* args)
+    {
+        size_t len;
+        char* string;
+        NEON_ARGS_CHECKCOUNT(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        string = neon::Util::utf8Encode(state, (int)args->argv[0].asNumber(), &len);
+        return neon::Value::fromObject(neon::String::take(state, string));
+    }
+    #endif
+
+    Value objfn_member_string_iter(State* state, Arguments* args)
     {
         int index;
         int length;
@@ -15116,7 +15174,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_string_itern(State* state, Arguments* args)
+    Value objfn_member_string_itern(State* state, Arguments* args)
     {
         int index;
         int length;
@@ -15144,7 +15202,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value memberfn_string_each(State* state, Arguments* args)
+    Value objfn_member_string_each(State* state, Arguments* args)
     {
         int i;
         int arity;
@@ -15174,7 +15232,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value memberfn_object_dump(State* state, Arguments* args)
+    Value objfn_member_object_dump(State* state, Arguments* args)
     {
         Value v;
         String* os;
@@ -15185,7 +15243,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_object_tostring(State* state, Arguments* args)
+    Value objfn_member_object_tostring(State* state, Arguments* args)
     {
         Value v;
         String* os;
@@ -15196,7 +15254,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_object_typename(State* state, Arguments* args)
+    Value objfn_static_object_typename(State* state, Arguments* args)
     {
         Value v;
         String* os;
@@ -15205,7 +15263,18 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value memberfn_object_isstring(State* state, Arguments* args)
+
+    Value objfn_member_object_typename(State* state, Arguments* args)
+    {
+        Value v;
+        String* os;
+        v = args->thisval;
+        os = String::copy(state, v.name());
+        return Value::fromObject(os);
+    }
+
+
+    Value objfn_member_object_isstring(State* state, Arguments* args)
     {
         Value v;
         (void)state;
@@ -15213,7 +15282,7 @@ namespace neon
         return Value::makeBool(v.isString());
     }
 
-    Value memberfn_object_isarray(State* state, Arguments* args)
+    Value objfn_member_object_isarray(State* state, Arguments* args)
     {
         Value v;
         (void)state;
@@ -15221,7 +15290,7 @@ namespace neon
         return Value::makeBool(v.isArray());
     }
 
-    Value memberfn_object_iscallable(State* state, Arguments* args)
+    Value objfn_member_object_iscallable(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15235,7 +15304,7 @@ namespace neon
         );
     }
 
-    Value memberfn_object_isbool(State* state, Arguments* args)
+    Value objfn_member_object_isbool(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15243,7 +15312,7 @@ namespace neon
         return Value::makeBool(selfval.isBool());
     }
 
-    Value memberfn_object_isnumber(State* state, Arguments* args)
+    Value objfn_member_object_isnumber(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15251,7 +15320,7 @@ namespace neon
         return Value::makeBool(selfval.isNumber());
     }
 
-    Value memberfn_object_isint(State* state, Arguments* args)
+    Value objfn_member_object_isint(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15259,7 +15328,7 @@ namespace neon
         return Value::makeBool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
     }
 
-    Value memberfn_object_isdict(State* state, Arguments* args)
+    Value objfn_member_object_isdict(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15267,7 +15336,7 @@ namespace neon
         return Value::makeBool(selfval.isDict());
     }
 
-    Value memberfn_object_isobject(State* state, Arguments* args)
+    Value objfn_member_object_isobject(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15275,7 +15344,7 @@ namespace neon
         return Value::makeBool(selfval.isObject());
     }
 
-    Value memberfn_object_isfunction(State* state, Arguments* args)
+    Value objfn_member_object_isfunction(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15288,7 +15357,7 @@ namespace neon
         );
     }
 
-    Value memberfn_object_isiterable(State* state, Arguments* args)
+    Value objfn_member_object_isiterable(State* state, Arguments* args)
     {
         bool isiterable;
         ClassObject* klass;
@@ -15307,7 +15376,7 @@ namespace neon
         return Value::makeBool(isiterable);
     }
 
-    Value memberfn_object_isclass(State* state, Arguments* args)
+    Value objfn_member_object_isclass(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15315,7 +15384,7 @@ namespace neon
         return Value::makeBool(selfval.isClass());
     }
 
-    Value memberfn_object_isfile(State* state, Arguments* args)
+    Value objfn_member_object_isfile(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15323,7 +15392,7 @@ namespace neon
         return Value::makeBool(selfval.isFile());
     }
 
-    Value memberfn_object_isinstance(State* state, Arguments* args)
+    Value objfn_member_object_isinstance(State* state, Arguments* args)
     {
         Value selfval;
         (void)state;
@@ -15331,199 +15400,235 @@ namespace neon
         return Value::makeBool(selfval.isInstance());
     }
 
-    Value memberfn_number_tobinstring(State* state, Arguments* args)
+    Value objfn_member_number_tobinstring(State* state, Arguments* args)
     {
         return Value::fromObject(String::numToBinString(state, args->thisval.asNumber()));
     }
 
-    Value memberfn_number_tooctstring(State* state, Arguments* args)
+    Value objfn_member_number_tooctstring(State* state, Arguments* args)
     {
         return Value::fromObject(String::numToOctString(state, args->thisval.asNumber(), false));
     }
 
-    Value memberfn_number_tohexstring(State* state, Arguments* args)
+    Value objfn_member_number_tohexstring(State* state, Arguments* args)
     {
         return Value::fromObject(String::numToHexString(state, args->thisval.asNumber(), false));
     }
+
+    Value objfn_static_math_staticabs(State* state, Arguments* args)
+    {
+        auto nv = args->at(0).asNumber();
+        auto rt = fabs(nv);
+        //fprintf(stderr, "nv=%g -->  %g\n", nv, rt);
+        return Value::makeNumber(rt);
+    }
+
+    Value objfn_static_math_staticround(State* state, Arguments* args)
+    {
+        auto nv = args->at(0).asNumber();
+        auto rt = round(nv);
+        //fprintf(stderr, "nv=%g -->  %g\n", nv, rt);
+        return Value::makeNumber(rt);
+    }
+
+    Value objfn_static_math_staticmin(State* state, Arguments* args)
+    {
+        auto x = args->at(0).asNumber();
+        auto y = args->at(1).asNumber();
+        auto b = (x < y) ? x : y;
+        return Value::makeNumber(b);
+    }
+
 
     void nn_state_initbuiltinmethods(State* state)
     {
         {
             state->m_classprimprocess->setStaticPropertyCstr("env", Value::fromObject(state->m_envdict));
+            
         }
         {
-            state->m_classprimobject->defStaticNativeMethod("typename", memberfn_object_typename);
-            state->m_classprimobject->defNativeMethod("dump", memberfn_object_dump);
-            state->m_classprimobject->defNativeMethod("toString", memberfn_object_tostring);
-            state->m_classprimobject->defNativeMethod("isArray", memberfn_object_isarray);        
-            state->m_classprimobject->defNativeMethod("isString", memberfn_object_isstring);
-            state->m_classprimobject->defNativeMethod("isCallable", memberfn_object_iscallable);
-            state->m_classprimobject->defNativeMethod("isBool", memberfn_object_isbool);
-            state->m_classprimobject->defNativeMethod("isNumber", memberfn_object_isnumber);
-            state->m_classprimobject->defNativeMethod("isInt", memberfn_object_isint);
-            state->m_classprimobject->defNativeMethod("isDict", memberfn_object_isdict);
-            state->m_classprimobject->defNativeMethod("isObject", memberfn_object_isobject);
-            state->m_classprimobject->defNativeMethod("isFunction", memberfn_object_isfunction);
-            state->m_classprimobject->defNativeMethod("isIterable", memberfn_object_isiterable);
-            state->m_classprimobject->defNativeMethod("isClass", memberfn_object_isclass);
-            state->m_classprimobject->defNativeMethod("isFile", memberfn_object_isfile);
-            state->m_classprimobject->defNativeMethod("isInstance", memberfn_object_isinstance);
+            state->m_classprimobject->defCallableField("class", objfn_member_object_typename);
+            state->m_classprimobject->defStaticNativeMethod("typename", objfn_static_object_typename);
+            state->m_classprimobject->defNativeMethod("dump", objfn_member_object_dump);
+            state->m_classprimobject->defNativeMethod("toString", objfn_member_object_tostring);
+            state->m_classprimobject->defNativeMethod("isArray", objfn_member_object_isarray);        
+            state->m_classprimobject->defNativeMethod("isString", objfn_member_object_isstring);
+            state->m_classprimobject->defNativeMethod("isCallable", objfn_member_object_iscallable);
+            state->m_classprimobject->defNativeMethod("isBool", objfn_member_object_isbool);
+            state->m_classprimobject->defNativeMethod("isNumber", objfn_member_object_isnumber);
+            state->m_classprimobject->defNativeMethod("isInt", objfn_member_object_isint);
+            state->m_classprimobject->defNativeMethod("isDict", objfn_member_object_isdict);
+            state->m_classprimobject->defNativeMethod("isObject", objfn_member_object_isobject);
+            state->m_classprimobject->defNativeMethod("isFunction", objfn_member_object_isfunction);
+            state->m_classprimobject->defNativeMethod("isIterable", objfn_member_object_isiterable);
+            state->m_classprimobject->defNativeMethod("isClass", objfn_member_object_isclass);
+            state->m_classprimobject->defNativeMethod("isFile", objfn_member_object_isfile);
+            state->m_classprimobject->defNativeMethod("isInstance", objfn_member_object_isinstance);
 
         }
         
         {
-            state->m_classprimnumber->defNativeMethod("toHexString", memberfn_number_tohexstring);
-            state->m_classprimnumber->defNativeMethod("toOctString", memberfn_number_tooctstring);
-            state->m_classprimnumber->defNativeMethod("toBinString", memberfn_number_tobinstring);
+            state->m_classprimnumber->defNativeMethod("toHexString", objfn_member_number_tohexstring);
+            state->m_classprimnumber->defNativeMethod("toOctString", objfn_member_number_tooctstring);
+            state->m_classprimnumber->defNativeMethod("toBinString", objfn_member_number_tobinstring);
         }
         {
-            state->m_classprimstring->defNativeConstructor(memberfn_string_constructor);
-            state->m_classprimstring->defStaticNativeMethod("fromCharCode", memberfn_string_fromcharcode);
-            state->m_classprimstring->defStaticNativeMethod("utf8Decode", memberfn_string_utf8decode);
-            state->m_classprimstring->defStaticNativeMethod("utf8Encode", memberfn_string_utf8encode);
-            state->m_classprimstring->defStaticNativeMethod("utf8NumBytes", memberfn_string_utf8numbytes);
+            state->m_classprimstring->defNativeConstructor(objfn_member_string_constructor);
+            state->m_classprimstring->defStaticNativeMethod("fromCharCode", objfn_static_string_fromcharcode);
+            state->m_classprimstring->defStaticNativeMethod("utf8Decode", objfn_static_string_utf8decode);
+            state->m_classprimstring->defStaticNativeMethod("utf8Encode", objfn_static_string_utf8encode);
+            state->m_classprimstring->defStaticNativeMethod("utf8NumBytes", objfn_static_string_utf8numbytes);
             
-            state->m_classprimstring->defCallableField("length", memberfn_string_length);
-            state->m_classprimstring->defNativeMethod("utf8Chars", memberfn_string_utf8chars);
-            state->m_classprimstring->defNativeMethod("utf8Codepoints", memberfn_string_utf8codepoints);
-            state->m_classprimstring->defNativeMethod("utf8Bytes", memberfn_string_utf8codepoints);
+            state->m_classprimstring->defCallableField("length", objfn_member_string_length);
+            state->m_classprimstring->defNativeMethod("utf8Chars", objfn_member_string_utf8chars);
+            state->m_classprimstring->defNativeMethod("utf8Codepoints", objfn_member_string_utf8codepoints);
+            state->m_classprimstring->defNativeMethod("utf8Bytes", objfn_member_string_utf8codepoints);
 
-            state->m_classprimstring->defNativeMethod("@iter", memberfn_string_iter);
-            state->m_classprimstring->defNativeMethod("@itern", memberfn_string_itern);
-            state->m_classprimstring->defNativeMethod("size", memberfn_string_length);
-            state->m_classprimstring->defNativeMethod("substr", memberfn_string_substring);
-            state->m_classprimstring->defNativeMethod("substring", memberfn_string_substring);
-            state->m_classprimstring->defNativeMethod("charCodeAt", memberfn_string_charcodeat);
-            state->m_classprimstring->defNativeMethod("charAt", memberfn_string_charat);
-            state->m_classprimstring->defNativeMethod("upper", memberfn_string_upper);
-            state->m_classprimstring->defNativeMethod("lower", memberfn_string_lower);
-            state->m_classprimstring->defNativeMethod("trim", memberfn_string_trim);
-            state->m_classprimstring->defNativeMethod("ltrim", memberfn_string_ltrim);
-            state->m_classprimstring->defNativeMethod("rtrim", memberfn_string_rtrim);
-            state->m_classprimstring->defNativeMethod("split", memberfn_string_split);
-            state->m_classprimstring->defNativeMethod("indexOf", memberfn_string_indexof);
-            state->m_classprimstring->defNativeMethod("count", memberfn_string_count);
-            state->m_classprimstring->defNativeMethod("toNumber", memberfn_string_tonumber);
-            state->m_classprimstring->defNativeMethod("toList", memberfn_string_tolist);
-            state->m_classprimstring->defNativeMethod("lpad", memberfn_string_lpad);
-            state->m_classprimstring->defNativeMethod("rpad", memberfn_string_rpad);
-            state->m_classprimstring->defNativeMethod("replace", memberfn_string_replace);
-            state->m_classprimstring->defNativeMethod("each", memberfn_string_each);
-            state->m_classprimstring->defNativeMethod("startswith", memberfn_string_startswith);
-            state->m_classprimstring->defNativeMethod("endswith", memberfn_string_endswith);
-            state->m_classprimstring->defNativeMethod("isAscii", memberfn_string_isascii);
-            state->m_classprimstring->defNativeMethod("isAlpha", memberfn_string_isalpha);
-            state->m_classprimstring->defNativeMethod("isAlnum", memberfn_string_isalnum);
-            state->m_classprimstring->defNativeMethod("isNumber", memberfn_string_isnumber);
-            state->m_classprimstring->defNativeMethod("isFloat", memberfn_string_isfloat);
-            state->m_classprimstring->defNativeMethod("isLower", memberfn_string_islower);
-            state->m_classprimstring->defNativeMethod("isUpper", memberfn_string_isupper);
-            state->m_classprimstring->defNativeMethod("isSpace", memberfn_string_isspace);
+            state->m_classprimstring->defNativeMethod("@iter", objfn_member_string_iter);
+            state->m_classprimstring->defNativeMethod("@itern", objfn_member_string_itern);
+            state->m_classprimstring->defNativeMethod("size", objfn_member_string_length);
+            state->m_classprimstring->defNativeMethod("substr", objfn_member_string_substring);
+            state->m_classprimstring->defNativeMethod("substring", objfn_member_string_substring);
+            state->m_classprimstring->defNativeMethod("charCodeAt", objfn_member_string_charcodeat);
+            state->m_classprimstring->defNativeMethod("charAt", objfn_member_string_charat);
+            state->m_classprimstring->defNativeMethod("upper", objfn_member_string_upper);
+            state->m_classprimstring->defNativeMethod("lower", objfn_member_string_lower);
+            state->m_classprimstring->defNativeMethod("trim", objfn_member_string_trim);
+            state->m_classprimstring->defNativeMethod("ltrim", objfn_member_string_ltrim);
+            state->m_classprimstring->defNativeMethod("rtrim", objfn_member_string_rtrim);
+            state->m_classprimstring->defNativeMethod("split", objfn_member_string_split);
+            state->m_classprimstring->defNativeMethod("indexOf", objfn_member_string_indexof);
+            state->m_classprimstring->defNativeMethod("count", objfn_member_string_count);
+            state->m_classprimstring->defNativeMethod("toNumber", objfn_member_string_tonumber);
+            state->m_classprimstring->defNativeMethod("toList", objfn_member_string_tolist);
+            state->m_classprimstring->defNativeMethod("lpad", objfn_member_string_lpad);
+            state->m_classprimstring->defNativeMethod("rpad", objfn_member_string_rpad);
+            state->m_classprimstring->defNativeMethod("replace", objfn_member_string_replace);
+            state->m_classprimstring->defNativeMethod("each", objfn_member_string_each);
+            state->m_classprimstring->defNativeMethod("startswith", objfn_member_string_startswith);
+            state->m_classprimstring->defNativeMethod("endswith", objfn_member_string_endswith);
+            state->m_classprimstring->defNativeMethod("isAscii", objfn_member_string_isascii);
+            state->m_classprimstring->defNativeMethod("isAlpha", objfn_member_string_isalpha);
+            state->m_classprimstring->defNativeMethod("isAlnum", objfn_member_string_isalnum);
+            state->m_classprimstring->defNativeMethod("isNumber", objfn_member_string_isnumber);
+            state->m_classprimstring->defNativeMethod("isFloat", objfn_member_string_isfloat);
+            state->m_classprimstring->defNativeMethod("isLower", objfn_member_string_islower);
+            state->m_classprimstring->defNativeMethod("isUpper", objfn_member_string_isupper);
+            state->m_classprimstring->defNativeMethod("isSpace", objfn_member_string_isspace);
+            state->m_classprimstring->defNativeMethod("repeat", objfn_member_string_repeat);
+
             
         }
         {
             #if 1
-            state->m_classprimarray->defNativeConstructor(memberfn_array_constructor);
+            state->m_classprimarray->defNativeConstructor(objfn_member_array_constructor);
             #endif
-            state->m_classprimarray->defCallableField("length", memberfn_array_length);
-            state->m_classprimarray->defNativeMethod("size", memberfn_array_length);
-            state->m_classprimarray->defNativeMethod("join", memberfn_array_join);
-            state->m_classprimarray->defNativeMethod("append", memberfn_array_append);
-            state->m_classprimarray->defNativeMethod("push", memberfn_array_append);
-            state->m_classprimarray->defNativeMethod("clear", memberfn_array_clear);
-            state->m_classprimarray->defNativeMethod("clone", memberfn_array_clone);
-            state->m_classprimarray->defNativeMethod("count", memberfn_array_count);
-            state->m_classprimarray->defNativeMethod("extend", memberfn_array_extend);
-            state->m_classprimarray->defNativeMethod("indexOf", memberfn_array_indexof);
-            state->m_classprimarray->defNativeMethod("insert", memberfn_array_insert);
-            state->m_classprimarray->defNativeMethod("pop", memberfn_array_pop);
-            state->m_classprimarray->defNativeMethod("shift", memberfn_array_shift);
-            state->m_classprimarray->defNativeMethod("removeAt", memberfn_array_removeat);
-            state->m_classprimarray->defNativeMethod("remove", memberfn_array_remove);
-            state->m_classprimarray->defNativeMethod("reverse", memberfn_array_reverse);
-            state->m_classprimarray->defNativeMethod("sort", memberfn_array_sort);
-            state->m_classprimarray->defNativeMethod("contains", memberfn_array_contains);
-            state->m_classprimarray->defNativeMethod("delete", memberfn_array_delete);
-            state->m_classprimarray->defNativeMethod("first", memberfn_array_first);
-            state->m_classprimarray->defNativeMethod("last", memberfn_array_last);
-            state->m_classprimarray->defNativeMethod("isEmpty", memberfn_array_isempty);
-            state->m_classprimarray->defNativeMethod("take", memberfn_array_take);
-            state->m_classprimarray->defNativeMethod("get", memberfn_array_get);
-            state->m_classprimarray->defNativeMethod("compact", memberfn_array_compact);
-            state->m_classprimarray->defNativeMethod("unique", memberfn_array_unique);
-            state->m_classprimarray->defNativeMethod("zip", memberfn_array_zip);
-            state->m_classprimarray->defNativeMethod("zipFrom", memberfn_array_zipfrom);
-            state->m_classprimarray->defNativeMethod("toDict", memberfn_array_todict);
-            state->m_classprimarray->defNativeMethod("each", memberfn_array_each);
-            state->m_classprimarray->defNativeMethod("map", memberfn_array_map);
-            state->m_classprimarray->defNativeMethod("filter", memberfn_array_filter);
-            state->m_classprimarray->defNativeMethod("some", memberfn_array_some);
-            state->m_classprimarray->defNativeMethod("every", memberfn_array_every);
-            state->m_classprimarray->defNativeMethod("reduce", memberfn_array_reduce);
-            state->m_classprimarray->defNativeMethod("@iter", memberfn_array_iter);
-            state->m_classprimarray->defNativeMethod("@itern", memberfn_array_itern);
+            state->m_classprimarray->defCallableField("length", objfn_member_array_length);
+            state->m_classprimarray->defNativeMethod("size", objfn_member_array_length);
+            state->m_classprimarray->defNativeMethod("join", objfn_member_array_join);
+            state->m_classprimarray->defNativeMethod("append", objfn_member_array_append);
+            state->m_classprimarray->defNativeMethod("push", objfn_member_array_append);
+            state->m_classprimarray->defNativeMethod("clear", objfn_member_array_clear);
+            state->m_classprimarray->defNativeMethod("clone", objfn_member_array_clone);
+            state->m_classprimarray->defNativeMethod("count", objfn_member_array_count);
+            state->m_classprimarray->defNativeMethod("extend", objfn_member_array_extend);
+            state->m_classprimarray->defNativeMethod("indexOf", objfn_member_array_indexof);
+            state->m_classprimarray->defNativeMethod("insert", objfn_member_array_insert);
+            state->m_classprimarray->defNativeMethod("pop", objfn_member_array_pop);
+            state->m_classprimarray->defNativeMethod("shift", objfn_member_array_shift);
+            state->m_classprimarray->defNativeMethod("removeAt", objfn_member_array_removeat);
+            state->m_classprimarray->defNativeMethod("remove", objfn_member_array_remove);
+            state->m_classprimarray->defNativeMethod("reverse", objfn_member_array_reverse);
+            state->m_classprimarray->defNativeMethod("sort", objfn_member_array_sort);
+            state->m_classprimarray->defNativeMethod("contains", objfn_member_array_contains);
+            state->m_classprimarray->defNativeMethod("delete", objfn_member_array_delete);
+            state->m_classprimarray->defNativeMethod("first", objfn_member_array_first);
+            state->m_classprimarray->defNativeMethod("last", objfn_member_array_last);
+            state->m_classprimarray->defNativeMethod("isEmpty", objfn_member_array_isempty);
+            state->m_classprimarray->defNativeMethod("take", objfn_member_array_take);
+            state->m_classprimarray->defNativeMethod("get", objfn_member_array_get);
+            state->m_classprimarray->defNativeMethod("compact", objfn_member_array_compact);
+            state->m_classprimarray->defNativeMethod("unique", objfn_member_array_unique);
+            state->m_classprimarray->defNativeMethod("zip", objfn_member_array_zip);
+            state->m_classprimarray->defNativeMethod("zipFrom", objfn_member_array_zipfrom);
+            state->m_classprimarray->defNativeMethod("toDict", objfn_member_array_todict);
+            state->m_classprimarray->defNativeMethod("each", objfn_member_array_each);
+            state->m_classprimarray->defNativeMethod("map", objfn_member_array_map);
+            state->m_classprimarray->defNativeMethod("filter", objfn_member_array_filter);
+            state->m_classprimarray->defNativeMethod("some", objfn_member_array_some);
+            state->m_classprimarray->defNativeMethod("every", objfn_member_array_every);
+            state->m_classprimarray->defNativeMethod("reduce", objfn_member_array_reduce);
+            state->m_classprimarray->defNativeMethod("@iter", objfn_member_array_iter);
+            state->m_classprimarray->defNativeMethod("@itern", objfn_member_array_itern);
         }
         {
             #if 0
-            state->m_classprimdict->defNativeConstructor(memberfn_dict_constructor);
-            state->m_classprimdict->defStaticNativeMethod("keys", memberfn_dict_keys);
+            state->m_classprimdict->defNativeConstructor(objfn_member_dict_constructor);
             #endif
-            state->m_classprimdict->defNativeMethod("keys", memberfn_dict_keys);
-            state->m_classprimdict->defNativeMethod("size", memberfn_dict_length);
-            state->m_classprimdict->defNativeMethod("add", memberfn_dict_add);
-            state->m_classprimdict->defNativeMethod("set", memberfn_dict_set);
-            state->m_classprimdict->defNativeMethod("clear", memberfn_dict_clear);
-            state->m_classprimdict->defNativeMethod("clone", memberfn_dict_clone);
-            state->m_classprimdict->defNativeMethod("compact", memberfn_dict_compact);
-            state->m_classprimdict->defNativeMethod("contains", memberfn_dict_contains);
-            state->m_classprimdict->defNativeMethod("extend", memberfn_dict_extend);
-            state->m_classprimdict->defNativeMethod("get", memberfn_dict_get);
-            state->m_classprimdict->defNativeMethod("values", memberfn_dict_values);
-            state->m_classprimdict->defNativeMethod("remove", memberfn_dict_remove);
-            state->m_classprimdict->defNativeMethod("isEmpty", memberfn_dict_isempty);
-            state->m_classprimdict->defNativeMethod("findKey", memberfn_dict_findkey);
-            state->m_classprimdict->defNativeMethod("toList", memberfn_dict_tolist);
-            state->m_classprimdict->defNativeMethod("each", memberfn_dict_each);
-            state->m_classprimdict->defNativeMethod("filter", memberfn_dict_filter);
-            state->m_classprimdict->defNativeMethod("some", memberfn_dict_some);
-            state->m_classprimdict->defNativeMethod("every", memberfn_dict_every);
-            state->m_classprimdict->defNativeMethod("reduce", memberfn_dict_reduce);
-            state->m_classprimdict->defNativeMethod("@iter", memberfn_dict_iter);
-            state->m_classprimdict->defNativeMethod("@itern", memberfn_dict_itern);
+            state->m_classprimdict->defNativeMethod("keys", objfn_member_dict_keys);
+            state->m_classprimdict->defNativeMethod("size", objfn_member_dict_length);
+            state->m_classprimdict->defNativeMethod("add", objfn_member_dict_add);
+            state->m_classprimdict->defNativeMethod("set", objfn_member_dict_set);
+            state->m_classprimdict->defNativeMethod("clear", objfn_member_dict_clear);
+            state->m_classprimdict->defNativeMethod("clone", objfn_member_dict_clone);
+            state->m_classprimdict->defNativeMethod("compact", objfn_member_dict_compact);
+            state->m_classprimdict->defNativeMethod("contains", objfn_member_dict_contains);
+            state->m_classprimdict->defNativeMethod("extend", objfn_member_dict_extend);
+            state->m_classprimdict->defNativeMethod("get", objfn_member_dict_get);
+            state->m_classprimdict->defNativeMethod("values", objfn_member_dict_values);
+            state->m_classprimdict->defNativeMethod("remove", objfn_member_dict_remove);
+            state->m_classprimdict->defNativeMethod("isEmpty", objfn_member_dict_isempty);
+            state->m_classprimdict->defNativeMethod("findKey", objfn_member_dict_findkey);
+            state->m_classprimdict->defNativeMethod("toList", objfn_member_dict_tolist);
+            state->m_classprimdict->defNativeMethod("each", objfn_member_dict_each);
+            state->m_classprimdict->defNativeMethod("filter", objfn_member_dict_filter);
+            state->m_classprimdict->defNativeMethod("some", objfn_member_dict_some);
+            state->m_classprimdict->defNativeMethod("every", objfn_member_dict_every);
+            state->m_classprimdict->defNativeMethod("reduce", objfn_member_dict_reduce);
+            state->m_classprimdict->defNativeMethod("@iter", objfn_member_dict_iter);
+            state->m_classprimdict->defNativeMethod("@itern", objfn_member_dict_itern);
         }
         {
-            state->m_classprimfile->defNativeConstructor(memberfn_file_constructor);
-            state->m_classprimfile->defStaticNativeMethod("exists", memberfn_file_exists);
-            state->m_classprimfile->defNativeMethod("close", memberfn_file_close);
-            state->m_classprimfile->defNativeMethod("open", memberfn_file_open);
-            state->m_classprimfile->defNativeMethod("read", memberfn_file_read);
-            state->m_classprimfile->defNativeMethod("get", memberfn_file_get);
-            state->m_classprimfile->defNativeMethod("gets", memberfn_file_gets);
-            state->m_classprimfile->defNativeMethod("write", memberfn_file_write);
-            state->m_classprimfile->defNativeMethod("puts", memberfn_file_puts);
-            state->m_classprimfile->defNativeMethod("printf", memberfn_file_printf);
-            state->m_classprimfile->defNativeMethod("number", memberfn_file_number);
-            state->m_classprimfile->defNativeMethod("isTTY", memberfn_file_istty);
-            state->m_classprimfile->defNativeMethod("isOpen", memberfn_file_isopen);
-            state->m_classprimfile->defNativeMethod("isClosed", memberfn_file_isclosed);
-            state->m_classprimfile->defNativeMethod("flush", memberfn_file_flush);
-            state->m_classprimfile->defNativeMethod("stats", memberfn_file_stats);
-            state->m_classprimfile->defNativeMethod("path", memberfn_file_path);
-            state->m_classprimfile->defNativeMethod("seek", memberfn_file_seek);
-            state->m_classprimfile->defNativeMethod("tell", memberfn_file_tell);
-            state->m_classprimfile->defNativeMethod("mode", memberfn_file_mode);
-            state->m_classprimfile->defNativeMethod("name", memberfn_file_name);
+            state->m_classprimfile->defNativeConstructor(objfn_member_file_constructor);
+            state->m_classprimfile->defStaticNativeMethod("exists", objfn_static_file_exists);
+            state->m_classprimfile->defNativeMethod("close", objfn_member_file_close);
+            state->m_classprimfile->defNativeMethod("open", objfn_member_file_open);
+            state->m_classprimfile->defNativeMethod("read", objfn_member_file_read);
+            state->m_classprimfile->defNativeMethod("get", objfn_member_file_get);
+            state->m_classprimfile->defNativeMethod("gets", objfn_member_file_gets);
+            state->m_classprimfile->defNativeMethod("write", objfn_member_file_write);
+            state->m_classprimfile->defNativeMethod("puts", objfn_member_file_puts);
+            state->m_classprimfile->defNativeMethod("printf", objfn_member_file_printf);
+            state->m_classprimfile->defNativeMethod("number", objfn_member_file_number);
+            state->m_classprimfile->defNativeMethod("isTTY", objfn_member_file_istty);
+            state->m_classprimfile->defNativeMethod("isOpen", objfn_member_file_isopen);
+            state->m_classprimfile->defNativeMethod("isClosed", objfn_member_file_isclosed);
+            state->m_classprimfile->defNativeMethod("flush", objfn_member_file_flush);
+            state->m_classprimfile->defNativeMethod("stats", objfn_member_file_stats);
+            state->m_classprimfile->defNativeMethod("path", objfn_member_file_path);
+            state->m_classprimfile->defNativeMethod("seek", objfn_member_file_seek);
+            state->m_classprimfile->defNativeMethod("tell", objfn_member_file_tell);
+            state->m_classprimfile->defNativeMethod("mode", objfn_member_file_mode);
+            state->m_classprimfile->defNativeMethod("name", objfn_member_file_name);
         }
         {
-            state->m_classprimrange->defNativeConstructor(memberfn_range_constructor);
-            state->m_classprimrange->defNativeMethod("lower", memberfn_range_lower);
-            state->m_classprimrange->defNativeMethod("upper", memberfn_range_upper);
-            state->m_classprimrange->defNativeMethod("range", memberfn_range_range);
-            state->m_classprimrange->defNativeMethod("loop", memberfn_range_loop);
-            state->m_classprimrange->defNativeMethod("expand", memberfn_range_expand);
-            state->m_classprimrange->defNativeMethod("toArray", memberfn_range_expand);
-            state->m_classprimrange->defNativeMethod("@iter", memberfn_range_iter);
-            state->m_classprimrange->defNativeMethod("@itern", memberfn_range_itern);
+            state->m_classprimrange->defNativeConstructor(objfn_member_range_constructor);
+            state->m_classprimrange->defNativeMethod("lower", objfn_member_range_lower);
+            state->m_classprimrange->defNativeMethod("upper", objfn_member_range_upper);
+            state->m_classprimrange->defNativeMethod("range", objfn_member_range_range);
+            state->m_classprimrange->defNativeMethod("loop", objfn_member_range_loop);
+            state->m_classprimrange->defNativeMethod("expand", objfn_member_range_expand);
+            state->m_classprimrange->defNativeMethod("toArray", objfn_member_range_expand);
+            state->m_classprimrange->defNativeMethod("@iter", objfn_member_range_iter);
+            state->m_classprimrange->defNativeMethod("@itern", objfn_member_range_itern);
+        }
+        {
+            state->m_classprimmath->defStaticNativeMethod("abs", objfn_static_math_staticabs);
+            state->m_classprimmath->defStaticNativeMethod("round", objfn_static_math_staticround);
+            state->m_classprimmath->defStaticNativeMethod("min", objfn_static_math_staticmin);
+        }
+        {
+            
         }
     }
 
@@ -15712,7 +15817,7 @@ neon::Value nn_nativefn_print(neon::State* state, neon::Arguments* args)
     {
         state->m_stdoutprinter->put("\n");
     }
-    return neon::Value::makeEmpty();
+    return neon::Value::makeNull();
 }
 
 neon::Value nn_nativefn_println(neon::State* state, neon::Arguments* args)
@@ -15953,6 +16058,8 @@ namespace neon
             m_classprimdict = makeNamedClass("Dict", m_classprimobject);
             m_classprimfile = makeNamedClass("File", m_classprimobject);
             m_classprimrange = makeNamedClass("Range", m_classprimobject);
+            m_classprimcallable = makeNamedClass("Function", m_classprimobject);
+            m_classprimmath = makeNamedClass("Math", m_classprimobject);
         }
         {
             m_envdict = Dictionary::make(this);
@@ -16395,7 +16502,7 @@ namespace neon
                 return vmutil_dogetrangedindexofarray(vm, list, willassign);
             }
             vm->stackPop();
-            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed");
+            return vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "list are numerically indexed, but index type is '%s'", vindex.name());
         }
         index = vindex.asNumber();
         if(NEON_UNLIKELY(index < 0))
@@ -16761,7 +16868,9 @@ namespace neon
     static NEON_FORCEINLINE Property* vmutil_getproperty(State::VM* vm, Value peeked, String* name)
     {
         Property* field;
-        switch(peeked.asObject()->m_objtype)
+        Object* pobj;
+        pobj = peeked.asObject();
+        switch(pobj->m_objtype)
         {
             case Value::OBJTYPE_MODULE:
                 {
@@ -16772,8 +16881,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "%s module does not define '%s'", module->m_modname, name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_CLASS:
@@ -16799,9 +16907,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class '%s' does not have a static property or method named '%s'",
-                        klass->m_classname->data(), name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_INSTANCE:
@@ -16817,9 +16923,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "instance of class '%s' does not have a property or method named '%s'",
-                        peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_STRING:
@@ -16829,8 +16933,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class String has no named property '%s'", name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_ARRAY:
@@ -16840,8 +16943,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Array has no named property '%s'", name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_RANGE:
@@ -16851,8 +16953,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class Range has no named property '%s'", name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_DICT:
@@ -16866,8 +16967,7 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "unknown key or class Dict property '%s'", name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             case Value::OBJTYPE_FILE:
@@ -16877,17 +16977,22 @@ namespace neon
                     {
                         return field;
                     }
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "class File has no named property '%s'", name->data());
-                    return nullptr;
+                    goto failprop;
                 }
                 break;
             default:
                 {
-                    vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type %s does not carry properties", peeked.name());
-                    return nullptr;
                 }
                 break;
         }
+        failprop:
+        // does Object have this property?
+        field = vm->m_pvm->m_classprimobject->getPropertyField(name);
+        if(field != nullptr)
+        {
+            return field;
+        }
+        vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type '%s' does not have a property named '%s'", peeked.name(), name->data());
         return nullptr;
     }
 

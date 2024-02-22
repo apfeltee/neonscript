@@ -1,0 +1,67 @@
+
+/*
+* compiles text to brainfuck.
+*/
+
+function generate(input)
+{
+    function closest(num, arr)
+    {
+        var arr2 = arr.map(function(n){ return Math.abs(num - n); })
+        var min = Math.min(arr2[0], arr2[1]);
+        return arr[arr2.indexOf(min)];
+    }
+
+    function buildBaseTable(arr) {
+        print('+'.repeat(10));
+        print('[')
+        for(i=0; i<arr.length; i++)
+        {
+            cc = arr[i];
+            print('>');
+            print('+'.repeat(cc / 10));
+        };
+        print('<'.repeat(arr.length));
+        print('-');
+        print(']');
+    }
+    var charr = [];
+    var basetab = []
+    for(i=0; i<input.length; i++)
+    {
+        c = input.charCodeAt(i);
+        charr.push(c);
+    }
+    basetab = charr.map(function(c)
+    {
+        return Math.round(c / 10) * 10;
+    }).filter(function(i, p, s)
+    {
+        return s.indexOf(i) == p;
+    });
+    buildBaseTable(basetab);
+    var pos = -1;
+    for(i=0; i<charr.length; i++)
+    {
+        charCode = charr[i];
+        var bestNum = closest(charCode, basetab);
+        var bestPos = basetab.indexOf(bestNum);
+        var moveChar = pos < bestPos ? '>' : '<';
+        print(moveChar.repeat(Math.abs(pos - bestPos)))
+        pos = bestPos;
+        var opChar = basetab[pos] < charCode ? '+' : '-';
+        print(opChar.repeat(Math.abs(basetab[pos] - charCode)));
+        print('.');
+        basetab[pos] = charCode;
+    };
+}
+
+function run() {
+    var source = null
+    //source = STDIN.read()
+    source = "hello world!"
+    //print("source=<<<", source, ">>>\n")
+    generate(source);
+}
+
+run()

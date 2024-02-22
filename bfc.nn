@@ -366,8 +366,16 @@ function main()
     var bfr = new BFRunner()
     if(fpath != null)
     {
-        src = readfile(fpath)
+        if(fpath == "-")
+        {
+            src = STDIN.read(1024)
+        }
+        else
+        {
+            src = readfile(fpath)
+        }
     }
+    println("src=", src)
     if(!bfr.compile(src, src.length))
     {
         println("failed to compile program");

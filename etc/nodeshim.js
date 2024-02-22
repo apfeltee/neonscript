@@ -109,6 +109,7 @@ function printf(...args)
 
 const ARGV = []
 const STDOUT = process.stdout;
+const STDIN = process.stdin;
 var oi = 0;
 for (i = 2; i < process.argv.length; i++) {
     ARGV[oi] = process.argv[i];
