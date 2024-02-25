@@ -1,0 +1,11 @@
+
+// keywords *can* be identifiers.
+
+class Foo
+{
+    static var if = "hello"
+    static var function = "and"
+    static var for = "goodbye"
+}
+println(Foo.if, " ", Foo.function, " ", Foo.for)
+

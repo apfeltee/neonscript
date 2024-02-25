@@ -1,52 +1,49 @@
 
-INCFLAGS = -I. -Ithirdparty
+INCFLAGS =
 
-CXX = g++ -std=c++20
-#WARNFLAGS_OPTIONAL = -Wno-unused-parameter
-WARNFLAGS_NEEDED = -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs $(WARNFLAGS_OPTIONAL)
-CCCMD = $(CXX) $(WARNFLAGS_NEEDED)
-CFLAGS =
-
-# gottagofast.mp4
-#CFLAGS += $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
-#CFLAGS += -ftrapv -fsanitize=undefined
-
-CFLAGS += $(INCFLAGS) -O0 -g3 -ggdb3
-
-# debug flags
-CFLAGS +=
-
-LDFLAGS =
-LDFLAGS += -flto -ldl -lm  -lreadline -lpthread
-#LDFLAGS += -lubsan
-
+CXX = g++ -std=c++20 -Wall -Wextra -Wshadow -Wunused-macros -Wunused-local-typedefs
+#CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
+CFLAGS = $(INCFLAGS) -O0 -g3 -ggdb3
+LDFLAGS = -flto -ldl -lm  -lreadline -lpthread
 target = run
 
-srcfiles_all = $(wildcard *.cpp)
-
-headerfiles_all =
+srcfiles_all = \
+	$(wildcard *.cpp) \
 
 objfiles_all = $(srcfiles_all:.cpp=.o)
 depfiles_all = $(objfiles_all:.o=.d)
+protofile = prot.inc
 
 # janky mess
+havecproto = 1
+ifeq (, $(shell which cprotod))
+havecproto = 0
+endif
 
-all: $(target)
+all: $(protofile) $(target)
+
+## dear god what a kludge
+ifeq (1, $(havecproto))
+$(protofile): $(srcfiles_all)
+	echo > $(protofile)
+	cproto $(srcfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' > $(protofile)_tmp
+	mv $(protofile)_tmp $(protofile)
+else
+$(protofile): $(srcfiles_all)
+endif
 
 $(target): $(objfiles_all)
-	$(CCCMD) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDFLAGS)
 
-
-#-include $(depfiles_all)
-
+-include $(depfiles_all)
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.cpp
-	$(CCCMD) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
+	$(CXX) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
 
 %.o: %.cpp
-	$(CCCMD) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
+	$(CXX) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:

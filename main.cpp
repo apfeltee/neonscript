@@ -124,46 +124,28 @@
 
 #define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
 
-/* check for exact number of arguments $d */
-#define NEON_ARGS_CHECKCOUNT(chp, d) \
-    if((chp)->argc != (d)) \
-    { \
-        return state->raiseFromFunction(args, "%s() expects %d arguments, %d given", (chp)->funcname, d, (chp)->argc); \
-    }
+
 
 /* check for miminum args $d ($d ... n) */
 #define NEON_ARGS_CHECKMINARG(chp, d) \
     if((chp)->argc < (d)) \
     { \
-        return state->raiseFromFunction(args, "%s() expects minimum of %d arguments, %d given", (chp)->funcname, d, (chp)->argc); \
+        return state->m_vmstate->raiseFromFunction(args, "%s() expects minimum of %d arguments, %d given", (chp)->funcname, d, (chp)->argc); \
     }
 
 /* check for range of args ($low .. $up) */
 #define NEON_ARGS_CHECKCOUNTRANGE(chp, low, up) \
     if((chp)->argc < (low) || (chp)->argc > (up)) \
     { \
-        return state->raiseFromFunction(args, "%s() expects between %d and %d arguments, %d given", (chp)->funcname, low, up, (chp)->argc); \
+        return state->m_vmstate->raiseFromFunction(args, "%s() expects between %d and %d arguments, %d given", (chp)->funcname, low, up, (chp)->argc); \
     }
 
-/* check for argument at index $i for $type, where $type is a Value::is*() function */
-#if 1
-    #define NEON_ARGS_CHECKTYPE(chp, i, __callfn__) \
-        if(!(chp)->argv[i].__callfn__()) \
-        { \
-            return state->raiseFromFunction(args, "%s() expects argument %d as " #__callfn__ ", %s given", (chp)->funcname, (i) + 1, (chp)->argv[i].name()); \
-        }
-
-#else
-    #define NEON_ARGS_CHECKTYPE(chp, i, type) \
-        { \
-        }
-#endif
 
 /* reject argument $type at $index */
 #define NEON_ARGS_REJECTTYPE(chp, __callfn__, index) \
     if((chp)->argv[index].__callfn__()) \
     { \
-        return state->raiseFromFunction(args, "invalid type %s() as argument %d in %s()", (chp)->argv[index].name(), (index) + 1, (chp)->funcname); \
+        return state->m_vmstate->raiseFromFunction(args, "invalid type %s() as argument %d in %s()", (chp)->argv[index].name(), (index) + 1, (chp)->funcname); \
     }
 
 #if defined(__GNUC__)
@@ -196,7 +178,7 @@
     }        
 
 #define NEON_VMMAC_TRYRAISE(state, rtval, ...) \
-    if(!state->raiseClass(state->m_exceptions.stdexception, ##__VA_ARGS__)) \
+    if(!state->m_vmstate->raiseClass(state->m_exceptions.stdexception, ##__VA_ARGS__)) \
     { \
         return rtval; \
     }
@@ -387,6 +369,103 @@ namespace neon
             return hash;
             /* return siphash24(127, 255, key, length); */
         }
+
+        // via https://stackoverflow.com/a/38478032
+        template<typename Type>
+        class Callable;
+
+        template<typename RetType, typename... ArgsType>
+        class Callable<RetType(ArgsType...)>
+        {
+            public:
+                // function pointer types for the type-erasure behaviors
+                // all these char* parameters are actually casted from some functor type
+                using invoke_fn_t = RetType (*)(char*, ArgsType&&...);
+                using construct_fn_t = void (*)(char*, char*);
+                using destroy_fn_t = void (*)(char*);
+
+            public:
+                // type-aware generic functions for invoking
+                // the specialization of these functions won't be capable with
+                //   the above function pointer types, so we need some cast
+                template<typename Functor> static RetType invoke_fn(Functor* fn, ArgsType&&... args)
+                {
+                    return (*fn)(std::forward<ArgsType>(args)...);
+                }
+
+                template<typename Functor> static void construct_fn(Functor* construct_dst, Functor* construct_src)
+                {
+                    // the functor type must be copy-constructible
+                    new(construct_dst) Functor(*construct_src);
+                }
+
+                template<typename Functor> static void destroy_fn(Functor* f)
+                {
+                    f->~Functor();
+                }
+
+            private:
+                // these pointers are storing behaviors
+                invoke_fn_t m_fninvoke = nullptr;
+                construct_fn_t m_fnconstruct = nullptr;
+                destroy_fn_t m_fndestroy = nullptr;
+                // erase the type of any functor and store it into a char*
+                // so the storage size should be obtained as well
+                //std::unique_ptr<char[]> m_dataptr;
+                char* m_dataptr = nullptr;
+                size_t m_datasize = 0;
+
+            public:
+                Callable() : m_fninvoke(nullptr), m_fnconstruct(nullptr), m_fndestroy(nullptr), m_dataptr(nullptr), m_datasize(0)
+                {
+                }
+
+                // construct from any functor type
+                // specialize functions and erase their type info by casting
+                template<typename Functor>
+                Callable(Functor f):
+                    m_fninvoke(reinterpret_cast<invoke_fn_t>(invoke_fn<Functor>)),
+                    m_fnconstruct(reinterpret_cast<construct_fn_t>(construct_fn<Functor>)),
+                    m_fndestroy(reinterpret_cast<destroy_fn_t>(destroy_fn<Functor>)),
+                    m_dataptr(new char[sizeof(Functor)]),
+                    m_datasize(sizeof(Functor))
+                {
+                    // copy the functor to internal storage
+                    m_fnconstruct(m_dataptr, reinterpret_cast<char*>(&f));
+                }
+
+                // copy constructor
+                Callable(const Callable& rhs) : m_fninvoke(rhs.m_fninvoke), m_fnconstruct(rhs.m_fnconstruct), m_fndestroy(rhs.m_fndestroy), m_datasize(rhs.m_datasize)
+                {
+                    if(m_fninvoke)
+                    {
+                        // when the source is not a null function, copy its internal functor
+                        if(m_dataptr != nullptr)
+                        {
+                            delete[] m_dataptr;
+                        }
+                        m_dataptr = new char[m_datasize];
+                        m_fnconstruct(m_dataptr, rhs.m_dataptr);
+                    }
+                }
+
+                ~Callable()
+                {
+                    if(m_dataptr != nullptr)
+                    {
+                        //m_fndestroy(m_dataptr);
+                        delete[] m_dataptr;
+                    }
+                }
+
+                // other constructors, from nullptr, from function pointers
+
+                RetType operator()(ArgsType&&... args)
+                {
+                    return m_fninvoke(m_dataptr, std::forward<ArgsType>(args)...);
+                }
+        };
+
 
         struct Utf8Iterator
         {
@@ -1464,7 +1543,6 @@ namespace neon
             }
     };
 
-
     struct Value final
     {
         public:
@@ -1501,10 +1579,23 @@ namespace neon
                 OBJTYPE_SWITCH,
                 /* object type that can hold any C pointer */
                 OBJTYPE_USERDATA,
+                OBJTYPE_CALLABLE = (OBJTYPE_FUNCBOUND | OBJTYPE_FUNCCLOSURE | OBJTYPE_FUNCSCRIPT | OBJTYPE_CLASS),
+            };
+
+            enum ValCheck
+            {
+                
+            };
+
+            union ValUnion
+            {
+                bool boolean;
+                double number;
+                Object* obj;
             };
 
         public:
-            static NEON_FORCEINLINE Value makeValue(ValType type)
+            NEON_FORCEINLINE static Value makeValue(ValType type)
             {
                 Value v;
                 v.m_valtype = type;
@@ -1518,15 +1609,13 @@ namespace neon
 
             static NEON_FORCEINLINE Value makeNull()
             {
-                Value v;
-                v = makeValue(VALTYPE_NULL);
+                Value v = makeValue(VALTYPE_NULL);
                 return v;
             }
 
             static NEON_FORCEINLINE Value makeBool(bool b)
             {
-                Value v;
-                v = makeValue(VALTYPE_BOOL);
+                Value v = makeValue(VALTYPE_BOOL);
                 v.m_valunion.boolean = b;
                 return v;
             }
@@ -1534,16 +1623,14 @@ namespace neon
             template<typename NumT>
             static NEON_FORCEINLINE Value makeNumber(NumT d)
             {
-                Value v;
-                v = makeValue(VALTYPE_NUMBER);
+                Value v = makeValue(VALTYPE_NUMBER);
                 v.m_valunion.number = d;
                 return v;
             }
 
             static NEON_FORCEINLINE Value makeInt(int i)
             {
-                Value v;
-                v = makeValue(VALTYPE_NUMBER);
+                Value v = makeValue(VALTYPE_NUMBER);
                 v.m_valunion.number = i;
                 return v;
             }
@@ -1551,8 +1638,7 @@ namespace neon
             template<typename SubObjT>
             static NEON_FORCEINLINE Value fromObject(SubObjT* obj)
             {
-                Value v;
-                v = makeValue(VALTYPE_OBJECT);
+                Value v = makeValue(VALTYPE_OBJECT);
                 v.m_valunion.obj = obj;
                 return v;
             }
@@ -1693,15 +1779,9 @@ namespace neon
                 return "unknown";
             }
 
-
         public:
             ValType m_valtype;
-            union
-            {
-                bool boolean;
-                double number;
-                Object* obj;
-            } m_valunion;
+            ValUnion m_valunion;
 
             #if 0
             union
@@ -1711,7 +1791,6 @@ namespace neon
             #endif
 
         public:
-
             #if 0
             bool operator<(const Value& other) const
             {
@@ -1823,7 +1902,6 @@ namespace neon
                 return false;
             }
 
-
             NEON_FORCEINLINE bool compare(Value other) const
             {
                 bool r;
@@ -1864,6 +1942,16 @@ namespace neon
             }
 
             NEON_FORCEINLINE bool isObjType(ObjType t) const;
+
+            template<typename EnumT>
+            NEON_FORCEINLINE bool isType(EnumT t)
+            {
+                if(m_valtype == VALTYPE_OBJECT)
+                {
+                    return isObjType(ObjType(t));
+                }
+                return (m_valtype == ValType(t));
+            }
 
             NEON_FORCEINLINE bool isFuncNative() const
             {
@@ -2425,33 +2513,6 @@ namespace neon
             }
     };
 
-    struct Arguments
-    {
-        public:
-            State* m_pvm;
-            const char* funcname;
-            Value thisval;
-            int argc;
-            Value* argv;
-            void* userptr;
-
-        public:
-            NEON_FORCEINLINE Arguments(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr): m_pvm(state)
-            {
-                this->funcname = n;
-                this->thisval = tv;
-                this->argc = vargc;
-                this->argv = vargv;
-                this->userptr = uptr;
-            }
-
-            NEON_FORCEINLINE Value at(size_t pos)
-            {
-                return this->argv[pos];
-            }
-
-    };
-
     struct ExceptionFrame
     {
         uint16_t address;
@@ -2473,6 +2534,7 @@ namespace neon
 
     struct State final
     {
+        friend class Arguments;
         public:
             struct VM
             {
@@ -2639,13 +2701,17 @@ namespace neon
                         return raiseAtSourceLocationActual(exklass, srcfile, srcline, format, args...);
                     }
 
+                    #define raiseFromFunction(a, ...) \
+                        raiseFromFunctionActual(a, __FILE__, __LINE__, __VA_ARGS__)
+
                     template<typename... ArgsT>
-                    Value raiseFromFunction(Arguments* fnargs, const char* fmt, ArgsT&&... args)
+                    Value raiseFromFunctionActual(Arguments* fnargs, const char* srcfile, int srcline, const char* fmt, ArgsT&&... args)
                     {
                         stackPop(fnargs->argc);
-                        raiseClass(m_pvm->m_exceptions.stdexception, fmt, args...);
+                        raiseClassActual(m_pvm->m_exceptions.stdexception, srcfile, srcline, fmt, args...);
                         return Value::makeBool(false);
                     }
+
 
                     void gcCollectGarbage();
                     void gcTraceRefs();
@@ -2999,18 +3065,6 @@ namespace neon
             void gcMarkCompilerRoots();
 
             template<typename... ArgsT>
-            bool raiseClassActual(ArgsT&&... args)
-            {
-                return m_vmstate->raiseClassActual(args...);
-            }
-
-            template<typename... ArgsT>
-            Value raiseFromFunction(ArgsT&&... args)
-            {
-                return m_vmstate->raiseFromFunction(args...);
-            }
-
-            template<typename... ArgsT>
             void raiseFatal(const char* format, ArgsT&&... args);
 
             template<typename... ArgsT>
@@ -3059,6 +3113,61 @@ namespace neon
 
             ClassObject* makeNamedClass(const char* name, ClassObject* parent);
     };
+
+
+    struct Arguments
+    {
+        public:
+            State* m_pvm;
+            const char* funcname;
+            Value thisval;
+            int argc;
+            Value* argv;
+            void* userptr;
+
+        public:
+            NEON_FORCEINLINE Arguments(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr): m_pvm(state)
+            {
+                this->funcname = n;
+                this->thisval = tv;
+                this->argc = vargc;
+                this->argv = vargv;
+                this->userptr = uptr;
+            }
+
+            NEON_FORCEINLINE Value at(size_t pos)
+            {
+                return this->argv[pos];
+            }
+
+            /* check for exact number of arguments $d */
+            void checkCount(int d)
+            {
+                if(this->argc != (d))
+                {
+                    m_pvm->m_vmstate->raiseFromFunction(this, "%s() expects %d arguments, %d given", this->funcname, d, this->argc);
+                }
+            }
+
+            #define NEON_ARGS_CHECKTYPE(chp, i, __caller__) \
+                if(!chp->argv[i].__caller__()) \
+                { \
+                    state->m_vmstate->raiseFromFunction(chp, "%s() expects argument %d as %s, %s given", chp->funcname, #__caller__, (i) + 1, chp->argv[i].name()); \
+                }
+
+            template<typename EnumT>
+            void checkType(int i, EnumT t)
+            {
+                //if(!this->argv[i].__callfn__())
+                if(!this->argv[i].isType(t))
+                {
+                    m_pvm->m_vmstate->raiseFromFunction(this, "%s() expects argument %d as %d, %s given", this->funcname, t, (i) + 1, this->argv[i].name());
+                }
+            }
+
+
+    };
+
 
     struct Object
     {
@@ -3816,6 +3925,13 @@ namespace neon
                 return rs;
             }
 
+            static String* makeFromStrbuf(State* state, Util::StrBuffer* sbuf)
+            {   
+                uint32_t h;
+                h = Util::hashString(sbuf->data(), sbuf->length());
+                return makeFromStrbuf(state, sbuf, h);
+            }
+
             static String* take(State* state, char* chars, int length)
             {
                 uint32_t hash;
@@ -4338,12 +4454,6 @@ namespace neon
                         return false;
                     }
                     /* file is in write only mode */
-                    /*
-                    else if(strstr(m_filemode->data(), "w") != nullptr && strstr(m_filemode->data(), "+") == nullptr)
-                    {
-                        FILE_ERROR(Unsupported, "cannot read file in write mode");
-                    }
-                    */
                     if(!m_isopen)
                     {
                         /* open the file if it isn't open */
@@ -4700,14 +4810,14 @@ namespace neon
     struct ClassObject final: public Object
     {
         public:
-            static ClassObject* make(State* state, String* name, ClassObject* parent)
+            static ClassObject* make(State* state, const Util::StrBuffer& name, ClassObject* parent)
             {
                 ClassObject* rt;
                 rt = Object::initBasicObject<ClassObject>(state, Value::OBJTYPE_CLASS);
                 rt->m_classname = name;
                 rt->m_instprops = Memory::create<HashTable>(state);
                 rt->m_staticprops = Memory::create<HashTable>(state);
-                rt->m_methods = Memory::create<HashTable>(state);
+                rt->m_classmethods = Memory::create<HashTable>(state);
                 rt->m_staticmethods = Memory::create<HashTable>(state);
                 rt->m_constructor = Value::makeEmpty();
                 rt->m_superclass = parent;
@@ -4724,12 +4834,16 @@ namespace neon
                 {
                     return false;
                 }
+                if(klass1 == expected)
+                {
+                    return true;
+                }
                 while(klass1 != nullptr)
                 {
-                    elen = expected->m_classname->length();
-                    klen = klass1->m_classname->length();
-                    ename = expected->m_classname->data();
-                    kname = klass1->m_classname->data();
+                    elen = expected->m_classname.length();
+                    klen = klass1->m_classname.length();
+                    ename = expected->m_classname.data();
+                    kname = klass1->m_classname.data();
                     if(elen == klen && memcmp(kname, ename, klen) == 0)
                     {
                         return true;
@@ -4762,19 +4876,19 @@ namespace neon
 
             /*
             * method table; they are currently not unique when instantiated; instead, they are
-            * read from $m_methods as-is. this includes adding methods!
+            * read from $m_classmethods as-is. this includes adding methods!
             * TODO: introduce a new hashtable field for ClassInstance for unique methods, perhaps?
             * right now, this method just prevents unnecessary copying.
             */
-            HashTable* m_methods;
+            HashTable* m_classmethods;
             HashTable* m_staticmethods;
-            String* m_classname;
+            Util::StrBuffer m_classname;
             ClassObject* m_superclass;
 
         public:
             ~ClassObject()
             {
-                Memory::destroy(m_methods);
+                Memory::destroy(m_classmethods);
                 Memory::destroy(m_staticmethods);
                 Memory::destroy(m_instprops);
                 Memory::destroy(m_staticprops);
@@ -4783,7 +4897,7 @@ namespace neon
             void inheritFrom(ClassObject* superclass)
             {
                 m_instprops->addAll(superclass->m_instprops);
-                m_methods->addAll(superclass->m_methods);
+                m_classmethods->addAll(superclass->m_classmethods);
                 m_superclass = superclass;
             }
 
@@ -4822,7 +4936,7 @@ namespace neon
 
             void defMethod(const char* name, Value val)
             {
-                m_methods->setCStr(name, val);
+                m_classmethods->setCStr(name, val);
             }
 
             void defNativeMethod(const char* name, NativeCallbackFN function)
@@ -4842,7 +4956,7 @@ namespace neon
             Property* getMethodField(String* name)
             {
                 Property* field;
-                field = m_methods->getField(Value::fromObject(name));
+                field = m_classmethods->getField(Value::fromObject(name));
                 if(field != nullptr)
                 {
                     return field;
@@ -5138,14 +5252,14 @@ namespace neon
                 physpath = Module::resolvePath(state, modulename->data(), intomodule->m_physlocation->data(), nullptr, false);
                 if(physpath == nullptr)
                 {
-                    state->raiseClass(state->m_exceptions.stdexception, "module not found: '%s'\n", modulename->data());
+                    state->m_vmstate->raiseClass(state->m_exceptions.stdexception, "module not found: '%s'\n", modulename->data());
                     return nullptr;
                 }
                 fprintf(stderr, "loading module from '%s'\n", physpath);
                 source = Util::fileReadFile(state, physpath, &fsz);
                 if(source == nullptr)
                 {
-                    state->raiseClass(state->m_exceptions.stdexception, "could not read import file %s", physpath);
+                    state->m_vmstate->raiseClass(state->m_exceptions.stdexception, "could not read import file %s", physpath);
                     return nullptr;
                 }
                 blob = Memory::create<Blob>(state);
@@ -5160,7 +5274,7 @@ namespace neon
                 if(!nc.callNested(callable, Value::makeNull(), args, &retv))
                 {
                     Memory::destroy(blob);
-                    state->raiseClass(state->m_exceptions.stdexception, "failed to call compiled import closure");
+                    state->m_vmstate->raiseClass(state->m_exceptions.stdexception, "failed to call compiled import closure");
                     return nullptr;
                 }
                 Memory::destroy(blob);
@@ -5180,7 +5294,6 @@ namespace neon
                 RegModule* regmod;
                 Module* targetmod;
                 RegModule::ClassInfo klassreg;
-                String* classname;
                 FuncNative* native;
                 ClassObject* klass;
                 HashTable* tabdest;
@@ -5215,8 +5328,7 @@ namespace neon
                         for(j = 0; regmod->classes[j].classname != nullptr; j++)
                         {
                             klassreg = regmod->classes[j];
-                            classname = state->m_vmstate->gcProtect(String::copy(state, klassreg.classname));
-                            klass = state->m_vmstate->gcProtect(ClassObject::make(state, classname, nullptr));
+                            klass = state->m_vmstate->gcProtect(ClassObject::make(state, klassreg.classname, nullptr));
                             if(klassreg.functions != nullptr)
                             {
                                 for(k = 0; klassreg.functions[k].funcname != nullptr; k++)
@@ -5232,7 +5344,14 @@ namespace neon
                                     {
                                         native->m_functype = FuncCommon::FUNCTYPE_PRIVATE;
                                     }
-                                    klass->m_methods->set(funcname, Value::fromObject(native));
+                                    if(func.isstatic)
+                                    {
+                                        klass->m_staticmethods->set(funcname, Value::fromObject(native));
+                                    }
+                                    else
+                                    {
+                                        klass->m_classmethods->set(funcname, Value::fromObject(native));
+                                    }
                                 }
                             }
                             if(klassreg.fields != nullptr)
@@ -5250,7 +5369,8 @@ namespace neon
                                     tabdest->set(fieldname, v);
                                 }
                             }
-                            targetmod->m_deftable->set(Value::fromObject(classname), Value::fromObject(klass));
+                            auto osname = String::copy(state, klassreg.classname);
+                            targetmod->m_deftable->set(Value::fromObject(osname), Value::fromObject(klass));
                         }
                     }
                     if(dlw != nullptr)
@@ -5514,7 +5634,7 @@ namespace neon
                 ValArray args;
                 if(invmethod)
                 {
-                    field = instance->m_fromclass->m_methods->getByCStr("toString");
+                    field = instance->m_fromclass->m_classmethods->getByCStr("toString");
                     if(field != nullptr)
                     {
                         NestCall nc(m_pvm);
@@ -5532,7 +5652,7 @@ namespace neon
                     }
                 }
                 #endif
-                putformat("<instance of %s at %p>", instance->m_fromclass->m_classname->data(), (void*)instance);
+                putformat("<instance of %s at %p>", instance->m_fromclass->m_classname.data(), (void*)instance);
             }
 
             void doPrintObject(Value value, bool fixstring, bool invmethod)
@@ -5597,7 +5717,7 @@ namespace neon
                         {
                             ClassObject* klass;
                             klass = static_cast<ClassObject*>(obj);
-                            putformat("<class %s at %p>", klass->m_classname->data(), (void*)klass);
+                            putformat("<class %s at %p>", klass->m_classname.data(), (void*)klass);
                         }
                         break;
                     case Value::OBJTYPE_FUNCCLOSURE:
@@ -5990,7 +6110,7 @@ namespace neon
                             break;
                         default:
                             {
-                                m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "unknown/invalid format flag '%%c'", st.nextchar);
+                                m_pvm->m_vmstate->raiseClass(m_pvm->m_exceptions.stdexception, "unknown/invalid format flag '%%c'", st.nextchar);
                             }
                             break;
                     }
@@ -8447,9 +8567,11 @@ namespace neon
                 return m_currfunccompiler->m_localcount;
             }
 
-            bool consumeIdent(const char* msg)
+            bool consumeIdent(bool raise, const char* msg)
             {
                 Token tok;
+                Token::Type tident;
+                tident = Token::TOK_IDENTNORMAL;
                 advance();
                 if(m_prevtoken.iskeyident)
                 {
@@ -8457,7 +8579,14 @@ namespace neon
                 }
                 else
                 {
-                    if(!consume(Token::TOK_IDENTNORMAL, msg))
+                    if(!raise)
+                    {
+                        if(m_currtoken.type != tident)
+                        {
+                            return false;
+                        }
+                    }
+                    if(!consume(tident, msg))
                     {
                         // what to do here?
                         return false;
@@ -8468,7 +8597,7 @@ namespace neon
 
             int parseIdentVar(const char* message)
             {
-                if(!consumeIdent(message))
+                if(!consumeIdent(true, message))
                 {
                     // what to do here?
                 }
@@ -9162,7 +9291,7 @@ namespace neon
             void parseClassFieldDefinition(bool isstatic)
             {
                 int fieldconstant;
-                consume(Token::TOK_IDENTNORMAL, "class property name expected");
+                consumeIdent(true, "class property name expected");
                 fieldconstant = makeIdentConst(&m_prevtoken);
                 if(match(Token::TOK_ASSIGN))
                 {
@@ -9271,6 +9400,10 @@ namespace neon
                 else if((m_prevtoken.length > 0) && (m_prevtoken.start[0] == '_'))
                 {
                     type = FuncCommon::FUNCTYPE_PRIVATE;
+                }
+                if(isstatic)
+                {
+                    type = FuncCommon::FUNCTYPE_STATIC;
                 }
                 parseFuncDeclFull(type, false);
                 emitInstruction(Instruction::OP_MAKEMETHOD);
@@ -10169,8 +10302,8 @@ namespace neon
                 {
                     ClassObject* klass;
                     klass = static_cast<ClassObject*>(object);
-                    Object::markObject(state, klass->m_classname);
-                    klass->m_methods->markTableValues();
+                    //Object::markObject(state, klass->m_classname);
+                    klass->m_classmethods->markTableValues();
                     klass->m_staticmethods->markTableValues();
                     klass->m_staticprops->markTableValues();
                     Object::markValue(state, klass->m_constructor);
@@ -10422,7 +10555,7 @@ namespace neon
         }
         else if(other.isClass() && self.isClass())
         {
-            return (other.asClass()->m_methods->count() < self.asClass()->m_methods->count());
+            return (other.asClass()->m_classmethods->count() < self.asClass()->m_classmethods->count());
         }
         else if(other.isArray() && self.isArray())
         {
@@ -10499,7 +10632,7 @@ namespace neon
                     ClassObject* klass;
                     klass = static_cast<ClassObject*>(object);
                     /* Classes just use their name. */
-                    return klass->m_classname->m_hash;
+                    return Util::hashString(klass->m_classname.data(), klass->m_classname.length());
                 }
                 break;
             case Value::OBJTYPE_FUNCSCRIPT:
@@ -10532,7 +10665,7 @@ namespace neon
     {
         ClassInstance* inst;
         inst = static_cast<ClassInstance*>(obj);
-        return inst->m_fromclass->m_classname->data();
+        return inst->m_fromclass->m_classname.data();
     }
 
     String* Value::toString(State* state, Value value)
@@ -10700,11 +10833,11 @@ namespace neon
             stackPop(argcount);
             if(closure->scriptfunc->m_isvariadic)
             {
-                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "expected at least %d arguments but got %d", closure->scriptfunc->m_arity - 1, argcount);
+                return raiseClass(m_pvm->m_exceptions.stdexception, "expected at least %d arguments but got %d", closure->scriptfunc->m_arity - 1, argcount);
             }
             else
             {
-                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "expected %d arguments but got %d", closure->scriptfunc->m_arity, argcount);
+                return raiseClass(m_pvm->m_exceptions.stdexception, "expected %d arguments but got %d", closure->scriptfunc->m_arity, argcount);
             }
         }
         if(checkMaybeResize())
@@ -10771,7 +10904,7 @@ namespace neon
                         }
                         else if(argcount != 0)
                         {
-                            return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "%s constructor expects 0 arguments, %d given", klass->m_classname->data(), argcount);
+                            return raiseClass(m_pvm->m_exceptions.stdexception, "%s constructor expects 0 arguments, %d given", klass->m_classname.data(), argcount);
                         }
                         return true;
                     }
@@ -10786,7 +10919,7 @@ namespace neon
                         {
                             return vmCallValue(field->m_actualval, thisval, argcount);
                         }
-                        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "module %s does not export a default function", module->m_modname);
+                        return raiseClass(m_pvm->m_exceptions.stdexception, "module %s does not export a default function", module->m_modname);
                     }
                     break;
                 case Value::OBJTYPE_FUNCCLOSURE:
@@ -10803,7 +10936,7 @@ namespace neon
                     break;
             }
         }
-        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "object of type %s is not callable", callable.name());
+        return raiseClass(m_pvm->m_exceptions.stdexception, "object of type %s is not callable", callable.name());
     }
 
     bool State::VM::vmCallValue(Value callable, Value thisval, int argcount)
@@ -10855,16 +10988,16 @@ namespace neon
     {
         Property* field;
         NEON_APIDEBUG(m_pvm, "argcount=%d", argcount);
-        field = klass->m_methods->getByObjString(name);
+        field = klass->m_classmethods->getByObjString(name);
         if(field != nullptr)
         {
             if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_PRIVATE)
             {
-                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "cannot call private method '%s' from instance of %s", name->data(), klass->m_classname->data());
+                return raiseClass(m_pvm->m_exceptions.stdexception, "cannot call private method '%s' from instance of %s", name->data(), klass->m_classname.data());
             }
             return vmCallBoundValue(field->m_actualval, Value::fromObject(klass), argcount);
         }
-        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "undefined method '%s' in %s", name->data(), klass->m_classname->data());
+        return raiseClass(m_pvm->m_exceptions.stdexception, "undefined method '%s' in %s", name->data(), klass->m_classname.data());
     }
 
     bool State::VM::vmInvokeSelfMethod(String* name, int argcount)
@@ -10878,7 +11011,7 @@ namespace neon
         if(receiver.isInstance())
         {
             instance = receiver.asInstance();
-            field = instance->m_fromclass->m_methods->getByObjString(name);
+            field = instance->m_fromclass->m_classmethods->getByObjString(name);
             if(field != nullptr)
             {
                 return vmCallBoundValue(field->m_actualval, receiver, argcount);
@@ -10893,17 +11026,17 @@ namespace neon
         }
         else if(receiver.isClass())
         {
-            field = receiver.asClass()->m_methods->getByObjString(name);
+            field = receiver.asClass()->m_classmethods->getByObjString(name);
             if(field != nullptr)
             {
                 if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_STATIC)
                 {
                     return vmCallBoundValue(field->m_actualval, receiver, argcount);
                 }
-                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "cannot call non-static method %s() on non instance", name->data());
+                return raiseClass(m_pvm->m_exceptions.stdexception, "cannot call non-static method %s() on non instance", name->data());
             }
         }
-        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "cannot call method '%s' on object of type '%s'", name->data(), receiver.name());
+        return raiseClass(m_pvm->m_exceptions.stdexception, "cannot call method '%s' on object of type '%s'", name->data(), receiver.name());
     }
 
     bool State::VM::vmInvokeMethod(String* name, int argcount)
@@ -10930,36 +11063,38 @@ namespace neon
                         {
                             return vmCallBoundValue(field->m_actualval, receiver, argcount);
                         }
-                        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "module %s does not define class or method %s()", module->m_modname, name->data());
+                        return raiseClass(m_pvm->m_exceptions.stdexception, "module %s does not define class or method %s()", module->m_modname, name->data());
                     }
                     break;
                 case Value::OBJTYPE_CLASS:
                     {
                         NEON_APIDEBUG(m_pvm, "receiver is a class");
                         klass = receiver.asClass();
-                        field = klass->m_methods->getByObjString(name);
+                        /* first, check static properties ... */
+                        field = klass->getStaticProperty(name);
+                        if(field != nullptr)
+                        {
+                            return vmCallBoundValue(field->m_actualval, receiver, argcount);
+                        }
+                        /* then check static methods ... */
+                        field = klass->getStaticMethodField(name);
+                        if(field != nullptr)
+                        {
+                            return vmCallBoundValue(field->m_actualval, receiver, argcount);
+                        }
+                        /*
+                        field = klass->m_classmethods->getByObjString(name);
                         if(field != nullptr)
                         {
                             if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_PRIVATE)
                             {
-                                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "cannot call private method %s() on %s", name->data(), klass->m_classname->data());
+                                return raiseClass(m_pvm->m_exceptions.stdexception, "cannot call private method %s() on %s", name->data(), klass->m_classname.data());
                             }
+                            //return Value::fromObject();
                             return vmCallBoundValue(field->m_actualval, receiver, argcount);
                         }
-                        else
-                        {
-                            field = klass->getStaticProperty(name);
-                            if(field != nullptr)
-                            {
-                                return vmCallBoundValue(field->m_actualval, receiver, argcount);
-                            }
-                            field = klass->getStaticMethodField(name);
-                            if(field != nullptr)
-                            {
-                                return vmCallBoundValue(field->m_actualval, receiver, argcount);
-                            }
-                        }
-                        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "unknown method %s() in class %s", name->data(), klass->m_classname->data());
+                        */
+                        return raiseClass(m_pvm->m_exceptions.stdexception, "unknown method %s() in class %s", name->data(), klass->m_classname.data());
                     }
                 case Value::OBJTYPE_INSTANCE:
                     {
@@ -10996,7 +11131,7 @@ namespace neon
                                 }
                             }
                         }
-                        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "'dict' has no method %s()", name->data());
+                        return raiseClass(m_pvm->m_exceptions.stdexception, "'dict' has no method %s()", name->data());
                     }
                     default:
                         {
@@ -11008,14 +11143,14 @@ namespace neon
         if(klass == nullptr)
         {
             /* @TODO: have methods for non objects as well. */
-            return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "non-object %s has no method named '%s'", receiver.name(), name->data());
+            return raiseClass(m_pvm->m_exceptions.stdexception, "non-object %s has no method named '%s'", receiver.name(), name->data());
         }
         field = klass->getMethodField(name);
         if(field != nullptr)
         {
             return vmCallBoundValue(field->m_actualval, receiver, argcount);
         }
-        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "'%s' has no method %s()", klass->m_classname->data(), name->data());
+        return raiseClass(m_pvm->m_exceptions.stdexception, "'%s' has no method %s()", klass->m_classname.data(), name->data());
     }
 
     bool State::VM::vmBindMethod(ClassObject* klass, String* name)
@@ -11023,12 +11158,12 @@ namespace neon
         Value val;
         Property* field;
         FuncBound* bound;
-        field = klass->m_methods->getByObjString(name);
+        field = klass->m_classmethods->getByObjString(name);
         if(field != nullptr)
         {
             if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_PRIVATE)
             {
-                return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "cannot get private property '%s' from instance", name->data());
+                return raiseClass(m_pvm->m_exceptions.stdexception, "cannot get private property '%s' from instance", name->data());
             }
             val = stackPeek(0);
             bound = FuncBound::make(m_pvm, val, field->m_actualval.asFuncClosure());
@@ -11036,7 +11171,7 @@ namespace neon
             stackPush(Value::fromObject(bound));
             return true;
         }
-        return m_pvm->raiseClass(m_pvm->m_exceptions.stdexception, "undefined property '%s'", name->data());
+        return raiseClass(m_pvm->m_exceptions.stdexception, "undefined property '%s'", name->data());
     }
 
     Value State::VM::getExceptionStacktrace()
@@ -11106,7 +11241,7 @@ namespace neon
         colred = nc.color('r');
         colreset = nc.color('0');
         /* at this point, the exception is unhandled; so, print it out. */
-        fprintf(stderr, "%sunhandled %s%s", colred, exception->m_fromclass->m_classname->data(), colreset);    
+        fprintf(stderr, "%sunhandled %s%s", colred, exception->m_fromclass->m_classname.data(), colreset);    
         field = exception->m_properties->getByCStr("message");
         if(field != nullptr)
         {
@@ -11448,7 +11583,7 @@ namespace neon
         FuncClosure* closure;
         classname = String::copy(this, cstrname);
         m_vmstate->stackPush(Value::fromObject(classname));
-        klass = ClassObject::make(this, classname, nullptr);
+        klass = ClassObject::make(this, Util::StrBuffer(cstrname), nullptr);
         m_vmstate->stackPop();
         m_vmstate->stackPush(Value::fromObject(klass));
         function = FuncScript::make(this, module, FuncCommon::FUNCTYPE_METHOD);
@@ -11495,7 +11630,7 @@ namespace neon
         m_vmstate->stackPop();
         /* set class constructor */
         m_vmstate->stackPush(Value::fromObject(closure));
-        klass->m_methods->set(Value::fromObject(classname), Value::fromObject(closure));
+        klass->m_classmethods->set(Value::fromObject(classname), Value::fromObject(closure));
         klass->m_constructor = Value::fromObject(closure);
         /* set class properties */
         klass->defProperty("message", Value::makeNull());
@@ -11638,7 +11773,7 @@ namespace neon
         NEON_ASTDEBUG(prs->m_pvm, "");
         prs->ignoreSpace();
         //if(!prs->consume(Token::TOK_IDENTNORMAL, "expected property name after '.'"))
-        if(!prs->consumeIdent("expected property name after '.'"))
+        if(!prs->consumeIdent(true, "expected property name after '.'"))
         {
             return false;
         }
@@ -11875,7 +12010,7 @@ namespace neon
         if(!prs->check(Token::TOK_PARENOPEN))
         {
             prs->consume(Token::TOK_DOT, "expected '.' or '(' after super");
-            prs->consume(Token::TOK_IDENTNORMAL, "expected super class method name after .");
+            prs->consumeIdent(true, "expected method name after '.'");
             name = prs->makeIdentConst(&prs->m_prevtoken);
         }
         else
@@ -12075,7 +12210,8 @@ namespace neon
     bool doRuleNew(Parser* prs, bool canassign)
     {
         NEON_ASTDEBUG(prs->m_pvm, "");
-        prs->consume(Token::TOK_IDENTNORMAL, "class name after 'new'");
+        prs->consumeIdent(true, "class name after 'new'");
+        
         return doRuleVarnormal(prs, canassign);
         //return doRuleCall(prs, prs->m_prevtoken, canassign);
     }
@@ -12289,7 +12425,7 @@ neon::Value nn_modfn_os_readdir(neon::State* state, neon::Arguments* args)
     }
     else
     {
-        state->raiseClass(state->m_exceptions.stdexception, "cannot open directory '%s'", dirn);
+        state->m_vmstate->raiseClass(state->m_exceptions.stdexception, "cannot open directory '%s'", dirn);
     }
     return neon::Value::makeEmpty();
 }
@@ -12397,20 +12533,20 @@ namespace neon
     Value objfn_member_dict_length(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
     }
 
     Value objfn_member_dict_add(State* state, Arguments* args)
     {
         Dictionary* dict;
-        NEON_ARGS_CHECKCOUNT(args, 2);
+        args->checkCount(2);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
         auto field = dict->m_valtable->getField(args->argv[0]);
         if(field != nullptr)
         {
-            return state->raiseFromFunction(args, "duplicate key %s at add()", Value::toString(state, args->argv[0])->data());
+            return state->m_vmstate->raiseFromFunction(args, "duplicate key %s at add()", Value::toString(state, args->argv[0])->data());
         }
         dict->addEntry(args->argv[0], args->argv[1]);
         return Value::makeEmpty();
@@ -12420,7 +12556,7 @@ namespace neon
     {
         Dictionary* dict;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 2);
+        args->checkCount(2);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
         auto field = dict->m_valtable->getField(args->argv[0]);
@@ -12439,7 +12575,7 @@ namespace neon
     {
         Dictionary* dict;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         Memory::destroy(dict->m_keynames);
         Memory::destroy(dict->m_valtable);
@@ -12451,7 +12587,7 @@ namespace neon
         size_t i;
         Dictionary* dict;
         Dictionary* newdict;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         newdict = state->m_vmstate->gcProtect(Dictionary::make(state));
         newdict->m_valtable->addAll(dict->m_valtable);
@@ -12467,7 +12603,7 @@ namespace neon
         size_t i;
         Dictionary* dict;
         Dictionary* newdict;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         newdict = state->m_vmstate->gcProtect(Dictionary::make(state));
         for(i = 0; i < dict->m_keynames->m_count; i++)
@@ -12485,7 +12621,7 @@ namespace neon
     {
         (void)state;
         Dictionary* dict;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
         auto field = dict->m_valtable->getField(args->argv[0]);
@@ -12498,7 +12634,7 @@ namespace neon
         Dictionary* dict;
         Dictionary* dictcpy;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isDict);
         dict = args->thisval.asDict();
         dictcpy = args->argv[0].asDict();
@@ -12542,7 +12678,7 @@ namespace neon
         size_t i;
         Dictionary* dict;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         list = state->m_vmstate->gcProtect(Array::make(state));
         for(i = 0; i < dict->m_keynames->m_count; i++)
@@ -12558,7 +12694,7 @@ namespace neon
         Dictionary* dict;
         Array* list;
         Property* field;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         list = state->m_vmstate->gcProtect(Array::make(state));
         for(i = 0; i < dict->m_keynames->m_count; i++)
@@ -12574,7 +12710,7 @@ namespace neon
         size_t i;
         int index;
         Dictionary* dict;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
         auto field = dict->m_valtable->getField(args->argv[0]);
@@ -12603,14 +12739,14 @@ namespace neon
     Value objfn_member_dict_isempty(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
     }
 
     Value objfn_member_dict_findkey(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
     }
 
@@ -12621,7 +12757,7 @@ namespace neon
         Dictionary* dict;
         Array* namelist;
         Array* valuelist;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = args->thisval.asDict();
         namelist = state->m_vmstate->gcProtect(Array::make(state));
         valuelist = state->m_vmstate->gcProtect(Array::make(state));
@@ -12649,7 +12785,7 @@ namespace neon
     {
         Dictionary* dict;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         dict = args->thisval.asDict();
         auto field = dict->m_valtable->getField(args->argv[0]);
         if(field != nullptr)
@@ -12663,7 +12799,7 @@ namespace neon
     {
         size_t i;
         Dictionary* dict;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         dict = args->thisval.asDict();
         if(args->argv[0].isNull())
         {
@@ -12691,7 +12827,7 @@ namespace neon
         Value unused;
         Dictionary* dict;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         dict = args->thisval.asDict();
         callable = args->argv[0];
@@ -12723,7 +12859,7 @@ namespace neon
         Dictionary* dict;
         ValArray nestargs;
         Dictionary* resultdict;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         dict = args->thisval.asDict();
         callable = args->argv[0];
@@ -12759,7 +12895,7 @@ namespace neon
         Value callable;
         Dictionary* dict;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         dict = args->thisval.asDict();
         callable = args->argv[0];
@@ -12795,7 +12931,7 @@ namespace neon
         Value result;
         Dictionary* dict;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         dict = args->thisval.asDict();
         callable = args->argv[0];
@@ -12882,7 +13018,7 @@ namespace neon
     #undef ENFORCE_VALID_DICT_KEY
 
     #define FILE_ERROR(type, message) \
-        return state->raiseFromFunction(args, #type " -> %s", message, file->m_filepath->data());
+        return state->m_vmstate->raiseFromFunction(args, #type " -> %s", message, file->m_filepath->data());
 
     #define RETURN_STATUS(status) \
         if((status) == 0) \
@@ -12896,7 +13032,7 @@ namespace neon
 
     #define DENY_STD() \
         if(file->m_isstd) \
-        return state->raiseFromFunction(args, "method not supported for std files");
+        return state->m_vmstate->raiseFromFunction(args, "method not supported for std files");
 
     Value objfn_member_file_constructor(State* state, Arguments* args)
     {
@@ -12911,7 +13047,7 @@ namespace neon
         opath = args->argv[0].asString();
         if(opath->length() == 0)
         {
-            return state->raiseFromFunction(args, "file path cannot be empty");
+            return state->m_vmstate->raiseFromFunction(args, "file path cannot be empty");
         }
         mode = "r";
         if(args->argc == 2)
@@ -12928,16 +13064,29 @@ namespace neon
     Value objfn_static_file_exists(State* state, Arguments* args)
     {
         String* file;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         file = args->argv[0].asString();
         return Value::makeBool(osfn_fileexists(file->data()));
     }
 
+    Value objfn_static_file_read(State* state, Arguments* args)
+    {
+        size_t sz;
+        char* src;
+        String* rt;
+        String* file;
+        args->checkCount(1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        file = args->argv[0].asString();
+        src = Util::fileReadFile(state, file->data(), &sz);
+        return Value::fromObject(String::take(state, src, sz));
+    }
+
     Value objfn_member_file_isfile(State* state, Arguments* args)
     {
         String* file;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         file = args->argv[0].asString();
         return Value::makeBool(osfn_pathisfile(file->data()));
@@ -12946,7 +13095,7 @@ namespace neon
     Value objfn_member_file_isdirectory(State* state, Arguments* args)
     {
         String* file;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         file = args->argv[0].asString();
         return Value::makeBool(osfn_pathisdirectory(file->data()));
@@ -12955,7 +13104,7 @@ namespace neon
     Value objfn_member_file_close(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         args->thisval.asFile()->selfCloseFile();
         return Value::makeEmpty();
     }
@@ -12963,7 +13112,7 @@ namespace neon
     Value objfn_member_file_open(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         args->thisval.asFile()->selfOpenFile();
         return Value::makeEmpty();
     }
@@ -13011,7 +13160,7 @@ namespace neon
         int ch;
         File* file;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         ch = fgetc(file->m_filehandle);
         if(ch == EOF)
@@ -13103,7 +13252,7 @@ namespace neon
         unsigned char* data;
         File* file;
         String* string;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         file = args->thisval.asFile();
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         string = args->argv[0].asString();
@@ -13151,7 +13300,7 @@ namespace neon
         unsigned char* data;
         File* file;
         String* string;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         file = args->thisval.asFile();
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         string = args->argv[0].asString();
@@ -13210,7 +13359,7 @@ namespace neon
     Value objfn_member_file_number(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeNumber(args->thisval.asFile()->m_filedesc);
     }
 
@@ -13218,7 +13367,7 @@ namespace neon
     {
         File* file;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         return Value::makeBool(file->m_istty);
     }
@@ -13226,7 +13375,7 @@ namespace neon
     Value objfn_member_file_flush(State* state, Arguments* args)
     {
         File* file;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         if(!file->m_isopen)
         {
@@ -13254,7 +13403,7 @@ namespace neon
         struct stat stats;
         File* file;
         Dictionary* dict;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         dict = state->m_vmstate->gcProtect(Dictionary::make(state));
         if(!file->m_isstd)
@@ -13290,7 +13439,7 @@ namespace neon
             }
             else
             {
-                return state->raiseFromFunction(args, "cannot get stats for non-existing file");
+                return state->m_vmstate->raiseFromFunction(args, "cannot get stats for non-existing file");
             }
         }
         else
@@ -13314,7 +13463,7 @@ namespace neon
     Value objfn_member_file_path(State* state, Arguments* args)
     {
         File* file;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         DENY_STD();
         return Value::fromObject(file->m_filepath);
@@ -13324,7 +13473,7 @@ namespace neon
     {
         File* file;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         return Value::fromObject(file->m_filemode);
     }
@@ -13333,7 +13482,7 @@ namespace neon
     {
         char* name;
         File* file;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         if(!file->m_isstd)
         {
@@ -13357,7 +13506,7 @@ namespace neon
         long position;
         int seektype;
         File* file;
-        NEON_ARGS_CHECKCOUNT(args, 2);
+        args->checkCount(2);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         NEON_ARGS_CHECKTYPE(args, 1, isNumber);
         file = args->thisval.asFile();
@@ -13370,7 +13519,7 @@ namespace neon
     Value objfn_member_file_tell(State* state, Arguments* args)
     {
         File* file;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         file = args->thisval.asFile();
         DENY_STD();
         return Value::makeNumber(ftell(file->m_filehandle));
@@ -13402,7 +13551,7 @@ namespace neon
     Value objfn_member_array_clear(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         args->thisval.asArray()->clear();
         return Value::makeEmpty();
     }
@@ -13411,7 +13560,7 @@ namespace neon
     {
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         return Value::fromObject(list->copy(0, list->size()));
     }
@@ -13421,7 +13570,7 @@ namespace neon
         size_t i;
         size_t count;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         list = args->thisval.asArray();
         count = 0;
         for(i = 0; i < list->size(); i++)
@@ -13440,7 +13589,7 @@ namespace neon
         Array* list;
         Array* list2;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isArray);
         list = args->thisval.asArray();
         list2 = args->argv[0].asArray();
@@ -13478,7 +13627,7 @@ namespace neon
         size_t index;
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 2);
+        args->checkCount(2);
         NEON_ARGS_CHECKTYPE(args, 1, isNumber);
         list = args->thisval.asArray();
         index = args->argv[1].asNumber();
@@ -13491,7 +13640,7 @@ namespace neon
         Value value;
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         if(list->size() > 0)
         {
@@ -13552,13 +13701,13 @@ namespace neon
         int index;
         Value value;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         list = args->thisval.asArray();
         index = args->argv[0].asNumber();
         if(index < 0 || index >= int(list->size()))
         {
-            return state->raiseFromFunction(args, "list index %d out of range at remove_at()", index);
+            return state->m_vmstate->raiseFromFunction(args, "list index %d out of range at remove_at()", index);
         }
         value = list->at(index);
         for(i = index; i < list->size() - 1; i++)
@@ -13574,7 +13723,7 @@ namespace neon
         size_t i;
         int index;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         list = args->thisval.asArray();
         index = -1;
         for(i = 0; i < list->size(); i++)
@@ -13601,7 +13750,7 @@ namespace neon
         int fromtop;
         Array* list;
         Array* nlist;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         nlist = state->m_vmstate->gcProtect(Array::make(state));
         /* in-place reversal:*/
@@ -13628,7 +13777,7 @@ namespace neon
     {
         Array* list;
         ValArray::QuickSort qs(state);
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         qs.runSort(list->m_varray, 0, list->size()-0);
         return Value::fromObject(list);
@@ -13638,7 +13787,7 @@ namespace neon
     {
         size_t i;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         list = args->thisval.asArray();
         for(i = 0; i < list->size(); i++)
         {
@@ -13668,11 +13817,11 @@ namespace neon
         list = args->thisval.asArray();
         if(idxlower < 0 || idxlower >= int(list->size()))
         {
-            return state->raiseFromFunction(args, "list index %d out of range at delete()", idxlower);
+            return state->m_vmstate->raiseFromFunction(args, "list index %d out of range at delete()", idxlower);
         }
         else if(idxupper < idxlower || idxupper >= int(list->size()))
         {
-            return state->raiseFromFunction(args, "invalid upper limit %d at delete()", idxupper);
+            return state->m_vmstate->raiseFromFunction(args, "invalid upper limit %d at delete()", idxupper);
         }
         for(i = 0; i < int(list->size() - idxupper); i++)
         {
@@ -13686,7 +13835,7 @@ namespace neon
     {
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         if(list->size() > 0)
         {
@@ -13699,7 +13848,7 @@ namespace neon
     {
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         if(list->size() > 0)
         {
@@ -13711,7 +13860,7 @@ namespace neon
     Value objfn_member_array_isempty(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeBool(args->thisval.asArray()->size() == 0);
     }
 
@@ -13720,7 +13869,7 @@ namespace neon
         int count;
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         list = args->thisval.asArray();
         count = args->argv[0].asNumber();
@@ -13740,7 +13889,7 @@ namespace neon
         int index;
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         list = args->thisval.asArray();
         index = args->argv[0].asNumber();
@@ -13756,7 +13905,7 @@ namespace neon
         size_t i;
         Array* list;
         Array* newlist;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         newlist = state->m_vmstate->gcProtect(Array::make(state));
         for(i = 0; i < list->count(); i++)
@@ -13776,7 +13925,7 @@ namespace neon
         bool found;
         Array* list;
         Array* newlist;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         list = args->thisval.asArray();
         newlist = state->m_vmstate->gcProtect(Array::make(state));
         for(i = 0; i < list->count(); i++)
@@ -13843,7 +13992,7 @@ namespace neon
         Array* newlist;
         Array* alist;
         Array* arglist;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isArray);
         list = args->thisval.asArray();
         newlist = state->m_vmstate->gcProtect(Array::make(state));
@@ -13852,7 +14001,7 @@ namespace neon
         {
             if(!arglist->at(i).isArray())
             {
-                return state->raiseFromFunction(args, "invalid list in zip entries");
+                return state->m_vmstate->raiseFromFunction(args, "invalid list in zip entries");
             }
         }
         for(i = 0; i < list->count(); i++)
@@ -13880,7 +14029,7 @@ namespace neon
         size_t i;
         Dictionary* dict;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         dict = state->m_vmstate->gcProtect(Dictionary::make(state));
         list = args->thisval.asArray();
         for(i = 0; i < list->count(); i++)
@@ -13895,7 +14044,7 @@ namespace neon
         int index;
         Array* list;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         list = args->thisval.asArray();
         index = args->argv[0].asNumber();
@@ -13910,7 +14059,7 @@ namespace neon
     {
         int index;
         Array* list;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         list = args->thisval.asArray();
         if(args->argv[0].isNull())
         {
@@ -13922,7 +14071,7 @@ namespace neon
         }
         if(!args->argv[0].isNumber())
         {
-            return state->raiseFromFunction(args, "lists are numerically indexed");
+            return state->m_vmstate->raiseFromFunction(args, "lists are numerically indexed");
         }
         index = args->argv[0].asNumber();
         if(index < int(list->count() - 1))
@@ -13940,7 +14089,7 @@ namespace neon
         Value unused;
         Array* list;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         list = args->thisval.asArray();
         callable = args->argv[0];
@@ -13970,7 +14119,7 @@ namespace neon
         Array* selfarr;
         ValArray nestargs;
         Array* resultlist;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         selfarr = args->thisval.asArray();
         callable = args->argv[0];
@@ -14001,7 +14150,7 @@ namespace neon
         Array* selfarr;
         ValArray nestargs;
         Array* resultlist;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         selfarr = args->thisval.asArray();
         callable = args->argv[0];
@@ -14038,7 +14187,7 @@ namespace neon
         Value result;
         Array* selfarr;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         selfarr = args->thisval.asArray();
         callable = args->argv[0];
@@ -14074,7 +14223,7 @@ namespace neon
         Value callable;
         Array* selfarr;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         selfarr = args->thisval.asArray();
         callable = args->argv[0];
@@ -14157,21 +14306,21 @@ namespace neon
     Value objfn_member_range_lower(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_lower);
     }
 
     Value objfn_member_range_upper(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_upper);
     }
 
     Value objfn_member_range_range(State* state, Arguments* args)
     {
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_range);
     }
 
@@ -14181,7 +14330,7 @@ namespace neon
         int index;
         Range* range;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         range = args->thisval.asRange();
         index = args->argv[0].asNumber();
@@ -14208,7 +14357,7 @@ namespace neon
     {
         int index;
         Range* range;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         range = args->thisval.asRange();
         if(args->argv[0].isNull())
         {
@@ -14220,7 +14369,7 @@ namespace neon
         }
         if(!args->argv[0].isNumber())
         {
-            return state->raiseFromFunction(args, "ranges are numerically indexed");
+            return state->m_vmstate->raiseFromFunction(args, "ranges are numerically indexed");
         }
         index = (int)args->argv[0].asNumber() + 1;
         if(index < range->m_range)
@@ -14238,7 +14387,7 @@ namespace neon
         Value unused;
         Range* range;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         range = args->thisval.asRange();
         callable = args->argv[0];
@@ -14291,7 +14440,7 @@ namespace neon
         int incode;
         int res;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         incode = args->argv[0].asNumber();
         //static int utf8NumBytes(int value)
@@ -14304,7 +14453,7 @@ namespace neon
         int res;
         String* instr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         instr = args->argv[0].asString();
         //static int utf8Decode(const uint8_t* bytes, uint32_t length)
@@ -14319,7 +14468,7 @@ namespace neon
         String* res;
         char* buf;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         incode = args->argv[0].asNumber();
         //static char* utf8Encode(unsigned int code)
@@ -14370,7 +14519,7 @@ namespace neon
     {
         char ch;
         String* os;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         ch = args->argv[0].asNumber();
         os = String::copy(state, &ch, 1);
@@ -14380,7 +14529,7 @@ namespace neon
     Value objfn_member_string_constructor(State* state, Arguments* args)
     {
         String* os;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         os = String::copy(state, "", 0);
         return Value::fromObject(os);
     }
@@ -14389,7 +14538,7 @@ namespace neon
     {
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         return Value::makeNumber(selfstr->length());
     }
@@ -14423,7 +14572,7 @@ namespace neon
         int selflen;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         selfstr = args->thisval.asString();
         idx = args->argv[0].asNumber();
@@ -14445,7 +14594,7 @@ namespace neon
         int idx;
         int selflen;
         String* selfstr;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         selfstr = args->thisval.asString();
         idx = args->argv[0].asNumber();
@@ -14466,7 +14615,7 @@ namespace neon
         size_t slen;
         String* str;
         String* copied;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         str = args->thisval.asString();
         copied = String::copy(state, str->data(), str->length());
         slen = copied->length();
@@ -14479,7 +14628,7 @@ namespace neon
         size_t slen;
         String* str;
         String* copied;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         str = args->thisval.asString();
         copied = String::copy(state, str->data(), str->length());
         slen = copied->length();
@@ -14492,7 +14641,7 @@ namespace neon
         int i;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         for(i = 0; i < (int)selfstr->length(); i++)
         {
@@ -14509,7 +14658,7 @@ namespace neon
         int i;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         for(i = 0; i < (int)selfstr->length(); i++)
         {
@@ -14528,7 +14677,7 @@ namespace neon
         String* selfstr;
         (void)f;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         errno = 0;
         if(selfstr->length() ==0)
@@ -14555,7 +14704,7 @@ namespace neon
         int i;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         for(i = 0; i < (int)selfstr->length(); i++)
         {
@@ -14573,7 +14722,7 @@ namespace neon
         bool alphafound;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         alphafound = false;
         for(i = 0; i < (int)selfstr->length(); i++)
@@ -14596,7 +14745,7 @@ namespace neon
         bool alphafound;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         alphafound = false;
         for(i = 0; i < (int)selfstr->length(); i++)
@@ -14618,7 +14767,7 @@ namespace neon
         int i;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         for(i = 0; i < (int)selfstr->length(); i++)
         {
@@ -14636,7 +14785,7 @@ namespace neon
         size_t cnt;
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         selfstr = args->thisval.asString();
         cnt = args->at(0).asNumber();
         auto os = String::make(state);
@@ -14881,7 +15030,7 @@ namespace neon
         String* substr;
         String* string;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         string = args->thisval.asString();
         substr = args->argv[0].asString();
@@ -14898,7 +15047,7 @@ namespace neon
         String* substr;
         String* string;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         string = args->thisval.asString();
         substr = args->argv[0].asString();
@@ -14917,7 +15066,7 @@ namespace neon
         String* substr;
         String* string;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isString);
         string = args->thisval.asString();
         substr = args->argv[0].asString();
@@ -14939,7 +15088,7 @@ namespace neon
     {
         String* selfstr;
         (void)state;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         selfstr = args->thisval.asString();
         return Value::makeNumber(strtod(selfstr->data(), nullptr));
     }
@@ -14965,7 +15114,7 @@ namespace neon
         int length;
         Array* list;
         String* string;
-        NEON_ARGS_CHECKCOUNT(args, 0);
+        args->checkCount(0);
         string = args->thisval.asString();
         list = state->m_vmstate->gcProtect(Array::make(state));
         length = string->length();
@@ -15165,7 +15314,7 @@ namespace neon
     {
         size_t len;
         char* string;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         string = neon::Util::utf8Encode(state, (int)args->argv[0].asNumber(), &len);
         return neon::Value::fromObject(neon::String::take(state, string));
@@ -15178,7 +15327,7 @@ namespace neon
         int length;
         String* string;
         String* result;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
         string = args->thisval.asString();
         length = string->length();
@@ -15196,7 +15345,7 @@ namespace neon
         int index;
         int length;
         String* string;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         string = args->thisval.asString();
         length = string->length();
         if(args->argv[0].isNull())
@@ -15209,7 +15358,7 @@ namespace neon
         }
         if(!args->argv[0].isNumber())
         {
-            return state->raiseFromFunction(args, "strings are numerically indexed");
+            return state->m_vmstate->raiseFromFunction(args, "strings are numerically indexed");
         }
         index = args->argv[0].asNumber();
         if(index < length - 1)
@@ -15227,7 +15376,7 @@ namespace neon
         Value unused;
         String* string;
         ValArray nestargs;
-        NEON_ARGS_CHECKCOUNT(args, 1);
+        args->checkCount(1);
         NEON_ARGS_CHECKTYPE(args, 0, isCallable);
         string = args->thisval.asString();
         callable = args->argv[0];
@@ -15280,16 +15429,11 @@ namespace neon
         return Value::fromObject(os);
     }
 
-
-    Value objfn_member_object_typename(State* state, Arguments* args)
+    Value objfn_member_object_getclass(State* state, Arguments* args)
     {
-        Value v;
-        String* os;
-        v = args->thisval;
-        os = String::copy(state, v.name());
-        return Value::fromObject(os);
+        auto klass = state->vmGetClassFor(args->thisval);
+        return Value::fromObject(klass);
     }
-
 
     Value objfn_member_object_isstring(State* state, Arguments* args)
     {
@@ -15386,8 +15530,8 @@ namespace neon
         {
             klass = selfval.asInstance()->m_fromclass;
             isiterable = (
-                (klass->m_methods->getField(Value::fromObject(String::copy(state, "@iter"))) != nullptr) &&
-                (klass->m_methods->getField(Value::fromObject(String::copy(state, "@itern"))) != nullptr)
+                (klass->m_classmethods->getField(Value::fromObject(String::copy(state, "@iter"))) != nullptr) &&
+                (klass->m_classmethods->getField(Value::fromObject(String::copy(state, "@itern"))) != nullptr)
             );
         }
         return Value::makeBool(isiterable);
@@ -15456,7 +15600,6 @@ namespace neon
         return Value::makeNumber(b);
     }
 
-
     void nn_state_initbuiltinmethods(State* state)
     {
         {
@@ -15464,7 +15607,7 @@ namespace neon
             
         }
         {
-            state->m_classprimobject->defCallableField("class", objfn_member_object_typename);
+            state->m_classprimobject->defCallableField("class", objfn_member_object_getclass);
             state->m_classprimobject->defStaticNativeMethod("typename", objfn_static_object_typename);
             state->m_classprimobject->defNativeMethod("dump", objfn_member_object_dump);
             state->m_classprimobject->defNativeMethod("toString", objfn_member_object_tostring);
@@ -15608,6 +15751,7 @@ namespace neon
         {
             state->m_classprimfile->defNativeConstructor(objfn_member_file_constructor);
             state->m_classprimfile->defStaticNativeMethod("exists", objfn_static_file_exists);
+            state->m_classprimfile->defStaticNativeMethod("read", objfn_static_file_read);
             state->m_classprimfile->defNativeMethod("close", objfn_member_file_close);
             state->m_classprimfile->defNativeMethod("open", objfn_member_file_open);
             state->m_classprimfile->defNativeMethod("read", objfn_member_file_read);
@@ -15649,221 +15793,219 @@ namespace neon
         }
     }
 
-}
-neon::Value nn_nativefn_time(neon::State* state, neon::Arguments* args)
-{
-    struct timeval tv;
-    (void)args;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    osfn_gettimeofday(&tv, nullptr);
-    return neon::Value::makeNumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
-}
-
-neon::Value nn_nativefn_microtime(neon::State* state, neon::Arguments* args)
-{
-    struct timeval tv;
-    (void)args;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 0);
-    osfn_gettimeofday(&tv, nullptr);
-    return neon::Value::makeNumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
-}
-
-neon::Value nn_nativefn_id(neon::State* state, neon::Arguments* args)
-{
-    long* lptr;
-    neon::Value val;
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    val = args->argv[0];
-    lptr = reinterpret_cast<long*>(&val);
-    return neon::Value::makeNumber(*lptr);
-}
-
-neon::Value nn_nativefn_int(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
-    if(args->argc == 0)
+    Value nn_nativefn_time(State* state, Arguments* args)
     {
-        return neon::Value::makeNumber(0);
+        struct timeval tv;
+        (void)args;
+        (void)state;
+        args->checkCount(0);
+        osfn_gettimeofday(&tv, nullptr);
+        return Value::makeNumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
     }
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    return neon::Value::makeNumber((double)((int)args->argv[0].asNumber()));
-}
 
-neon::Value nn_nativefn_chr(neon::State* state, neon::Arguments* args)
-{
-    size_t len;
-    char* string;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-    string = neon::Util::utf8Encode(state, (int)args->argv[0].asNumber(), &len);
-    return neon::Value::fromObject(neon::String::take(state, string));
-}
-
-neon::Value nn_nativefn_ord(neon::State* state, neon::Arguments* args)
-{
-    int ord;
-    int length;
-    neon::String* string;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    string = args->argv[0].asString();
-    length = string->length();
-    if(length > 1)
+    Value nn_nativefn_microtime(State* state, Arguments* args)
     {
-        return state->raiseFromFunction(args, "ord() expects character as argument, string given");
+        struct timeval tv;
+        (void)args;
+        (void)state;
+        args->checkCount(0);
+        osfn_gettimeofday(&tv, nullptr);
+        return Value::makeNumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
     }
-    ord = (int)string->data()[0];
-    if(ord < 0)
-    {
-        ord += 256;
-    }
-    return neon::Value::makeNumber(ord);
-}
 
-neon::Value nn_nativefn_rand(neon::State* state, neon::Arguments* args)
-{
-    int tmp;
-    int lowerlimit;
-    int upperlimit;
-    (void)state;
-    NEON_ARGS_CHECKCOUNTRANGE(args, 0, 2);
-    lowerlimit = 0;
-    upperlimit = 1;
-    if(args->argc > 0)
+    Value nn_nativefn_id(State* state, Arguments* args)
     {
+        long* lptr;
+        Value val;
+        (void)state;
+        args->checkCount(1);
+        val = args->argv[0];
+        lptr = reinterpret_cast<long*>(&val);
+        return Value::makeNumber(*lptr);
+    }
+
+    Value nn_nativefn_int(State* state, Arguments* args)
+    {
+        (void)state;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
+        if(args->argc == 0)
+        {
+            return Value::makeNumber(0);
+        }
         NEON_ARGS_CHECKTYPE(args, 0, isNumber);
-        lowerlimit = args->argv[0].asNumber();
+        return Value::makeNumber((double)((int)args->argv[0].asNumber()));
     }
-    if(args->argc == 2)
+
+    Value nn_nativefn_chr(State* state, Arguments* args)
     {
-        NEON_ARGS_CHECKTYPE(args, 1, isNumber);
-        upperlimit = args->argv[1].asNumber();
+        size_t len;
+        char* string;
+        args->checkCount(1);
+        NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+        string = Util::utf8Encode(state, (int)args->argv[0].asNumber(), &len);
+        return Value::fromObject(String::take(state, string));
     }
-    if(lowerlimit > upperlimit)
+
+    Value nn_nativefn_ord(State* state, Arguments* args)
     {
-        tmp = upperlimit;
-        upperlimit = lowerlimit;
-        lowerlimit = tmp;
+        int ord;
+        int length;
+        String* string;
+        args->checkCount(1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        string = args->argv[0].asString();
+        length = string->length();
+        if(length > 1)
+        {
+            return state->m_vmstate->raiseFromFunction(args, "ord() expects character as argument, string given");
+        }
+        ord = (int)string->data()[0];
+        if(ord < 0)
+        {
+            ord += 256;
+        }
+        return Value::makeNumber(ord);
     }
-    return neon::Value::makeNumber(neon::Util::MTRand(lowerlimit, upperlimit));
-}
 
-neon::Value nn_nativefn_typeof(neon::State* state, neon::Arguments* args)
-{
-    const char* result;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    result = args->argv[0].name();
-    return neon::Value::fromObject(neon::String::copy(state, result));
-}
-
-neon::Value nn_nativefn_eval(neon::State* state, neon::Arguments* args)
-{
-    neon::Value result;
-    neon::String* os;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    os = args->argv[0].asString();
-    /*fprintf(stderr, "eval:src=%s\n", os->data());*/
-    result = state->evalSource(os->data());
-    return result;
-}
-
-/*
-neon::Value nn_nativefn_loadfile(neon::State* state, neon::Arguments* args)
-{
-    neon::Value result;
-    neon::String* os;
-    NEON_ARGS_CHECKCOUNT(args, 1);
-    os = args->argv[0].asString();
-    fprintf(stderr, "eval:src=%s\n", os->data());
-    result = state->evalSource(os->data());
-    return result;
-}
-*/
-
-neon::Value nn_nativefn_instanceof(neon::State* state, neon::Arguments* args)
-{
-    (void)state;
-    NEON_ARGS_CHECKCOUNT(args, 2);
-    NEON_ARGS_CHECKTYPE(args, 0, isInstance);
-    NEON_ARGS_CHECKTYPE(args, 1, isClass);
-    return neon::Value::makeBool(neon::ClassObject::instanceOf(args->argv[0].asInstance()->m_fromclass, args->argv[1].asClass()));
-}
-
-neon::Value nn_nativefn_sprintf(neon::State* state, neon::Arguments* args)
-{
-    neon::String* res;
-    neon::String* ofmt;
-    NEON_ARGS_CHECKMINARG(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    ofmt = args->argv[0].asString();
-    neon::Printer pd(state);
-    neon::FormatInfo nfi(state, &pd, ofmt->cstr(), ofmt->length());
-    if(!nfi.format(args->argc, 1, args->argv))
+    Value nn_nativefn_rand(State* state, Arguments* args)
     {
-        return neon::Value::makeNull();
+        int tmp;
+        int lowerlimit;
+        int upperlimit;
+        (void)state;
+        NEON_ARGS_CHECKCOUNTRANGE(args, 0, 2);
+        lowerlimit = 0;
+        upperlimit = 1;
+        if(args->argc > 0)
+        {
+            NEON_ARGS_CHECKTYPE(args, 0, isNumber);
+            lowerlimit = args->argv[0].asNumber();
+        }
+        if(args->argc == 2)
+        {
+            NEON_ARGS_CHECKTYPE(args, 1, isNumber);
+            upperlimit = args->argv[1].asNumber();
+        }
+        if(lowerlimit > upperlimit)
+        {
+            tmp = upperlimit;
+            upperlimit = lowerlimit;
+            lowerlimit = tmp;
+        }
+        return Value::makeNumber(Util::MTRand(lowerlimit, upperlimit));
     }
-    res = pd.takeString();
-    return neon::Value::fromObject(res);
-}
 
-neon::Value nn_nativefn_printf(neon::State* state, neon::Arguments* args)
-{
-    neon::String* ofmt;
-    NEON_ARGS_CHECKMINARG(args, 1);
-    NEON_ARGS_CHECKTYPE(args, 0, isString);
-    ofmt = args->argv[0].asString();
-    neon::FormatInfo nfi(state, state->m_stdoutprinter, ofmt->cstr(), ofmt->length());
-    if(!nfi.format(args->argc, 1, args->argv))
+    Value nn_nativefn_typeof(State* state, Arguments* args)
     {
+        const char* result;
+        args->checkCount(1);
+        result = args->argv[0].name();
+        return Value::fromObject(String::copy(state, result));
     }
-    return neon::Value::makeNull();
-}
 
-neon::Value nn_nativefn_print(neon::State* state, neon::Arguments* args)
-{
-    int i;
-    for(i = 0; i < args->argc; i++)
+    Value nn_nativefn_eval(State* state, Arguments* args)
     {
-        state->m_stdoutprinter->printValue(args->argv[i], false, true);
+        Value result;
+        String* os;
+        args->checkCount(1);
+        os = args->argv[0].asString();
+        /*fprintf(stderr, "eval:src=%s\n", os->data());*/
+        result = state->evalSource(os->data());
+        return result;
     }
-    if(state->m_isreplmode)
+
+    /*
+    Value nn_nativefn_loadfile(State* state, Arguments* args)
     {
+        Value result;
+        String* os;
+        args->checkCount(1);
+        os = args->argv[0].asString();
+        fprintf(stderr, "eval:src=%s\n", os->data());
+        result = state->evalSource(os->data());
+        return result;
+    }
+    */
+
+    Value nn_nativefn_instanceof(State* state, Arguments* args)
+    {
+        (void)state;
+        args->checkCount(2);
+        NEON_ARGS_CHECKTYPE(args, 0, isInstance);
+        NEON_ARGS_CHECKTYPE(args, 1, isClass);
+        return Value::makeBool(ClassObject::instanceOf(args->argv[0].asInstance()->m_fromclass, args->argv[1].asClass()));
+    }
+
+    Value nn_nativefn_sprintf(State* state, Arguments* args)
+    {
+        String* res;
+        String* ofmt;
+        NEON_ARGS_CHECKMINARG(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        ofmt = args->argv[0].asString();
+        Printer pd(state);
+        FormatInfo nfi(state, &pd, ofmt->cstr(), ofmt->length());
+        if(!nfi.format(args->argc, 1, args->argv))
+        {
+            return Value::makeNull();
+        }
+        res = pd.takeString();
+        return Value::fromObject(res);
+    }
+
+    Value nn_nativefn_printf(State* state, Arguments* args)
+    {
+        String* ofmt;
+        NEON_ARGS_CHECKMINARG(args, 1);
+        NEON_ARGS_CHECKTYPE(args, 0, isString);
+        ofmt = args->argv[0].asString();
+        FormatInfo nfi(state, state->m_stdoutprinter, ofmt->cstr(), ofmt->length());
+        if(!nfi.format(args->argc, 1, args->argv))
+        {
+        }
+        return Value::makeNull();
+    }
+
+    Value nn_nativefn_print(State* state, Arguments* args)
+    {
+        int i;
+        for(i = 0; i < args->argc; i++)
+        {
+            state->m_stdoutprinter->printValue(args->argv[i], false, true);
+        }
+        if(state->m_isreplmode)
+        {
+            state->m_stdoutprinter->put("\n");
+        }
+        return Value::makeNull();
+    }
+
+    Value nn_nativefn_println(State* state, Arguments* args)
+    {
+        Value v;
+        v = nn_nativefn_print(state, args);
         state->m_stdoutprinter->put("\n");
+        return v;
     }
-    return neon::Value::makeNull();
-}
 
-neon::Value nn_nativefn_println(neon::State* state, neon::Arguments* args)
-{
-    neon::Value v;
-    v = nn_nativefn_print(state, args);
-    state->m_stdoutprinter->put("\n");
-    return v;
-}
+    void nn_state_initbuiltinfunctions(State* state)
+    {
+        state->defNativeFunction("print", nn_nativefn_print);
+        state->defNativeFunction("println", nn_nativefn_println);
+        state->defNativeFunction("sprintf", nn_nativefn_sprintf);
+        state->defNativeFunction("printf", nn_nativefn_printf);
+        state->defNativeFunction("chr", nn_nativefn_chr);
+        state->defNativeFunction("id", nn_nativefn_id);
+        state->defNativeFunction("int", nn_nativefn_int);
+        state->defNativeFunction("instanceof", nn_nativefn_instanceof);
+        state->defNativeFunction("microtime", nn_nativefn_microtime);
+        state->defNativeFunction("ord", nn_nativefn_ord);
+        state->defNativeFunction("rand", nn_nativefn_rand);
+        state->defNativeFunction("time", nn_nativefn_time);
+        state->defNativeFunction("eval", nn_nativefn_eval);    
+    }
 
-void nn_state_initbuiltinfunctions(neon::State* state)
-{
-    state->defNativeFunction("print", nn_nativefn_print);
-    state->defNativeFunction("println", nn_nativefn_println);
-    state->defNativeFunction("sprintf", nn_nativefn_sprintf);
-    state->defNativeFunction("printf", nn_nativefn_printf);
-    state->defNativeFunction("chr", nn_nativefn_chr);
-    state->defNativeFunction("id", nn_nativefn_id);
-    state->defNativeFunction("int", nn_nativefn_int);
-    state->defNativeFunction("instanceof", nn_nativefn_instanceof);
-    state->defNativeFunction("microtime", nn_nativefn_microtime);
-    state->defNativeFunction("ord", nn_nativefn_ord);
-    state->defNativeFunction("rand", nn_nativefn_rand);
-    state->defNativeFunction("time", nn_nativefn_time);
-    state->defNativeFunction("eval", nn_nativefn_eval);    
-}
 
-namespace neon
-{
     #if 0
         #define destrdebug(...) \
             { \
@@ -15908,7 +16050,7 @@ namespace neon
         ClassObject* cl;
         String* os;
         os = String::copy(this, name);
-        cl = ClassObject::make(this, os, parent);
+        cl = ClassObject::make(this, Util::StrBuffer(name), parent);
         m_definedglobals->set(Value::fromObject(os), Value::fromObject(cl));
         return cl;
     }
@@ -15978,7 +16120,7 @@ namespace neon
         ok = nc.callNested(callme, Value::makeNull(), args, &retval);
         if(!ok)
         {
-            raiseClass(m_exceptions.stdexception, "eval() failed");
+            m_vmstate->raiseClass(m_exceptions.stdexception, "eval() failed");
         }
         return retval;
     }
@@ -16158,10 +16300,20 @@ namespace neon
     {
         Value method;
         ClassObject* klass;
+        FuncCommon::Type t;
         method = vm->stackPeek(0);
+        t = FuncCommon::getMethodType(method);
         klass = vm->stackPeek(1).asClass();
-        klass->m_methods->set(Value::fromObject(name), method);
-        if(FuncCommon::getMethodType(method) == FuncCommon::FUNCTYPE_INITIALIZER)
+        //fprintf(stderr, "method '%s' type: %d\n", name->data(), t);
+        if(t == FuncCommon::FUNCTYPE_STATIC)
+        {
+            klass->m_staticmethods->set(Value::fromObject(name), method);
+        }
+        else
+        {
+            klass->m_classmethods->set(Value::fromObject(name), method);
+        }
+        if(t == FuncCommon::FUNCTYPE_INITIALIZER)
         {
             klass->m_constructor = method;
         }
@@ -16905,7 +17057,7 @@ namespace neon
                 {
                     ClassObject* klass;
                     klass = peeked.asClass();
-                    field = klass->m_methods->getByObjString(name);
+                    field = klass->m_classmethods->getByObjString(name);
                     if(field != nullptr)
                     {
                         if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_STATIC)
@@ -17009,7 +17161,7 @@ namespace neon
         {
             return field;
         }
-        vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type '%s' does not have a property named '%s'", peeked.name(), name->data());
+        vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "object of type '%s' does not have a property named '%s'", peeked.name(), name->data());
         return nullptr;
     }
 
@@ -17043,7 +17195,7 @@ namespace neon
         }
         else
         {
-            vm->m_pvm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "'%s' of type %s does not have properties", Value::toString(vm->m_pvm, peeked)->data(),
+            vm->raiseClass(vm->m_pvm->m_exceptions.stdexception, "'%s' of type %s does not have properties", Value::toString(vm->m_pvm, peeked)->data(),
                 peeked.name());
         }
         return false;
@@ -17075,13 +17227,13 @@ namespace neon
                 return true;
             }
             NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "instance of class %s does not have a property or method named '%s'",
-                peeked.asInstance()->m_fromclass->m_classname->data(), name->data());
+                peeked.asInstance()->m_fromclass->m_classname.data(), name->data());
             return false;
         }
         else if(peeked.isClass())
         {
             klass = peeked.asClass();
-            field = klass->m_methods->getByObjString(name);
+            field = klass->m_classmethods->getByObjString(name);
             if(field != nullptr)
             {
                 if(FuncCommon::getMethodType(field->m_actualval) == FuncCommon::FUNCTYPE_STATIC)
@@ -17103,7 +17255,7 @@ namespace neon
                     return true;
                 }
             }
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname->data(), name->data());
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "cannot get method '%s' from instance of class '%s'", klass->m_classname.data(), name->data());
             return false;
         }
         else if(peeked.isModule())
@@ -18081,7 +18233,7 @@ namespace neon
                         }
                         if(!haveval)
                         {
-                            klass = ClassObject::make(m_pvm, name, nullptr);
+                            klass = ClassObject::make(m_pvm, Util::StrBuffer(name->data(), name->length()), nullptr);
                             pushme = Value::fromObject(klass);
                         }
                         stackPush(pushme);
@@ -18127,7 +18279,7 @@ namespace neon
                         klass = stackPeek(0).asClass();
                         if(!vmBindMethod(klass->m_superclass, name))
                         {
-                            NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname->data(), name->data());
+                            NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "class %s does not define a function %s", klass->m_classname.data(), name->data());
                         }
                     }
                     break;
@@ -18259,11 +18411,11 @@ namespace neon
                         {
                             if(!message.isNull())
                             {
-                                m_pvm->raiseClass(m_pvm->m_exceptions.asserterror, Value::toString(m_pvm, message)->data());
+                                raiseClass(m_pvm->m_exceptions.asserterror, Value::toString(m_pvm, message)->data());
                             }
                             else
                             {
-                                m_pvm->raiseClass(m_pvm->m_exceptions.asserterror, "assertion failed");
+                                raiseClass(m_pvm->m_exceptions.asserterror, "assertion failed");
                             }
                         }
                     }
@@ -18447,7 +18599,7 @@ static bool nn_cli_repl(neon::State* state)
         fprintf(stderr, "line = %s. isexit=%d\n", line, strcmp(line, ".exit"));
         if(line == nullptr || strcmp(line, ".exit") == 0)
         {
-            source.destroy();
+            source.reset();
             return true;
         }
         linelength = (int)strlen(line);
@@ -18645,6 +18797,7 @@ void nn_cli_printtypesizes()
             fprintf(stdout, "%d\t%s\n", (int)sizeof(t), #t); \
             fflush(stdout); \
         }
+    ptyp(neon::Util::StrBuffer);
     ptyp(neon::Printer);
     ptyp(neon::Value);
     ptyp(neon::Object);

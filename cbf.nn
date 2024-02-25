@@ -60,6 +60,10 @@ function run() {
     var source = null
     //source = STDIN.read()
     source = "hello world!"
+    if(ARGV.length > 1)
+    {
+        source = new File(ARGV[1]).read(1024*1024)
+    }
     //print("source=<<<", source, ">>>\n")
     generate(source);
 }

@@ -407,9 +407,25 @@ namespace neon
                     m_data[slen] = '\0';
                 }
 
+                inline StrBuffer(const char* str): StrBuffer(str, strlen(str))
+                {
+                }
+
                 inline ~StrBuffer()
                 {
-                    destroy();
+                    if(m_data != nullptr)
+                    {
+                        Memory::osFree(m_data);
+                        m_data = nullptr;
+                        resetVars();
+                    }
+                }
+
+                inline StrBuffer& operator=(const StrBuffer& other)
+                {
+                    reset();
+                    append(other.m_data, other.m_length);
+                    return *this;
                 }
 
                 inline uint64_t size() const
@@ -425,17 +441,6 @@ namespace neon
                 inline const char* data() const
                 {
                     return m_data;
-                }
-
-                inline bool destroy()
-                {
-                    if(m_data != nullptr)
-                    {
-                        Memory::osFree(m_data);
-                        m_data = nullptr;
-                        resetVars();
-                    }
-                    return true;
                 }
 
                 inline bool compare(const char* str, size_t len) const
