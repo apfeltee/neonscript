@@ -232,7 +232,7 @@ size_t osfn_fdput(int fd, const void* buf, size_t count)
 
 int osfn_fdsyncfs(int fd)
 {
-    #if defined(OSFN_ISUNIX)
+    #if defined(OSFN_ISUNIX) && !defined(__CYGWIN__)
         return syncfs(fd);
     #endif
     return -1;

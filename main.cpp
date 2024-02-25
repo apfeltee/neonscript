@@ -1796,6 +1796,7 @@ namespace neon
                 }
                 else if(fn == &Value::isCallable)
                 {
+                    /* synthetic type */
                     return "Callable";
                 }
                 return "?illegalornullfunc?";
@@ -2564,19 +2565,20 @@ namespace neon
 
     struct ExceptionFrame
     {
-        uint16_t address;
-        uint16_t finallyaddress;
-        ClassObject* klass;
+        uint16_t address = 0;
+        uint16_t finallyaddress = 0;
+        bool hasclass = false;
+        ClassObject* exklass = nullptr;
     };
 
     struct CallFrame
     {
-        int handlercount;
-        int gcprotcount;
-        int stackslotpos;
-        Instruction* inscode;
-        FuncClosure* closure;
-        ExceptionFrame handlers[NEON_CFG_MAXEXCEPTHANDLERS];
+        int handlercount = 0;
+        int gcprotcount = 0;
+        int stackslotpos = 0;
+        Instruction* inscode = nullptr;
+        FuncClosure* closure = nullptr;
+        ExceptionFrame handlers[NEON_CFG_MAXEXCEPTHANDLERS] = {};
     };
 
     using NativeCallbackFN = Value (*)(State*, Arguments*);
@@ -2668,7 +2670,7 @@ namespace neon
                                 fprintf(stderr, "error: failed to allocate stackvalues!\n");
                                 abort();
                             }
-                            memset(m_stackvalues, 0, NEON_CFG_INITSTACKCOUNT * sizeof(Value));
+                            //memset(m_stackvalues, 0, NEON_CFG_INITSTACKCOUNT * sizeof(Value));
                         }
                         {
                             m_framecapacity = NEON_CFG_INITFRAMECOUNT;
@@ -2683,7 +2685,8 @@ namespace neon
                             {
                                 for(j=0; j<NEON_CFG_MAXEXCEPTHANDLERS; j++)
                                 {
-                                    m_framevalues[i].handlers[j].klass = nullptr;
+                                    m_framevalues[i].handlers[j].hasclass = false;
+                                    m_framevalues[i].handlers[j].exklass = nullptr;
                                 }
                             }
                         }
@@ -2696,7 +2699,7 @@ namespace neon
                     void setInstanceProperty(ClassInstance* instance, const char* propname, Value value);
 
                     template<typename... ArgsT>
-                    bool raiseAtSourceLocation(ClassObject* exklass, const char* format, ArgsT&&... args)
+                    bool raiseAtSourceLocation(ClassObject* raiseme, const char* format, ArgsT&&... args)
                     {
                         static auto fn_snprintf = snprintf;
                         int length;
@@ -2709,7 +2712,7 @@ namespace neon
                         needed += 1;
                         msgbuf = (char*)Memory::osMalloc(needed+1);
                         length = fn_snprintf(msgbuf, needed, format, args...);
-                        instance = m_pvm->makeExceptionInstance(exklass, msgbuf, length, true);
+                        instance = m_pvm->makeExceptionInstance(raiseme, msgbuf, length, true);
                         stackPush(Value::fromObject(instance));
                         stacktrace = getExceptionStacktrace();
                         stackPush(stacktrace);
@@ -2719,23 +2722,23 @@ namespace neon
                     }
 
                     template<typename... ArgsT>
-                    bool raiseClass(ClassObject* exklass, const char* format, ArgsT&&... args)
+                    bool raiseClass(ClassObject* raiseme, const char* format, ArgsT&&... args)
                     {
-                        return raiseAtSourceLocation(exklass, format, std::forward<ArgsT>(args)...);
+                        return raiseAtSourceLocation(raiseme, format, std::forward<ArgsT>(args)...);
                     }
 
                     template<typename... ArgsT>
                     bool raiseClass(const char* clname, const char* format, ArgsT&&... args)
                     {
                         ClassObject* tmp;
-                        ClassObject* exklass;
-                        exklass = m_pvm->m_exceptions.stdexception;
+                        ClassObject* vdef;
+                        vdef = m_pvm->m_exceptions.stdexception;
                         tmp = m_pvm->findExceptionByName(clname);
                         if(tmp != nullptr)
                         {
-                            exklass = tmp;
+                            vdef = tmp;
                         }
-                        return raiseAtSourceLocation(exklass, format, std::forward<ArgsT>(args)...);
+                        return raiseAtSourceLocation(vdef, format, std::forward<ArgsT>(args)...);
                     }
 
                     template<typename... ArgsT>
@@ -2984,7 +2987,7 @@ namespace neon
                         }
                         frame->handlers[frame->handlercount].address = address;
                         frame->handlers[frame->handlercount].finallyaddress = finallyaddress;
-                        frame->handlers[frame->handlercount].klass = type;
+                        frame->handlers[frame->handlercount].exklass = type;
                         frame->handlercount++;
                         return true;
                     }
@@ -3083,7 +3086,7 @@ namespace neon
         private:
             void init(void* userptr);
 
-            ClassInstance* makeExceptionInstance(ClassObject* exklass, char* msgbuf, size_t len, bool takestr);
+            ClassInstance* makeExceptionInstance(ClassObject* ofklass, char* msgbuf, size_t len, bool takestr);
             
             ClassObject* findExceptionByName(const char* name);
 
@@ -8656,8 +8659,9 @@ namespace neon
             {
                 handler = &m_currentframe->handlers[i - 1];
                 function = m_currentframe->closure->scriptfunc;
-                klassraised = handler->klass;
-                if(klassraised == nullptr)
+                klassraised = handler->exklass;
+                //fprintf(stderr, "handler->address=%d handler->finallyaddress=%d\n", handler->address, handler->finallyaddress);
+                if(klassraised == nullptr || handler->hasclass == false)
                 {
                     klassraised = m_pvm->m_exceptions.stdexception;
                 }
@@ -8727,7 +8731,7 @@ namespace neon
             for(j = 0; j < (int)m_framevalues[i].handlercount; j++)
             {
                 handler = &m_framevalues[i].handlers[j];
-                Object::markObject(m_pvm, handler->klass);
+                Object::markObject(m_pvm, handler->exklass);
             }
         }
         for(upvalue = m_openupvalues; upvalue != nullptr; upvalue = upvalue->m_nextupval)
@@ -8901,7 +8905,7 @@ namespace neon
         m_vmstate->resetVMState();
     }
 
-    ClassInstance* State::makeExceptionInstance(ClassObject* exklass, char* msgbuf, size_t len, bool takestr)
+    ClassInstance* State::makeExceptionInstance(ClassObject* ofklass, char* msgbuf, size_t len, bool takestr)
     {
         String* omsg;
         ClassInstance* instance;
@@ -8913,7 +8917,7 @@ namespace neon
         {
             omsg = String::copy(this, msgbuf, len);
         }
-        instance = ClassInstance::make(this, exklass);
+        instance = ClassInstance::make(this, ofklass);
         m_vmstate->stackPush(Value::fromObject(instance));
         instance->defProperty("message", Value::fromObject(omsg));
         m_vmstate->stackPop();
