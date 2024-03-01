@@ -1552,11 +1552,11 @@ namespace neon
                 VALTYPE_BOOL,
                 VALTYPE_NUMBER,
                 VALTYPE_OBJECT,
-                VALTYPE_LIGHTSTRING,
             };
 
             enum ObjType
             {
+                OBJTYPE_INVALID,
                 /* containers */
                 OBJTYPE_STRING,
                 OBJTYPE_RANGE,
@@ -1578,7 +1578,6 @@ namespace neon
                 OBJTYPE_SWITCH,
                 /* object type that can hold any C pointer */
                 OBJTYPE_USERDATA,
-                OBJTYPE_CALLABLE = (OBJTYPE_FUNCBOUND | OBJTYPE_FUNCCLOSURE | OBJTYPE_FUNCSCRIPT | OBJTYPE_CLASS),
             };
 
             enum ValCheck
@@ -1824,13 +1823,6 @@ namespace neon
         public:
             ValType m_valtype;
             ValUnion m_valunion;
-
-            #if 0
-            union
-            {
-                Util::StrBuffer string;
-            } m_lightunion;
-            #endif
 
         public:
             #if 0
@@ -2536,12 +2528,286 @@ namespace neon
                 Memory::destroy(m_argdefvals);
             }
 
-            void toStream(FILE* hnd)
+            static bool serializeInstructionToStream(State* state, FILE* hnd, const Instruction& inst)
             {
+                (void)state;
+                /*
+                    bool isop;
+                    uint8_t code;
+                    int srcline;
+                */
+                fwrite(&inst.isop, sizeof(inst.isop), 1, hnd);
+                fwrite(&inst.code, sizeof(inst.code), 1, hnd);
+                fwrite(&inst.srcline, sizeof(inst.srcline), 1, hnd);
+                return true;
             }
 
-            void fromFile(const char* path)
+
+            template<typename Type>
+            static bool readFrom(const char* name, FILE* hnd, Type* dest, size_t count)
             {
+                size_t rdlen;
+                rdlen = fread(dest, sizeof(Type), 1, hnd);
+                if(rdlen != count)
+                {
+                    fprintf(stderr, "failed to read %zd items of %s (got %zd, expected %zd)\n", count, name, rdlen, count);
+                    return false;
+                }
+                return true;
+            }
+
+            static bool deserializeInstructionFromStream(State* state, FILE* hnd, Instruction& dest)
+            {
+                if(!readFrom<decltype(Instruction::isop)>("Instruction::isop", hnd, &dest.isop, 1))
+                {
+                    return false;
+                }
+                if(!readFrom<decltype(Instruction::code)>("Instruction::code", hnd, &dest.code, 1))
+                {
+                    return false;
+                }
+                if(!readFrom<decltype(Instruction::srcline)>("Instruction::srcline", hnd, &dest.srcline, 1))
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            static bool serializeValueToStream(State* state, FILE* hnd, const Value& val)
+            {
+                /*
+                    ValType m_valtype;
+                    ValUnion m_valunion;
+                    union ValUnion
+                    {
+                        bool boolean;
+                        double number;
+                        Object* obj;
+                    };
+                    enum ValType
+                    {
+                        VALTYPE_EMPTY,
+                        VALTYPE_NULL,
+                        VALTYPE_BOOL,
+                        VALTYPE_NUMBER,
+                        VALTYPE_OBJECT,
+                    };
+                */
+                char nothing = 0;
+                fwrite(&val.m_valtype, sizeof(val.m_valtype), 1, hnd);
+                if(val.m_valtype == Value::VALTYPE_OBJECT)
+                {
+                    auto ob = val.objectType();
+                    fwrite(&ob, sizeof(ob), 1, hnd);
+                }
+                else
+                {
+                    Value::ObjType dummy = Value::OBJTYPE_INVALID;
+                    fwrite(&dummy, sizeof(dummy), 1, hnd);
+                }
+                switch(val.m_valtype)
+                {
+                    case Value::VALTYPE_EMPTY:
+                    case Value::VALTYPE_NULL:
+                        {
+                            fwrite(&nothing, sizeof(char), 1, hnd);
+                        }
+                        break;
+                    case Value::VALTYPE_NUMBER:
+                        {
+                            fwrite(&val.m_valunion.number, sizeof(val.m_valunion.number), 1, hnd);
+                        }
+                        break;
+                    case Value::VALTYPE_BOOL:
+                        {
+                            fwrite(&val.m_valunion.boolean, sizeof(val.m_valunion.boolean), 1, hnd);
+                        }
+                        break;
+                    case Value::VALTYPE_OBJECT:
+                        {
+                            serializeValObjectToStream(state, hnd, val);
+                        }
+                        break;
+                    default:
+                        {
+                            fprintf(stderr, "should not happen - trying to serialize something beyond VALTYPE_OBJECT!");
+                        }
+                        break;
+                }
+                return true;
+            }
+
+                /*
+                    enum ObjType
+                    {
+                        OBJTYPE_STRING,
+                        OBJTYPE_RANGE,
+                        OBJTYPE_ARRAY,
+                        OBJTYPE_DICT,
+                        OBJTYPE_FILE,
+                        OBJTYPE_UPVALUE,
+                        OBJTYPE_FUNCBOUND,
+                        OBJTYPE_FUNCCLOSURE,
+                        OBJTYPE_FUNCSCRIPT,
+                        OBJTYPE_INSTANCE,
+                        OBJTYPE_FUNCNATIVE,
+                        OBJTYPE_CLASS,
+                        OBJTYPE_MODULE,
+                        OBJTYPE_SWITCH,
+                        OBJTYPE_USERDATA,
+                    };
+                */
+            static bool serializeValObjectToStream(State* state, FILE* hnd, const Value& val);
+            static bool deserializeValObjectFromStream(State* state, FILE* hnd, Value::ObjType ot, Value& dest);
+
+            static bool deserializeValueFromStream(State* state, FILE* hnd, Value& dest)
+            {
+                const char* tn;
+                Value::ObjType ot;
+                if(!readFrom<decltype(Value::m_valtype)>("Value::m_valtype", hnd, &dest.m_valtype, 1))
+                {
+                    return false;
+                }
+                if(!readFrom<Value::ObjType>("objectType", hnd, &ot, 1))
+                {
+                    return false;
+                }
+                switch(dest.m_valtype)
+                {
+                    case Value::VALTYPE_EMPTY:
+                    case Value::VALTYPE_NULL:
+                        {
+                            fgetc(hnd);
+                        }
+                        break;
+                    case Value::VALTYPE_NUMBER:
+                        {
+                            if(!readFrom<decltype(Value::m_valunion.number)>("Value::m_valunion.number", hnd, &dest.m_valunion.number, 1))
+                            {
+                                return false;
+                            }
+                        }
+                        break;
+                    case Value::VALTYPE_BOOL:
+                        {
+                            if(!readFrom<decltype(Value::m_valunion.boolean)>("Value::m_valunion.boolean", hnd, &dest.m_valunion.boolean, 1))
+                            {
+                                return false;
+                            }
+                        }
+                        break;
+                    case Value::VALTYPE_OBJECT:
+                        {
+                            if(ot == Value::OBJTYPE_INVALID)
+                            {
+                                fprintf(stderr, "bad object type (OBJTYPE_INVALID)");
+                                return false;
+                            }
+                            if(!deserializeValObjectFromStream(state, hnd, ot, dest))
+                            {
+                                return false;
+                            }
+                        }
+                        break;
+                    default:
+                        {
+                            tn = Value::typenameFromEnum(dest.m_valtype);
+                            if(dest.m_valtype == Value::VALTYPE_OBJECT)
+                            {
+                                tn = Value::typenameFromEnum(ot);
+                            }
+                            fprintf(stderr, "unhandled type '%s'\n", tn);
+                        }
+                }
+                return true;
+            }
+
+            void toStream(FILE* hnd)
+            {
+                uint64_t i;
+                fputc('N', hnd);
+                fputc('B', hnd);
+                fputc('\b', hnd);
+                {
+                    fwrite(&m_count, sizeof(uint64_t), 1, hnd);
+                    for(i=0; i<m_count; i++)
+                    {
+                        serializeInstructionToStream(m_pvm, hnd, m_instrucs[i]);
+                    }
+                }
+                {
+                    fwrite(&m_constants->m_count, sizeof(uint64_t), 1, hnd);
+                    for(i=0; i<m_constants->m_count; i++)
+                    {
+                        serializeValueToStream(m_pvm, hnd, m_constants->m_values[i]);
+                    }
+                }
+                {
+                }
+            }
+
+            bool fromHandle(FILE* hnd)
+            {
+                int chn;
+                int chb;
+                int chm;
+                uint64_t cnt;
+                uint64_t inscnt;
+                uint64_t constcnt; 
+                Instruction ins;
+                Value cval;
+                chn = fgetc(hnd);
+                chb = fgetc(hnd);
+                chm = fgetc(hnd);
+                if((chn != 'N') && (chb != 'B') && (chm != '\b'))
+                {
+                    fprintf(stderr, "error: bad header\n");
+                    return false;
+                }
+                inscnt = 0;
+                if(!readFrom<uint64_t>("instruction count", hnd, &inscnt, 1))
+                {
+                    fprintf(stderr, "failed to read instruction count. got %zd\n", inscnt);
+                    return false;
+                }
+                cnt = 0;
+                while(cnt != inscnt)
+                {
+                    if(!deserializeInstructionFromStream(m_pvm, hnd, ins))
+                    {
+                        fprintf(stderr, "error: failed to read instruction\n");
+                        return false;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "read instruction %zd of %zd ...\n", cnt, inscnt);
+                    }
+                    cnt++;
+                    push(ins);
+                }
+                cnt = 0;
+                constcnt = 0;
+                if(!readFrom<uint64_t>("constant count", hnd, &constcnt, 1))
+                {
+                    return false;
+                }
+                fprintf(stderr, "binary contains %zd constants\n", constcnt);
+                while(cnt != constcnt)
+                {
+                    //if(!readFrom<Value>("constant", hnd, &cval, 1))
+                    if(!deserializeValueFromStream(m_pvm, hnd, cval))
+                    {
+                        fprintf(stderr, "error: failed to read constant\n");
+                        return false;
+                    }
+                    else
+                    {
+                        fprintf(stderr, "read constant %zd of %zd ...\n", cnt, constcnt);
+                    }
+                    cnt++;
+                    pushConst(cval);
+                }
+                return true;
             }
 
             void push(Instruction ins)
@@ -2860,6 +3126,10 @@ namespace neon
                     NEON_FORCEINLINE Value stackPop()
                     {
                         Value v;
+                        if(m_stackidx == 0)
+                        {
+                            return Value::makeEmpty();
+                        }
                         m_stackidx--;
                         v = m_stackvalues[m_stackidx];
                         return v;
@@ -3163,6 +3433,8 @@ namespace neon
 
             FuncClosure* compileScriptSource(Module* module, bool fromeval, const char* source);
             Value evalSource(const char* source);
+            FuncClosure* compileSource(Module* module, const char* source);
+            Status execFromClosure(FuncClosure* fn, Value* dest);            
             Status execSource(Module* module, const char* source, Value* dest);
 
             void defGlobalValue(const char* name, Value val);
@@ -4714,7 +4986,7 @@ namespace neon
                     upvals[i] = nullptr;
                 }
                 rt = Object::initBasicObject<FuncClosure>(state, Value::OBJTYPE_FUNCCLOSURE);
-                rt->scriptfunc = function;
+                rt->m_scriptfunc = function;
                 rt->m_storedupvals = upvals;
                 rt->m_upvalcount = function->m_upvalcount;
                 return rt;
@@ -4722,7 +4994,7 @@ namespace neon
 
         public:
             int m_upvalcount;
-            FuncScript* scriptfunc;
+            FuncScript* m_scriptfunc;
             ScopeUpvalue** m_storedupvals;
 
         public:
@@ -4805,7 +5077,7 @@ namespace neon
                 if(callable.isFuncClosure())
                 {
                     closure = callable.asFuncClosure();
-                    m_arity = closure->scriptfunc->m_arity;
+                    m_arity = closure->m_scriptfunc->m_arity;
                 }
                 else if(callable.isFuncScript())
                 {
@@ -5780,7 +6052,7 @@ namespace neon
                         {
                             FuncBound* bn;
                             bn = static_cast<FuncBound*>(obj);
-                            printObjFunction(bn->method->scriptfunc);
+                            printObjFunction(bn->method->m_scriptfunc);
                         }
                         break;
                     case Value::OBJTYPE_MODULE:
@@ -5801,7 +6073,7 @@ namespace neon
                         {
                             FuncClosure* cls;
                             cls = static_cast<FuncClosure*>(obj);
-                            printObjFunction(cls->scriptfunc);
+                            printObjFunction(cls->m_scriptfunc);
                         }
                         break;
                     case Value::OBJTYPE_FUNCSCRIPT:
@@ -5844,10 +6116,6 @@ namespace neon
                                 put(string->data(), string->length());
                             }
                             m_pvm->m_vmstate->gcClearProtect();
-                        }
-                        break;
-                    case Value::OBJTYPE_CALLABLE:
-                        {
                         }
                         break;
                 }
@@ -7606,6 +7874,8 @@ namespace neon
 
     #include "parser.h"
 
+    #include "ser.h"
+
     FuncScript* Module::compileModuleSource(State* state, Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast)
     {
         return Parser::compileSource(state, module, source, blob, fromimport, keeplast);
@@ -7693,7 +7963,7 @@ namespace neon
                     int i;
                     FuncClosure* closure;
                     closure = static_cast<FuncClosure*>(object);
-                    Object::markObject(state, closure->scriptfunc);
+                    Object::markObject(state, closure->m_scriptfunc);
                     for(i = 0; i < closure->m_upvalcount; i++)
                     {
                         Object::markObject(state, closure->m_storedupvals[i]);
@@ -7727,7 +7997,6 @@ namespace neon
             case Value::OBJTYPE_FUNCNATIVE:
             case Value::OBJTYPE_USERDATA:
             case Value::OBJTYPE_STRING:
-            case Value::OBJTYPE_CALLABLE:
                 break;
         }
     }
@@ -7923,7 +8192,7 @@ namespace neon
         }
         else if(other.isFuncClosure() && self.isFuncClosure())
         {
-            return (other.asFuncClosure()->scriptfunc->m_arity < self.asFuncClosure()->scriptfunc->m_arity);
+            return (other.asFuncClosure()->m_scriptfunc->m_arity < self.asFuncClosure()->m_scriptfunc->m_arity);
         }
         else if(other.isRange() && self.isRange())
         {
@@ -8163,7 +8432,7 @@ namespace neon
             case Value::OBJTYPE_FUNCNATIVE:
                 return method.asFuncNative()->m_functype;
             case Value::OBJTYPE_FUNCCLOSURE:
-                return method.asFuncClosure()->scriptfunc->m_functype;
+                return method.asFuncClosure()->m_scriptfunc->m_functype;
             default:
                 break;
         }
@@ -8175,7 +8444,7 @@ namespace neon
         uint16_t idx;
         Blob* bl;
         idx = readShort();
-        bl = m_currentframe->closure->scriptfunc->m_compiledblob;
+        bl = m_currentframe->closure->m_scriptfunc->m_compiledblob;
         return bl->m_constants->m_values[idx];
     }
 
@@ -8188,14 +8457,14 @@ namespace neon
         Array* argslist;
         NEON_APIDEBUG(m_pvm, "thisval.type=%s, argcount=%d", thisval.name(), argcount);
         /* fill empty parameters if not variadic */
-        for(; !closure->scriptfunc->m_isvariadic && argcount < closure->scriptfunc->m_arity; argcount++)
+        for(; !closure->m_scriptfunc->m_isvariadic && argcount < closure->m_scriptfunc->m_arity; argcount++)
         {
             stackPush(Value::makeNull());
         }
         /* handle variadic arguments... */
-        if(closure->scriptfunc->m_isvariadic && argcount >= closure->scriptfunc->m_arity - 1)
+        if(closure->m_scriptfunc->m_isvariadic && argcount >= closure->m_scriptfunc->m_arity - 1)
         {
-            startva = argcount - closure->scriptfunc->m_arity;
+            startva = argcount - closure->m_scriptfunc->m_arity;
             argslist = Array::make(m_pvm);
             stackPush(Value::fromObject(argslist));
             for(i = startva; i >= 0; i--)
@@ -8207,16 +8476,16 @@ namespace neon
             stackPop(startva + 2);
             stackPush(Value::fromObject(argslist));
         }
-        if(argcount != closure->scriptfunc->m_arity)
+        if(argcount != closure->m_scriptfunc->m_arity)
         {
             stackPop(argcount);
-            if(closure->scriptfunc->m_isvariadic)
+            if(closure->m_scriptfunc->m_isvariadic)
             {
-                return raiseClass(m_pvm->m_exceptions.stdexception, "expected at least %d arguments but got %d", closure->scriptfunc->m_arity - 1, argcount);
+                return raiseClass(m_pvm->m_exceptions.stdexception, "expected at least %d arguments but got %d", closure->m_scriptfunc->m_arity - 1, argcount);
             }
             else
             {
-                return raiseClass(m_pvm->m_exceptions.stdexception, "expected %d arguments but got %d", closure->scriptfunc->m_arity, argcount);
+                return raiseClass(m_pvm->m_exceptions.stdexception, "expected %d arguments but got %d", closure->m_scriptfunc->m_arity, argcount);
             }
         }
         if(checkMaybeResize())
@@ -8227,7 +8496,7 @@ namespace neon
         frame->gcprotcount = 0;
         frame->handlercount = 0;
         frame->closure = closure;
-        frame->inscode = closure->scriptfunc->m_compiledblob->m_instrucs;
+        frame->inscode = closure->m_scriptfunc->m_compiledblob->m_instrucs;
         frame->stackslotpos = m_stackidx + (-argcount - 1);
         return true;
     }
@@ -8558,7 +8827,7 @@ namespace neon
             {
                 Printer pd(m_pvm);
                 frame = &m_framevalues[i];
-                function = frame->closure->scriptfunc;
+                function = frame->closure->m_scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
                 instruction = frame->inscode - function->m_compiledblob->m_instrucs - 1;
                 line = function->m_compiledblob->m_instrucs[instruction].srcline;
@@ -8676,7 +8945,7 @@ namespace neon
             for(i = m_currentframe->handlercount; i > 0; i--)
             {
                 handler = &m_currentframe->handlers[i - 1];
-                function = m_currentframe->closure->scriptfunc;
+                function = m_currentframe->closure->m_scriptfunc;
                 klassraised = handler->exklass;
                 //fprintf(stderr, "handler->address=%d handler->finallyaddress=%d\n", handler->address, handler->finallyaddress);
                 if(handler->hasclass == false)
@@ -8892,7 +9161,7 @@ namespace neon
         /* flush out anything on stdout first */
         fflush(stdout);
         frame = &m_vmstate->m_framevalues[m_vmstate->m_framecount - 1];
-        function = frame->closure->scriptfunc;
+        function = frame->closure->m_scriptfunc;
         instruction = frame->inscode - function->m_compiledblob->m_instrucs - 1;
         line = function->m_compiledblob->m_instrucs[instruction].srcline;
         fprintf(stderr, "RuntimeError: ");
@@ -8905,7 +9174,7 @@ namespace neon
             for(i = m_vmstate->m_framecount - 1; i >= 0; i--)
             {
                 frame = &m_vmstate->m_framevalues[i];
-                function = frame->closure->scriptfunc;
+                function = frame->closure->m_scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
                 instruction = frame->inscode - function->m_compiledblob->m_instrucs - 1;
                 fprintf(stderr, "    %s:%d -> ", function->m_inmodule->m_physlocation->data(), function->m_compiledblob->m_instrucs[instruction].srcline);
@@ -12770,16 +13039,17 @@ namespace neon
         return closure;
     }
 
-    Status State::execSource(Module* module, const char* source, Value* dest)
+    FuncClosure* State::compileSource(Module* module, const char* source)
     {
-        Status status;
         FuncClosure* closure;
         module->setFileField();
         closure = compileScriptSource(module, false, source);
-        if(closure == nullptr)
-        {
-            return Status::FAIL_COMPILE;
-        }
+        return closure;
+    }
+
+    Status State::execFromClosure(FuncClosure* closure, Value* dest)
+    {
+        Status status;        
         if(m_conf.exitafterbytecode)
         {
             return Status::OK;
@@ -12787,6 +13057,18 @@ namespace neon
         m_vmstate->callClosure(closure, Value::makeNull(), 0);
         status = m_vmstate->runVM(0, dest);
         return status;
+
+    }
+
+    Status State::execSource(Module* module, const char* source, Value* dest)
+    {
+        FuncClosure* closure;
+        closure = compileSource(module, source);
+        if(closure == nullptr)
+        {
+            return Status::FAIL_COMPILE;
+        }
+        return execFromClosure(closure, dest);
     }
 
     Value State::evalSource(const char* source)
@@ -14171,7 +14453,7 @@ namespace neon
             NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "empty cannot be assigned");
             return false;
         }
-        tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        tab = vm->m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable;
         tab->set(Value::fromObject(name), val);
         vm->stackPop();
         #if (defined(NEON_CFG_DEBUGTABLE) && NEON_CFG_DEBUGTABLE) || 0
@@ -14186,7 +14468,7 @@ namespace neon
         HashTable* tab;
         Property* field;
         name = vm->readString();
-        tab = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        tab = vm->m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable;
         field = tab->getByObjString(name);
         if(field == nullptr)
         {
@@ -14211,7 +14493,7 @@ namespace neon
             return false;
         }
         name = vm->readString();
-        table = vm->m_currentframe->closure->scriptfunc->m_inmodule->m_deftable;
+        table = vm->m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable;
         if(table->set(Value::fromObject(name), vm->stackPeek(0)))
         {
             if(vm->m_pvm->m_conf.enablestrictmode)
@@ -14260,7 +14542,7 @@ namespace neon
         Value val;
         slot = vm->readShort();
         ssp = vm->m_currentframe->stackslotpos;
-        //fprintf(stderr, "FUNCARGGET: %s\n", vm->m_currentframe->closure->scriptfunc->m_scriptfnname->data());
+        //fprintf(stderr, "FUNCARGGET: %s\n", vm->m_currentframe->closure->m_scriptfunc->m_scriptfnname->data());
         val = vm->m_stackvalues[ssp + slot];
         vm->stackPush(val);
         return true;
@@ -14411,8 +14693,8 @@ namespace neon
             }
             if(m_pvm->m_conf.dumpinstructions)
             {
-                ofs = (int)(m_currentframe->inscode - m_currentframe->closure->scriptfunc->m_compiledblob->m_instrucs);
-                dp.printInstructionAt(m_currentframe->closure->scriptfunc->m_compiledblob, ofs, false);
+                ofs = (int)(m_currentframe->inscode - m_currentframe->closure->m_scriptfunc->m_compiledblob->m_instrucs);
+                dp.printInstructionAt(m_currentframe->closure->m_scriptfunc->m_compiledblob, ofs, false);
                 if(m_pvm->m_conf.dumpprintstack)
                 {
                     fprintf(stderr, "stack (before)=[\n");
@@ -14898,7 +15180,7 @@ namespace neon
                         Property* field;
                         haveval = false;
                         name = readString();
-                        field = m_currentframe->closure->scriptfunc->m_inmodule->m_deftable->getByObjString(name);
+                        field = m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable->getByObjString(name);
                         if(field != nullptr)
                         {
                             if(field->m_actualval.isClass())
@@ -15147,8 +15429,8 @@ namespace neon
                             field = m_pvm->m_definedglobals->getField(Value::fromObject(type));
                             if((field == nullptr) || !field->value().isClass())
                             {
-                                //if(!m_currentframe->closure->scriptfunc->m_inmodule->m_deftable->get(Value::fromObject(type), &value) || !value.isClass())
-                                field = m_currentframe->closure->scriptfunc->m_inmodule->m_deftable->getField(Value::fromObject(type));
+                                //if(!m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable->get(Value::fromObject(type), &value) || !value.isClass())
+                                field = m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable->getField(Value::fromObject(type));
                                 if(field == nullptr || !field->value().isClass())
                                 {
                                     NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "object of type '%s' is not an exception", type->data());
@@ -15370,13 +15652,44 @@ static bool nn_cli_repl(neon::State* state)
 }
 #endif
 
-static bool nn_cli_runfile(neon::State* state, const char* file)
+static neon::FuncClosure* nn_cli_readbinary(neon::State* state, const char* filename)
 {
+    bool ok;
+    FILE* fh;
+    fh = fopen(filename, "rb");
+    if(fh == nullptr)
+    {
+        return nullptr;
+    }
+    auto fs = neon::FuncScript::make(state, state->m_toplevelmodule, neon::FuncCommon::FUNCTYPE_FUNCTION);
+    auto cls = neon::FuncClosure::make(state, fs);
+    ok = fs->m_compiledblob->fromHandle(fh);
+    fclose(fh);
+    if(!ok)
+    {
+        return nullptr;
+    }
+    return cls;
+}
+
+static neon::FuncClosure* nn_cli_compilesource(neon::State* state, const char* source, size_t len, const char* filename)
+{
+    const char* rp;
+    neon::FuncClosure* closure;
+    state->m_rootphysfile = (char*)filename;
+    rp = filename;
+    state->m_toplevelmodule->m_physlocation = neon::String::copy(state, rp);
+    closure = state->compileSource(state->m_toplevelmodule, source);
+    return closure;
+}
+
+static neon::FuncClosure* nn_cli_compilefiletoclosure(neon::State* state, const char* file)
+{
+
     size_t fsz;
-    char* rp;
     char* source;
     const char* oldfile;
-    neon::Status result;
+    neon::FuncClosure* closure;
     source = neon::Util::fileReadFile(state, file, &fsz);
     if(source == nullptr)
     {
@@ -15385,15 +15698,40 @@ static bool nn_cli_runfile(neon::State* state, const char* file)
         if(source == nullptr)
         {
             fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
-            return false;
+            return nullptr;
         }
     }
-    state->m_rootphysfile = (char*)file;
-    rp = osfn_realpath(file, nullptr);
-    state->m_toplevelmodule->m_physlocation = neon::String::copy(state, rp);
-    neon::Memory::osFree(rp);
-    result = state->execSource(state->m_toplevelmodule, source, nullptr);
+    closure = nn_cli_compilesource(state, source, fsz, file);
     neon::Memory::osFree(source);
+    return closure;
+}
+
+static bool nn_cli_compilefiletobinary(neon::State* state, const char* file, const char* destfile)
+{
+    FILE* fh;
+    neon::FuncClosure* closure;
+    closure = nn_cli_compilefiletoclosure(state, file);
+    if(closure != nullptr)
+    {
+        fh = fopen(destfile, "wb");
+        if(fh == nullptr)
+        {
+            return false;
+        }
+        closure->m_scriptfunc->m_compiledblob->toStream(fh);
+        fclose(fh);
+        
+    }
+    return false;
+}
+
+
+bool nn_cli_runfile(neon::State* state, const char* file)
+{
+    neon::Status result;
+    neon::FuncClosure* closure;
+    closure = nn_cli_compilefiletoclosure(state, file);
+    result = state->execFromClosure(closure, nullptr);
     fflush(stdout);
     if(result == neon::Status::FAIL_COMPILE)
     {
@@ -15607,17 +15945,22 @@ int main(int argc, char* argv[], char** envp)
     int longindex;
     int nextgcstart;
     bool ok;
+    bool comptofile;
     bool wasusage;
     bool quitafterinit;
+    bool inputisbin;
     char *arg;
     char* source;
+    const char* compdest;
     const char* filename;
     char* nargv[128];
     neon::State* state;
     neon::Util::setOSUnicode();
     ok = true;
     wasusage = false;
+    comptofile = false;
     quitafterinit = false;
+    inputisbin = false;
     source = nullptr;
     nextgcstart = NEON_CFG_DEFAULTGCSTART;
     state = neon::Memory::create<neon::State>();
@@ -15635,6 +15978,8 @@ int main(int argc, char* argv[], char** envp)
         {"apidebug", 'a', OptionParser::A_NONE, "print calls to API (very verbose, very slow)"},
         {"astdebug", 'A', OptionParser::A_NONE, "print calls to the parser (very verbose, very slow)"},
         {"gcstart", 'g', OptionParser::A_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC"},
+        {"compile", 'c', OptionParser::A_REQUIRED, "compile to file"},
+        {"frombinary", 'b', OptionParser::A_NONE, "input file is a binary file"},
         {0, 0, (OptionParser::ArgType)0, nullptr}
     };
     nargc = 0;
@@ -15646,6 +15991,15 @@ int main(int argc, char* argv[], char** envp)
         if(opt == '?')
         {
             printf("%s: %s\n", argv[0], options.errmsg);
+        }
+        else if(co == 'b')
+        {
+            inputisbin = true;
+        }
+        else if(co == 'c')
+        {
+            comptofile = true;
+            compdest = options.optarg;
         }
         else if(co == 'g')
         {
@@ -15735,7 +16089,28 @@ int main(int argc, char* argv[], char** envp)
     {
         filename = state->m_cliargv->at(0).asString()->data();
         fprintf(stderr, "nargv[0]=%s\n", filename);
-        ok = nn_cli_runfile(state, filename);
+        if(inputisbin)
+        {
+            auto cls = nn_cli_readbinary(state, filename);
+            if(cls == nullptr)
+            {
+                fprintf(stderr, "failed to read binary!\n");
+                goto cleanup;
+            }
+            auto s = state->execFromClosure(cls, nullptr);
+            ok = s == neon::Status::OK;
+        }
+        else
+        {
+            if(comptofile)
+            {
+                ok = nn_cli_compilefiletobinary(state, filename, compdest);
+            }
+            else
+            {
+                ok = nn_cli_runfile(state, filename);
+            }
+        }
     }
     else
     {
