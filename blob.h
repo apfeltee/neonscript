@@ -1,147 +1,4 @@
 
-    struct AnyStream
-    {
-        public:
-            enum Type
-            {
-                REC_INVALID,
-                REC_CFILE,
-                REC_CPPSTREAM,
-                REC_STRING,
-            };
-
-            union RecUnion
-            {
-                Util::StrBuffer* strbuf;
-                FILE* handle;
-                std::ostream* ostrm;
-            };
-
-        private:
-            Type m_type = REC_INVALID;
-            RecUnion m_recs;
-
-        private:
-            template<typename ItemT>
-            bool putToString(const ItemT* thing, size_t count) const
-            {
-                m_recs.strbuf->append((const char*)thing, count);
-                return true;
-            }
-
-            template<typename ItemT>
-            bool putToCFile(const ItemT* thing, size_t count) const
-            {
-                fwrite(thing, sizeof(ItemT), count, m_recs.handle);
-                return true;
-            }
-
-            template<typename ItemT>
-            bool putToCPPStream(const ItemT* thing, size_t count) const
-            {
-                m_recs.ostrm->write((const char*)thing, count);
-                return true;
-            }
-
-            bool putOneToCFile(int b) const
-            {
-                fputc(b, m_recs.handle);
-                return true;
-            }
-
-            template<typename ItemT>
-            bool readFromCFile(ItemT* target, size_t tsz, size_t count) const
-            {
-                size_t rd;
-                rd = fread(target, tsz, count, m_recs.handle);
-                if(rd == count)
-                {
-                    return true;
-                }
-                return false;
-            }
-
-            int readOneFromCFile() const
-            {
-                return fgetc(m_recs.handle);
-            }
-
-
-        public:
-            AnyStream()
-            {
-            }
-
-            AnyStream(FILE* hnd): m_type(REC_CFILE)
-            {
-                m_recs.handle = hnd;
-            }
-
-            AnyStream(std::ostream& os): m_type(REC_CPPSTREAM)
-            {
-                m_recs.ostrm = &os;
-            }
-
-            AnyStream(Util::StrBuffer& os): m_type(REC_STRING)
-            {
-                m_recs.strbuf = &os;
-            }
-
-            template<typename ItemT>
-            bool put(const ItemT* thing, size_t count) const
-            {
-                switch(m_type)
-                {
-                    case REC_CFILE:
-                        return putToCFile(thing, count);
-                    case REC_CPPSTREAM:
-                        return putToCPPStream(thing, count);
-                    case REC_STRING:
-                        return putToString(thing, count);
-                    default:
-                        break;
-                }
-                return false;
-            }
-
-            bool putOne(int b) const
-            {
-                switch(m_type)
-                {
-                    case REC_CFILE:
-                        return putOneToCFile(b);
-                    default:
-                        break;
-                }
-                return false;
-            }
-
-            template<typename ItemT>
-            bool read(ItemT* target, size_t tsz, size_t count) const
-            {
-                switch(m_type)
-                {
-                    case REC_CFILE:
-                        return readFromCFile(target, tsz, count);
-                    default:
-                        break;
-                }
-                return false;
-            }
-
-            int readOne() const
-            {
-                switch(m_type)
-                {
-                    case REC_CFILE:
-                        return readOneFromCFile();
-                    default:
-                        break;
-                }
-                return -1;
-            }
-    };
-
     struct Blob
     {
         public:
@@ -172,7 +29,7 @@
                 Memory::destroy(m_argdefvals);
             }
 
-            static bool serializeInstructionToStream(State* state, const AnyStream& hnd, const Instruction& inst)
+            static bool serializeInstructionToStream(State* state, const Util::AnyStream& hnd, const Instruction& inst)
             {
                 (void)state;
                 /*
@@ -188,7 +45,7 @@
 
 
             template<typename Type>
-            static bool readFrom(const char* name, const AnyStream& hnd, Type* dest, size_t count)
+            static bool readFrom(const char* name, const Util::AnyStream& hnd, Type* dest, size_t count)
             {
                 size_t rdlen;
                 rdlen = hnd.read(dest, sizeof(Type), 1);
@@ -200,8 +57,9 @@
                 return true;
             }
 
-            static bool deserializeInstructionFromStream(State* state, const AnyStream& hnd, Instruction& dest)
+            static bool deserializeInstructionFromStream(State* state, const Util::AnyStream& hnd, Instruction& dest)
             {
+                (void)state;
                 if(!readFrom<decltype(Instruction::isop)>("Instruction::isop", hnd, &dest.isop, 1))
                 {
                     return false;
@@ -217,7 +75,7 @@
                 return true;
             }
 
-            static bool serializeValueToStream(State* state, const AnyStream& hnd, const Value& val)
+            static bool serializeValueToStream(State* state, const Util::AnyStream& hnd, const Value& val)
             {
                 /*
                     ValType m_valtype;
@@ -301,10 +159,10 @@
                         OBJTYPE_USERDATA,
                     };
                 */
-            static bool serializeValObjectToStream(State* state, const AnyStream& hnd, const Value& val);
-            static bool deserializeValObjectFromStream(State* state, const AnyStream& hnd, Value::ObjType ot, Value& dest);
+            static bool serializeValObjectToStream(State* state, const Util::AnyStream& hnd, const Value& val);
+            static bool deserializeValObjectFromStream(State* state, const Util::AnyStream& hnd, Value::ObjType ot, Value& dest);
 
-            static bool deserializeValueFromStream(State* state, const AnyStream& hnd, Value& dest)
+            static bool deserializeValueFromStream(State* state, const Util::AnyStream& hnd, Value& dest)
             {
                 const char* tn;
                 Value::ObjType ot;
@@ -321,7 +179,7 @@
                     case Value::VALTYPE_EMPTY:
                     case Value::VALTYPE_NULL:
                         {
-                            hnd.readOne();
+                            hnd.get();
                         }
                         break;
                     case Value::VALTYPE_NUMBER:
@@ -366,7 +224,7 @@
                 return true;
             }
 
-            void binToStream(const AnyStream& hnd)
+            void binToStream(const Util::AnyStream& hnd)
             {
                 uint64_t i;
                 {
@@ -387,15 +245,15 @@
                 }
             }
 
-            void toStream(const AnyStream& hnd)
+            void toStream(const Util::AnyStream& hnd)
             {
-                hnd.putOne('N');
-                hnd.putOne('B');
-                hnd.putOne('\b');
+                hnd.put('N');
+                hnd.put('B');
+                hnd.put('\b');
                 binToStream(hnd);
             }
 
-            bool fromHandle(const AnyStream& hnd)
+            bool fromHandle(const Util::AnyStream& hnd, bool checkhdr)
             {
                 int chn;
                 int chb;
@@ -405,13 +263,16 @@
                 uint64_t constcnt; 
                 Instruction ins;
                 Value cval;
-                chn = hnd.readOne();
-                chb = hnd.readOne();
-                chm = hnd.readOne();
-                if((chn != 'N') && (chb != 'B') && (chm != '\b'))
+                //if(checkhdr)
                 {
-                    fprintf(stderr, "error: bad header\n");
-                    return false;
+                    chn = hnd.get();
+                    chb = hnd.get();
+                    chm = hnd.get();
+                    if((chn != 'N') && (chb != 'B') && (chm != '\b'))
+                    {
+                        fprintf(stderr, "error: bad header (got '%c' '%c' '%c')\n", chn, chb, chm);
+                        return false;
+                    }
                 }
                 inscnt = 0;
                 if(!readFrom<uint64_t>("instruction count", hnd, &inscnt, 1))

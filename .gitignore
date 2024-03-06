@@ -26,6 +26,9 @@ big/
 big/*
 uftrace*
 uftrace.*
+vgout*
+idea*
+todo*
 *.stackdump
 *.class
 push.sh

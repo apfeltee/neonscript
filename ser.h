@@ -1,19 +1,21 @@
 
     template<typename Type>
-    size_t fhput(const AnyStream& fh, const Type* thing, size_t count)
+    size_t fhput(const Util::AnyStream& fh, const Type* thing, size_t count)
     {
         return fh.put(thing, count);
     }
 
-    bool putString(State* state, const AnyStream& hnd, String* os)
+    bool putString(State* state, const Util::AnyStream& hnd, String* os)
     {
-        uint64_t len = os->length();
+        uint64_t len;
+        (void)state;
+        len = os->length();
         fhput<uint64_t>(hnd, &len, 1);
         fhput<char>(hnd, os->data(), os->length());
         return true;
     }
 
-    bool readString(State* state, const AnyStream& hnd, String** dest)
+    bool readString(State* state, const Util::AnyStream& hnd, String** dest)
     {
         uint64_t length;
         char* data;
@@ -31,7 +33,29 @@
         return true;
     }
 
-    bool putFuncScript(State* state, const AnyStream& hnd, FuncScript* fn)
+    bool readFuncScript(State* state, const Util::AnyStream& hnd, FuncScript** dest)
+    {
+        *dest = FuncScript::make(state, state->m_toplevelmodule, FuncCommon::FUNCTYPE_FUNCTION);
+        if(!Blob::readFrom<int>("m_arity", hnd, &(*dest)->m_arity, 1))
+        {
+            return false;
+        }
+        if(!Blob::readFrom<int>("m_upvalcount", hnd, &(*dest)->m_upvalcount, 1))
+        {
+            return false;
+        }
+        if(!Blob::readFrom<bool>("m_isvariadic", hnd, &(*dest)->m_isvariadic, 1))
+        {
+            return false;
+        }
+        if(!readString(state, hnd, &(*dest)->m_scriptfnname))
+        {
+            return false;
+        }
+        return (*dest)->m_compiledblob->fromHandle(hnd, false);
+    }
+
+    bool putFuncScript(State* state, const Util::AnyStream& hnd, FuncScript* fn)
     {
                     /*
                     int m_upvalcount;
@@ -40,15 +64,16 @@
                     String* m_scriptfnname;
                     Module* m_inmodule;
                     */
+        fhput<int>(hnd, &fn->m_arity, 1);
         fhput<int>(hnd, &fn->m_upvalcount, 1);
         fhput<bool>(hnd, &fn->m_isvariadic, 1);
         putString(state, hnd, fn->m_scriptfnname);
-        fn->m_compiledblob->binToStream(hnd);
+        fn->m_compiledblob->toStream(hnd);
         return true;
     }
 
 
-    bool Blob::serializeValObjectToStream(State* state, const AnyStream& hnd, const Value& val)
+    bool Blob::serializeValObjectToStream(State* state, const Util::AnyStream& hnd, const Value& val)
     {
         switch(val.objectType())
         {
@@ -79,7 +104,7 @@
         return false;
     }
 
-    bool Blob::deserializeValObjectFromStream(State* state, const AnyStream& hnd, Value::ObjType ot, Value& dest)
+    bool Blob::deserializeValObjectFromStream(State* state, const Util::AnyStream& hnd, Value::ObjType ot, Value& dest)
     {
         switch(ot)
         {
@@ -91,6 +116,17 @@
                         return false;
                     }
                     dest = Value::fromObject(os);
+                    return true;
+                }
+                break;
+            case Value::OBJTYPE_FUNCSCRIPT:
+                {
+                    FuncScript* fn;
+                    if(!readFuncScript(state, hnd, &fn))
+                    {
+                        return false;
+                    }
+                    dest = Value::fromObject(fn);
                     return true;
                 }
                 break;

@@ -202,7 +202,7 @@ namespace neon
     struct /**/Lexer;
     struct /**/Parser;
     struct /**/RegModule;
-    struct /**/Arguments;
+    struct /**/CallState;
     struct /**/Value;
     struct /**/ClassObject;
     struct /**/ClassInstance;
@@ -466,7 +466,6 @@ namespace neon
                     return m_fninvoke(m_dataptr, std::forward<ArgsType>(args)...);
                 }
         };
-
 
         struct Utf8Iterator
         {
@@ -971,6 +970,150 @@ namespace neon
 {
     namespace Util
     {
+
+        struct AnyStream
+        {
+            public:
+                enum Type
+                {
+                    REC_INVALID,
+                    REC_CFILE,
+                    REC_CPPSTREAM,
+                    REC_STRING,
+                };
+
+                union RecUnion
+                {
+                    Util::StrBuffer* strbuf;
+                    FILE* handle;
+                    std::ostream* ostrm;
+                };
+
+            private:
+                Type m_type = REC_INVALID;
+                RecUnion m_recs;
+
+            private:
+
+                template<typename ItemT>
+                inline bool putToString(const ItemT* thing, size_t count) const
+                {
+                    m_recs.strbuf->append((const char*)thing, count);
+                    return true;
+                }
+
+                template<typename ItemT>
+                inline bool putToCFile(const ItemT* thing, size_t count) const
+                {
+                    fwrite(thing, sizeof(ItemT), count, m_recs.handle);
+                    return true;
+                }
+
+                template<typename ItemT>
+                inline bool putToCPPStream(const ItemT* thing, size_t count) const
+                {
+                    m_recs.ostrm->write((const char*)thing, count);
+                    return true;
+                }
+
+                inline bool putOneToCFile(int b) const
+                {
+                    fputc(b, m_recs.handle);
+                    return true;
+                }
+
+                template<typename ItemT>
+                inline bool readFromCFile(ItemT* target, size_t tsz, size_t count) const
+                {
+                    size_t rd;
+                    rd = fread(target, tsz, count, m_recs.handle);
+                    if(rd == count)
+                    {
+                        return true;
+                    }
+                    return false;
+                }
+
+                inline int readOneFromCFile() const
+                {
+                    return fgetc(m_recs.handle);
+                }
+
+            public:
+                inline AnyStream()
+                {
+                }
+
+                inline AnyStream(FILE* hnd): m_type(REC_CFILE)
+                {
+                    m_recs.handle = hnd;
+                }
+
+                inline AnyStream(std::ostream& os): m_type(REC_CPPSTREAM)
+                {
+                    m_recs.ostrm = &os;
+                }
+
+                inline AnyStream(Util::StrBuffer& os): m_type(REC_STRING)
+                {
+                    m_recs.strbuf = &os;
+                }
+
+                template<typename ItemT>
+                inline bool put(const ItemT* thing, size_t count) const
+                {
+                    switch(m_type)
+                    {
+                        case REC_CFILE:
+                            return putToCFile(thing, count);
+                        case REC_CPPSTREAM:
+                            return putToCPPStream(thing, count);
+                        case REC_STRING:
+                            return putToString(thing, count);
+                        default:
+                            break;
+                    }
+                    return false;
+                }
+
+                inline bool put(int b) const
+                {
+                    switch(m_type)
+                    {
+                        case REC_CFILE:
+                            return putOneToCFile(b);
+                        default:
+                            break;
+                    }
+                    return false;
+                }
+
+                template<typename ItemT>
+                inline bool read(ItemT* target, size_t tsz, size_t count) const
+                {
+                    switch(m_type)
+                    {
+                        case REC_CFILE:
+                            return readFromCFile(target, tsz, count);
+                        default:
+                            break;
+                    }
+                    return false;
+                }
+
+                inline int get() const
+                {
+                    switch(m_type)
+                    {
+                        case REC_CFILE:
+                            return readOneFromCFile();
+                        default:
+                            break;
+                    }
+                    return -1;
+                }
+        };
+
         struct OptionParser
         {
             public:
@@ -2519,7 +2662,7 @@ namespace neon
         ExceptionFrame handlers[NEON_CFG_MAXEXCEPTHANDLERS];
     };
 
-    using NativeCallbackFN = Value (*)(State*, Arguments*);
+    using NativeCallbackFN = Value (*)(State*, CallState*);
 
     struct ArgBase
     {
@@ -2534,7 +2677,7 @@ namespace neon
 
     struct State final
     {
-        friend class Arguments;
+        friend class CallState;
         public:
             struct VM
             {
@@ -3099,8 +3242,70 @@ namespace neon
             FuncClosure* compileScriptSource(Module* module, bool fromeval, const char* source);
             Value evalSource(const char* source);
             FuncClosure* compileSource(Module* module, const char* source);
+
+            FuncClosure* readBinaryFile(const char* filename);
+
             Status execFromClosure(FuncClosure* fn, Value* dest);            
             Status execSource(Module* module, const char* source, Value* dest);
+
+            bool runCode(char* source)
+            {
+                Status result;
+                m_rootphysfile = nullptr;
+                result = execSource(m_toplevelmodule, source, nullptr);
+                fflush(stdout);
+                if(result == Status::FAIL_COMPILE)
+                {
+                    return false;
+                }
+                if(result == Status::FAIL_RUNTIME)
+                {
+                    return false;
+                }
+                return true;
+            }
+
+            FuncClosure* compileSourceToClosure(const char* source, size_t len, const char* filename);
+
+            FuncClosure* compileFileToClosure(const char* file)
+            {
+                size_t fsz;
+                char* source;
+                const char* oldfile;
+                FuncClosure* closure;
+                source = Util::fileReadFile(this, file, &fsz);
+                if(source == nullptr)
+                {
+                    oldfile = file;
+                    source = Util::fileReadFile(this, file, &fsz);
+                    if(source == nullptr)
+                    {
+                        fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
+                        return nullptr;
+                    }
+                }
+                closure = compileSourceToClosure(source, fsz, file);
+                Memory::osFree(source);
+                return closure;
+            }
+
+            bool runFile(const char* file)
+            {
+                Status result;
+                FuncClosure* closure;
+                closure = compileFileToClosure(file);
+                result = execFromClosure(closure, nullptr);
+                fflush(stdout);
+                if(result == Status::FAIL_COMPILE)
+                {
+                    return false;
+                }
+                if(result == Status::FAIL_RUNTIME)
+                {
+                    return false;
+                }
+                return true;
+            }
 
             void defGlobalValue(const char* name, Value val);
             void defNativeFunction(const char* name, NativeCallbackFN fptr);
@@ -3111,11 +3316,11 @@ namespace neon
             ClassObject* makeNamedClass(const char* name, ClassObject* parent);
     };
 
-
-    struct Arguments: public ArgBase
+    // better name: CallState?
+    struct CallState: public ArgBase
     {
         public:
-            NEON_FORCEINLINE Arguments(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr)
+            NEON_FORCEINLINE CallState(State* state, const char* n, Value tv, Value* vargv, int vargc, void* uptr)
             {
                 this->m_pvm = state;
                 this->funcname = n;
@@ -5783,6 +5988,8 @@ namespace neon
                             m_pvm->m_vmstate->gcClearProtect();
                         }
                         break;
+                    default:
+                        break;
                 }
                 m_pvm->m_vmstate->gcClearProtect();
             }
@@ -7663,6 +7870,8 @@ namespace neon
             case Value::OBJTYPE_USERDATA:
             case Value::OBJTYPE_STRING:
                 break;
+            default:
+                break;
         }
     }
 
@@ -8174,7 +8383,7 @@ namespace neon
         NEON_APIDEBUG(m_pvm, "thisval.type=%s, argcount=%d", thisval.name(), argcount);
         spos = m_stackidx + (-argcount);
         vargs = &m_stackvalues[spos];
-        Arguments fnargs(m_pvm, native->m_nativefnname, thisval, vargs, argcount, native->m_userptrforfn);
+        CallState fnargs(m_pvm, native->m_nativefnname, thisval, vargs, argcount, native->m_userptrforfn);
         r = native->m_natfunc(m_pvm, &fnargs);
         {
             m_stackvalues[spos - 1] = r;
@@ -8978,7 +9187,7 @@ void nn_modfn_os_preloader(neon::State* state)
     (void)state;
 }
 
-neon::Value nn_modfn_os_readdir(neon::State* state, neon::Arguments* args)
+neon::Value nn_modfn_os_readdir(neon::State* state, neon::CallState* args)
 {
     const char* dirn;
     FSDirReader rd;
@@ -9029,7 +9238,7 @@ neon::RegModule* nn_natmodule_load_os(neon::State* state)
     return &module;
 }
 
-neon::Value nn_modfn_astscan_scan(neon::State* state, neon::Arguments* args)
+neon::Value nn_modfn_astscan_scan(neon::State* state, neon::CallState* args)
 {
     size_t prelen;
     const char* prefix;
@@ -9107,14 +9316,14 @@ void nn_import_loadbuiltinmodules(neon::State* state)
 
 namespace neon
 {
-    Value objfn_dict_member_length(State* state, Arguments* args)
+    Value objfn_dict_member_length(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeNumber(args->thisval.asDict()->m_keynames->m_count);
     }
 
-    Value objfn_dict_member_add(State* state, Arguments* args)
+    Value objfn_dict_member_add(State* state, CallState* args)
     {
         Dictionary* dict;
         args->checkCount(2);
@@ -9129,10 +9338,9 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_dict_member_set(State* state, Arguments* args)
+    Value objfn_dict_member_set(State* state, CallState* args)
     {
         Dictionary* dict;
-        (void)state;
         args->checkCount(2);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
@@ -9148,7 +9356,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_dict_member_clear(State* state, Arguments* args)
+    Value objfn_dict_member_clear(State* state, CallState* args)
     {
         Dictionary* dict;
         (void)state;
@@ -9159,7 +9367,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_dict_member_clone(State* state, Arguments* args)
+    Value objfn_dict_member_clone(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9175,7 +9383,7 @@ namespace neon
         return Value::fromObject(newdict);
     }
 
-    Value objfn_dict_member_compact(State* state, Arguments* args)
+    Value objfn_dict_member_compact(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9194,9 +9402,8 @@ namespace neon
         return Value::fromObject(newdict);
     }
 
-    Value objfn_dict_member_contains(State* state, Arguments* args)
+    Value objfn_dict_member_contains(State* state, CallState* args)
     {
-        (void)state;
         Dictionary* dict;
         args->checkCount(1);
         ENFORCE_VALID_DICT_KEY(args, 0);
@@ -9205,7 +9412,7 @@ namespace neon
         return Value::makeBool(field != nullptr);
     }
 
-    Value objfn_dict_member_extend(State* state, Arguments* args)
+    Value objfn_dict_member_extend(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9227,11 +9434,10 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_dict_member_get(State* state, Arguments* args)
+    Value objfn_dict_member_get(State* state, CallState* args)
     {
         Dictionary* dict;
         Property* field;
-        (void)state;
         NEON_ARGS_CHECKCOUNTRANGE(args, 1, 2);
         ENFORCE_VALID_DICT_KEY(args, 0);
         dict = args->thisval.asDict();
@@ -9250,7 +9456,7 @@ namespace neon
         return field->m_actualval;
     }
 
-    Value objfn_dict_member_keys(State* state, Arguments* args)
+    Value objfn_dict_member_keys(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9265,7 +9471,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value objfn_dict_member_values(State* state, Arguments* args)
+    Value objfn_dict_member_values(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9282,7 +9488,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value objfn_dict_member_remove(State* state, Arguments* args)
+    Value objfn_dict_member_remove(State* state, CallState* args)
     {
         size_t i;
         int index;
@@ -9313,21 +9519,21 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_dict_member_isempty(State* state, Arguments* args)
+    Value objfn_dict_member_isempty(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeBool(args->thisval.asDict()->m_keynames->m_count == 0);
     }
 
-    Value objfn_dict_member_findkey(State* state, Arguments* args)
+    Value objfn_dict_member_findkey(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(1);
         return args->thisval.asDict()->m_valtable->findKey(args->argv[0]);
     }
 
-    Value objfn_dict_member_tolist(State* state, Arguments* args)
+    Value objfn_dict_member_tolist(State* state, CallState* args)
     {
         size_t i;
         Array* list;
@@ -9358,7 +9564,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value objfn_dict_member_iter(State* state, Arguments* args)
+    Value objfn_dict_member_iter(State* state, CallState* args)
     {
         Dictionary* dict;
         (void)state;
@@ -9372,7 +9578,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_dict_member_itern(State* state, Arguments* args)
+    Value objfn_dict_member_itern(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -9397,7 +9603,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_dict_member_each(State* state, Arguments* args)
+    Value objfn_dict_member_each(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -9428,7 +9634,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_dict_member_filter(State* state, Arguments* args)
+    Value objfn_dict_member_filter(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -9465,7 +9671,7 @@ namespace neon
         return Value::fromObject(resultdict);
     }
 
-    Value objfn_dict_member_some(State* state, Arguments* args)
+    Value objfn_dict_member_some(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -9501,7 +9707,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_dict_member_every(State* state, Arguments* args)
+    Value objfn_dict_member_every(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -9537,7 +9743,7 @@ namespace neon
         return Value::makeBool(true);
     }
 
-    Value objfn_dict_member_reduce(State* state, Arguments* args)
+    Value objfn_dict_member_reduce(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -9612,7 +9818,7 @@ namespace neon
         if(file->m_isstd) \
         return state->m_vmstate->raiseFromFunction(args, "method not supported for std files");
 
-    Value objfn_file_member_constructor(State* state, Arguments* args)
+    Value objfn_file_member_constructor(State* state, CallState* args)
     {
         FILE* hnd;
         const char* path;
@@ -9639,7 +9845,7 @@ namespace neon
         return Value::fromObject(file);
     }
 
-    Value objfn_file_static_exists(State* state, Arguments* args)
+    Value objfn_file_static_exists(State* state, CallState* args)
     {
         String* file;
         (void)state;
@@ -9649,7 +9855,7 @@ namespace neon
         return Value::makeBool(osfn_fileexists(file->data()));
     }
 
-    Value objfn_file_static_isfile(State* state, Arguments* args)
+    Value objfn_file_static_isfile(State* state, CallState* args)
     {
         String* file;
         (void)state;
@@ -9659,7 +9865,7 @@ namespace neon
         return Value::makeBool(osfn_pathisfile(file->data()));
     }
 
-    Value objfn_file_static_isdirectory(State* state, Arguments* args)
+    Value objfn_file_static_isdirectory(State* state, CallState* args)
     {
         String* file;
         (void)state;
@@ -9669,12 +9875,11 @@ namespace neon
         return Value::makeBool(osfn_pathisdirectory(file->data()));
     }
 
-    Value objfn_file_static_read(State* state, Arguments* args)
+    Value objfn_file_static_read(State* state, CallState* args)
     {
         size_t sz;
         char* src;
         String* file;
-        (void)state;
         args->checkCount(1);
         args->checkByFunc(0, &Value::isString);
         file = args->argv[0].asString();
@@ -9682,7 +9887,7 @@ namespace neon
         return Value::fromObject(String::take(state, src, sz));
     }
 
-    Value objfn_file_member_close(State* state, Arguments* args)
+    Value objfn_file_member_close(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
@@ -9690,7 +9895,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_file_member_open(State* state, Arguments* args)
+    Value objfn_file_member_open(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
@@ -9698,7 +9903,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_file_member_isopen(State* state, Arguments* args)
+    Value objfn_file_member_isopen(State* state, CallState* args)
     {
         File* file;
         (void)state;
@@ -9706,7 +9911,7 @@ namespace neon
         return Value::makeBool(file->m_isstd || file->m_isopen);
     }
 
-    Value objfn_file_member_isclosed(State* state, Arguments* args)
+    Value objfn_file_member_isclosed(State* state, CallState* args)
     {
         File* file;
         (void)state;
@@ -9714,7 +9919,7 @@ namespace neon
         return Value::makeBool(!file->m_isstd && !file->m_isopen);
     }
 
-    Value objfn_file_member_read(State* state, Arguments* args)
+    Value objfn_file_member_read(State* state, CallState* args)
     {
         size_t readhowmuch;
         File::IOResult res;
@@ -9736,7 +9941,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_file_member_get(State* state, Arguments* args)
+    Value objfn_file_member_get(State* state, CallState* args)
     {
         int ch;
         File* file;
@@ -9751,7 +9956,7 @@ namespace neon
         return Value::makeNumber(ch);
     }
 
-    Value objfn_file_member_gets(State* state, Arguments* args)
+    Value objfn_file_member_gets(State* state, CallState* args)
     {
         long end;
         long length;
@@ -9826,7 +10031,7 @@ namespace neon
         return Value::fromObject(String::take(state, buffer, bytesread));
     }
 
-    Value objfn_file_member_write(State* state, Arguments* args)
+    Value objfn_file_member_write(State* state, CallState* args)
     {
         size_t count;
         int length;
@@ -9874,7 +10079,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_file_member_puts(State* state, Arguments* args)
+    Value objfn_file_member_puts(State* state, CallState* args)
     {
         size_t count;
         int length;
@@ -9921,7 +10126,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_file_member_printf(State* state, Arguments* args)
+    Value objfn_file_member_printf(State* state, CallState* args)
     {
         File* file;
         String* ofmt;
@@ -9937,14 +10142,14 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_file_member_number(State* state, Arguments* args)
+    Value objfn_file_member_number(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeNumber(args->thisval.asFile()->m_filedesc);
     }
 
-    Value objfn_file_member_istty(State* state, Arguments* args)
+    Value objfn_file_member_istty(State* state, CallState* args)
     {
         File* file;
         (void)state;
@@ -9953,7 +10158,7 @@ namespace neon
         return Value::makeBool(file->m_istty);
     }
 
-    Value objfn_file_member_flush(State* state, Arguments* args)
+    Value objfn_file_member_flush(State* state, CallState* args)
     {
         File* file;
         args->checkCount(0);
@@ -9979,7 +10184,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_file_member_stats(State* state, Arguments* args)
+    Value objfn_file_member_stats(State* state, CallState* args)
     {
         struct stat stats;
         File* file;
@@ -10041,7 +10246,7 @@ namespace neon
         return Value::fromObject(dict);
     }
 
-    Value objfn_file_member_path(State* state, Arguments* args)
+    Value objfn_file_member_path(State* state, CallState* args)
     {
         File* file;
         args->checkCount(0);
@@ -10050,7 +10255,7 @@ namespace neon
         return Value::fromObject(file->m_filepath);
     }
 
-    Value objfn_file_member_mode(State* state, Arguments* args)
+    Value objfn_file_member_mode(State* state, CallState* args)
     {
         File* file;
         (void)state;
@@ -10059,7 +10264,7 @@ namespace neon
         return Value::fromObject(file->m_filemode);
     }
 
-    Value objfn_file_member_name(State* state, Arguments* args)
+    Value objfn_file_member_name(State* state, CallState* args)
     {
         char* name;
         File* file;
@@ -10082,7 +10287,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_file_member_seek(State* state, Arguments* args)
+    Value objfn_file_member_seek(State* state, CallState* args)
     {
         long position;
         int seektype;
@@ -10097,7 +10302,7 @@ namespace neon
         RETURN_STATUS(fseek(file->m_filehandle, position, seektype));
     }
 
-    Value objfn_file_member_tell(State* state, Arguments* args)
+    Value objfn_file_member_tell(State* state, CallState* args)
     {
         File* file;
         args->checkCount(0);
@@ -10110,7 +10315,7 @@ namespace neon
     #undef RETURN_STATUS
     #undef DENY_STD
 
-    Value objfn_array_member_length(State* state, Arguments* args)
+    Value objfn_array_member_length(State* state, CallState* args)
     {
         Array* selfarr;
         (void)state;
@@ -10118,7 +10323,7 @@ namespace neon
         return Value::makeNumber(selfarr->size());
     }
 
-    Value objfn_array_member_append(State* state, Arguments* args)
+    Value objfn_array_member_append(State* state, CallState* args)
     {
         int i;
         (void)state;
@@ -10129,7 +10334,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_clear(State* state, Arguments* args)
+    Value objfn_array_member_clear(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
@@ -10137,7 +10342,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_clone(State* state, Arguments* args)
+    Value objfn_array_member_clone(State* state, CallState* args)
     {
         Array* list;
         (void)state;
@@ -10146,7 +10351,7 @@ namespace neon
         return Value::fromObject(list->copy(0, list->size()));
     }
 
-    Value objfn_array_member_count(State* state, Arguments* args)
+    Value objfn_array_member_count(State* state, CallState* args)
     {
         size_t i;
         size_t count;
@@ -10165,7 +10370,7 @@ namespace neon
         return Value::makeNumber(count);
     }
 
-    Value objfn_array_member_extend(State* state, Arguments* args)
+    Value objfn_array_member_extend(State* state, CallState* args)
     {
         size_t i;
         Array* list;
@@ -10182,7 +10387,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_indexof(State* state, Arguments* args)
+    Value objfn_array_member_indexof(State* state, CallState* args)
     {
         size_t i;
         Array* list;
@@ -10204,7 +10409,7 @@ namespace neon
         return Value::makeNumber(-1);
     }
 
-    Value objfn_array_member_insert(State* state, Arguments* args)
+    Value objfn_array_member_insert(State* state, CallState* args)
     {
         size_t index;
         Array* list;
@@ -10217,7 +10422,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_pop(State* state, Arguments* args)
+    Value objfn_array_member_pop(State* state, CallState* args)
     {
         Value value;
         Array* list;
@@ -10233,7 +10438,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_shift(State* state, Arguments* args)
+    Value objfn_array_member_shift(State* state, CallState* args)
     {
         size_t i;
         size_t j;
@@ -10277,7 +10482,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_removeat(State* state, Arguments* args)
+    Value objfn_array_member_removeat(State* state, CallState* args)
     {
         size_t i;
         int index;
@@ -10301,7 +10506,7 @@ namespace neon
         return value;
     }
 
-    Value objfn_array_member_remove(State* state, Arguments* args)
+    Value objfn_array_member_remove(State* state, CallState* args)
     {
         size_t i;
         int index;
@@ -10329,7 +10534,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_reverse(State* state, Arguments* args)
+    Value objfn_array_member_reverse(State* state, CallState* args)
     {
         int fromtop;
         Array* list;
@@ -10357,7 +10562,7 @@ namespace neon
         return Value::fromObject(nlist);
     }
 
-    Value objfn_array_member_sort(State* state, Arguments* args)
+    Value objfn_array_member_sort(State* state, CallState* args)
     {
         Array* list;
         ValArray::QuickSort qs(state);
@@ -10367,7 +10572,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value objfn_array_member_contains(State* state, Arguments* args)
+    Value objfn_array_member_contains(State* state, CallState* args)
     {
         size_t i;
         Array* list;
@@ -10384,7 +10589,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_array_member_delete(State* state, Arguments* args)
+    Value objfn_array_member_delete(State* state, CallState* args)
     {
         int i;
         int idxupper;
@@ -10416,7 +10621,7 @@ namespace neon
         return Value::makeNumber((double)idxupper - (double)idxlower + 1);
     }
 
-    Value objfn_array_member_first(State* state, Arguments* args)
+    Value objfn_array_member_first(State* state, CallState* args)
     {
         Array* list;
         (void)state;
@@ -10429,7 +10634,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_last(State* state, Arguments* args)
+    Value objfn_array_member_last(State* state, CallState* args)
     {
         Array* list;
         (void)state;
@@ -10442,14 +10647,14 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_isempty(State* state, Arguments* args)
+    Value objfn_array_member_isempty(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeBool(args->thisval.asArray()->size() == 0);
     }
 
-    Value objfn_array_member_take(State* state, Arguments* args)
+    Value objfn_array_member_take(State* state, CallState* args)
     {
         int count;
         Array* list;
@@ -10469,7 +10674,7 @@ namespace neon
         return Value::fromObject(list->copy(0, count));
     }
 
-    Value objfn_array_member_get(State* state, Arguments* args)
+    Value objfn_array_member_get(State* state, CallState* args)
     {
         int index;
         Array* list;
@@ -10485,7 +10690,7 @@ namespace neon
         return list->at(index);
     }
 
-    Value objfn_array_member_compact(State* state, Arguments* args)
+    Value objfn_array_member_compact(State* state, CallState* args)
     {
         size_t i;
         Array* list;
@@ -10503,7 +10708,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value objfn_array_member_unique(State* state, Arguments* args)
+    Value objfn_array_member_unique(State* state, CallState* args)
     {
         size_t i;
         size_t j;
@@ -10532,7 +10737,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value objfn_array_member_zip(State* state, Arguments* args)
+    Value objfn_array_member_zip(State* state, CallState* args)
     {
         size_t i;
         size_t j;
@@ -10569,7 +10774,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value objfn_array_member_zipfrom(State* state, Arguments* args)
+    Value objfn_array_member_zipfrom(State* state, CallState* args)
     {
         size_t i;
         size_t j;
@@ -10609,7 +10814,7 @@ namespace neon
         return Value::fromObject(newlist);
     }
 
-    Value objfn_array_member_todict(State* state, Arguments* args)
+    Value objfn_array_member_todict(State* state, CallState* args)
     {
         size_t i;
         Dictionary* dict;
@@ -10624,7 +10829,7 @@ namespace neon
         return Value::fromObject(dict);
     }
 
-    Value objfn_array_member_iter(State* state, Arguments* args)
+    Value objfn_array_member_iter(State* state, CallState* args)
     {
         int index;
         Array* list;
@@ -10640,7 +10845,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_itern(State* state, Arguments* args)
+    Value objfn_array_member_itern(State* state, CallState* args)
     {
         int index;
         Array* list;
@@ -10666,7 +10871,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_array_member_each(State* state, Arguments* args)
+    Value objfn_array_member_each(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10695,7 +10900,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_array_member_map(State* state, Arguments* args)
+    Value objfn_array_member_map(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10726,7 +10931,7 @@ namespace neon
         return Value::fromObject(resultlist);
     }
 
-    Value objfn_array_member_filter(State* state, Arguments* args)
+    Value objfn_array_member_filter(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10764,7 +10969,7 @@ namespace neon
         return Value::fromObject(resultlist);
     }
 
-    Value objfn_array_member_some(State* state, Arguments* args)
+    Value objfn_array_member_some(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10800,7 +11005,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_array_member_every(State* state, Arguments* args)
+    Value objfn_array_member_every(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10836,7 +11041,7 @@ namespace neon
         return Value::makeBool(true);
     }
 
-    Value objfn_array_member_reduce(State* state, Arguments* args)
+    Value objfn_array_member_reduce(State* state, CallState* args)
     {
         size_t i;
         int arity;
@@ -10888,28 +11093,28 @@ namespace neon
         return accumulator;
     }
 
-    Value objfn_range_member_lower(State* state, Arguments* args)
+    Value objfn_range_member_lower(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_lower);
     }
 
-    Value objfn_range_member_upper(State* state, Arguments* args)
+    Value objfn_range_member_upper(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_upper);
     }
 
-    Value objfn_range_member_range(State* state, Arguments* args)
+    Value objfn_range_member_range(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(0);
         return Value::makeNumber(args->thisval.asRange()->m_range);
     }
 
-    Value objfn_range_member_iter(State* state, Arguments* args)
+    Value objfn_range_member_iter(State* state, CallState* args)
     {
         int val;
         int index;
@@ -10938,7 +11143,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_range_member_itern(State* state, Arguments* args)
+    Value objfn_range_member_itern(State* state, CallState* args)
     {
         int index;
         Range* range;
@@ -10964,7 +11169,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_range_member_loop(State* state, Arguments* args)
+    Value objfn_range_member_loop(State* state, CallState* args)
     {
         int i;
         int arity;
@@ -10993,7 +11198,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_range_member_expand(State* state, Arguments* args)
+    Value objfn_range_member_expand(State* state, CallState* args)
     {
         int i;
         Value val;
@@ -11009,7 +11214,7 @@ namespace neon
         return Value::fromObject(oa);
     }
 
-    Value objfn_range_member_constructor(State* state, Arguments* args)
+    Value objfn_range_member_constructor(State* state, CallState* args)
     {
         int a;
         int b;
@@ -11020,7 +11225,7 @@ namespace neon
         return Value::fromObject(orng);
     }
 
-    Value objfn_string_static_utf8numbytes(State* state, Arguments* args)
+    Value objfn_string_static_utf8numbytes(State* state, CallState* args)
     {
         int incode;
         int res;
@@ -11033,7 +11238,7 @@ namespace neon
         return Value::makeNumber(res);
     }
 
-    Value objfn_string_static_utf8decode(State* state, Arguments* args)
+    Value objfn_string_static_utf8decode(State* state, CallState* args)
     {
         int res;
         String* instr;
@@ -11046,7 +11251,7 @@ namespace neon
         return Value::makeNumber(res);
     }
 
-    Value objfn_string_static_utf8encode(State* state, Arguments* args)
+    Value objfn_string_static_utf8encode(State* state, CallState* args)
     {
         int incode;
         size_t len;
@@ -11062,7 +11267,7 @@ namespace neon
         return Value::fromObject(res);
     }
 
-    Value nn_util_stringutf8chars(State* state, Arguments* args, bool onlycodepoint)
+    Value nn_util_stringutf8chars(State* state, CallState* args, bool onlycodepoint)
     {
         int cp;
         const char* cstr;
@@ -11090,17 +11295,17 @@ namespace neon
         return Value::fromObject(res);
     }
 
-    Value objfn_string_member_utf8chars(State* state, Arguments* args)
+    Value objfn_string_member_utf8chars(State* state, CallState* args)
     {
         return nn_util_stringutf8chars(state, args, false);
     }
 
-    Value objfn_string_member_utf8codepoints(State* state, Arguments* args)
+    Value objfn_string_member_utf8codepoints(State* state, CallState* args)
     {
         return nn_util_stringutf8chars(state, args, true);
     }
 
-    Value objfn_string_static_fromcharcode(State* state, Arguments* args)
+    Value objfn_string_static_fromcharcode(State* state, CallState* args)
     {
         char ch;
         String* os;
@@ -11111,7 +11316,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_string_member_constructor(State* state, Arguments* args)
+    Value objfn_string_member_constructor(State* state, CallState* args)
     {
         String* os;
         args->checkCount(0);
@@ -11119,7 +11324,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_string_member_length(State* state, Arguments* args)
+    Value objfn_string_member_length(State* state, CallState* args)
     {
         String* selfstr;
         (void)state;
@@ -11128,7 +11333,7 @@ namespace neon
         return Value::makeNumber(selfstr->length());
     }
 
-    Value objfn_string_member_substring(State* state, Arguments* args)
+    Value objfn_string_member_substring(State* state, CallState* args)
     {
         size_t end;
         size_t start;
@@ -11150,7 +11355,7 @@ namespace neon
         return Value::fromObject(nos);
     }
 
-    Value objfn_string_member_charcodeat(State* state, Arguments* args)
+    Value objfn_string_member_charcodeat(State* state, CallState* args)
     {
         int ch;
         int idx;
@@ -11173,7 +11378,7 @@ namespace neon
         return Value::makeNumber(ch);
     }
 
-    Value objfn_string_member_charat(State* state, Arguments* args)
+    Value objfn_string_member_charat(State* state, CallState* args)
     {
         char ch;
         int idx;
@@ -11195,7 +11400,7 @@ namespace neon
         return Value::fromObject(String::copy(state, &ch, 1));
     }
 
-    Value objfn_string_member_upper(State* state, Arguments* args)
+    Value objfn_string_member_upper(State* state, CallState* args)
     {
         size_t slen;
         String* str;
@@ -11208,7 +11413,7 @@ namespace neon
         return Value::fromObject(copied);
     }
 
-    Value objfn_string_member_lower(State* state, Arguments* args)
+    Value objfn_string_member_lower(State* state, CallState* args)
     {
         size_t slen;
         String* str;
@@ -11221,7 +11426,7 @@ namespace neon
         return Value::fromObject(copied);
     }
 
-    Value objfn_string_member_isalpha(State* state, Arguments* args)
+    Value objfn_string_member_isalpha(State* state, CallState* args)
     {
         int i;
         String* selfstr;
@@ -11238,7 +11443,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value objfn_string_member_isalnum(State* state, Arguments* args)
+    Value objfn_string_member_isalnum(State* state, CallState* args)
     {
         int i;
         String* selfstr;
@@ -11255,7 +11460,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value objfn_string_member_isfloat(State* state, Arguments* args)
+    Value objfn_string_member_isfloat(State* state, CallState* args)
     {
         double f;
         char* p;
@@ -11284,7 +11489,7 @@ namespace neon
         return Value::makeBool(false);
     }
 
-    Value objfn_string_member_isnumber(State* state, Arguments* args)
+    Value objfn_string_member_isnumber(State* state, CallState* args)
     {
         int i;
         String* selfstr;
@@ -11301,7 +11506,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value objfn_string_member_islower(State* state, Arguments* args)
+    Value objfn_string_member_islower(State* state, CallState* args)
     {
         int i;
         bool alphafound;
@@ -11324,7 +11529,7 @@ namespace neon
         return Value::makeBool(alphafound);
     }
 
-    Value objfn_string_member_isupper(State* state, Arguments* args)
+    Value objfn_string_member_isupper(State* state, CallState* args)
     {
         int i;
         bool alphafound;
@@ -11347,7 +11552,7 @@ namespace neon
         return Value::makeBool(alphafound);
     }
 
-    Value objfn_string_member_isspace(State* state, Arguments* args)
+    Value objfn_string_member_isspace(State* state, CallState* args)
     {
         int i;
         String* selfstr;
@@ -11364,7 +11569,7 @@ namespace neon
         return Value::makeBool(selfstr->length() != 0);
     }
 
-    Value objfn_string_member_repeat(State* state, Arguments* args)
+    Value objfn_string_member_repeat(State* state, CallState* args)
     {
         size_t i;
         size_t cnt;
@@ -11382,7 +11587,7 @@ namespace neon
     }
 
 
-    Value objfn_string_member_trim(State* state, Arguments* args)
+    Value objfn_string_member_trim(State* state, CallState* args)
     {
         char trimmer;
         char* end;
@@ -11439,7 +11644,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value objfn_string_member_ltrim(State* state, Arguments* args)
+    Value objfn_string_member_ltrim(State* state, CallState* args)
     {
         char trimmer;
         char* end;
@@ -11481,7 +11686,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value objfn_string_member_rtrim(State* state, Arguments* args)
+    Value objfn_string_member_rtrim(State* state, CallState* args)
     {
         char trimmer;
         char* end;
@@ -11523,7 +11728,7 @@ namespace neon
         return Value::fromObject(String::copy(state, string));
     }
 
-    Value objfn_array_member_constructor(State* state, Arguments* args)
+    Value objfn_array_member_constructor(State* state, CallState* args)
     {
         int cnt;
         Value filler;
@@ -11540,7 +11745,7 @@ namespace neon
         return Value::fromObject(arr);
     }
 
-    Value objfn_array_member_join(State* state, Arguments* args)
+    Value objfn_array_member_join(State* state, CallState* args)
     {
         int i;
         int count;
@@ -11580,7 +11785,7 @@ namespace neon
         return Value::fromObject(pd.takeString());
     }
 
-    Value objfn_string_member_indexof(State* state, Arguments* args)
+    Value objfn_string_member_indexof(State* state, CallState* args)
     {
         int startindex;
         const char* result;
@@ -11610,7 +11815,7 @@ namespace neon
         return Value::makeNumber(-1);
     }
 
-    Value objfn_string_member_startswith(State* state, Arguments* args)
+    Value objfn_string_member_startswith(State* state, CallState* args)
     {
         String* substr;
         String* string;
@@ -11626,7 +11831,7 @@ namespace neon
         return Value::makeBool(memcmp(substr->data(), string->data(), substr->length()) == 0);
     }
 
-    Value objfn_string_member_endswith(State* state, Arguments* args)
+    Value objfn_string_member_endswith(State* state, CallState* args)
     {
         int difference;
         String* substr;
@@ -11644,7 +11849,7 @@ namespace neon
         return Value::makeBool(memcmp(substr->data(), string->data() + difference, substr->length()) == 0);
     }
 
-    Value objfn_string_member_count(State* state, Arguments* args)
+    Value objfn_string_member_count(State* state, CallState* args)
     {
         int count;
         const char* tmp;
@@ -11669,7 +11874,7 @@ namespace neon
         return Value::makeNumber(count);
     }
 
-    Value objfn_string_member_tonumber(State* state, Arguments* args)
+    Value objfn_string_member_tonumber(State* state, CallState* args)
     {
         String* selfstr;
         (void)state;
@@ -11678,7 +11883,7 @@ namespace neon
         return Value::makeNumber(strtod(selfstr->data(), nullptr));
     }
 
-    Value objfn_string_member_isascii(State* state, Arguments* args)
+    Value objfn_string_member_isascii(State* state, CallState* args)
     {
         String* string;
         (void)state;
@@ -11691,7 +11896,7 @@ namespace neon
         return Value::fromObject(string);
     }
 
-    Value objfn_string_member_tolist(State* state, Arguments* args)
+    Value objfn_string_member_tolist(State* state, CallState* args)
     {
         int i;
         int end;
@@ -11716,7 +11921,7 @@ namespace neon
     }
 
     // TODO: lpad and rpad modify m_sbuf members!!!
-    Value objfn_string_member_lpad(State* state, Arguments* args)
+    Value objfn_string_member_lpad(State* state, CallState* args)
     {
         int i;
         int width;
@@ -11762,7 +11967,7 @@ namespace neon
         return Value::fromObject(result);
     }
 
-    Value objfn_string_member_rpad(State* state, Arguments* args)
+    Value objfn_string_member_rpad(State* state, CallState* args)
     {
         int i;
         int width;
@@ -11808,7 +12013,7 @@ namespace neon
         return Value::fromObject(result);
     }
 
-    Value objfn_string_member_split(State* state, Arguments* args)
+    Value objfn_string_member_split(State* state, CallState* args)
     {
         int i;
         int end;
@@ -11854,7 +12059,7 @@ namespace neon
         return Value::fromObject(list);
     }
 
-    Value objfn_string_member_replace(State* state, Arguments* args)
+    Value objfn_string_member_replace(State* state, CallState* args)
     {
         int i;
         int totallength;
@@ -11895,7 +12100,7 @@ namespace neon
     }
 
     #if 0
-    Value objfn_string_member_chr(State* state, Arguments* args)
+    Value objfn_string_member_chr(State* state, CallState* args)
     {
         size_t len;
         char* string;
@@ -11906,7 +12111,7 @@ namespace neon
     }
     #endif
 
-    Value objfn_string_member_iter(State* state, Arguments* args)
+    Value objfn_string_member_iter(State* state, CallState* args)
     {
         int index;
         int length;
@@ -11925,7 +12130,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_string_member_itern(State* state, Arguments* args)
+    Value objfn_string_member_itern(State* state, CallState* args)
     {
         int index;
         int length;
@@ -11953,7 +12158,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value objfn_string_member_each(State* state, Arguments* args)
+    Value objfn_string_member_each(State* state, CallState* args)
     {
         int i;
         int arity;
@@ -11983,7 +12188,7 @@ namespace neon
         return Value::makeEmpty();
     }
 
-    Value objfn_object_member_dump(State* state, Arguments* args)
+    Value objfn_object_member_dump(State* state, CallState* args)
     {
         Value v;
         String* os;
@@ -11994,7 +12199,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_object_member_tostring(State* state, Arguments* args)
+    Value objfn_object_member_tostring(State* state, CallState* args)
     {
         Value v;
         String* os;
@@ -12005,7 +12210,7 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_object_static_typename(State* state, Arguments* args)
+    Value objfn_object_static_typename(State* state, CallState* args)
     {
         Value v;
         String* os;
@@ -12014,13 +12219,13 @@ namespace neon
         return Value::fromObject(os);
     }
 
-    Value objfn_object_member_getclass(State* state, Arguments* args)
+    Value objfn_object_member_getclass(State* state, CallState* args)
     {
         auto klass = state->vmGetClassFor(args->thisval);
         return Value::fromObject(klass);
     }
 
-    Value objfn_object_member_isstring(State* state, Arguments* args)
+    Value objfn_object_member_isstring(State* state, CallState* args)
     {
         Value v;
         (void)state;
@@ -12028,7 +12233,7 @@ namespace neon
         return Value::makeBool(v.isString());
     }
 
-    Value objfn_object_member_isarray(State* state, Arguments* args)
+    Value objfn_object_member_isarray(State* state, CallState* args)
     {
         Value v;
         (void)state;
@@ -12036,7 +12241,7 @@ namespace neon
         return Value::makeBool(v.isArray());
     }
 
-    Value objfn_object_member_iscallable(State* state, Arguments* args)
+    Value objfn_object_member_iscallable(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12050,7 +12255,7 @@ namespace neon
         );
     }
 
-    Value objfn_object_member_isbool(State* state, Arguments* args)
+    Value objfn_object_member_isbool(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12058,7 +12263,7 @@ namespace neon
         return Value::makeBool(selfval.isBool());
     }
 
-    Value objfn_object_member_isnumber(State* state, Arguments* args)
+    Value objfn_object_member_isnumber(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12066,7 +12271,7 @@ namespace neon
         return Value::makeBool(selfval.isNumber());
     }
 
-    Value objfn_object_member_isint(State* state, Arguments* args)
+    Value objfn_object_member_isint(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12074,7 +12279,7 @@ namespace neon
         return Value::makeBool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
     }
 
-    Value objfn_object_member_isdict(State* state, Arguments* args)
+    Value objfn_object_member_isdict(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12082,7 +12287,7 @@ namespace neon
         return Value::makeBool(selfval.isDict());
     }
 
-    Value objfn_object_member_isobject(State* state, Arguments* args)
+    Value objfn_object_member_isobject(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12090,7 +12295,7 @@ namespace neon
         return Value::makeBool(selfval.isObject());
     }
 
-    Value objfn_object_member_isfunction(State* state, Arguments* args)
+    Value objfn_object_member_isfunction(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12103,7 +12308,7 @@ namespace neon
         );
     }
 
-    Value objfn_object_member_isiterable(State* state, Arguments* args)
+    Value objfn_object_member_isiterable(State* state, CallState* args)
     {
         bool isiterable;
         ClassObject* klass;
@@ -12122,7 +12327,7 @@ namespace neon
         return Value::makeBool(isiterable);
     }
 
-    Value objfn_object_member_isclass(State* state, Arguments* args)
+    Value objfn_object_member_isclass(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12130,7 +12335,7 @@ namespace neon
         return Value::makeBool(selfval.isClass());
     }
 
-    Value objfn_object_member_isfile(State* state, Arguments* args)
+    Value objfn_object_member_isfile(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12138,7 +12343,7 @@ namespace neon
         return Value::makeBool(selfval.isFile());
     }
 
-    Value objfn_object_member_isinstance(State* state, Arguments* args)
+    Value objfn_object_member_isinstance(State* state, CallState* args)
     {
         Value selfval;
         (void)state;
@@ -12146,22 +12351,22 @@ namespace neon
         return Value::makeBool(selfval.isInstance());
     }
 
-    Value objfn_number_member_tobinstring(State* state, Arguments* args)
+    Value objfn_number_member_tobinstring(State* state, CallState* args)
     {
         return Value::fromObject(String::numToBinString(state, args->thisval.asNumber()));
     }
 
-    Value objfn_number_member_tooctstring(State* state, Arguments* args)
+    Value objfn_number_member_tooctstring(State* state, CallState* args)
     {
         return Value::fromObject(String::numToOctString(state, args->thisval.asNumber(), false));
     }
 
-    Value objfn_number_member_tohexstring(State* state, Arguments* args)
+    Value objfn_number_member_tohexstring(State* state, CallState* args)
     {
         return Value::fromObject(String::numToHexString(state, args->thisval.asNumber(), false));
     }
 
-    Value objfn_math_static_abs(State* state, Arguments* args)
+    Value objfn_math_static_abs(State* state, CallState* args)
     {
         (void)state;
         args->checkType(0, Value::VALTYPE_NUMBER);
@@ -12171,7 +12376,7 @@ namespace neon
         return Value::makeNumber(rt);
     }
 
-    Value objfn_math_static_round(State* state, Arguments* args)
+    Value objfn_math_static_round(State* state, CallState* args)
     {
         (void)state;
         args->checkType(0, Value::VALTYPE_NUMBER);
@@ -12181,7 +12386,7 @@ namespace neon
         return Value::makeNumber(rt);
     }
 
-    Value objfn_math_static_min(State* state, Arguments* args)
+    Value objfn_math_static_min(State* state, CallState* args)
     {
         (void)state;
         //args->checkType(0, Value::VALTYPE_NUMBER);
@@ -12387,7 +12592,7 @@ namespace neon
         }
     }
 
-    Value nn_nativefn_time(State* state, Arguments* args)
+    Value nn_nativefn_time(State* state, CallState* args)
     {
         struct timeval tv;
         (void)args;
@@ -12397,7 +12602,7 @@ namespace neon
         return Value::makeNumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
     }
 
-    Value nn_nativefn_microtime(State* state, Arguments* args)
+    Value nn_nativefn_microtime(State* state, CallState* args)
     {
         struct timeval tv;
         (void)args;
@@ -12407,7 +12612,7 @@ namespace neon
         return Value::makeNumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
     }
 
-    Value nn_nativefn_id(State* state, Arguments* args)
+    Value nn_nativefn_id(State* state, CallState* args)
     {
         long* lptr;
         Value val;
@@ -12418,7 +12623,7 @@ namespace neon
         return Value::makeNumber(*lptr);
     }
 
-    Value nn_nativefn_int(State* state, Arguments* args)
+    Value nn_nativefn_int(State* state, CallState* args)
     {
         (void)state;
         NEON_ARGS_CHECKCOUNTRANGE(args, 0, 1);
@@ -12430,7 +12635,7 @@ namespace neon
         return Value::makeNumber((double)((int)args->argv[0].asNumber()));
     }
 
-    Value nn_nativefn_chr(State* state, Arguments* args)
+    Value nn_nativefn_chr(State* state, CallState* args)
     {
         size_t len;
         char* string;
@@ -12440,7 +12645,7 @@ namespace neon
         return Value::fromObject(String::take(state, string));
     }
 
-    Value nn_nativefn_ord(State* state, Arguments* args)
+    Value nn_nativefn_ord(State* state, CallState* args)
     {
         int ord;
         int length;
@@ -12467,7 +12672,7 @@ namespace neon
         return Value::makeNumber(ord);
     }
 
-    Value nn_nativefn_rand(State* state, Arguments* args)
+    Value nn_nativefn_rand(State* state, CallState* args)
     {
         int tmp;
         int lowerlimit;
@@ -12495,7 +12700,7 @@ namespace neon
         return Value::makeNumber(Util::MTRand(lowerlimit, upperlimit));
     }
 
-    Value nn_nativefn_typeof(State* state, Arguments* args)
+    Value nn_nativefn_typeof(State* state, CallState* args)
     {
         const char* result;
         args->checkCount(1);
@@ -12503,7 +12708,7 @@ namespace neon
         return Value::fromObject(String::copy(state, result));
     }
 
-    Value nn_nativefn_eval(State* state, Arguments* args)
+    Value nn_nativefn_eval(State* state, CallState* args)
     {
         Value result;
         String* os;
@@ -12515,7 +12720,7 @@ namespace neon
     }
 
     /*
-    Value nn_nativefn_loadfile(State* state, Arguments* args)
+    Value nn_nativefn_loadfile(State* state, CallState* args)
     {
         Value result;
         String* os;
@@ -12527,7 +12732,7 @@ namespace neon
     }
     */
 
-    Value nn_nativefn_instanceof(State* state, Arguments* args)
+    Value nn_nativefn_instanceof(State* state, CallState* args)
     {
         (void)state;
         args->checkCount(2);
@@ -12536,7 +12741,7 @@ namespace neon
         return Value::makeBool(ClassObject::instanceOf(args->argv[0].asInstance()->m_fromclass, args->argv[1].asClass()));
     }
 
-    Value nn_nativefn_sprintf(State* state, Arguments* args)
+    Value nn_nativefn_sprintf(State* state, CallState* args)
     {
         String* res;
         String* ofmt;
@@ -12553,7 +12758,7 @@ namespace neon
         return Value::fromObject(res);
     }
 
-    Value nn_nativefn_printf(State* state, Arguments* args)
+    Value nn_nativefn_printf(State* state, CallState* args)
     {
         String* ofmt;
         NEON_ARGS_CHECKMINARG(args, 1);
@@ -12566,7 +12771,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value nn_nativefn_print(State* state, Arguments* args)
+    Value nn_nativefn_print(State* state, CallState* args)
     {
         int i;
         for(i = 0; i < args->argc; i++)
@@ -12580,7 +12785,7 @@ namespace neon
         return Value::makeNull();
     }
 
-    Value nn_nativefn_println(State* state, Arguments* args)
+    Value nn_nativefn_println(State* state, CallState* args)
     {
         Value v;
         v = nn_nativefn_print(state, args);
@@ -12588,7 +12793,7 @@ namespace neon
         return v;
     }
 
-    Value nn_nativefn_raise(State* state, Arguments* args)
+    Value nn_nativefn_raise(State* state, CallState* args)
     {
         const char* msg;
         const char* clname;
@@ -12674,6 +12879,18 @@ namespace neon
         return cl;
     }
 
+    FuncClosure* State::compileSourceToClosure(const char* source, size_t len, const char* filename)
+    {
+        const char* rp;
+        FuncClosure* closure;
+        (void)len;
+        m_rootphysfile = (char*)filename;
+        rp = filename;
+        m_toplevelmodule->m_physlocation = String::copy(this, rp);
+        closure = compileSource(m_toplevelmodule, source);
+        return closure;
+    }
+
     FuncClosure* State::compileScriptSource(Module* module, bool fromeval, const char* source)
     {
         Blob* blob;
@@ -12702,6 +12919,26 @@ namespace neon
         }
         Memory::destroy(blob);
         return closure;
+    }
+
+    FuncClosure* State::readBinaryFile(const char* filename)
+    {
+        bool ok;
+        FILE* fh;
+        fh = fopen(filename, "rb");
+        if(fh == nullptr)
+        {
+            return nullptr;
+        }
+        auto fs = FuncScript::make(this, m_toplevelmodule, FuncCommon::FUNCTYPE_FUNCTION);
+        auto cls = FuncClosure::make(this, fs);
+        ok = fs->m_compiledblob->fromHandle(fh, true);
+        fclose(fh);
+        if(!ok)
+        {
+            return nullptr;
+        }
+        return cls;
     }
 
     FuncClosure* State::compileSource(Module* module, const char* source)
@@ -15317,65 +15554,12 @@ static bool nn_cli_repl(neon::State* state)
 }
 #endif
 
-static neon::FuncClosure* nn_cli_readbinary(neon::State* state, const char* filename)
-{
-    bool ok;
-    FILE* fh;
-    fh = fopen(filename, "rb");
-    if(fh == nullptr)
-    {
-        return nullptr;
-    }
-    auto fs = neon::FuncScript::make(state, state->m_toplevelmodule, neon::FuncCommon::FUNCTYPE_FUNCTION);
-    auto cls = neon::FuncClosure::make(state, fs);
-    ok = fs->m_compiledblob->fromHandle(fh);
-    fclose(fh);
-    if(!ok)
-    {
-        return nullptr;
-    }
-    return cls;
-}
-
-static neon::FuncClosure* nn_cli_compilesource(neon::State* state, const char* source, size_t len, const char* filename)
-{
-    const char* rp;
-    neon::FuncClosure* closure;
-    state->m_rootphysfile = (char*)filename;
-    rp = filename;
-    state->m_toplevelmodule->m_physlocation = neon::String::copy(state, rp);
-    closure = state->compileSource(state->m_toplevelmodule, source);
-    return closure;
-}
-
-static neon::FuncClosure* nn_cli_compilefiletoclosure(neon::State* state, const char* file)
-{
-
-    size_t fsz;
-    char* source;
-    const char* oldfile;
-    neon::FuncClosure* closure;
-    source = neon::Util::fileReadFile(state, file, &fsz);
-    if(source == nullptr)
-    {
-        oldfile = file;
-        source = neon::Util::fileReadFile(state, file, &fsz);
-        if(source == nullptr)
-        {
-            fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
-            return nullptr;
-        }
-    }
-    closure = nn_cli_compilesource(state, source, fsz, file);
-    neon::Memory::osFree(source);
-    return closure;
-}
 
 static bool nn_cli_compilefiletobinary(neon::State* state, const char* file, const char* destfile)
 {
     FILE* fh;
     neon::FuncClosure* closure;
-    closure = nn_cli_compilefiletoclosure(state, file);
+    closure = state->compileFileToClosure(file);
     if(closure != nullptr)
     {
         fh = fopen(destfile, "wb");
@@ -15388,42 +15572,6 @@ static bool nn_cli_compilefiletobinary(neon::State* state, const char* file, con
         
     }
     return false;
-}
-
-
-bool nn_cli_runfile(neon::State* state, const char* file)
-{
-    neon::Status result;
-    neon::FuncClosure* closure;
-    closure = nn_cli_compilefiletoclosure(state, file);
-    result = state->execFromClosure(closure, nullptr);
-    fflush(stdout);
-    if(result == neon::Status::FAIL_COMPILE)
-    {
-        return false;
-    }
-    if(result == neon::Status::FAIL_RUNTIME)
-    {
-        return false;
-    }
-    return true;
-}
-
-static bool nn_cli_runcode(neon::State* state, char* source)
-{
-    neon::Status result;
-    state->m_rootphysfile = nullptr;
-    result = state->execSource(state->m_toplevelmodule, source, nullptr);
-    fflush(stdout);
-    if(result == neon::Status::FAIL_COMPILE)
-    {
-        return false;
-    }
-    if(result == neon::Status::FAIL_RUNTIME)
-    {
-        return false;
-    }
-    return true;
 }
 
 #if defined(NEON_PLAT_ISWASM)
@@ -15748,7 +15896,7 @@ int main(int argc, char* argv[], char** envp)
     nn_import_loadbuiltinmodules(state);
     if(source != nullptr)
     {
-        ok = nn_cli_runcode(state, source);
+        ok = state->runCode(source);
     }
     else if(nargc > 0)
     {
@@ -15756,7 +15904,7 @@ int main(int argc, char* argv[], char** envp)
         fprintf(stderr, "nargv[0]=%s\n", filename);
         if(inputisbin)
         {
-            auto cls = nn_cli_readbinary(state, filename);
+            auto cls = state->readBinaryFile(filename);
             if(cls == nullptr)
             {
                 fprintf(stderr, "failed to read binary!\n");
@@ -15773,7 +15921,7 @@ int main(int argc, char* argv[], char** envp)
             }
             else
             {
-                ok = nn_cli_runfile(state, filename);
+                ok = state->runFile(filename);
             }
         }
     }
