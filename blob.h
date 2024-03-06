@@ -1,54 +1,20 @@
 
-    struct Blob
+    struct Serializer
     {
         public:
             State* m_pvm;
-            uint64_t m_count;
-            uint64_t m_capacity;
-            Instruction* m_instrucs;
-            ValArray* m_constants;
-            ValArray* m_argdefvals;
+            const Util::AnyStream& m_io;
 
         public:
-            Blob(State* state): m_pvm(state)
+            Serializer(State* state, const Util::AnyStream& io): m_pvm(state), m_io(io)
             {
-                m_count = 0;
-                m_capacity = 0;
-                m_instrucs = nullptr;
-                m_constants = Memory::create<ValArray>();
-                m_argdefvals = Memory::create<ValArray>();
             }
-
-            ~Blob()
-            {
-                if(m_instrucs != nullptr)
-                {
-                    Memory::freeArray(m_instrucs, m_capacity);
-                }
-                Memory::destroy(m_constants);
-                Memory::destroy(m_argdefvals);
-            }
-
-            static bool serializeInstructionToStream(State* state, const Util::AnyStream& hnd, const Instruction& inst)
-            {
-                (void)state;
-                /*
-                    bool isop;
-                    uint8_t code;
-                    int srcline;
-                */
-                hnd.put(&inst.isop, 1);
-                hnd.put(&inst.code, 1);
-                hnd.put(&inst.srcline, 1);
-                return true;
-            }
-
 
             template<typename Type>
-            static bool readFrom(const char* name, const Util::AnyStream& hnd, Type* dest, size_t count)
+            bool readFrom(const char* name, Type* dest, size_t count)
             {
                 size_t rdlen;
-                rdlen = hnd.read(dest, sizeof(Type), 1);
+                rdlen = m_io.read(dest, sizeof(Type), 1);
                 if(rdlen != count)
                 {
                     fprintf(stderr, "failed to read %zd items of %s (got %zd, expected %zd)\n", count, name, rdlen, count);
@@ -57,25 +23,48 @@
                 return true;
             }
 
-            static bool deserializeInstructionFromStream(State* state, const Util::AnyStream& hnd, Instruction& dest)
+            template<typename Type>
+            size_t fhput(const Type* thing, size_t count)
             {
-                (void)state;
-                if(!readFrom<decltype(Instruction::isop)>("Instruction::isop", hnd, &dest.isop, 1))
+                return m_io.put(thing, count);
+            }
+
+            bool putString(String* os);
+            bool readString(String** dest);
+            bool readFuncScript(FuncScript** dest);
+            bool putFuncScript(FuncScript* fn);
+
+            bool serializeInstructionToStream(const Instruction& inst)
+            {
+                /*
+                    bool isop;
+                    uint8_t code;
+                    int srcline;
+                */
+                m_io.put(&inst.isop, 1);
+                m_io.put(&inst.code, 1);
+                m_io.put(&inst.srcline, 1);
+                return true;
+            }
+
+            bool readInstructionFromStream(Instruction& dest)
+            {
+                if(!readFrom<decltype(Instruction::isop)>("Instruction::isop", &dest.isop, 1))
                 {
                     return false;
                 }
-                if(!readFrom<decltype(Instruction::code)>("Instruction::code", hnd, &dest.code, 1))
+                if(!readFrom<decltype(Instruction::code)>("Instruction::code", &dest.code, 1))
                 {
                     return false;
                 }
-                if(!readFrom<decltype(Instruction::srcline)>("Instruction::srcline", hnd, &dest.srcline, 1))
+                if(!readFrom<decltype(Instruction::srcline)>("Instruction::srcline", &dest.srcline, 1))
                 {
                     return false;
                 }
                 return true;
             }
 
-            static bool serializeValueToStream(State* state, const Util::AnyStream& hnd, const Value& val)
+            bool putValueToStream(const Value& val)
             {
                 /*
                     ValType m_valtype;
@@ -96,38 +85,38 @@
                     };
                 */
                 char nothing = 0;
-                hnd.put(&val.m_valtype, 1);
+                m_io.put(&val.m_valtype, 1);
                 if(val.m_valtype == Value::VALTYPE_OBJECT)
                 {
                     auto ob = val.objectType();
-                    hnd.put(&ob, 1);
+                    m_io.put(&ob, 1);
                 }
                 else
                 {
                     Value::ObjType dummy = Value::OBJTYPE_INVALID;
-                    hnd.put(&dummy, 1);
+                    m_io.put(&dummy, 1);
                 }
                 switch(val.m_valtype)
                 {
                     case Value::VALTYPE_EMPTY:
                     case Value::VALTYPE_NULL:
                         {
-                            hnd.put(&nothing, 1);
+                            m_io.put(&nothing, 1);
                         }
                         break;
                     case Value::VALTYPE_NUMBER:
                         {
-                            hnd.put(&val.m_valunion.number, 1);
+                            m_io.put(&val.m_valunion.number, 1);
                         }
                         break;
                     case Value::VALTYPE_BOOL:
                         {
-                            hnd.put(&val.m_valunion.boolean, 1);
+                            m_io.put(&val.m_valunion.boolean, 1);
                         }
                         break;
                     case Value::VALTYPE_OBJECT:
                         {
-                            serializeValObjectToStream(state, hnd, val);
+                            putValObjectToStream(val);
                         }
                         break;
                     default:
@@ -159,18 +148,18 @@
                         OBJTYPE_USERDATA,
                     };
                 */
-            static bool serializeValObjectToStream(State* state, const Util::AnyStream& hnd, const Value& val);
-            static bool deserializeValObjectFromStream(State* state, const Util::AnyStream& hnd, Value::ObjType ot, Value& dest);
+            bool putValObjectToStream(const Value& val);
+            bool readValObjectFromStream(Value::ObjType ot, Value& dest);
 
-            static bool deserializeValueFromStream(State* state, const Util::AnyStream& hnd, Value& dest)
+            bool readValueFromStream(Value& dest)
             {
                 const char* tn;
                 Value::ObjType ot;
-                if(!readFrom<decltype(Value::m_valtype)>("Value::m_valtype", hnd, &dest.m_valtype, 1))
+                if(!readFrom<decltype(Value::m_valtype)>("Value::m_valtype", &dest.m_valtype, 1))
                 {
                     return false;
                 }
-                if(!readFrom<Value::ObjType>("objectType", hnd, &ot, 1))
+                if(!readFrom<Value::ObjType>("objectType", &ot, 1))
                 {
                     return false;
                 }
@@ -179,12 +168,12 @@
                     case Value::VALTYPE_EMPTY:
                     case Value::VALTYPE_NULL:
                         {
-                            hnd.get();
+                            m_io.get();
                         }
                         break;
                     case Value::VALTYPE_NUMBER:
                         {
-                            if(!readFrom<decltype(Value::m_valunion.number)>("Value::m_valunion.number", hnd, &dest.m_valunion.number, 1))
+                            if(!readFrom<decltype(Value::m_valunion.number)>("Value::m_valunion.number", &dest.m_valunion.number, 1))
                             {
                                 return false;
                             }
@@ -192,7 +181,7 @@
                         break;
                     case Value::VALTYPE_BOOL:
                         {
-                            if(!readFrom<decltype(Value::m_valunion.boolean)>("Value::m_valunion.boolean", hnd, &dest.m_valunion.boolean, 1))
+                            if(!readFrom<decltype(Value::m_valunion.boolean)>("Value::m_valunion.boolean", &dest.m_valunion.boolean, 1))
                             {
                                 return false;
                             }
@@ -205,7 +194,7 @@
                                 fprintf(stderr, "bad object type (OBJTYPE_INVALID)");
                                 return false;
                             }
-                            if(!deserializeValObjectFromStream(state, hnd, ot, dest))
+                            if(!readValObjectFromStream(ot, dest))
                             {
                                 return false;
                             }
@@ -224,21 +213,55 @@
                 return true;
             }
 
-            void binToStream(const Util::AnyStream& hnd)
+
+    };
+
+    struct Blob
+    {
+        public:
+            State* m_pvm;
+            uint64_t m_count;
+            uint64_t m_capacity;
+            Instruction* m_instrucs;
+            ValArray* m_constants;
+            ValArray* m_argdefvals;
+
+        public:
+            Blob(State* state): m_pvm(state)
+            {
+                m_count = 0;
+                m_capacity = 0;
+                m_instrucs = nullptr;
+                m_constants = Memory::create<ValArray>();
+                m_argdefvals = Memory::create<ValArray>();
+            }
+
+            ~Blob()
+            {
+                if(m_instrucs != nullptr)
+                {
+                    Memory::freeArray(m_instrucs, m_capacity);
+                }
+                Memory::destroy(m_constants);
+                Memory::destroy(m_argdefvals);
+            }
+
+
+            void binToStream(Serializer& ser)
             {
                 uint64_t i;
                 {
-                    hnd.put(&m_count, 1);
+                    ser.m_io.put(&m_count, 1);
                     for(i=0; i<m_count; i++)
                     {
-                        serializeInstructionToStream(m_pvm, hnd, m_instrucs[i]);
+                        ser.serializeInstructionToStream(m_instrucs[i]);
                     }
                 }
                 {
-                    hnd.put(&m_constants->m_count, 1);
+                    ser.m_io.put(&m_constants->m_count, 1);
                     for(i=0; i<m_constants->m_count; i++)
                     {
-                        serializeValueToStream(m_pvm, hnd, m_constants->m_values[i]);
+                        ser.putValueToStream(m_constants->m_values[i]);
                     }
                 }
                 {
@@ -247,10 +270,11 @@
 
             void toStream(const Util::AnyStream& hnd)
             {
-                hnd.put('N');
-                hnd.put('B');
-                hnd.put('\b');
-                binToStream(hnd);
+                Serializer ser(m_pvm, hnd);
+                ser.m_io.put('N');
+                ser.m_io.put('B');
+                ser.m_io.put('\b');
+                binToStream(ser);
             }
 
             bool fromHandle(const Util::AnyStream& hnd, bool checkhdr)
@@ -263,7 +287,8 @@
                 uint64_t constcnt; 
                 Instruction ins;
                 Value cval;
-                //if(checkhdr)
+                Serializer ser(m_pvm, hnd);
+                if(checkhdr)
                 {
                     chn = hnd.get();
                     chb = hnd.get();
@@ -275,7 +300,7 @@
                     }
                 }
                 inscnt = 0;
-                if(!readFrom<uint64_t>("instruction count", hnd, &inscnt, 1))
+                if(!ser.readFrom<uint64_t>("instruction count", &inscnt, 1))
                 {
                     fprintf(stderr, "failed to read instruction count. got %zd\n", inscnt);
                     return false;
@@ -283,7 +308,7 @@
                 cnt = 0;
                 while(cnt != inscnt)
                 {
-                    if(!deserializeInstructionFromStream(m_pvm, hnd, ins))
+                    if(!ser.readInstructionFromStream(ins))
                     {
                         fprintf(stderr, "error: failed to read instruction\n");
                         return false;
@@ -297,15 +322,15 @@
                 }
                 cnt = 0;
                 constcnt = 0;
-                if(!readFrom<uint64_t>("constant count", hnd, &constcnt, 1))
+                if(!ser.readFrom<uint64_t>("constant count", &constcnt, 1))
                 {
                     return false;
                 }
                 fprintf(stderr, "binary contains %zd constants\n", constcnt);
                 while(cnt != constcnt)
                 {
-                    //if(!readFrom<Value>("constant", hnd, &cval, 1))
-                    if(!deserializeValueFromStream(m_pvm, hnd, cval))
+                    //if(!ser.readFrom<Value>("constant", &cval, 1))
+                    if(!ser.readValueFromStream(cval))
                     {
                         fprintf(stderr, "error: failed to read constant\n");
                         return false;

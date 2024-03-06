@@ -1,79 +1,72 @@
 
-    template<typename Type>
-    size_t fhput(const Util::AnyStream& fh, const Type* thing, size_t count)
-    {
-        return fh.put(thing, count);
-    }
+            bool Serializer::putString(String* os)
+            {
+                uint64_t len;
+                len = os->length();
+                fhput<uint64_t>(&len, 1);
+                fhput<char>(os->data(), os->length());
+                return true;
+            }
 
-    bool putString(State* state, const Util::AnyStream& hnd, String* os)
-    {
-        uint64_t len;
-        (void)state;
-        len = os->length();
-        fhput<uint64_t>(hnd, &len, 1);
-        fhput<char>(hnd, os->data(), os->length());
-        return true;
-    }
+            bool Serializer::readString(String** dest)
+            {
+                uint64_t length;
+                char* data;
+                if(!readFrom<uint64_t>("String.length", &length, 1))
+                {
+                    return false;
+                }
+                data = (char*)malloc(length+1);
+                if(!m_io.read(data, sizeof(char), length))
+                {
+                    fprintf(stderr, "failed to read string data\n");
+                    return false;
+                }
+                *dest = String::take(m_pvm, data, length);
+                return true;
+            }
 
-    bool readString(State* state, const Util::AnyStream& hnd, String** dest)
-    {
-        uint64_t length;
-        char* data;
-        if(!Blob::readFrom<uint64_t>("String.length", hnd, &length, 1))
-        {
-            return false;
-        }
-        data = (char*)malloc(length+1);
-        if(!hnd.read(data, sizeof(char), length))
-        {
-            fprintf(stderr, "failed to read string data\n");
-            return false;
-        }
-        *dest = String::take(state, data, length);
-        return true;
-    }
+            bool Serializer::readFuncScript(FuncScript** dest)
+            {
+                *dest = FuncScript::make(m_pvm, m_pvm->m_toplevelmodule, FuncCommon::FUNCTYPE_FUNCTION);
+                if(!readFrom<int>("m_arity", &(*dest)->m_arity, 1))
+                {
+                    return false;
+                }
+                if(!readFrom<int>("m_upvalcount", &(*dest)->m_upvalcount, 1))
+                {
+                    return false;
+                }
+                if(!readFrom<bool>("m_isvariadic", &(*dest)->m_isvariadic, 1))
+                {
+                    return false;
+                }
+                if(!readString(&(*dest)->m_scriptfnname))
+                {
+                    return false;
+                }
+                return (*dest)->m_compiledblob->fromHandle(m_io, false);
+            }
 
-    bool readFuncScript(State* state, const Util::AnyStream& hnd, FuncScript** dest)
-    {
-        *dest = FuncScript::make(state, state->m_toplevelmodule, FuncCommon::FUNCTYPE_FUNCTION);
-        if(!Blob::readFrom<int>("m_arity", hnd, &(*dest)->m_arity, 1))
-        {
-            return false;
-        }
-        if(!Blob::readFrom<int>("m_upvalcount", hnd, &(*dest)->m_upvalcount, 1))
-        {
-            return false;
-        }
-        if(!Blob::readFrom<bool>("m_isvariadic", hnd, &(*dest)->m_isvariadic, 1))
-        {
-            return false;
-        }
-        if(!readString(state, hnd, &(*dest)->m_scriptfnname))
-        {
-            return false;
-        }
-        return (*dest)->m_compiledblob->fromHandle(hnd, false);
-    }
-
-    bool putFuncScript(State* state, const Util::AnyStream& hnd, FuncScript* fn)
-    {
-                    /*
-                    int m_upvalcount;
-                    bool m_isvariadic;
-                    Blob* m_compiledblob;
-                    String* m_scriptfnname;
-                    Module* m_inmodule;
-                    */
-        fhput<int>(hnd, &fn->m_arity, 1);
-        fhput<int>(hnd, &fn->m_upvalcount, 1);
-        fhput<bool>(hnd, &fn->m_isvariadic, 1);
-        putString(state, hnd, fn->m_scriptfnname);
-        fn->m_compiledblob->toStream(hnd);
-        return true;
-    }
+            bool Serializer::putFuncScript(FuncScript* fn)
+            {
+                            /*
+                            int m_upvalcount;
+                            bool m_isvariadic;
+                            Blob* m_compiledblob;
+                            String* m_scriptfnname;
+                            Module* m_inmodule;
+                            */
+                fhput<int>(&fn->m_arity, 1);
+                fhput<int>(&fn->m_upvalcount, 1);
+                fhput<bool>(&fn->m_isvariadic, 1);
+                putString(fn->m_scriptfnname);
+                fn->m_compiledblob->binToStream(*this);
+                return true;
+            }
 
 
-    bool Blob::serializeValObjectToStream(State* state, const Util::AnyStream& hnd, const Value& val)
+    bool Serializer::putValObjectToStream(const Value& val)
     {
         switch(val.objectType())
         {
@@ -86,13 +79,13 @@
             case Value::OBJTYPE_STRING:
                 {
                     auto os = val.asString();
-                    return putString(state, hnd, os);
+                    return putString(os);
                 }
                 break;
             case Value::OBJTYPE_FUNCSCRIPT:
                 {
                     auto fn = val.asFuncScript();
-                    return putFuncScript(state, hnd, fn);
+                    return putFuncScript(fn);
                 }
                 break;
             default:
@@ -104,14 +97,14 @@
         return false;
     }
 
-    bool Blob::deserializeValObjectFromStream(State* state, const Util::AnyStream& hnd, Value::ObjType ot, Value& dest)
+    bool Serializer::readValObjectFromStream(Value::ObjType ot, Value& dest)
     {
         switch(ot)
         {
             case Value::OBJTYPE_STRING:
                 {
                     String* os;
-                    if(!readString(state, hnd, &os))
+                    if(!readString(&os))
                     {
                         return false;
                     }
@@ -122,7 +115,7 @@
             case Value::OBJTYPE_FUNCSCRIPT:
                 {
                     FuncScript* fn;
-                    if(!readFuncScript(state, hnd, &fn))
+                    if(!readFuncScript(&fn))
                     {
                         return false;
                     }
