@@ -1,6 +1,17 @@
 
+    /*
+    * the (de-)Serializer.
+    * note: no attempt is made to check for endianness. this class
+    * assumes x64. Might just work on other processors, but don't count on it.
+    */
     struct Serializer
     {
+        public:
+            static constexpr bool isLittleEndian()
+            {
+                return std::endian::native == std::endian::little;
+            }
+
         public:
             State* m_pvm;
             const Util::AnyStream& m_io;
@@ -10,8 +21,16 @@
             {
             }
 
+            /*
+            * attempts to read a <Type> (of size of that type) of count $count.
+            * functionally equiv to just calling fread(), except
+            * looking slightly nicer - and also auto-complains
+            * when it failed.
+            *
+            * if read succeeded, returns true.
+            */
             template<typename Type>
-            bool readFrom(const char* name, Type* dest, size_t count)
+            bool readDirect(const char* name, Type* dest, size_t count)
             {
                 size_t rdlen;
                 rdlen = m_io.read(dest, sizeof(Type), 1);
@@ -23,67 +42,70 @@
                 return true;
             }
 
+            /*
+            * puts a <Type> (of size of that type), of count $count.
+            * will happily read/from to references, and it does
+            * not check if $thing is a reference.
+            */
             template<typename Type>
             size_t fhput(const Type* thing, size_t count)
             {
                 return m_io.put(thing, count);
             }
 
+            /*
+            * serializes a String.
+            */
             bool putString(String* os);
+
+            /*
+            * reads a String object into $os.
+            * param $os does not need to be allocated (in fact, should not be!)
+            */
             bool readString(String** dest);
+
+            /*
+            * reads a FuncScript into $dest. same as readString; $dest should
+            * not be allocated, because it will be overwritten
+            */
             bool readFuncScript(FuncScript** dest);
+
+            /*
+            * serializes a FuncScript.
+            */
             bool putFuncScript(FuncScript* fn);
 
-            bool serializeInstructionToStream(const Instruction& inst)
+            bool putInstruction(const Instruction& inst)
             {
-                /*
-                    bool isop;
-                    uint8_t code;
-                    int srcline;
-                */
-                m_io.put(&inst.isop, 1);
                 m_io.put(&inst.code, 1);
-                m_io.put(&inst.srcline, 1);
+                //m_io.put(&inst.isop, 1);
+                //m_io.put(&inst.srcline, 1);
                 return true;
             }
 
-            bool readInstructionFromStream(Instruction& dest)
+            bool readInstruction(Instruction& dest)
             {
-                if(!readFrom<decltype(Instruction::isop)>("Instruction::isop", &dest.isop, 1))
+                dest.srcline = 0;
+                dest.isop = false;
+                if(!readDirect<decltype(Instruction::code)>("Instruction::code", &dest.code, 1))
                 {
                     return false;
                 }
-                if(!readFrom<decltype(Instruction::code)>("Instruction::code", &dest.code, 1))
-                {
-                    return false;
-                }
-                if(!readFrom<decltype(Instruction::srcline)>("Instruction::srcline", &dest.srcline, 1))
-                {
-                    return false;
-                }
-                return true;
-            }
-
-            bool putValueToStream(const Value& val)
-            {
                 /*
-                    ValType m_valtype;
-                    ValUnion m_valunion;
-                    union ValUnion
-                    {
-                        bool boolean;
-                        double number;
-                        Object* obj;
-                    };
-                    enum ValType
-                    {
-                        VALTYPE_EMPTY,
-                        VALTYPE_NULL,
-                        VALTYPE_BOOL,
-                        VALTYPE_NUMBER,
-                        VALTYPE_OBJECT,
-                    };
+                if(!readDirect<decltype(Instruction::isop)>("Instruction::isop", &dest.isop, 1))
+                {
+                    return false;
+                }
+                if(!readDirect<decltype(Instruction::srcline)>("Instruction::srcline", &dest.srcline, 1))
+                {
+                    return false;
+                }
                 */
+                return true;
+            }
+
+            bool putValue(const Value& val)
+            {
                 char nothing = 0;
                 m_io.put(&val.m_valtype, 1);
                 if(val.m_valtype == Value::VALTYPE_OBJECT)
@@ -101,6 +123,7 @@
                     case Value::VALTYPE_EMPTY:
                     case Value::VALTYPE_NULL:
                         {
+                            // these two are dummies, but they still occupy a bit of space.
                             m_io.put(&nothing, 1);
                         }
                         break;
@@ -116,7 +139,7 @@
                         break;
                     case Value::VALTYPE_OBJECT:
                         {
-                            putValObjectToStream(val);
+                            putObject(val);
                         }
                         break;
                     default:
@@ -128,38 +151,18 @@
                 return true;
             }
 
-                /*
-                    enum ObjType
-                    {
-                        OBJTYPE_STRING,
-                        OBJTYPE_RANGE,
-                        OBJTYPE_ARRAY,
-                        OBJTYPE_DICT,
-                        OBJTYPE_FILE,
-                        OBJTYPE_UPVALUE,
-                        OBJTYPE_FUNCBOUND,
-                        OBJTYPE_FUNCCLOSURE,
-                        OBJTYPE_FUNCSCRIPT,
-                        OBJTYPE_INSTANCE,
-                        OBJTYPE_FUNCNATIVE,
-                        OBJTYPE_CLASS,
-                        OBJTYPE_MODULE,
-                        OBJTYPE_SWITCH,
-                        OBJTYPE_USERDATA,
-                    };
-                */
-            bool putValObjectToStream(const Value& val);
-            bool readValObjectFromStream(Value::ObjType ot, Value& dest);
+            bool putObject(const Value& val);
+            bool readObject(Value::ObjType ot, Value& dest);
 
-            bool readValueFromStream(Value& dest)
+            bool readValue(Value& dest)
             {
                 const char* tn;
                 Value::ObjType ot;
-                if(!readFrom<decltype(Value::m_valtype)>("Value::m_valtype", &dest.m_valtype, 1))
+                if(!readDirect<decltype(Value::m_valtype)>("Value::m_valtype", &dest.m_valtype, 1))
                 {
                     return false;
                 }
-                if(!readFrom<Value::ObjType>("objectType", &ot, 1))
+                if(!readDirect<Value::ObjType>("objectType", &ot, 1))
                 {
                     return false;
                 }
@@ -173,7 +176,7 @@
                         break;
                     case Value::VALTYPE_NUMBER:
                         {
-                            if(!readFrom<decltype(Value::m_valunion.number)>("Value::m_valunion.number", &dest.m_valunion.number, 1))
+                            if(!readDirect<decltype(Value::m_valunion.number)>("Value::m_valunion.number", &dest.m_valunion.number, 1))
                             {
                                 return false;
                             }
@@ -181,7 +184,7 @@
                         break;
                     case Value::VALTYPE_BOOL:
                         {
-                            if(!readFrom<decltype(Value::m_valunion.boolean)>("Value::m_valunion.boolean", &dest.m_valunion.boolean, 1))
+                            if(!readDirect<decltype(Value::m_valunion.boolean)>("Value::m_valunion.boolean", &dest.m_valunion.boolean, 1))
                             {
                                 return false;
                             }
@@ -194,7 +197,7 @@
                                 fprintf(stderr, "bad object type (OBJTYPE_INVALID)");
                                 return false;
                             }
-                            if(!readValObjectFromStream(ot, dest))
+                            if(!readObject(ot, dest))
                             {
                                 return false;
                             }
@@ -213,6 +216,7 @@
                 return true;
             }
 
+            bool readBlob(Blob* toblob, bool checkhdr);
 
     };
 
@@ -246,7 +250,6 @@
                 Memory::destroy(m_argdefvals);
             }
 
-
             void binToStream(Serializer& ser)
             {
                 uint64_t i;
@@ -254,14 +257,14 @@
                     ser.m_io.put(&m_count, 1);
                     for(i=0; i<m_count; i++)
                     {
-                        ser.serializeInstructionToStream(m_instrucs[i]);
+                        ser.putInstruction(m_instrucs[i]);
                     }
                 }
                 {
                     ser.m_io.put(&m_constants->m_count, 1);
                     for(i=0; i<m_constants->m_count; i++)
                     {
-                        ser.putValueToStream(m_constants->m_values[i]);
+                        ser.putValue(m_constants->m_values[i]);
                     }
                 }
                 {
@@ -279,70 +282,8 @@
 
             bool fromHandle(const Util::AnyStream& hnd, bool checkhdr)
             {
-                int chn;
-                int chb;
-                int chm;
-                uint64_t cnt;
-                uint64_t inscnt;
-                uint64_t constcnt; 
-                Instruction ins;
-                Value cval;
                 Serializer ser(m_pvm, hnd);
-                if(checkhdr)
-                {
-                    chn = hnd.get();
-                    chb = hnd.get();
-                    chm = hnd.get();
-                    if((chn != 'N') && (chb != 'B') && (chm != '\b'))
-                    {
-                        fprintf(stderr, "error: bad header (got '%c' '%c' '%c')\n", chn, chb, chm);
-                        return false;
-                    }
-                }
-                inscnt = 0;
-                if(!ser.readFrom<uint64_t>("instruction count", &inscnt, 1))
-                {
-                    fprintf(stderr, "failed to read instruction count. got %zd\n", inscnt);
-                    return false;
-                }
-                cnt = 0;
-                while(cnt != inscnt)
-                {
-                    if(!ser.readInstructionFromStream(ins))
-                    {
-                        fprintf(stderr, "error: failed to read instruction\n");
-                        return false;
-                    }
-                    else
-                    {
-                        fprintf(stderr, "read instruction %zd of %zd ...\n", cnt, inscnt);
-                    }
-                    cnt++;
-                    push(ins);
-                }
-                cnt = 0;
-                constcnt = 0;
-                if(!ser.readFrom<uint64_t>("constant count", &constcnt, 1))
-                {
-                    return false;
-                }
-                fprintf(stderr, "binary contains %zd constants\n", constcnt);
-                while(cnt != constcnt)
-                {
-                    //if(!ser.readFrom<Value>("constant", &cval, 1))
-                    if(!ser.readValueFromStream(cval))
-                    {
-                        fprintf(stderr, "error: failed to read constant\n");
-                        return false;
-                    }
-                    else
-                    {
-                        fprintf(stderr, "read constant %zd of %zd ...\n", cnt, constcnt);
-                    }
-                    cnt++;
-                    pushConst(cval);
-                }
-                return true;
+                return ser.readBlob(this, checkhdr);
             }
 
             void push(Instruction ins)

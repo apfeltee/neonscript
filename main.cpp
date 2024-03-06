@@ -20,6 +20,7 @@
 #include <inttypes.h>
 #include <type_traits>
 #include <new>
+#include <bit>
 #include <iostream>
 
 /*
