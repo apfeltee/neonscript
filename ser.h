@@ -1,21 +1,46 @@
 
+
+    void Serializer::putBlob(Blob* blob)
+    {
+        uint64_t i;
+        uint64_t cnt;
+        {
+            cnt = blob->m_count;
+            putArrayBegin("instructions", cnt);
+            for(i=0; i<blob->m_count; i++)
+            {
+                putInstruction(blob->m_instrucs[i]);
+            }
+            putArrayEnd();
+        }
+        {
+            cnt = blob->m_constants->m_count;
+            putArrayBegin("constants", cnt);
+            for(i=0; i<blob->m_constants->m_count; i++)
+            {
+                putValue(blob->m_constants->m_values[i]);
+            }
+            putArrayEnd();
+        }
+    }
+
     bool Serializer::putString(String* os)
     {
         uint64_t len;
         len = os->length();
-        fhput<uint64_t>(&len, 1);
-        fhput<char>(os->data(), os->length());
+        streamPut<uint64_t>(&len, 1);
+        streamPut<char>(os->data(), os->length());
         return true;
     }
 
-    bool Serializer::readString(String** dest)
+    bool Deserializer::readString(String** dest)
     {
         uint64_t length;
         char* data;
         /*
         * first, collect length...
         */
-        if(!readDirect<uint64_t>("String.length", &length, 1))
+        if(!streamRead<uint64_t>("String.length", &length, 1))
         {
             return false;
         }
@@ -32,22 +57,22 @@
         return true;
     }
 
-    bool Serializer::readFuncScript(FuncScript** dest)
+    bool Deserializer::readFuncScript(FuncScript** dest)
     {
         *dest = FuncScript::make(m_pvm, m_pvm->m_toplevelmodule, FuncCommon::FUNCTYPE_FUNCTION);
-        if(!readDirect<FuncCommon::Type>("m_functype", &(*dest)->m_functype, 1))
+        if(!streamRead<FuncCommon::Type>("m_functype", &(*dest)->m_functype, 1))
         {
             return false;
         }
-        if(!readDirect<int>("m_arity", &(*dest)->m_arity, 1))
+        if(!streamRead<int>("m_arity", &(*dest)->m_arity, 1))
         {
             return false;
         }
-        if(!readDirect<int>("m_upvalcount", &(*dest)->m_upvalcount, 1))
+        if(!streamRead<int>("m_upvalcount", &(*dest)->m_upvalcount, 1))
         {
             return false;
         }
-        if(!readDirect<bool>("m_isvariadic", &(*dest)->m_isvariadic, 1))
+        if(!streamRead<bool>("m_isvariadic", &(*dest)->m_isvariadic, 1))
         {
             return false;
         }
@@ -61,12 +86,12 @@
 
     bool Serializer::putFuncScript(FuncScript* fn)
     {
-        fhput<FuncCommon::Type>(&fn->m_functype, 1);
-        fhput<int>(&fn->m_arity, 1);
-        fhput<int>(&fn->m_upvalcount, 1);
-        fhput<bool>(&fn->m_isvariadic, 1);
+        streamPut<FuncCommon::Type>(&fn->m_functype, 1);
+        streamPut<int>(&fn->m_arity, 1);
+        streamPut<int>(&fn->m_upvalcount, 1);
+        streamPut<bool>(&fn->m_isvariadic, 1);
         putString(fn->m_scriptfnname);
-        fn->m_compiledblob->binToStream(*this);
+        putBlob(fn->m_compiledblob);
         return true;
     }
 
@@ -112,6 +137,12 @@
                     return putFuncScript(fn);
                 }
                 break;
+            case Value::OBJTYPE_FUNCCLOSURE:
+                {
+                    auto fn = val.asFuncClosure();
+                    return putFuncScript(fn->m_scriptfunc);
+                }
+                break;
             default:
                 {
                     fprintf(stderr, "unhandled object type '%s' for serialization\n", val.name());
@@ -121,7 +152,7 @@
         return false;
     }
 
-    bool Serializer::readObject(Value::ObjType ot, Value& dest)
+    bool Deserializer::readObject(Value::ObjType ot, Value& dest)
     {
         switch(ot)
         {
@@ -156,7 +187,7 @@
         return false;
     }
 
-    bool Serializer::readBlob(Blob* toblob, bool checkhdr)
+    bool Deserializer::readBlob(Blob* toblob, bool checkhdr)
     {
         int chn;
         int chb;
@@ -168,9 +199,9 @@
         Value cval;
         if(checkhdr)
         {
-            chn = m_io.get();
-            chb = m_io.get();
-            chm = m_io.get();
+            chn = streamGetOne<char>(-1);
+            chb = streamGetOne<char>(-1);
+            chm = streamGetOne<char>(-1);
             if((chn != 'N') && (chb != 'B') && (chm != '\b'))
             {
                 fprintf(stderr, "error: bad header (got '%c' '%c' '%c')\n", chn, chb, chm);
@@ -178,7 +209,7 @@
             }
         }
         inscnt = 0;
-        if(!readDirect<uint64_t>("instruction count", &inscnt, 1))
+        if(!streamRead<uint64_t>("instruction count", &inscnt, 1))
         {
             fprintf(stderr, "failed to read instruction count. got %zd\n", inscnt);
             return false;
@@ -200,7 +231,7 @@
         fprintf(stderr, "successfully read %zd of %zd instructions!\n", cnt, inscnt);
         cnt = 0;
         constcnt = 0;
-        if(!readDirect<uint64_t>("constant count", &constcnt, 1))
+        if(!streamRead<uint64_t>("constant count", &constcnt, 1))
         {
             return false;
         }

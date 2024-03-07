@@ -1006,21 +1006,25 @@ namespace neon
                 template<typename ItemT>
                 inline bool putToCFile(const ItemT* thing, size_t count) const
                 {
-                    fwrite(thing, sizeof(ItemT), count, m_recs.handle);
-                    return true;
+                    size_t r;
+                    r = fwrite(thing, sizeof(ItemT), count, m_recs.handle);
+                    fflush(m_recs.handle);
+                    return (r == count);
                 }
 
                 template<typename ItemT>
                 inline bool putToCPPStream(const ItemT* thing, size_t count) const
                 {
                     m_recs.ostrm->write((const char*)thing, count);
+                    (*m_recs.ostrm) << std::flush;
                     return true;
                 }
 
                 inline bool putOneToCFile(int b) const
                 {
-                    fputc(b, m_recs.handle);
-                    return true;
+                    char ch;
+                    ch = b;
+                    return putToCFile(&ch, 1);
                 }
 
                 template<typename ItemT>
@@ -1058,6 +1062,11 @@ namespace neon
                 inline AnyStream(Util::StrBuffer& os): m_type(REC_STRING)
                 {
                     m_recs.strbuf = &os;
+                }
+
+                inline AnyStream(Util::StrBuffer* os): m_type(REC_STRING)
+                {
+                    m_recs.strbuf = os;
                 }
 
                 template<typename ItemT>
@@ -12220,6 +12229,25 @@ namespace neon
         return Value::fromObject(os);
     }
 
+    Value objfn_object_static_serialize(State* state, CallState* args)
+    {
+        Value v;
+        String* os;
+        Util::StrBuffer* dest;
+        v = args->argv[0];
+        dest = Memory::create<Util::StrBuffer>(0);
+        Serializer ser(state, Util::AnyStream(dest));
+        ser.putValue(v);
+        os = String::makeFromStrbuf(state, dest);
+        return Value::fromObject(os);
+    }
+
+    Value objfn_object_static_deserialize(State* state, CallState* args)
+    {
+        return Value::makeNull();
+    }
+
+
     Value objfn_object_member_getclass(State* state, CallState* args)
     {
         auto klass = state->vmGetClassFor(args->thisval);
@@ -12407,6 +12435,8 @@ namespace neon
         {
             state->m_classprimobject->defCallableField("class", objfn_object_member_getclass);
             state->m_classprimobject->defStaticNativeMethod("typename", objfn_object_static_typename);
+            state->m_classprimobject->defStaticNativeMethod("serialize", objfn_object_static_serialize);
+            state->m_classprimobject->defStaticNativeMethod("deserialize", objfn_object_static_deserialize);            
             state->m_classprimobject->defNativeMethod("dump", objfn_object_member_dump);
             state->m_classprimobject->defNativeMethod("toString", objfn_object_member_tostring);
             state->m_classprimobject->defNativeMethod("isArray", objfn_object_member_isarray);        
@@ -12422,7 +12452,6 @@ namespace neon
             state->m_classprimobject->defNativeMethod("isClass", objfn_object_member_isclass);
             state->m_classprimobject->defNativeMethod("isFile", objfn_object_member_isfile);
             state->m_classprimobject->defNativeMethod("isInstance", objfn_object_member_isinstance);
-
         }
         
         {

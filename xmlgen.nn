@@ -55,7 +55,6 @@ class Element
     toXML(pretty, indstr, indent)
     {
         var i;
-        var selfind;
         var obuf = [];
         var withtext = this.hasText();
         if(pretty == null)
