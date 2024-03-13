@@ -717,11 +717,13 @@
             {
                 int constant;
                 constant = currentBlob()->pushConst(value);
+                #if 0
                 if(constant >= UINT16_MAX)
                 {
                     raiseError("too many constants in current scope");
                     return 0;
                 }
+                #endif
                 return constant;
             }
 
@@ -1347,7 +1349,7 @@
 
             void printCompiledFuncBlob(const char* fname)
             {
-                DebugPrinter dp(m_pvm, m_pvm->m_debugprinter);
+                DebugPrinter dp(m_pvm, m_pvm->m_debugprinter, DebugPrinter::OUT_PSEUDOASM);
                 dp.printFunctionDisassembly(currentBlob(), fname);
             }
 
@@ -1408,19 +1410,21 @@
                 return value;
             }
 
-            int readStringUnicodeEscape(char* string, const char* realstring, int numberbytes, int realindex, int index)
+            int readStringUnicodeEscape(char* string, const char* realstring, size_t numberbytes, size_t realindex, size_t index)
             {
                 int value;
-                int count;
+                int numb;
+                size_t count;
                 size_t len;
                 char* chr;
                 NEON_ASTDEBUG(m_pvm, "");
                 value = readStringHexEscape(realstring, realindex, numberbytes);
-                count = Util::utf8NumBytes(value);
-                if(count == -1)
+                numb = Util::utf8NumBytes(value);
+                if(numb == -1)
                 {
                     raiseError("cannot encode a negative unicode value");
                 }
+                count = numb;
                 /* check for greater that \uffff */
                 if(value > 65535)
                 {
@@ -1431,7 +1435,7 @@
                     chr = Util::utf8Encode(m_pvm, value, &len);
                     if(chr != nullptr)
                     {
-                        memcpy(string + index, chr, (size_t)count + 1);
+                        memcpy(string + index, chr, count + 1);
                         Memory::osFree(chr);
                     }
                     else
@@ -2433,6 +2437,7 @@
                 int continueexecutionaddress;
                 bool catchexists;
                 bool finalexists;
+                Token ntok;
                 if(m_currfunccompiler->m_compiledexcepthandlercount == NEON_CFG_MAXEXCEPTHANDLERS)
                 {
                     raiseError("maximum exception handler in scope exceeded");
@@ -2463,16 +2468,14 @@
                     consume(Token::TOK_PARENOPEN, "expected '(' after 'catch'");
                     consume(Token::TOK_IDENTNORMAL, "missing exception class name");
                     type = makeIdentConst(&m_prevtoken);
+                    ntok = m_prevtoken;
                     address = currentBlob()->m_count;
                     if(match(Token::TOK_IDENTNORMAL))
                     {
-                        emitSetStmtVar(m_prevtoken);
+                        ntok = m_prevtoken;
                     }
-                    else
-                    {
-                        emitInstruction(Instruction::OP_POPONE);
-                    }
-                      consume(Token::TOK_PARENCLOSE, "expected ')' after 'catch'");
+                    emitSetStmtVar(ntok);
+                    consume(Token::TOK_PARENCLOSE, "expected ')' after 'catch'");
                     emitInstruction(Instruction::OP_EXPOPTRY);
                     ignoreSpace();
                     parseStatement();

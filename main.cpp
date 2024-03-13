@@ -2561,85 +2561,87 @@ namespace neon
             };
 
         public:
-            static const char* opName(uint8_t instruc)
+            static const char* opName(uint8_t instruc, bool pseudomode)
             {
+                #define either(a, b) (pseudomode ? (b) : (a))
                 switch(instruc)
                 {
-                    case OP_GLOBALDEFINE: return "OP_GLOBALDEFINE";
-                    case OP_GLOBALGET: return "OP_GLOBALGET";
-                    case OP_GLOBALSET: return "OP_GLOBALSET";
-                    case OP_LOCALGET: return "OP_LOCALGET";
-                    case OP_LOCALSET: return "OP_LOCALSET";
-                    case OP_FUNCARGSET: return "OP_FUNCARGSET";
-                    case OP_FUNCARGGET: return "OP_FUNCARGGET";
-                    case OP_UPVALUEGET: return "OP_UPVALUEGET";
-                    case OP_UPVALUESET: return "OP_UPVALUESET";
-                    case OP_UPVALUECLOSE: return "OP_UPVALUECLOSE";
-                    case OP_PROPERTYGET: return "OP_PROPERTYGET";
-                    case OP_PROPERTYGETSELF: return "OP_PROPERTYGETSELF";
-                    case OP_PROPERTYSET: return "OP_PROPERTYSET";
-                    case OP_JUMPIFFALSE: return "OP_JUMPIFFALSE";
-                    case OP_JUMPNOW: return "OP_JUMPNOW";
-                    case OP_LOOP: return "OP_LOOP";
-                    case OP_EQUAL: return "OP_EQUAL";
-                    case OP_PRIMGREATER: return "OP_PRIMGREATER";
-                    case OP_PRIMLESSTHAN: return "OP_PRIMLESSTHAN";
-                    case OP_PUSHEMPTY: return "OP_PUSHEMPTY";
-                    case OP_PUSHNULL: return "OP_PUSHNULL";
-                    case OP_PUSHTRUE: return "OP_PUSHTRUE";
-                    case OP_PUSHFALSE: return "OP_PUSHFALSE";
-                    case OP_PRIMADD: return "OP_PRIMADD";
-                    case OP_PRIMSUBTRACT: return "OP_PRIMSUBTRACT";
-                    case OP_PRIMMULTIPLY: return "OP_PRIMMULTIPLY";
-                    case OP_PRIMDIVIDE: return "OP_PRIMDIVIDE";
-                    case OP_PRIMFLOORDIVIDE: return "OP_PRIMFLOORDIVIDE";
-                    case OP_PRIMMODULO: return "OP_PRIMMODULO";
-                    case OP_PRIMPOW: return "OP_PRIMPOW";
-                    case OP_PRIMNEGATE: return "OP_PRIMNEGATE";
-                    case OP_PRIMNOT: return "OP_PRIMNOT";
-                    case OP_PRIMBITNOT: return "OP_PRIMBITNOT";
-                    case OP_PRIMAND: return "OP_PRIMAND";
-                    case OP_PRIMOR: return "OP_PRIMOR";
-                    case OP_PRIMBITXOR: return "OP_PRIMBITXOR";
-                    case OP_PRIMSHIFTLEFT: return "OP_PRIMSHIFTLEFT";
-                    case OP_PRIMSHIFTRIGHT: return "OP_PRIMSHIFTRIGHT";
-                    case OP_PUSHONE: return "OP_PUSHONE";
-                    case OP_PUSHCONSTANT: return "OP_PUSHCONSTANT";
-                    case OP_ECHO: return "OP_ECHO";
-                    case OP_POPONE: return "OP_POPONE";
-                    case OP_DUPONE: return "OP_DUPONE";
-                    case OP_POPN: return "OP_POPN";
-                    case OP_ASSERT: return "OP_ASSERT";
-                    case OP_EXTHROW: return "OP_EXTHROW";
-                    case OP_MAKECLOSURE: return "OP_MAKECLOSURE";
-                    case OP_CALLFUNCTION: return "OP_CALLFUNCTION";
-                    case OP_CALLMETHOD: return "OP_CALLMETHOD";
-                    case OP_CLASSINVOKETHIS: return "OP_CLASSINVOKETHIS";
-                    case OP_RETURN: return "OP_RETURN";
-                    case OP_MAKECLASS: return "OP_MAKECLASS";
-                    case OP_MAKEMETHOD: return "OP_MAKEMETHOD";
-                    case OP_CLASSPROPERTYDEFINE: return "OP_CLASSPROPERTYDEFINE";
-                    case OP_CLASSINHERIT: return "OP_CLASSINHERIT";
-                    case OP_CLASSGETSUPER: return "OP_CLASSGETSUPER";
-                    case OP_CLASSINVOKESUPER: return "OP_CLASSINVOKESUPER";
-                    case OP_CLASSINVOKESUPERSELF: return "OP_CLASSINVOKESUPERSELF";
-                    case OP_MAKERANGE: return "OP_MAKERANGE";
-                    case OP_MAKEARRAY: return "OP_MAKEARRAY";
-                    case OP_MAKEDICT: return "OP_MAKEDICT";
-                    case OP_INDEXGET: return "OP_INDEXGET";
-                    case OP_INDEXGETRANGED: return "OP_INDEXGETRANGED";
-                    case OP_INDEXSET: return "OP_INDEXSET";
-                    case OP_IMPORTIMPORT: return "OP_IMPORTIMPORT";
-                    case OP_EXTRY: return "OP_EXTRY";
-                    case OP_EXPOPTRY: return "OP_EXPOPTRY";
-                    case OP_EXPUBLISHTRY: return "OP_EXPUBLISHTRY";
-                    case OP_STRINGIFY: return "OP_STRINGIFY";
-                    case OP_SWITCH: return "OP_SWITCH";
-                    case OP_TYPEOF: return "OP_TYPEOF";
-                    case OP_BREAK_PL: return "OP_BREAK_PL";
+                    case OP_GLOBALDEFINE: return either("OP_GLOBALDEFINE", "globaldefine");
+                    case OP_GLOBALGET: return either("OP_GLOBALGET", "globalget");
+                    case OP_GLOBALSET: return either("OP_GLOBALSET", "globalset");
+                    case OP_LOCALGET: return either("OP_LOCALGET", "localget");
+                    case OP_LOCALSET: return either("OP_LOCALSET", "localset");
+                    case OP_FUNCARGSET: return either("OP_FUNCARGSET", "funcargset");
+                    case OP_FUNCARGGET: return either("OP_FUNCARGGET", "funcargget");
+                    case OP_UPVALUEGET: return either("OP_UPVALUEGET", "upvalueget");
+                    case OP_UPVALUESET: return either("OP_UPVALUESET", "upvalueset");
+                    case OP_UPVALUECLOSE: return either("OP_UPVALUECLOSE", "upvalueclose");
+                    case OP_PROPERTYGET: return either("OP_PROPERTYGET", "propertyget");
+                    case OP_PROPERTYGETSELF: return either("OP_PROPERTYGETSELF", "propertygetself");
+                    case OP_PROPERTYSET: return either("OP_PROPERTYSET", "propertyset");
+                    case OP_JUMPIFFALSE: return either("OP_JUMPIFFALSE", "jumpiffalse");
+                    case OP_JUMPNOW: return either("OP_JUMPNOW", "jumpnow");
+                    case OP_LOOP: return either("OP_LOOP", "loop");
+                    case OP_EQUAL: return either("OP_EQUAL", "equal");
+                    case OP_PRIMGREATER: return either("OP_PRIMGREATER", "mathgreater");
+                    case OP_PRIMLESSTHAN: return either("OP_PRIMLESSTHAN", "mathlessthan");
+                    case OP_PUSHEMPTY: return either("OP_PUSHEMPTY", "pushempty");
+                    case OP_PUSHNULL: return either("OP_PUSHNULL", "pushnull");
+                    case OP_PUSHTRUE: return either("OP_PUSHTRUE", "pushtrue");
+                    case OP_PUSHFALSE: return either("OP_PUSHFALSE", "pushfalse");
+                    case OP_PRIMADD: return either("OP_PRIMADD", "primadd");
+                    case OP_PRIMSUBTRACT: return either("OP_PRIMSUBTRACT", "primsubtract");
+                    case OP_PRIMMULTIPLY: return either("OP_PRIMMULTIPLY", "primmultiply");
+                    case OP_PRIMDIVIDE: return either("OP_PRIMDIVIDE", "mathdiv");
+                    case OP_PRIMFLOORDIVIDE: return either("OP_PRIMFLOORDIVIDE", "mathfloordiv");
+                    case OP_PRIMMODULO: return either("OP_PRIMMODULO", "mathmod");
+                    case OP_PRIMPOW: return either("OP_PRIMPOW", "mathpow");
+                    case OP_PRIMNEGATE: return either("OP_PRIMNEGATE", "mathnegate");
+                    case OP_PRIMNOT: return either("OP_PRIMNOT", "mathnot");
+                    case OP_PRIMBITNOT: return either("OP_PRIMBITNOT", "mathbitnot");
+                    case OP_PRIMAND: return either("OP_PRIMAND", "mathand");
+                    case OP_PRIMOR: return either("OP_PRIMOR", "mathor");
+                    case OP_PRIMBITXOR: return either("OP_PRIMBITXOR", "mathbitxor");
+                    case OP_PRIMSHIFTLEFT: return either("OP_PRIMSHIFTLEFT", "mathshiftleft");
+                    case OP_PRIMSHIFTRIGHT: return either("OP_PRIMSHIFTRIGHT", "mathshiftright");
+                    case OP_PUSHONE: return either("OP_PUSHONE", "pushone");
+                    case OP_PUSHCONSTANT: return either("OP_PUSHCONSTANT", "pushconstant");
+                    case OP_ECHO: return either("OP_ECHO", "echo");
+                    case OP_POPONE: return either("OP_POPONE", "popone");
+                    case OP_DUPONE: return either("OP_DUPONE", "dupone");
+                    case OP_POPN: return either("OP_POPN", "popn");
+                    case OP_ASSERT: return either("OP_ASSERT", "assert");
+                    case OP_EXTHROW: return either("OP_EXTHROW", "exthrow");
+                    case OP_MAKECLOSURE: return either("OP_MAKECLOSURE", "makeclosure");
+                    case OP_CALLFUNCTION: return either("OP_CALLFUNCTION", "callfunction");
+                    case OP_CALLMETHOD: return either("OP_CALLMETHOD", "callmethod");
+                    case OP_CLASSINVOKETHIS: return either("OP_CLASSINVOKETHIS", "classinvokethis");
+                    case OP_RETURN: return either("OP_RETURN", "return");
+                    case OP_MAKECLASS: return either("OP_MAKECLASS", "makeclass");
+                    case OP_MAKEMETHOD: return either("OP_MAKEMETHOD", "makemethod");
+                    case OP_CLASSPROPERTYDEFINE: return either("OP_CLASSPROPERTYDEFINE", "classpropertydefine");
+                    case OP_CLASSINHERIT: return either("OP_CLASSINHERIT", "classinherit");
+                    case OP_CLASSGETSUPER: return either("OP_CLASSGETSUPER", "classgetsuper");
+                    case OP_CLASSINVOKESUPER: return either("OP_CLASSINVOKESUPER", "classinvokesuper");
+                    case OP_CLASSINVOKESUPERSELF: return either("OP_CLASSINVOKESUPERSELF", "classinvokesuperself");
+                    case OP_MAKERANGE: return either("OP_MAKERANGE", "makerange");
+                    case OP_MAKEARRAY: return either("OP_MAKEARRAY", "makearray");
+                    case OP_MAKEDICT: return either("OP_MAKEDICT", "makedict");
+                    case OP_INDEXGET: return either("OP_INDEXGET", "indexget");
+                    case OP_INDEXGETRANGED: return either("OP_INDEXGETRANGED", "indexgetranged");
+                    case OP_INDEXSET: return either("OP_INDEXSET", "indexset");
+                    case OP_IMPORTIMPORT: return either("OP_IMPORTIMPORT", "importimport");
+                    case OP_EXTRY: return either("OP_EXTRY", "extry");
+                    case OP_EXPOPTRY: return either("OP_EXPOPTRY", "expoptry");
+                    case OP_EXPUBLISHTRY: return either("OP_EXPUBLISHTRY", "expublishtry");
+                    case OP_STRINGIFY: return either("OP_STRINGIFY", "stringify");
+                    case OP_SWITCH: return either("OP_SWITCH", "switch");
+                    case OP_TYPEOF: return either("OP_TYPEOF", "typeof");
+                    case OP_BREAK_PL: return either("OP_BREAK_PL", "break_pl");
                     default:
                         break;
                 }
+                #undef either
                 return "<?unknown?>";
             }
 
@@ -3304,6 +3306,10 @@ namespace neon
                 Status result;
                 FuncClosure* closure;
                 closure = compileFileToClosure(file);
+                if(closure == nullptr)
+                {
+                    return false;
+                }
                 result = execFromClosure(closure, nullptr);
                 fflush(stdout);
                 if(result == Status::FAIL_COMPILE)
@@ -5123,6 +5129,14 @@ namespace neon
                 Memory::destroy(m_staticprops);
             }
 
+            bool serialize(Serializer& ser)
+            {
+                ser.putString(m_classname.data(), m_classname.length());
+                //ser.putTable(m_classmethods);
+                //ser.putTable(m_);
+                return true; 
+            }
+
             void inheritFrom(ClassObject* superclass)
             {
                 m_instprops->addAll(superclass->m_instprops);
@@ -6398,8 +6412,16 @@ namespace neon
 
     struct DebugPrinter
     {
+        public:
+            enum OutType
+            {
+                OUT_DETAILED,
+                OUT_PSEUDOASM,
+            };
+
         private:
             State* m_pvm;
+            OutType m_otype;
             Printer* m_printer;
             const char* m_insname;
             Blob* m_currblob;
@@ -6408,7 +6430,7 @@ namespace neon
             void doPrintInstrName()
             {
                 Terminal nc;
-                m_printer->putformat("%s%-16s%s ", nc.color('r'), m_insname, nc.color('0'));
+                m_printer->putformat("%s%s%s ", nc.color('r'), m_insname, nc.color('0'));
             }
 
             size_t doPrintSimpleInstr(size_t offset)
@@ -6423,7 +6445,7 @@ namespace neon
                 uint16_t constant;
                 constant = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d ", constant);
+                m_printer->putformat("%d ", constant);
                 m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
                 return offset + 3;
@@ -6435,7 +6457,7 @@ namespace neon
                 uint16_t constant;
                 constant = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d ", constant);
+                m_printer->putformat("%d ", constant);
                 m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 proptn = "";
                 if(m_currblob->m_instrucs[offset + 3].code == 1)
@@ -6452,7 +6474,7 @@ namespace neon
                 uint16_t slot;
                 slot = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d\n", slot);
+                m_printer->putformat("%d\n", slot);
                 return offset + 3;
             }
 
@@ -6461,7 +6483,7 @@ namespace neon
                 uint8_t slot;
                 slot = m_currblob->m_instrucs[offset + 1].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d\n", slot);
+                m_printer->putformat("%d\n", slot);
                 return offset + 2;
             }
 
@@ -6471,7 +6493,7 @@ namespace neon
                 jump = (uint16_t)(m_currblob->m_instrucs[offset + 1].code << 8);
                 jump |= m_currblob->m_instrucs[offset + 2].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d -> %d\n", offset, offset + 3 + sign * jump);
+                m_printer->putformat("%d -> %d\n", offset, offset + 3 + sign * jump);
                 return offset + 3;
             }
 
@@ -6487,7 +6509,7 @@ namespace neon
                 finally = (uint16_t)(m_currblob->m_instrucs[offset + 5].code << 8);
                 finally |= m_currblob->m_instrucs[offset + 6].code;
                 doPrintInstrName();
-                m_printer->putformat("%8d -> %d, %d\n", type, address, finally);
+                m_printer->putformat("%d -> %d, %d\n", type, address, finally);
                 return offset + 7;
             }
 
@@ -6499,7 +6521,7 @@ namespace neon
                 constant |= m_currblob->m_instrucs[offset + 2].code;
                 argcount = m_currblob->m_instrucs[offset + 3].code;
                 doPrintInstrName();
-                m_printer->putformat("(%d args) %8d ", argcount, constant);
+                m_printer->putformat("(%d args) %d ", argcount, constant);
                 m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
                 return offset + 4;
@@ -6516,7 +6538,7 @@ namespace neon
                 offset++;
                 constant = m_currblob->m_instrucs[offset++].code << 8;
                 constant |= m_currblob->m_instrucs[offset++].code;
-                m_printer->putformat("%-16s %8d ", m_insname, constant);
+                m_printer->putformat("%s %d ", m_insname, constant);
                 m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
                 m_printer->putformat("\n");
                 function = m_currblob->m_constants->m_values[constant].asFuncScript();
@@ -6530,15 +6552,16 @@ namespace neon
                     {
                         locn = "local";
                     }
-                    m_printer->putformat("%04d      |                     %s %d\n", offset - 3, locn, (int)index);
+                    m_printer->putformat("%04d | %s %d\n", offset - 3, locn, (int)index);
                 }
                 return offset;
             }
 
         public:
-            DebugPrinter(State* state, Printer* pd)
+            DebugPrinter(State* state, Printer* pd, OutType ot)
             {
                 m_pvm = state;
+                m_otype = ot;
                 m_printer = pd;
             }
 
@@ -6566,29 +6589,22 @@ namespace neon
                 );
                 if(ascompiled)
                 {
-                    m_printer->putformat(" >> %d ", offset, srcline);
+                    m_printer->putformat(" >> %08x ", offset, srcline);
                 }
                 else
                 {
-                    m_printer->putformat("@%08d ", offset);
+                    m_printer->putformat("@%08x ", offset);
                 }
                 if(issame)
                 {
-                    if(ascompiled)
-                    {
-                        m_printer->putformat(" | ");
-                    }
-                    else
-                    {
-                        m_printer->putformat("       | ");
-                    }
+                    m_printer->putformat(" | ");
                 }
                 else
                 {
                     m_printer->putformat("(line %d) ", m_currblob->m_instrucs[offset].srcline);
                 }
                 instruction = m_currblob->m_instrucs[offset].code;
-                m_insname = Instruction::opName(instruction);
+                m_insname = Instruction::opName(instruction, m_otype == OUT_PSEUDOASM);
                 switch(instruction)
                 {
                     case Instruction::OP_JUMPIFFALSE:
@@ -8336,14 +8352,19 @@ namespace neon
     bool State::VM::callClosure(FuncClosure* closure, Value thisval, int argcount)
     {
         int i;
+        int arity;
         int startva;
+        bool isvar;
         CallFrame* frame;
         Array* argslist;
         NEON_APIDEBUG(m_pvm, "thisval.type=%s, argcount=%d", thisval.name(), argcount);
         /* fill empty parameters if not variadic */
-        for(; !closure->m_scriptfunc->m_isvariadic && argcount < closure->m_scriptfunc->m_arity; argcount++)
+        isvar = closure->m_scriptfunc->m_isvariadic;
+        arity = closure->m_scriptfunc->m_arity;
+        while(!isvar && argcount < arity)
         {
             stackPush(Value::makeNull());
+            argcount++;
         }
         /* handle variadic arguments... */
         if(closure->m_scriptfunc->m_isvariadic && argcount >= closure->m_scriptfunc->m_arity - 1)
@@ -9001,7 +9022,8 @@ namespace neon
                 
                 default:
                     {
-                        fprintf(stderr, "getclassfor: unhandled type!\n");
+                        fprintf(stderr, "getclassfor: unhandled type '%s'\n", receiver.name());
+                        return m_classprimobject;
                     }
                     break;
             }
@@ -9104,7 +9126,7 @@ namespace neon
         FuncClosure* closure;
         classname = String::copy(this, cstrname);
         m_vmstate->stackPush(Value::fromObject(classname));
-        klass = ClassObject::make(this, Util::StrBuffer(cstrname), nullptr);
+        klass = ClassObject::make(this, Util::StrBuffer(cstrname), m_classprimobject);
         m_vmstate->stackPop();
         m_vmstate->stackPush(Value::fromObject(klass));
         function = FuncScript::make(this, module, FuncCommon::FUNCTYPE_METHOD);
@@ -13123,6 +13145,10 @@ namespace neon
             m_envdict = Dictionary::make(this);
         }
         {
+            nn_state_initbuiltinfunctions(this);
+            nn_state_initbuiltinmethods(this);
+        }
+        {
             if(m_exceptions.stdexception == nullptr)
             {
                 m_exceptions.stdexception = makeExceptionClass(m_toplevelmodule, "Exception");
@@ -13132,10 +13158,6 @@ namespace neon
             m_exceptions.ioerror = makeExceptionClass(m_toplevelmodule, "IOError");
             m_exceptions.oserror = makeExceptionClass(m_toplevelmodule, "OSError");
             m_exceptions.argumenterror = makeExceptionClass(m_toplevelmodule, "ArgumentError");
-        }
-        {
-            nn_state_initbuiltinfunctions(this);
-            nn_state_initbuiltinmethods(this);
         }
         {
             {
@@ -14258,7 +14280,7 @@ namespace neon
         );
         if(isfail)
         {
-            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "unsupported operand %s for %s and %s", Instruction::opName(instruction), binvalleft.name(), binvalright.name());
+            NEON_VMMAC_TRYRAISE(vm->m_pvm, false, "unsupported operand %s for %s and %s", Instruction::opName(instruction, false), binvalleft.name(), binvalright.name());
             return false;
         }
         binvalright = vm->stackPop();
@@ -14364,7 +14386,7 @@ namespace neon
                 break;
             default:
                 {
-                    fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, Instruction::opName(instruction));
+                    fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, Instruction::opName(instruction, false));
                     return false;
                 }
                 break;
@@ -14610,7 +14632,7 @@ namespace neon
         Terminal nc;
         you_are_calling_exit_vm_outside_of_runvm = false;
         m_currentframe = &m_framevalues[m_framecount - 1];
-        DebugPrinter dp(m_pvm, m_pvm->m_debugprinter);
+        DebugPrinter dp(m_pvm, m_pvm->m_debugprinter, DebugPrinter::OUT_DETAILED);
         for(;;)
         {
             /*
@@ -15349,32 +15371,36 @@ namespace neon
                     {
                         uint16_t addr;
                         uint16_t finaddr;
-                        Value value;
                         String* type;
                         Property* field;
+                        ClassObject* klass;
+                        klass = nullptr;
                         type = readString();
                         addr = readShort();
                         finaddr = readShort();
                         if(addr != 0)
                         {
-                            //if(!m_pvm->m_definedglobals->get(Value::fromObject(type), &value) || !value.isClass())
                             field = m_pvm->m_definedglobals->getField(Value::fromObject(type));
                             if((field == nullptr) || !field->value().isClass())
                             {
-                                //if(!m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable->get(Value::fromObject(type), &value) || !value.isClass())
                                 field = m_currentframe->closure->m_scriptfunc->m_inmodule->m_deftable->getField(Value::fromObject(type));
-                                if(field == nullptr || !field->value().isClass())
+                                if(field != nullptr)
                                 {
-                                    NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "object of type '%s' is not an exception", type->data());
-                                    break;
+                                    if(field->value().isClass())
+                                    {
+                                        klass = field->value().asClass();
+                                    }
+                                    /*
+                                    else
+                                    {
+                                        NEON_VMMAC_TRYRAISE(m_pvm, Status::FAIL_RUNTIME, "object of type '%s' is not an exception", type->data());
+                                        break;
+                                    }
+                                    */
                                 }
                             }
-                            exceptionPushHandler(value.asClass(), addr, finaddr);
                         }
-                        else
-                        {
-                            exceptionPushHandler(nullptr, addr, finaddr);
-                        }
+                        exceptionPushHandler(klass, addr, finaddr);
                     }
                     break;
                 case Instruction::OP_EXPOPTRY:

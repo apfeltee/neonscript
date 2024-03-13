@@ -91,6 +91,13 @@
             /*
             * serializes a String.
             */
+            bool putString(const char* str, uint64_t len)
+            {
+                streamPut<uint64_t>(&len, 1);
+                streamPut<char>(str, len);
+                return true;
+            }
+    
             bool putString(String* os);
 
             /*

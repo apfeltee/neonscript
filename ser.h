@@ -26,10 +26,7 @@
 
     bool Serializer::putString(String* os)
     {
-        uint64_t len;
-        len = os->length();
-        streamPut<uint64_t>(&len, 1);
-        streamPut<char>(os->data(), os->length());
+        putString(os->data(), os->length());
         return true;
     }
 
