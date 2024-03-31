@@ -8,7 +8,7 @@ function parsedtosexp(data)
     var j, len, results;
     // Convert a JS data structure to a string s-expression.  A sexier version
     // would remove quotes around strings that don't need them.
-    if(data.isArray())
+    if(data.class == Array)
     {
         results = []
         j = 0;

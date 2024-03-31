@@ -468,6 +468,371 @@ namespace neon
                 }
         };
 
+        // dynamic vector of scalar (constructorless) data
+        template <typename ValType>
+        class Vector
+        {
+            public:
+                using FNAllocator = void*(*)(size_t);
+                using FNReallocator = void*(*)(void*, size_t);
+                using FNDeallocator = void(*)(void*);
+
+            private:
+                FNAllocator m_allocator;
+                FNReallocator m_reallocator;
+                FNDeallocator m_deallocator;
+                size_t m_size;// size in number of ValType values
+                ValType* m_begin;
+                size_t m_capacity;// allocated size in ValType values
+
+            private:
+                bool resize(size_t new_size)
+                {
+                    size_t nsz;
+                    size_t ncap;
+                    size_t capneed;
+                    void* data;
+                    capneed = new_size;
+                    if(capneed > m_capacity)
+                    {
+                        ncap = capneed + (m_capacity >> 1u);
+                        if(m_begin)
+                        {
+                            data = m_reallocator(m_begin, ncap * sizeof(ValType));
+                        }
+                        else
+                        {
+                            ncap = 8;
+                            nsz = ncap * sizeof(ValType);
+                            data = m_allocator(nsz);
+                        }
+                        if(data)
+                        {
+                            m_capacity = ncap;
+                            m_begin = (ValType*)data;
+                        }
+                        else
+                        {
+                            return false;// error: not enough memory
+                        }
+                    }
+                    return true;
+                }
+
+        public:
+            using iterator = ValType*;
+            using const_iterator = const ValType*;
+
+            class accessor
+            {
+                private:
+                    friend class Vector;
+                    ValType* m_valptr;
+
+                    accessor(ValType* ptr) : m_valptr(ptr)
+                    {
+                    }
+
+                public:
+                    accessor& operator=(const ValType& value)
+                    {
+                        *m_valptr = value;
+                        return *this;
+                    }
+
+                    operator const ValType&() const
+                    {
+                        return *m_valptr;
+                    }
+
+                    operator ValType&()
+                    {
+                        return *m_valptr;
+                    }
+            };
+
+            Vector(FNAllocator allocator = ::malloc, FNReallocator reallocator = ::realloc, FNDeallocator deallocator = ::free)
+            : m_allocator(allocator), m_reallocator(reallocator), m_deallocator(deallocator)
+            {
+                m_begin = nullptr;
+                m_size = 0;
+                m_capacity = 0;
+            }
+
+            ~Vector()
+            {
+                m_size = 0;
+                //if(m_begin != nullptr)
+                {
+                    m_deallocator(m_begin);
+                    m_begin = nullptr;
+                }
+            }
+
+            accessor operator[](size_t index)
+            {
+                return accessor(m_begin + index);
+            }
+
+            accessor operator[](size_t index) const
+            {
+                return accessor(m_begin + index);
+            }
+
+            ValType& at(size_t i)
+            {
+                return m_begin[i];
+            }
+
+            const ValType& at(size_t i) const
+            {
+                return m_begin[i];
+            }
+
+            inline size_t size() const
+            {
+                return m_size;
+            }
+
+            inline size_t capacity() const
+            {
+                return m_capacity;
+            }
+
+            inline bool reserve(size_t new_size)
+            {
+                return resize(new_size);
+            }
+
+            inline const_iterator cbegin() const
+            {
+                return m_begin;
+            }
+
+            inline const_iterator cend() const
+            {
+                return m_begin + m_size;
+            }
+
+            inline iterator begin()
+            {
+                return m_begin;
+            }
+
+            inline iterator end()
+            {
+                return m_begin + m_size;
+            }
+
+            void clear()
+            {
+                m_size = 0;
+                memset(m_begin, 0, m_capacity);
+            }
+
+            bool push_back(const ValType& value)
+            {
+                if(!resize(m_size + 1))
+                {
+                    return false;
+                }
+                m_begin[m_size++] = value;
+                return true;
+            }
+
+            void erase(iterator first, iterator last)
+            {
+                if(last < first)
+                {
+                    iterator tmp;
+                    tmp = first;
+                    first = last;
+                    last = tmp;
+                }
+                size_t start = first - m_begin;
+                size_t end = last - m_begin;
+                size_t erase_size = end - start + 1;
+                if(last < m_begin + m_size - 1)
+                {
+                    const size_t count = m_size - end;
+                    memmove(first, last + 1, sizeof(ValType) * count);
+                }
+                m_size -= erase_size;
+            }
+        };
+
+        // a key value pair
+        template <typename TKey, typename TValue>
+        struct Pair final
+        {
+            public:
+                TKey m_key;
+                TValue m_value;
+
+            public:
+                Pair(TKey key, TValue value) : m_key(key), m_value(value)
+                {
+                }
+
+                Pair(const Pair& rhs)
+                {
+                    m_key = rhs.m_key;
+                    m_value = rhs.m_value;
+                }
+
+                Pair& operator=(const Pair& rhs)
+                {
+                    m_key = rhs.m_key;
+                    m_value = rhs.m_value;
+                    return *this;
+                }
+
+                Pair(Pair&& rhs)
+                {
+                    m_key = rhs.m_key;
+                    m_value = rhs.m_value;
+                }
+
+                Pair& operator=(Pair&& rhs)
+                {
+                    m_key = rhs.m_key;
+                    m_value = rhs.m_value;
+                    return *this;
+                }
+        };
+
+        // a simple hash table
+        template<typename TKey, typename TValue>
+        class HashMap
+        {
+            public:
+                using bucket_type = Vector<Pair<TKey, TValue>>;
+                using FNHash = int(*)(const TKey&);
+                using FNAllocator = typename bucket_type::FNAllocator;
+                using FNReallocator = typename bucket_type::FNReallocator;
+                using FNDeallocator = typename bucket_type::FNDeallocator;
+                using key_type = TKey;
+                using mapped_type = TValue;
+                using PairType = Pair<const TKey, TValue>;
+
+            private:
+                Vector<bucket_type*> m_buckets;
+                FNHash m_fnhash;
+                size_t m_size;
+
+            public:
+                HashMap(FNHash hash_function, FNAllocator allocator = ::malloc, FNReallocator reallocator = ::realloc, FNDeallocator deallocator = ::free)
+                : m_fnhash(hash_function), m_size(0)
+                {
+                    size_t i;
+                    size_t sz;
+                    //sz = Size;
+                    sz = m_buckets.size();
+                    for(i = 0; i < sz; ++i)
+                    {
+                        m_buckets[i] = Memory::create<bucket_type>(allocator, reallocator, deallocator);
+                    }
+                }
+
+                ~HashMap()
+                {
+                    size_t i;
+                    for(i=0; i < m_buckets.size(); i++)
+                    {
+                        Memory::destroy(m_buckets[i]);
+                    }
+                }
+
+                inline size_t size() const
+                {
+                    return m_size;
+                }
+
+                void clear()
+                {
+                    size_t i;
+                    m_size = 0;
+                    for(i = 0; i < m_buckets.size(); ++i)
+                    {
+                        m_buckets->clear();
+                    }
+                }
+
+                void checkbuckets(size_t h)
+                {
+                    while((h + 1) > (m_buckets.size() + 0))
+                    {
+                        m_buckets.push_back(Memory::create<bucket_type>());
+                    }
+                }
+
+                bool insert(const PairType& value)
+                {
+                    size_t asz;
+                    asz = m_buckets.size();
+                    int h = m_fnhash(value.m_key) % ((asz == 0) ? 1 : asz);
+                    checkbuckets(h);
+                    bucket_type* bucket = m_buckets[h];
+                    if(bucket->size())
+                    {
+                        auto it = bucket->cbegin();
+                        while(it != bucket->cend())
+                        {
+                            if(it->m_key == value.m_key)
+                            {
+                                return false;
+                            }
+                            ++it;
+                        }
+                    }
+                    if(bucket->push_back({ value.m_key, value.m_value }))
+                    {
+                        ++m_size;
+                        return true;
+                    }
+                    return false;
+                }
+
+                const mapped_type* find(const key_type& key) const
+                {
+                    int h = m_fnhash(key) % m_buckets.size();
+                    const bucket_type* bucket = m_buckets[h];
+                    if(bucket->size())
+                    {
+                        auto it = bucket->cbegin();
+                        while(it != bucket->cend())
+                        {
+                            if(it->m_key == key)
+                            {
+                                return &it->m_value;
+                            }
+                            ++it;
+                        }
+                    }
+                    return nullptr;
+                }
+
+                mapped_type* find_mutable(const key_type& key)
+                {
+                    int h = m_fnhash(key) % m_buckets.size();
+                    checkbuckets(h);
+                    bucket_type* bucket = m_buckets[h];
+                    if(bucket->size())
+                    {
+                        auto it = bucket->begin();
+                        while(it != bucket->end())
+                        {
+                            if(it->m_key == key)
+                            {
+                                return &it->m_value;
+                            }
+                            ++it;
+                        }
+                    }
+                    return nullptr;
+                }
+        };
+
         struct Utf8Iterator
         {
             public:
@@ -961,10 +1326,170 @@ namespace neon
             fclose(fh);
             return b;
         }
+
+        #if 1
+        template<typename ValType>
+        struct GenericArray
+        {
+            public:
+                /* how many entries are currently stored? */
+                size_t m_count;
+                /* how many entries can be stored before growing? */
+                size_t m_capacity;
+                ValType* m_values;
+
+            private:
+                bool destroy()
+                {
+                    if(m_values != nullptr)
+                    {
+                        Memory::freeArray(m_values, m_capacity);
+                        m_values = nullptr;
+                        m_count = 0;
+                        m_capacity = 0;
+                        return true;
+                    }
+                    return false;
+                }
+
+            public:
+                GenericArray()
+                {
+                    m_capacity = 0;
+                    m_count = 0;
+                    m_values = nullptr;
+                }
+
+                ~GenericArray()
+                {
+                    destroy();
+                }
+
+                inline size_t size() const
+                {
+                    return m_count;
+                }
+
+                inline size_t length() const
+                {
+                    return m_count;
+                }
+
+                inline size_t count() const
+                {
+                    return m_count;
+                }
+
+                inline ValType& at(size_t i)
+                {
+                    return m_values[i];
+                }
+
+                inline ValType& at(size_t i) const
+                {
+                    return m_values[i];
+                }
+
+                inline ValType& operator[](size_t i)
+                {
+                    return m_values[i];
+                }
+
+                inline ValType& operator[](size_t i) const
+                {
+                    return m_values[i];
+                }
+
+                ValType pop()
+                {
+                    if(m_count > 0)
+                    {
+                        m_count--;
+                        return m_values[m_count+1];
+                    }
+                    return {};
+                }
+
+                void push(ValType value)
+                {
+                    size_t oldcapacity;
+                    if(m_capacity < m_count + 1)
+                    {
+                        oldcapacity = m_capacity;
+                        m_capacity = Util::growCapacity(oldcapacity);
+                        m_values = Memory::growArray(m_values, oldcapacity, m_capacity);
+                    }
+                    m_values[m_count] = value;
+                    m_count++;
+                }
+
+                void insertDefault(ValType value, size_t index, ValType defaultvalue)
+                {
+                    size_t i;
+                    size_t oldcap;
+                    if(m_capacity <= index)
+                    {
+                        m_capacity = Util::growCapacity(index);
+                        m_values = Memory::growArray(m_values, m_count, m_capacity);
+                    }
+                    else if(m_capacity < m_count + 2)
+                    {
+                        oldcap = m_capacity;
+                        m_capacity = Util::growCapacity(oldcap);
+                        m_values = Memory::growArray(m_values, oldcap, m_capacity);
+                    }
+                    if(index <= m_count)
+                    {
+                        for(i = m_count - 1; i >= index; i--)
+                        {
+                            m_values[i + 1] = m_values[i];
+                        }
+                    }
+                    else
+                    {
+                        for(i = m_count; i < index; i++)
+                        {
+                            /* null out overflow indices */
+                            m_values[i] = defaultvalue;
+                            m_count++;
+                        }
+                    }
+                    m_values[index] = value;
+                    m_count++;
+                }
+
+                ValType shiftDefault(size_t count, ValType defval)
+                {
+                    size_t i;
+                    size_t j;
+                    size_t vsz;
+                    ValType temp;
+                    ValType item;
+                    vsz = m_count;
+                    if(count >= vsz || vsz == 1)
+                    {
+                        m_count = 0;
+                        return defval;
+                    }
+                    item = m_values[0];
+                    j = 0;
+                    for(i=1; i<vsz; i++)
+                    {
+                        temp = m_values[i];
+                        m_values[j] = temp;
+                        j++;
+                    }
+                    m_count--;
+                    return item;
+                }
+        };
+        #else
+            template<typename Type>
+            using GenericArray = Vector<Type>;
+        #endif
     }
 }
 
-#include "genericarray.h"
 #include "sbuf.h"
 
 namespace neon
@@ -3134,7 +3659,7 @@ namespace neon
             struct
             {
                 /* for switching through the command line args... */
-                bool enablewarnings = false;
+                bool enablewarnings = true;
                 bool dumpbytecode = false;
                 bool exitafterbytecode = false;
                 bool dumpinstructions = false;
@@ -3178,6 +3703,7 @@ namespace neon
             ClassObject* m_classprimprocess;
             ClassObject* m_classprimobject;
             ClassObject* m_classprimnumber;
+            ClassObject* m_classprimbool;
             ClassObject* m_classprimstring;
             ClassObject* m_classprimarray;
             ClassObject* m_classprimdict;
@@ -3560,7 +4086,6 @@ namespace neon
             {
                 return m_actualval;
             }
-
     };
 
     struct Property: public PropBase<Value>
@@ -6446,7 +6971,14 @@ namespace neon
                 constant = (m_currblob->m_instrucs[offset + 1].code << 8) | m_currblob->m_instrucs[offset + 2].code;
                 doPrintInstrName();
                 m_printer->putformat("%d ", constant);
-                m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
+                if(constant > m_currblob->m_constants->size())
+                {
+                    m_printer->putformat("<out of range of %d constants> ", m_currblob->m_constants->size());
+                }
+                else
+                {
+                    m_printer->printValue(m_currblob->m_constants->m_values[constant], true, false);
+                }
                 m_printer->putformat("\n");
                 return offset + 3;
             }
@@ -8996,38 +9528,44 @@ namespace neon
 
     ClassObject* State::vmGetClassFor(Value receiver)
     {
-        if(receiver.isNumber())
+        if(!receiver.isObject())
         {
-            return m_classprimnumber;
-        }
-        if(receiver.isObject())
-        {
-            switch(receiver.asObject()->m_objtype)
+            switch(receiver.type())
             {
-                case Value::OBJTYPE_STRING:
-                    return m_classprimstring;
-                case Value::OBJTYPE_RANGE:
-                    return m_classprimrange;
-                case Value::OBJTYPE_ARRAY:
-                    return m_classprimarray;
-                case Value::OBJTYPE_DICT:
-                    return m_classprimdict;
-                case Value::OBJTYPE_FILE:
-                    return m_classprimfile;
-                case Value::OBJTYPE_FUNCNATIVE:
-                case Value::OBJTYPE_FUNCBOUND:
-                case Value::OBJTYPE_FUNCCLOSURE:
-                case Value::OBJTYPE_FUNCSCRIPT:
-                    return m_classprimcallable;
-                
+                case Value::VALTYPE_NUMBER:
+                    return m_classprimnumber;
+                case Value::VALTYPE_BOOL:
+                    return m_classprimbool;
                 default:
-                    {
-                        fprintf(stderr, "getclassfor: unhandled type '%s'\n", receiver.name());
-                        return m_classprimobject;
-                    }
                     break;
             }
         }
+        switch(receiver.asObject()->m_objtype)
+        {
+            case Value::OBJTYPE_STRING:
+                return m_classprimstring;
+            case Value::OBJTYPE_RANGE:
+                return m_classprimrange;
+            case Value::OBJTYPE_ARRAY:
+                return m_classprimarray;
+            case Value::OBJTYPE_DICT:
+                return m_classprimdict;
+            case Value::OBJTYPE_FILE:
+                return m_classprimfile;
+            case Value::OBJTYPE_FUNCNATIVE:
+            case Value::OBJTYPE_FUNCBOUND:
+            case Value::OBJTYPE_FUNCCLOSURE:
+            case Value::OBJTYPE_FUNCSCRIPT:
+                return m_classprimcallable;
+            
+            default:
+                {
+                    fprintf(stderr, "getclassfor: unhandled type '%s'\n", receiver.name());
+                    return m_classprimobject;
+                }
+                break;
+        }
+    
         return nullptr;
     }
 
@@ -12276,22 +12814,6 @@ namespace neon
         return Value::fromObject(klass);
     }
 
-    Value objfn_object_member_isstring(State* state, CallState* args)
-    {
-        Value v;
-        (void)state;
-        v = args->thisval;
-        return Value::makeBool(v.isString());
-    }
-
-    Value objfn_object_member_isarray(State* state, CallState* args)
-    {
-        Value v;
-        (void)state;
-        v = args->thisval;
-        return Value::makeBool(v.isArray());
-    }
-
     Value objfn_object_member_iscallable(State* state, CallState* args)
     {
         Value selfval;
@@ -12306,45 +12828,6 @@ namespace neon
         );
     }
 
-    Value objfn_object_member_isbool(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isBool());
-    }
-
-    Value objfn_object_member_isnumber(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isNumber());
-    }
-
-    Value objfn_object_member_isint(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
-    }
-
-    Value objfn_object_member_isdict(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isDict());
-    }
-
-    Value objfn_object_member_isobject(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isObject());
-    }
 
     Value objfn_object_member_isfunction(State* state, CallState* args)
     {
@@ -12376,30 +12859,6 @@ namespace neon
             );
         }
         return Value::makeBool(isiterable);
-    }
-
-    Value objfn_object_member_isclass(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isClass());
-    }
-
-    Value objfn_object_member_isfile(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isFile());
-    }
-
-    Value objfn_object_member_isinstance(State* state, CallState* args)
-    {
-        Value selfval;
-        (void)state;
-        selfval = args->thisval;
-        return Value::makeBool(selfval.isInstance());
     }
 
     Value objfn_number_member_tobinstring(State* state, CallState* args)
@@ -12461,19 +12920,10 @@ namespace neon
             state->m_classprimobject->defStaticNativeMethod("deserialize", objfn_object_static_deserialize);            
             state->m_classprimobject->defNativeMethod("dump", objfn_object_member_dump);
             state->m_classprimobject->defNativeMethod("toString", objfn_object_member_tostring);
-            state->m_classprimobject->defNativeMethod("isArray", objfn_object_member_isarray);        
-            state->m_classprimobject->defNativeMethod("isString", objfn_object_member_isstring);
+            // should be .isA(): something.isA(File) . 
             state->m_classprimobject->defNativeMethod("isCallable", objfn_object_member_iscallable);
-            state->m_classprimobject->defNativeMethod("isBool", objfn_object_member_isbool);
-            state->m_classprimobject->defNativeMethod("isNumber", objfn_object_member_isnumber);
-            state->m_classprimobject->defNativeMethod("isInt", objfn_object_member_isint);
-            state->m_classprimobject->defNativeMethod("isDict", objfn_object_member_isdict);
-            state->m_classprimobject->defNativeMethod("isObject", objfn_object_member_isobject);
             state->m_classprimobject->defNativeMethod("isFunction", objfn_object_member_isfunction);
             state->m_classprimobject->defNativeMethod("isIterable", objfn_object_member_isiterable);
-            state->m_classprimobject->defNativeMethod("isClass", objfn_object_member_isclass);
-            state->m_classprimobject->defNativeMethod("isFile", objfn_object_member_isfile);
-            state->m_classprimobject->defNativeMethod("isInstance", objfn_object_member_isinstance);
         }
         
         {
@@ -13133,6 +13583,7 @@ namespace neon
             m_classprimobject = makeNamedClass("Object", nullptr);
             m_classprimprocess = makeNamedClass("Process", m_classprimobject);
             m_classprimnumber = makeNamedClass(Value::typenameFromEnum(Value::VALTYPE_NUMBER), m_classprimobject);
+            m_classprimbool = makeNamedClass(Value::typenameFromEnum(Value::VALTYPE_BOOL), m_classprimobject);
             m_classprimstring = makeNamedClass(Value::typenameFromEnum(Value::OBJTYPE_STRING), m_classprimobject);
             m_classprimarray = makeNamedClass(Value::typenameFromEnum(Value::OBJTYPE_ARRAY), m_classprimobject);
             m_classprimdict = makeNamedClass(Value::typenameFromEnum(Value::OBJTYPE_DICT), m_classprimobject);
@@ -13955,10 +14406,44 @@ namespace neon
         return r;
     }
 
+    template<typename InTypClass, typename InStringT>
+    Property* vmutil_getpropbyname(InTypClass* klass, InStringT name)
+    {
+        return klass->getPropertyField(name);
+
+    }
+
     static NEON_FORCEINLINE Property* vmutil_getproperty(State::VM* vm, Value peeked, String* name)
     {
+        ClassObject* klass;
         Property* field;
         Object* pobj;
+        klass = nullptr;
+        if(!peeked.isObject())
+        {
+            switch(peeked.type())
+            {
+                case Value::VALTYPE_NUMBER:
+                    {
+                        klass = vm->m_pvm->m_classprimnumber;
+                    }
+                    break;
+                case Value::VALTYPE_BOOL:
+                    {
+                        klass = vm->m_pvm->m_classprimbool;
+                    }
+                    break;
+            }
+            if(klass != nullptr)
+            {
+                field = vmutil_getpropbyname(klass, name);
+                if(field != nullptr)
+                {
+                    return field;
+                }
+                goto failprop;
+            }
+        }
         pobj = peeked.asObject();
         switch(pobj->m_objtype)
         {
@@ -13976,7 +14461,6 @@ namespace neon
                 break;
             case Value::OBJTYPE_CLASS:
                 {
-                    ClassObject* klass;
                     klass = peeked.asClass();
                     field = klass->m_classmethods->getByObjString(name);
                     if(field != nullptr)
@@ -14093,24 +14577,17 @@ namespace neon
         String* name;
         name = vm->readString();
         peeked = vm->stackPeek(0);
-        if(peeked.isObject())
+        field = vmutil_getproperty(vm, peeked, name);
+        if(field != nullptr)
         {
-            field = vmutil_getproperty(vm, peeked, name);
-            if(field == nullptr)
+            if(field->m_proptype == Property::PROPTYPE_FUNCTION)
             {
-                return false;
+                vm->vmCallBoundValue(field->m_actualval, peeked, 0);
             }
             else
             {
-                if(field->m_proptype == Property::PROPTYPE_FUNCTION)
-                {
-                    vm->vmCallBoundValue(field->m_actualval, peeked, 0);
-                }
-                else
-                {
-                    vm->stackPop();
-                    vm->stackPush(field->m_actualval);
-                }
+                vm->stackPop();
+                vm->stackPush(field->m_actualval);
             }
             return true;
         }
@@ -15805,6 +16282,11 @@ void nn_cli_showusage(char* argv[], OptionParser::LongFlags* flags, bool fail)
     nn_cli_fprintusage(out, flags);
 }
 
+/*
+NB. The most straigth-forward instantiation would be:
+neon::State state;
+state.runFile(somefile);
+*/
 int main(int argc, char* argv[], char** envp)
 {
     int i;
@@ -15837,7 +16319,7 @@ int main(int argc, char* argv[], char** envp)
     {
         {"help", 'h', OptionParser::A_NONE, "this help"},
         {"strict", 's', OptionParser::A_NONE, "enable strict mode, such as requiring explicit var declarations"},
-        {"warn", 'w', OptionParser::A_NONE, "enable warnings"},
+        {"nowarn", 'w', OptionParser::A_NONE, "disable warnings"},
         {"debug", 'd', OptionParser::A_NONE, "enable debugging: print instructions and stack values during execution"},
         {"skipstack", 'D', OptionParser::A_NONE, "skip printing stack values when dumping"},
         {"exitaftercompile", 'x', OptionParser::A_NONE, "when using '-d', quit after printing compiled function(s)"},
@@ -15915,7 +16397,7 @@ int main(int argc, char* argv[], char** envp)
         }
         else if(co == 'w')
         {
-            state->m_conf.enablewarnings = true;
+            state->m_conf.enablewarnings = false;
         }
         else if(co == 'q')
         {

@@ -263,7 +263,6 @@
             struct ClassCompiler
             {
                 bool hassuperclass;
-                bool hasname;
                 ClassCompiler* m_enclosing;
                 Token classname;
             };
@@ -299,23 +298,6 @@
                 Memory::destroy(parser);
                 state->m_activeparser = nullptr;
                 return function;
-            }
-
-            template<typename... ArgsT>
-            static Token makeSynthTokFormat(const char* name, ArgsT&&... args)
-            {
-                enum{ kMaxBuf = 128 };
-                size_t len;
-                char buf[kMaxBuf] = {0};
-                static auto fn_snprintf = snprintf;
-                Token token;
-                token.isglobal = false;
-                token.line = 0;
-                token.type = (Token::Type)0;
-                len = fn_snprintf(buf, kMaxBuf, name, args...);
-                token.start = buf;
-                token.length = len;
-                return token;
             }
 
             static Token makeSynthToken(const char* name)
@@ -442,7 +424,6 @@
             int m_innermostloopstart;
             int m_innermostloopscopedepth;
             int m_blockcount;
-            int m_inswitch;
             /* the context in which the parser resides; none (outer level), inside a class, dict, array, etc */
             CompContext m_compcontext;
             const char* m_currentphysfile;
@@ -466,7 +447,6 @@
                 m_replcanecho = false;
                 m_isreturning = false;
                 m_istrying = false;
-                m_inswitch = 0;
                 m_compcontext = COMPCONTEXT_NONE;
                 m_innermostloopstart = -1;
                 m_innermostloopscopedepth = 0;
@@ -1003,11 +983,6 @@
                 }
             }
 
-            int makeIdentConst(String* str)
-            {
-                return pushConst(Value::fromObject(str));
-            }
-
             int makeIdentConst(Token* name)
             {
                 int rawlen;
@@ -1021,7 +996,7 @@
                     rawlen--;
                 }
                 str = String::copy(m_pvm, rawstr, rawlen);
-                return makeIdentConst(str);
+                return pushConst(Value::fromObject(str));
             }
 
             void declareVariable()
@@ -1817,32 +1792,21 @@
                 ignoreSpace();
             }
 
-            void parseClassDeclaration(bool named)
+            void parseClassDeclaration()
             {
                 bool isstatic;
                 int nameconst;
                 CompContext oldctx;
                 Token classname;
                 ClassCompiler classcompiler;
-                classcompiler.hasname = named;
-                if(named)
-                {
-                    consume(Token::TOK_IDENTNORMAL, "class name expected");
-                    classname = m_prevtoken;
-                    declareVariable();
-                }
-                else
-                {
-                    classname = makeSynthToken("<anonclass>");
-                }
-                nameconst = makeIdentConst(&classname);
-                classcompiler.classname = classname;
+                consume(Token::TOK_IDENTNORMAL, "class name expected");
+                nameconst = makeIdentConst(&m_prevtoken);
+                classname = m_prevtoken;
+                declareVariable();
                 emitInstruction(Instruction::OP_MAKECLASS);
                 emit1short(nameconst);
-                if(named)
-                {
-                    emitDefineVariable(nameconst);
-                }
+                emitDefineVariable(nameconst);
+                classcompiler.classname = m_prevtoken;
                 classcompiler.hassuperclass = false;
                 classcompiler.m_enclosing = m_currclasscompiler;
                 m_currclasscompiler = &classcompiler;
@@ -1864,10 +1828,7 @@
                     emitInstruction(Instruction::OP_CLASSINHERIT);
                     classcompiler.hassuperclass = true;
                 }
-                if(named)
-                {
-                    emitNamedVar(classname, false);
-                }
+                emitNamedVar(classname, false);
                 ignoreSpace();
                 consume(Token::TOK_BRACEOPEN, "expected '{' before class body");
                 ignoreSpace();
@@ -1893,10 +1854,7 @@
                 if(match(Token::TOK_SEMICOLON))
                 {
                 }
-                if(named)
-                {
-                    emitInstruction(Instruction::OP_POPONE);
-                }
+                emitInstruction(Instruction::OP_POPONE);
                 if(classcompiler.hassuperclass)
                 {
                     scopeEnd();
@@ -2014,7 +1972,7 @@
                 ignoreSpace();
                 if(match(Token::TOK_KWCLASS))
                 {
-                    parseClassDeclaration(true);
+                    parseClassDeclaration();
                 }
                 else if(match(Token::TOK_KWFUNCTION))
                 {
@@ -2299,11 +2257,6 @@
              */
             void parseSwitchStatement()
             {
-                enum {
-                    PS_BEFOREALL,
-                    PS_BEFOREDEFAULT,
-                    PS_AFTERDEFAULT,
-                };
                 int i;
                 int length;
                 int tgtaddr;
@@ -2318,14 +2271,11 @@
                 String* string;
                 Util::GenericArray<int> caseends;
                 /* the expression */
-                consume(Token::TOK_PARENOPEN, "expected '(' 'switch'");
                 parseExpression();
-                consume(Token::TOK_PARENCLOSE, "expected ')' 'switch' expression");
-                ignoreSpace();
                 consume(Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
                 ignoreSpace();
                 /* 0: before all cases, 1: before default, 2: after default */
-                swstate = PS_BEFOREALL;
+                swstate = 0;
                 casecount = 0;
                 sw = VarSwitch::make(m_pvm);
                 m_pvm->m_vmstate->stackPush(Value::fromObject(sw));
@@ -2335,17 +2285,16 @@
                 emit1short(pushConst(Value::fromObject(sw)));
                 */
                 startoffset = currentBlob()->m_count;
-                m_inswitch++;
                 while(!match(Token::TOK_BRACECLOSE) && !check(Token::TOK_EOF))
                 {
                     if(match(Token::TOK_KWCASE) || match(Token::TOK_KWDEFAULT))
                     {
                         casetype = m_prevtoken.type;
-                        if(swstate == PS_AFTERDEFAULT)
+                        if(swstate == 2)
                         {
                             raiseError("cannot have another case after a default case");
                         }
-                        if(swstate == PS_BEFOREDEFAULT)
+                        if(swstate == 1)
                         {
                             /* at the end of the previous case, jump over the others... */
                             tgtaddr = emitJump(Instruction::OP_JUMPNOW);
@@ -2355,7 +2304,7 @@
                         }
                         if(casetype == Token::TOK_KWCASE)
                         {
-                            swstate = PS_BEFOREDEFAULT;
+                            swstate = 1;
                             do
                             {
                                 ignoreSpace();
@@ -2387,32 +2336,29 @@
                                 {
                                     /* pop the switch */
                                     m_pvm->m_vmstate->stackPop();
-                                    raiseError("only constants can be used in 'case' clause");
+                                    raiseError("only constants can be used in 'when' expressions");
                                     return;
                                 }
                             } while(match(Token::TOK_COMMA));
-                            consume(Token::TOK_COLON, "expected ':' after 'case' constants");
                         }
                         else
                         {
-                            consume(Token::TOK_COLON, "expected ':' after 'default'");
-                            swstate = PS_AFTERDEFAULT;
+                            swstate = 2;
                             sw->m_defaultjump = currentBlob()->m_count - startoffset;
                         }
                     }
                     else
                     {
                         /* otherwise, it's a statement inside the current case */
-                        if(swstate == PS_BEFOREALL)
+                        if(swstate == 0)
                         {
                             raiseError("cannot have statements before any case");
                         }
                         parseStatement();
                     }
                 }
-                m_inswitch--;
                 /* if we ended without a default case, patch its condition jump */
-                if(swstate == PS_BEFOREDEFAULT)
+                if(swstate == 1)
                 {
                     tgtaddr = emitJump(Instruction::OP_JUMPNOW);
                     //caseends[casecount++] = tgtaddr;
@@ -2664,10 +2610,6 @@
 
             void parseBreakStatement()
             {
-                if(m_inswitch != 0)
-                {
-                    m_pvm->warn("possibly incorrect use of 'break' to terminate a 'case' clause: will terminate loop instead!");
-                }
                 if(m_innermostloopstart == -1)
                 {
                     raiseError("'break' can only be used in a loop");
@@ -3370,12 +3312,6 @@
         return true;
     }
 
-    bool doRuleAnonclass(Parser* prs, bool canassign)
-    {
-        prs->parseClassDeclaration(false);
-        return true;
-    }
-
     bool doRuleAnonfunc(Parser* prs, bool canassign)
     {
         int cs;
@@ -3468,7 +3404,7 @@
             dorule(Token::TOK_KWAS, nullptr, nullptr, SyntaxRule::PREC_NONE );
             dorule(Token::TOK_KWASSERT, nullptr, nullptr, SyntaxRule::PREC_NONE );
             dorule(Token::TOK_KWBREAK, nullptr, nullptr, SyntaxRule::PREC_NONE );
-            dorule(Token::TOK_KWCLASS, doRuleAnonclass, nullptr, SyntaxRule::PREC_NONE );
+            dorule(Token::TOK_KWCLASS, nullptr, nullptr, SyntaxRule::PREC_NONE );
             dorule(Token::TOK_KWCONTINUE, nullptr, nullptr, SyntaxRule::PREC_NONE );
             dorule(Token::TOK_KWFUNCTION, doRuleAnonfunc, nullptr, SyntaxRule::PREC_NONE );
             dorule(Token::TOK_KWDEFAULT, nullptr, nullptr, SyntaxRule::PREC_NONE );
