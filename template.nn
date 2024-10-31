@@ -1,0 +1,237 @@
+
+"use strict";
+
+function ojoin(arr)
+{
+    var l = arr.length;
+    var s = "";
+    for(var i=0; i<l; i++)
+    {
+        s += arr[i].toString();
+        if((i+1) < l)
+        {
+        }
+    }
+    return s;
+}
+
+class LighTemplate
+{
+    constructor(data)
+    {
+        this.rawsource = data;
+        this.currline = 1;
+        this.currcol = 0;
+        this.parsedbuf = [];
+        this.chunk = [];
+        this.sourcepos = 0;
+        this.sourcelen = data.length;
+    }
+
+    /**
+    * called before parsing.
+    */
+    onBegin()
+    {
+    }
+
+    /**
+    * called after parsing.
+    */
+    onEnd()
+    {
+    }
+
+    /**
+    * called for codeblocks, i.e., '<% var stuff = get_doodles(); %>'
+    */
+    onCodeblock(itm)
+    {
+        this.parsedbuf.push(ojoin(itm), "\n");
+    };
+
+    /**
+    * called for codelines, i.e., '<%= somevar %>'.
+    */
+    onCodeline(itm)
+    {
+        this.parsedbuf.push("response.write(", ojoin(itm), ");\n");
+    }
+
+    /**
+    * called for everything that is not a codeline or a codeblock.
+    * that is, everything else.
+    */
+    onData(itm)
+    {
+        this.parsedbuf.push("response.write(", ojoin(itm).dump(), ");\n");
+    }
+
+    /**
+    * return a "compiled" function from generated code.
+    */
+    compile()
+    {
+        var rawcode = this.parse();
+        println("parsed: <<<", rawcode, ">>>")
+        return eval(rawcode);
+    }
+
+    /**
+    * compile and call the parsed template.
+    * returns the string contents of the template buffer (i.e., the output).
+    */
+    run(vars)
+    {
+        var compiled = this.compile();
+        println("compiled=", compiled);
+        return compiled(vars);
+    }
+
+    whenlf(ci)
+    {
+        if(ci >= this.rawsource.length)
+        {
+            if(this.rawsource[ci] == '\n')
+            {
+                this.currline++;
+                this.currcol = 1;
+            }
+        }
+    }
+
+    _parseAfterTagLoop()
+    {
+        if(this.chunk.length > 0)
+        {
+            if(this.chunk[0] == '=')
+            {
+                var tmp = [];
+                var clen = this.chunk.length;
+                for(var i=1; i<clen; i++)
+                {
+                    tmp.push(this.chunk[i]);
+                }
+                this.onCodeline(tmp);
+            }
+            else if(this.chunk[0] == '#')
+            {
+                // skip comment blocks
+            }
+            else
+            {
+                this.onCodeblock(this.chunk);
+            }
+        }
+        this.chunk = [];
+    }
+
+    _parseInTag()
+    {
+        this.sourcepos += 2;
+        while(this.sourcepos < this.sourcelen)
+        {
+            this.whenlf(this.sourcepos);
+            var c1 = this.rawsource[this.sourcepos];
+            var c2 = this.rawsource[this.sourcepos+1];
+            var is1 = (c1 == '%');
+            var is2 = (c2 == '>');
+            var is3 = (is1 && is2);
+            if(is3)
+            {
+                this.sourcepos += 2;
+                return this._parseAfterTagLoop();
+            }
+            this.chunk.push(this.rawsource[this.sourcepos]);
+            this.sourcepos++;
+            this.currcol++;
+        }
+        this._parseAfterTagLoop();
+    }
+
+    _parseAfterRawLoop()
+    {
+        this.onData(this.chunk);
+        this.chunk = [];
+    }
+
+    _parseRawText()
+    {
+        while(this.sourcepos < this.sourcelen)
+        {
+            this.whenlf(this.sourcepos);
+            var c1 = this.rawsource[this.sourcepos];
+            var c2 = this.rawsource[this.sourcepos+1];
+            var is1 = (c1 == '<');
+            var is2 = (c2 == '%');
+            var is3 = (is1 && is2);
+            if(is3)
+            {
+                return this._parseAfterRawLoop();
+            }
+            // for some oddball reason the index becomes invalid?
+            // very odd
+            if(this.rawsource[this.sourcepos] != null)
+            {
+                this.chunk.push(this.rawsource[this.sourcepos]);
+                this.sourcepos++;
+                this.currcol++;
+            }
+        }
+        this._parseAfterRawLoop();
+    }
+
+    /**
+    * parses the raw template.
+    * there's no error handling yet, so if your template is malformed...
+    * well, you'll know when that happens.
+    */
+    parse()
+    {
+        // this is the current index in the raw source.
+        this.sourcepos = 0;
+        // this is where the chunks end up in.
+        // are arrays possibly a faster choice?
+        this.onBegin();
+        while(this.sourcepos < this.sourcelen)
+        {
+            this.chunk = [];
+            var c1 = this.rawsource[this.sourcepos];
+            var c2 = this.rawsource[this.sourcepos+1];
+            var is1 = (c1 == "<");
+            var is2 = (c2 == "%");
+            var is3 = (is1 && is2);
+            if(is3)
+            {
+                this._parseInTag();
+            }
+            else
+            {
+                this._parseRawText();
+            }
+        }
+        this.onEnd();
+        var body = ojoin(this.parsedbuf);
+        var full = "return (function(response){\n" + body + "\n})";
+        return full;
+    }
+}
+
+class Response
+{
+    write(...)
+    {
+        var i;
+        var ia = __args__.length;
+        for(i=0; i<ia; i++)
+        {
+            print(__args__[i])
+        }
+    }
+}
+
+var src = new File("src.tpl").read()
+var tpl = new LighTemplate(src)
+var rs = new Response()
+tpl.run(rs)
+

@@ -1,0 +1,18 @@
+
+/*
+    colors = try{ import colors }
+*/
+
+try
+{
+    colors = import "colors"
+}
+catch(Exception)
+{
+    colors = import "../mods/colors"
+}
+
+println("colors=", colors);
+
+print(colors.text('Successful!', colors.text_color.green))
+

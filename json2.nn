@@ -1,0 +1,257 @@
+
+/* like json.nn, except emulated class via function + table (which is, in essence, functionally identical) */
+
+function JSONParser(str)
+{
+    var mine = {};
+    mine.m_source = str;
+    mine.m_index = 0;
+    mine.nfirstchars = "-0123456789.";
+    mine.nchars = "-0123456789.eE";
+    mine.isWhiteSpace = function(c)
+    {
+        return (
+            (c == " ") ||
+            (c == "\r") ||
+            (c == "\n") ||
+            (c == "\t")
+        );
+    };
+    mine.skipWhiteSpace = function()
+    {
+        while(true)
+        {
+            if(mine.m_index >= mine.m_source.length)
+            {
+                break;
+            }
+            if(mine.isWhiteSpace(mine.m_source[mine.m_index]))
+            {
+                mine.m_index++;
+            }
+            else
+            {
+                break;
+            }
+        }
+    };
+    mine.parseValue = function()
+    {
+        mine.skipWhiteSpace();
+        if(mine.m_index == mine.m_source.length)
+        {
+            return null;
+        }
+        var c = mine.m_source[mine.m_index];
+        if (c == "{")
+        {
+            return mine.parseObject();
+        }
+        else if (c == "[")
+        {
+            return mine.parseArray();
+        }
+        else if (c == "'")
+        {
+            return mine.parseString("'");
+        }
+        else if (c == "\"")
+        {
+            return mine.parseString("\"");
+        }
+        else if (c == "t")
+        {
+            return mine.parseLiteral("true", true);
+        }
+        else if (c == "f")
+        {
+            return mine.parseLiteral("false", false);
+        }
+        else if (c == "n")
+        {
+            return mine.parseLiteral("null", null);
+        }
+        else
+        {
+            var pos = mine.nfirstchars.indexOf(c);
+            if(pos != -1)
+            {
+                println("c = ", c, ", pos=", pos)
+                return mine.parseNumber();
+            }
+        }
+        println("Invalid json (c=<${c}>, index=${mine.m_index}, max=${mine.m_source.length})");
+    };
+    mine.parseLiteral = function(literal, value)
+    {
+        if(literal.length > (mine.m_source.length - mine.m_index))
+        {
+            error("Expecting ${literal}");
+        }
+        for (var i = 0; i < literal.length; i++)
+        {
+            if(literal[i] != mine.m_source[mine.m_index])
+            {
+                error("Expecting ${literal}");
+            }
+            mine.m_index++
+        }
+        return value;
+    };
+    mine.parseNumber = function()
+    {
+        var startIndex = mine.m_index;
+        var c = 0;
+        while(true)
+        {
+            if(mine.nchars.indexOf(mine.m_source[mine.m_index]) == -1)
+            {
+                break;
+            }
+            mine.m_index++;
+        }
+        var str = mine.m_source.substr(startIndex, mine.m_index);
+        println("parseNumber: str=${str.dump()}");
+        //mine.m_index -= 1;
+        return str.toNumber();
+    };
+    mine.parseString = function(quote)
+    {
+        var startIndex = mine.m_index;
+        mine.m_index++;
+        var c = 0;
+        var s = "";
+        while ((c = mine.m_source[mine.m_index]) != quote)
+        {
+            if(c == "\\++"[0])
+            {
+                mine.m_index++;
+                c = mine.m_source[mine.m_index];
+                if(c == "r")
+                {
+                    s += "\r";
+                }
+                else if (c == "n")
+                {
+                    s += "\n";
+                }
+                else if (c == "t")
+                {
+                    s += "\t";
+                }
+                else if (c == "f")
+                {
+                    s += "\f";
+                }
+                // Note escaped unicode not handled
+                else
+                {
+                    s += c;
+                }
+            }
+            else
+            {
+                s += c;
+            }
+            mine.m_index++;
+        }
+        mine.m_index++;
+        return s;
+    };
+    mine.parseObject = function()
+    {
+        mine.m_index++;
+        mine.skipWhiteSpace();
+        if(mine.m_source[mine.m_index] == "}")
+        {
+            mine.m_index++;
+            return {};
+        }
+        var o = {};
+        var c = null;
+        while (true)
+        {
+            var name = mine.parseValue();
+            mine.skipWhiteSpace();
+            c = mine.m_source[mine.m_index];
+            if (c != ":")
+            {
+                error("Expecting :");
+            }
+            mine.m_index++;
+            mine.skipWhiteSpace();
+            var value = mine.parseValue();
+            mine.skipWhiteSpace();
+            if(name != null)
+            {
+                o[name] = value;
+            }
+            c = mine.m_source[mine.m_index];
+            if (c == ",")
+            {
+                mine.m_index++;
+                mine.skipWhiteSpace();
+            }
+            else
+            {
+                break;
+            }
+        }
+        if(c != "}")
+        {
+            error("Expecting }");
+        }
+        mine.m_index++;
+        return o;
+    };
+    mine.parseArray = function()
+    {
+        mine.m_index++;
+        mine.skipWhiteSpace();
+        if(mine.m_source[mine.m_index] == "]")
+        {
+            mine.m_index++;
+            return [];
+        }
+        var a = [];
+        var c = null;
+        while(true)
+        {
+            var value = mine.parseValue();
+            a.push(value);
+            mine.skipWhiteSpace();
+            c = mine.m_source[mine.m_index];
+            if (c == ",")
+            {
+                mine.m_index++;
+                mine.skipWhiteSpace();
+            }
+            else
+            {
+                break;
+            }
+        }
+        if(c != "]")
+        {
+            error("Expecting ]");
+        }
+        mine.m_index++;
+        return a;
+    };
+    return mine;
+}
+
+function parse(str)
+{
+    var json =  JSONParser(str)
+    var r = json.parseValue();
+    return r
+}
+
+var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
+if(ARGV.length > 1)
+{
+    src = new File(ARGV[1]).read()
+}
+println("---source=<<<", src, ">>>")
+println(parse(src).dump());

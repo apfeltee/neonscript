@@ -1,0 +1,76 @@
+
+class Individual
+{
+    constructor(name)
+    {
+        this.m_name = name;
+    }
+
+    name()
+    {
+        return this.m_name;
+    }
+}
+
+class Person < Individual
+{
+    constructor(name, age, livesat)
+    {
+        super(name);
+        this.m_age = age;
+        this.m_livesat = livesat;
+        this.m_pets = []
+    }
+
+    age()
+    {
+        return this.m_age
+    }
+
+    livesat()
+    {
+        return this.m_livesat
+    }
+
+    adoptPet(p)
+    {
+        this.m_pets.push(p)
+    }
+
+    toString()
+    {
+        return "Person ${this.name()}, age ${this.age()}, lives at ${this.livesat()}, has ${this.m_pets.length == 0 ? "no" : this.m_pets.length} pets"
+    }
+
+}
+
+class Pet < Individual
+{
+    constructor(name, species, liveswith)
+    {
+        super(name)
+        this.m_species = species
+        this.m_liveswith = liveswith
+    }
+
+    liveswith()
+    {
+        return this.m_liveswith
+    }
+
+    species()
+    {
+        return this.m_species
+    }
+
+    toString()
+    {
+        return "pet ${this.name()} is a ${this.species()}";
+    }
+}
+
+jim = new Person("jim", 65, "new york")
+jim.adoptPet(new Pet())
+//[jim].map(println)
+println(jim.toString())
+

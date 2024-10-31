@@ -1,0 +1,107 @@
+function h(b) {
+    b = b;
+    /*
+    b.sort(function(a, d) {
+        return a - d
+    });
+    */
+    var e = b.length / 2 - 0.5;
+    return Math.round(Math.sqrt((b[Math.ceil(e)] + b[Math.floor(e)]) / 2))
+}
+
+function k(b, e, a)
+{
+    if(e > a)
+    {
+        return l(b[0], e - a);
+    }
+    if(a > e)
+    {
+        return l(b[1], a - e);
+    }
+    return ""
+}
+
+function l(b, e) {
+    var a = "";
+    for (d = 0; d < e; d++)
+    {
+        a += b;
+    }
+    return a
+}
+
+function m(b, e, a) {
+    var d = a;
+    var f = -1;
+    for(c = 0; c < e.length; c++)
+    {
+        var g = Math.abs(e[c] - a) + Math.abs(c - b);
+        if(d > g)
+        {
+            d = g;
+            f = c;
+        }
+    }
+    return {
+        a: f,
+        b: d
+    }
+}
+genSource = function(b)
+{
+    if (0 == b.length) return "";
+    var e = [];
+    for(a = 0; a < b.length; a++)
+    {
+        e.push(b.charCodeAt(a));
+    }
+    a = [];
+    b = [];
+    var d = 0;
+    for (var f = 0; f < e.length; f++) {
+        var c = e[f];
+        d = m(d, b, c);
+        if(d.b >= Math.min(c, Math.ceil(Math.sqrt(c)) + 1))
+        {
+            d = a.length;
+            a.push(c);
+            b.push(c);
+        }
+        else
+        {
+            d = d.a;
+            b[d] = c;
+        }
+    }
+    d = h(a);
+    f = [];
+    b = [];
+    for (c = 0; c < a.length; c++)
+    {
+        f.push(Math.round(a[c] / d));
+        b.push(f[c] * d);
+    }
+    a = "" + l("+", d);
+    a += "[";
+    for (c = 0; c < f.length; c++)
+    {
+        a += ">";
+        a += l("+", f[c]);
+    }
+    a += l("<", f.length) + "-";
+    f = a + "]>";
+    for (a = c = 0; a < e.length; a++)
+    {
+        d = e[a];
+        var g = m(c, b, d);
+        f += k("<>", c, g.a);
+        f += k("-+", b[g.a], d);
+        f += ".";
+        c = g.a;
+        b[c] = d
+    }
+    return f
+};
+
+println(genSource("hello and goodbye"))

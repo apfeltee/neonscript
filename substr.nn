@@ -1,0 +1,27 @@
+
+function shouldbe(got, expected)
+{
+    if(got == expected)
+    {
+        println("OK")
+    }
+    else
+    {
+        println("failed: expected ${expected.dump()}, but got ${got.dump()}")
+    }
+}
+
+var anyString = "Mozilla";
+
+shouldbe(anyString.substring(0, 1), "M");
+shouldbe(anyString.substring(1, 0), "M");
+
+shouldbe(anyString.substring(0, 6), "Mozill");
+
+shouldbe(anyString.substring(4), "lla");
+shouldbe(anyString.substring(4, 7), "lla");
+shouldbe(anyString.substring(7, 4), "lla");
+
+shouldbe(anyString.substring(0, 7), "Mozilla");
+shouldbe(anyString.substring(0, 10), "Mozilla");
+

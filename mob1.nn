@@ -1,0 +1,32 @@
+
+function A(k, plusone, minusone, minusanother, plusanother, plusnull)
+{
+    function B()
+    {
+        k = k - 1;
+        return A(k, B, plusone, minusone, minusanother, plusanother);
+    }
+    if (k <= 0) {
+        return plusanother() + plusnull();
+    } else {
+        return B();
+    }
+}
+
+function vnull()  { return  0; }
+function vone()  { return  1; }
+function vminusone() { return -1; }
+
+for(var i=0; i<11; i++)
+{
+    print("", i, " -> ");
+    try
+    {
+        println(A(i, vone, vminusone, vminusone, vone, vnull));
+    }
+    catch(Exception e)
+    {
+        println("error: ${e.message} (from ${e.srcfile}:${e.srcline})");
+        break;
+    }
+}

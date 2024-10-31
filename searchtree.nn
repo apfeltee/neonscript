@@ -1,0 +1,72 @@
+
+class treeNode {
+    constructor(key) {
+        this.key = key;
+        this.left = null;
+        this.right = null;
+    }
+    getKey() {
+        return this.key;
+    }
+}
+
+class binarySearchTree {
+    constructor(key) {
+        this.root = treeNode(key);
+    }
+    insert(key) {
+        if (this.root == null) {
+            this.root = treeNode(key);
+        } else {
+            var cur = this.root;
+            var prev = cur;
+            while (cur != null) {
+                prev = cur;
+                if (cur.key < key) {
+                    cur = cur.left;
+                } else if (cur.key > key){
+                    cur = cur.right;
+                }   
+            }
+            if (prev != null) {
+                if (prev.getKey() < key) {
+                    prev.right = treeNode(key);
+                } else {
+                    prev.left = treeNode(key);
+                }
+            }
+        }
+    }
+    search(key) {
+        if (this.root == null) {
+            return false;
+        }
+        if (this.root.key == key) {
+            return true;
+        }
+        var cur = this.root;
+        var prev = cur;
+        while (cur != null and cur.key != key) {
+            prev = cur;
+            if (cur.getKey() < key) {
+                cur = cur.right;
+            } else {
+                cur = cur.left;
+            }
+        }
+        if ( cur != null and cur.getKey() == key) {
+            return true;
+        }
+        return false;
+    }
+}
+
+var tree = binarySearchTree(10);
+tree.insert(6);
+tree.insert(9);
+tree.insert(13);
+tree.insert(15);
+println(tree.search(9));
+println(!tree.search(1));
+
+

@@ -1,0 +1,280 @@
+
+/* json parser for "less smart" interpreters, which either fail to carry upvalues correctly, or have no classes (usually both) */
+
+function utilIndexOf(str, ch)
+{
+    var i = 0;
+    while(i < str.length)
+    {
+        if(str[i] == ch)
+        {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+function initparser(str)
+{
+    var state = {};
+    state.m_source = str;
+    state.m_index = 0;
+    state.nfirstchars = "-0123456789.";
+    state.nchars = "-0123456789.eE";
+    return state;
+}
+
+function isSpace(state, c)
+{
+    return (
+        (c == " ") ||
+        (c == "\r") ||
+        (c == "\n") ||
+        (c == "\t")
+    );
+}
+
+function skipSpace(state)
+{
+    while(1)
+    {
+        if(state.m_index >= state.m_source.length)
+        {
+            break;
+        }
+        if(isSpace(state, state.m_source[state.m_index]))
+        {
+            state.m_index++;
+        }
+        else
+        {
+            break;
+        }
+    }
+}
+
+function parseValue(state)
+{
+    skipSpace(state);
+    if(state.m_index == state.m_source.length)
+    {
+        return null;
+    }
+    var c = state.m_source[state.m_index];
+    if (c == "{")
+    {
+        return parseObject(state);
+    }
+    else if (c == "[")
+    {
+        return parseArray(state);
+    }
+    else if (c == "'")
+    {
+        return parseString(state, "'");
+    }
+    else if (c == "\"")
+    {
+        return parseString(state, "\"");
+    }
+    else if (c == "t")
+    {
+        return parseLiteral(state, "true", 1);
+    }
+    else if (c == "f")
+    {
+        return parseLiteral(state, "false", 0);
+    }
+    else if (c == "n")
+    {
+        return parseLiteral(state, "null", null);
+    }
+    else
+    {
+        var pos = utilIndexOf(state.nfirstchars, c);
+        if(pos != -1)
+        {
+            println("c = ", c, ", pos=", pos)
+            return parseNumber(state);
+        }
+    }
+    println("Invalid json (c=<${c}>, index=${state.m_index}, max=${state.m_source.length})");
+};
+
+function parseLiteral(state, literal, value)
+{
+    if(literal.length > (state.m_source.length - state.m_index))
+    {
+        error("Expecting ${literal}");
+    }
+    for (var i = 0; i < literal.length; i++)
+    {
+        if(literal[i] != state.m_source[state.m_index])
+        {
+            error("Expecting ${literal}");
+        }
+        state.m_index++
+    }
+    return value;
+}
+
+function parseNumber(state)
+{
+    var startIndex = state.m_index;
+    var c = 0;
+    while(1)
+    {
+        if(utilIndexOf(state.nchars, state.m_source[state.m_index]) == -1)
+        {
+            break;
+        }
+        state.m_index++;
+    }
+    var str = state.m_source.substr(startIndex, state.m_index);
+    println("parseNumber: str=${str.dump()}");
+    //state.m_index -= 1;
+    return str.toNumber();
+}
+
+function parseString(state, quote)
+{
+    var startIndex = state.m_index;
+    state.m_index++;
+    var c = 0;
+    var s = "";
+    while ((c = state.m_source[state.m_index]) != quote)
+    {
+        if(c == "\\++"[0])
+        {
+            state.m_index++;
+            c = state.m_source[state.m_index];
+            if(c == "r")
+            {
+                s += "\r";
+            }
+            else if (c == "n")
+            {
+                s += "\n";
+            }
+            else if (c == "t")
+            {
+                s += "\t";
+            }
+            else if (c == "f")
+            {
+                s += "\f";
+            }
+            // Note escaped unicode not handled
+            else
+            {
+                s += c;
+            }
+        }
+        else
+        {
+            s += c;
+        }
+        state.m_index++;
+    }
+    state.m_index++;
+    return s;
+}
+
+function parseObject(state)
+{
+    state.m_index++;
+    skipSpace(state);
+    if(state.m_source[state.m_index] == "}")
+    {
+        state.m_index++;
+        return {};
+    }
+    var o = {};
+    var c = null;
+    while(1)
+    {
+        var name = parseValue(state);
+        skipSpace(state);
+        c = state.m_source[state.m_index];
+        if (c != ":")
+        {
+            error("Expecting :");
+        }
+        state.m_index++;
+        skipSpace(state);
+        var value = parseValue(state);
+        skipSpace(state);
+        if(name != null)
+        {
+            o[name] = value;
+        }
+        c = state.m_source[state.m_index];
+        if (c == ",")
+        {
+            state.m_index++;
+            skipSpace(state);
+        }
+        else
+        {
+            break;
+        }
+    }
+    if(c != "}")
+    {
+        error("Expecting }");
+    }
+    state.m_index++;
+    return o;
+};
+
+function parseArray(state)
+{
+    state.m_index++;
+    skipSpace(state);
+    if(state.m_source[state.m_index] == "]")
+    {
+        state.m_index++;
+        return [];
+    }
+    var a = [];
+    var c = null;
+    while(1)
+    {
+        var value = parseValue(state);
+        a.push(value);
+        skipSpace(state);
+        c = state.m_source[state.m_index];
+        if (c == ",")
+        {
+            state.m_index++;
+            skipSpace(state);
+        }
+        else
+        {
+            break;
+        }
+    }
+    if(c != "]")
+    {
+        error("Expecting ]");
+    }
+    state.m_index++;
+    return a;
+};
+
+
+function parse(str)
+{
+    var json = initparser(str)
+    var r = parseValue(json);
+    return r
+}
+
+var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
+if(ARGV.length > 1)
+{
+    src = new File(ARGV[1]).read()
+}
+println("---source=<<<", src, ">>>")
+println(parse(src).dump());

@@ -1,0 +1,24 @@
+
+var fh = null
+
+
+try
+{
+    fh = File("Makefile", "rb")
+    var raw = fh.read()
+    println("raw: ", raw.toString())
+    /*
+    var lines = raw.split("\n")
+    println(lines)
+    for(var i=0; i<lines.size(); i++)
+    {
+        println("[", i, "]: ", lines[i]);
+    }
+    */
+}
+//catch(e)
+catch(Exception e)
+{
+    print("exception: ", e.message, "\n")
+}
+

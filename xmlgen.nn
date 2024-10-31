@@ -1,0 +1,151 @@
+
+/*
+* another non-trivial example which uses references (see createChild, et al)
+*/
+
+class Element
+{
+    static htmlquote(val)
+    {
+        return val;
+    }
+
+    constructor(tagname, text)
+    {
+        this.tagname = tagname;
+        this.data = [];
+        this.innertext = text;
+        this.attributes = {};
+        this.children = [];
+    }
+
+    createChild(tagname, text)
+    {
+        var elem = Element(tagname, text)
+        this.children.push(elem)
+        return this.children[this.children.length - 1]
+    }
+
+    setAttribute(name, target)
+    {
+        this.attributes[name] = target;
+        return this;
+    }
+
+    appendChild(elem)
+    {
+        this.children.push(elem);
+        return this;
+    }
+
+    hasText()
+    {
+        if(this.children.length > 0)
+        {
+            return true;
+        }
+        if(this.innertext != null)
+        {
+            return true;
+        }
+        return false;
+    }
+
+
+    toXML(pretty, indstr, indent)
+    {
+        var i;
+        var obuf = [];
+        var withtext = this.hasText();
+        if(pretty == null)
+        {
+            pretty = false;
+        }
+        if(indstr == null)
+        {
+            indstr = "   ";
+        }
+        if(indent == null)
+        {
+            indent = 0;
+        }
+        function indpad(ind)
+        {
+            if(pretty)
+            {
+                for(i = 0; i != ind; i++)
+                {
+                    obuf.push(indstr);
+                }
+            }
+        }
+        obuf.push("<", this.tagname);
+        if(this.attributes != null)
+        {
+            var keys = this.attributes.keys();
+            var cnt = keys.length;
+            if(cnt > 0)
+            {
+                obuf.push(" ");
+                for(var i=0; i<cnt; i++)
+                {
+                    var key = keys[i];
+                    var val = Element.htmlquote(this.attributes[key]);
+                    obuf.push(key, "=\"", val, "\"")
+                    if((i+1) != cnt)
+                    {
+                        obuf.push(" ")
+                    }
+                }
+            }
+            println("obuf=", obuf, ", cnt=", cnt)
+        }
+        if(withtext)
+        {
+            obuf.push(">");
+            indpad(indent);
+            if(this.innertext != null)
+            {
+                obuf.push(this.innertext);
+            }
+        }
+        else
+        {
+            obuf.push(" />");
+        }
+        if(pretty)
+        {
+            obuf.push("\n");
+        }
+        for(var i=0; i<this.children.length; i++)
+        {
+            var elem = this.children[i];
+            indpad(indent);
+            obuf.push(elem.toXML(pretty, indstr, indent+1))
+        }
+        if(withtext)
+        {
+            obuf.push("</", this.tagname, ">");
+            if(pretty)
+            {
+                obuf.push("\n");
+            }
+        }
+        return obuf.join("");
+    }
+}
+
+/* an overly verbose API for an overly verbose document format. fitting. */
+
+doc =  Element("html");
+head = doc.createChild("head");
+body = doc.createChild("body");
+form = body.createChild("form");
+input = form.createChild("input");
+submit = form.createChild("input");
+form.setAttribute("action", "/bin/submit.cgi");
+input.setAttribute("name", "fr_uname").setAttribute("type", "text");
+submit.setAttribute("type", "submit").setAttribute("value", "Go!");
+form.appendChild(input).appendChild(submit);
+head.createChild("title", "Example Document");
+println(doc.toXML(true));

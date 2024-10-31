@@ -1,0 +1,73 @@
+try
+{
+    try
+    {
+        throw Exception("Second exception thrown")
+    }
+    catch(Exception e)
+    {
+        println("inner: ${e.message}");
+    }
+}
+catch(Exception e)
+{
+    echo "outer: ${e.message}" ;
+}
+
+try
+{
+    var i = 10
+    echo i
+    try
+    {
+        echo {}[10]()
+    }
+    catch(Exception e)
+    {
+        echo "\nMessage: ${e.message}"
+    }
+    finally
+    {
+        echo "Despite the error, I run because I am in finally"
+    }
+}
+catch(Exception e)
+{
+    echo e
+}
+
+try
+{
+    throw Exception("I am a thrown exception")
+    throw Exception("Second exception we will never reach")
+}
+catch(Exception e)
+{
+    echo "\nCatching exception..."
+    echo "Exception message: ${e.message}"
+    echo "Exception trace: ${e.stacktrace}"
+}
+
+try
+{
+    echo "\nTry block called"
+}
+finally
+{
+    echo "Final block called\n"
+}
+
+try
+{
+    echo []["10"]
+}
+catch(Exception e)
+{
+    print("past finally: ", e.message, "\n")
+}
+finally
+{
+    echo "Error occurred, but I will still run"
+}
+
+echo "all good"

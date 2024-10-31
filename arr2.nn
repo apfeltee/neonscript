@@ -1,0 +1,7 @@
+var a={};
+//vn = 5555
+a["jim"] = ["red", 889, "blue"];
+println("before: ", a);
+a["jim"][1]++;
+println("after index: ", a["jim"]);
+println("after: ", a);

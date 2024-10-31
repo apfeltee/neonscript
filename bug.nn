@@ -1,0 +1,7 @@
+
+class Code
+{
+    static var T_OP = 46
+}
+
+println(Code.T_OP)

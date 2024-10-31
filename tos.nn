@@ -1,0 +1,17 @@
+
+class Foo
+{
+    stuff()
+    {
+        return "things"
+    }
+
+    toString()
+    {
+        return "tostring'd with ${this.stuff()}!"
+    }
+}
+
+f = Foo()
+println(f)
+

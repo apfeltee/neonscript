@@ -1,0 +1,72 @@
+
+var B64_KEYCHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+
+function b64encode(input)
+{
+    var res = [];
+    var i = 0;
+    var ninput = input;
+    var ilen = ninput.size(); 
+    while (i < ilen)
+    {
+        var chr1 = ninput.charCodeAt(i+0);
+        var chr2 = ninput.charCodeAt(i+1);
+        var chr3 = ninput.charCodeAt(i+2);
+        i += 3;
+        var enc1 = chr1 >> 2;
+        var enc2 = ((chr1 & 3) << 4) | (chr2 >> 4);
+        var enc3 = ((chr2 & 15) << 2) | (chr3 >> 6);
+        var enc4 = chr3 & 63;
+        if(chr2 != chr2)
+        {
+            enc3 = enc4 = 64;
+        }
+        else if(chr3 != chr3)
+        {
+            enc4 = 64;
+        }
+        res.push(B64_KEYCHARS.charAt(enc1));
+        res.push(B64_KEYCHARS.charAt(enc2));
+        res.push(B64_KEYCHARS.charAt(enc3));
+        res.push(B64_KEYCHARS.charAt(enc4));
+    }
+    return res.join("");
+}
+
+function b64decode(input)
+{
+    var res = [];
+    var i = 0;
+    var ilen = input.size();
+    while (i < ilen)
+    {
+        var enc1 = B64_KEYCHARS.indexOf(input.charAt(i+0));
+        var enc2 = B64_KEYCHARS.indexOf(input.charAt(i+1));
+        var enc3 = B64_KEYCHARS.indexOf(input.charAt(i+2));
+        var enc4 = B64_KEYCHARS.indexOf(input.charAt(i+3));
+        i += 4;
+        var chr1 = (enc1 << 2) | (enc2 >> 4);
+        var chr2 = ((enc2 & 15) << 4) | (enc3 >> 2);
+        var chr3 = ((enc3 & 3) << 6) | enc4;
+        res.push(String.fromCharCode(chr1));
+        if (enc3 != 64)
+        {
+            res.push(String.fromCharCode(chr2));
+        }
+        if (enc4 != 64)
+        {
+            res.push(String.fromCharCode(chr3));
+        }
+    }
+    var output = res.join("");
+    return output;
+}
+
+
+var string = "Learning JavaScript";
+
+var encodedString = b64encode(string);
+println("encoded = ", encodedString);
+
+var decodedString = b64decode(encodedString);
+println("decoded = ", decodedString);

@@ -1,0 +1,94 @@
+
+var g_failed = 0;
+
+function check(name, subfn)
+{
+    println("testing ${name} ... ");
+    try
+    {
+        subfn();
+        println("testing ${name}: ok!");
+    }
+    catch(Exception e)
+    {
+        println("testing ${name}: failed: ${e.message}!");
+        g_failed++;
+    }
+}
+
+function _assert(b, msg)
+{
+    if(!b)
+    {
+        throw Exception(msg)
+    }
+}
+
+check("array creation", function()
+{
+    a = [1, 2, 3, 4];
+    _assert(a.length == 4, "array length")
+});
+
+check("array push", function()
+{
+    a = []
+    a.push("foo")
+    a.push("bar")
+    _assert((a.length == 2) && (a[1] == "bar"), "array values");
+});
+
+check("array assign", function()
+{
+    a = []
+    a[0] = "foo"
+    a[1] = "bar"
+    println("a = ", a)
+    _assert((a.length == 2) && (a[1] == "bar"), "array values (expected a.length==2 but is ${a.length})");    
+});
+check("array.map", function()
+{
+    a = [11, 22, 33];
+    res = a.map(function(i){ return i+1 })
+    _assert(res == [12, 23, 34], "map: ${res}")
+})
+
+/*
+check("", function()
+{
+
+    _assert();
+});
+*/
+
+check("exceptions", function()
+{
+    var res;
+    res = "failed";
+    try
+    {
+        try
+        {
+            throw Exception("ok")
+        }
+        catch(Exception e)
+        {
+            throw e;
+        }
+    }
+    catch(Exception e)
+    {
+        res = e.message;
+    }
+    _assert(res == "ok", "ok=${res}");
+});
+
+if(g_failed == 0)
+{
+    println("all good");
+}
+else
+{
+    println("something broke!");
+}
+

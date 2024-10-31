@@ -1,0 +1,266 @@
+
+/* 'normal' JSON parsing, with a class object. */
+
+class JSONParser
+{
+    constructor(str)
+    {
+        this.m_source = str;
+        this.m_index = 0;
+        this.nfirstchars = "-0123456789.";
+        this.nchars = "-0123456789.eE";
+    }
+
+    isWhiteSpace(c)
+    {
+        return (
+            (c == " ") ||
+            (c == "\r") ||
+            (c == "\n") ||
+            (c == "\t")
+        );
+    }
+
+    skipWhiteSpace()
+    {
+        while(true)
+        {
+            if(this.m_index >= this.m_source.length)
+            {
+                break;
+            }
+            if(this.isWhiteSpace(this.m_source[this.m_index]))
+            {
+                this.m_index++;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    parseValue()
+    {
+        this.skipWhiteSpace();
+        if(this.m_index == this.m_source.length)
+        {
+            return null;
+        }
+        var c = this.m_source[this.m_index];
+        if (c == "{")
+        {
+            return this.parseObject();
+        }
+        else if (c == "[")
+        {
+            return this.parseArray();
+        }
+        else if (c == "'")
+        {
+            return this.parseString("'");
+        }
+        else if (c == "\"")
+        {
+            return this.parseString("\"");
+        }
+        else if (c == "t")
+        {
+            return this.parseLiteral("true", true);
+        }
+        else if (c == "f")
+        {
+            return this.parseLiteral("false", false);
+        }
+        else if (c == "n")
+        {
+            return this.parseLiteral("null", null);
+        }
+        else
+        {
+            var pos = this.nfirstchars.indexOf(c);
+            if(pos != -1)
+            {
+                println("c = ", c, ", pos=", pos)
+                return this.parseNumber();
+            }
+        }
+        println("Invalid json (c=<${c}>, index=${this.m_index}, max=${this.m_source.length})");
+    }
+
+    parseLiteral(literal, value)
+    {
+        if(literal.length > (this.m_source.length - this.m_index))
+        {
+            error("Expecting ${literal}");
+        }
+        for (var i = 0; i < literal.length; i++)
+        {
+            if(literal[i] != this.m_source[this.m_index])
+            {
+                error("Expecting ${literal}");
+            }
+            this.m_index++
+        }
+        return value;
+    }
+
+    parseNumber()
+    {
+        var startIndex = this.m_index;
+        var c = 0;
+        while(true)
+        {
+            if(this.nchars.indexOf(this.m_source[this.m_index]) == -1)
+            {
+                break;
+            }
+            this.m_index++;
+        }
+        var str = this.m_source.substr(startIndex, this.m_index);
+        println("parseNumber: str=${str.dump()}");
+        //this.m_index -= 1;
+        return str.toNumber();
+    }
+
+    parseString(quote)
+    {
+        var startIndex = this.m_index;
+        this.m_index++;
+        var c = 0;
+        var s = "";
+        while ((c = this.m_source[this.m_index]) != quote)
+        {
+            if(c == "\\++"[0])
+            {
+                this.m_index++;
+                c = this.m_source[this.m_index];
+                if(c == "r")
+                {
+                    s += "\r";
+                }
+                else if (c == "n")
+                {
+                    s += "\n";
+                }
+                else if (c == "t")
+                {
+                    s += "\t";
+                }
+                else if (c == "f")
+                {
+                    s += "\f";
+                }
+                // Note escaped unicode not handled
+                else
+                {
+                    s += c;
+                }
+            }
+            else
+            {
+                s += c;
+            }
+            this.m_index++;
+        }
+        this.m_index++;
+        return s;
+    }
+
+    parseObject()
+    {
+        this.m_index++;
+        this.skipWhiteSpace();
+        if(this.m_source[this.m_index] == "}")
+        {
+            this.m_index++;
+            return {};
+        }
+        var o = {};
+        var c = null;
+        while (true)
+        {
+            var name = this.parseValue();
+            this.skipWhiteSpace();
+            c = this.m_source[this.m_index];
+            if (c != ":")
+            {
+                error("Expecting :");
+            }
+            this.m_index++;
+            this.skipWhiteSpace();
+            var value = this.parseValue();
+            this.skipWhiteSpace();
+            if(name != null)
+            {
+                o[name] = value;
+            }
+            c = this.m_source[this.m_index];
+            if (c == ",")
+            {
+                this.m_index++;
+                this.skipWhiteSpace();
+            }
+            else
+            {
+                break;
+            }
+        }
+        if(c != "}")
+        {
+            error("Expecting }");
+        }
+        this.m_index++;
+        return o;
+    }
+
+    parseArray()
+    {
+        this.m_index++;
+        this.skipWhiteSpace();
+        if(this.m_source[this.m_index] == "]")
+        {
+            this.m_index++;
+            return [];
+        }
+        var a = [];
+        var c = null;
+        while(true)
+        {
+            var value = this.parseValue();
+            a.push(value);
+            this.skipWhiteSpace();
+            c = this.m_source[this.m_index];
+            if (c == ",")
+            {
+                this.m_index++;
+                this.skipWhiteSpace();
+            }
+            else
+            {
+                break;
+            }
+        }
+        if(c != "]")
+        {
+            error("Expecting ]");
+        }
+        this.m_index++;
+        return a;
+    }
+}
+
+function parse(str)
+{
+    var json = new JSONParser(str)
+    var r = json.parseValue();
+    return r
+}
+
+var src = "[1, 2, 3, {\"name\": \"john doe\", \"flags\": [4, 5, 6]}]";
+if(ARGV.length > 1)
+{
+    src = new File(ARGV[1]).read()
+}
+println("---source=<<<", src, ">>>")
+println(parse(src).dump());
