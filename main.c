@@ -9,7 +9,6 @@
 #endif
 
 #if defined(NEON_USE_LINENOISE)
-    //#include "linenoise/utf8.h"
     #include "linenoise.h"
 #endif
 
@@ -39,8 +38,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <inttypes.h>
-
-#include "utf8.h"
 
 /*
 * needed because clang + wasi (wasi headers, specifically) don't seem to define these.
@@ -85,17 +82,29 @@
 #include "optparse.h"
 #include "os.h"
 
+
+#if defined(__GNUC__) || defined(__clang__)
+    #define nn_util_likely(x)   (__builtin_expect(!!(x), 1))
+    #define nn_util_unlikely(x) (__builtin_expect(!!(x), 0))
+#else
+    #define nn_util_likely(x)   (x)
+    #define nn_util_unlikely(x) (x)
+#endif
+
 #if defined(__STRICT_ANSI__)
     #define NEON_INLINE static
     #define NEON_FORCEINLINE static
+    #define inline
 #else
     #define NEON_INLINE static inline
-    #if 0 //defined(__GNUC__)
+    #if defined(__GNUC__)
         #define NEON_FORCEINLINE static __attribute__((always_inline)) inline
     #else
         #define NEON_FORCEINLINE static inline
     #endif
 #endif
+
+#define MT_STATE_SIZE 624
 
 #define NEON_CFG_FILEEXT ".nn"
 
@@ -196,28 +205,28 @@
 
 /* check for exact number of arguments $d */
 #define NEON_ARGS_CHECKCOUNT(chp, d) \
-    if((chp)->argc != (d)) \
+    if(nn_util_unlikely((chp)->argc != (d))) \
     { \
         return NEON_ARGS_FAIL(chp, "%s() expects %d arguments, %d given", (chp)->name, d, (chp)->argc); \
     }
 
 /* check for miminum args $d ($d ... n) */
 #define NEON_ARGS_CHECKMINARG(chp, d) \
-    if((chp)->argc < (d)) \
+    if(nn_util_unlikely((chp)->argc < (d))) \
     { \
         return NEON_ARGS_FAIL(chp, "%s() expects minimum of %d arguments, %d given", (chp)->name, d, (chp)->argc); \
     }
 
 /* check for range of args ($low .. $up) */
 #define NEON_ARGS_CHECKCOUNTRANGE(chp, low, up) \
-    if((chp)->argc < (low) || (chp)->argc > (up)) \
+    if(nn_util_unlikely((chp)->argc < (low) || (chp)->argc > (up))) \
     { \
         return NEON_ARGS_FAIL(chp, "%s() expects between %d and %d arguments, %d given", (chp)->name, low, up, (chp)->argc); \
     }
 
 /* check for argument at index $i for $type, where $type is a nn_value_is*() function */
 #define NEON_ARGS_CHECKTYPE(chp, i, type) \
-    if(!type((chp)->argv[i])) \
+    if(nn_util_unlikely(!type((chp)->argv[i]))) \
     { \
         return NEON_ARGS_FAIL(chp, "%s() expects argument %d as " NORMALIZE(type) ", %s given", (chp)->name, (i) + 1, nn_value_typename((chp)->argv[i])); \
     }
@@ -297,7 +306,7 @@ enum NNOpCode
     NEON_OP_STRINGIFY,
     NEON_OP_SWITCH,
     NEON_OP_TYPEOF,
-    NEON_OP_BREAK_PL,
+    NEON_OP_BREAK_PL
 };
 
 enum NNAstTokType
@@ -399,7 +408,7 @@ enum NNAstTokType
     NEON_ASTTOK_ERROR,
     NEON_ASTTOK_KWEMPTY,
     NEON_ASTTOK_UNDEFINED,
-    NEON_ASTTOK_TOKCOUNT,
+    NEON_ASTTOK_TOKCOUNT
 };
 
 enum NNAstPrecedence
@@ -447,21 +456,21 @@ enum NNFuncType
     NEON_FUNCTYPE_INITIALIZER,
     NEON_FUNCTYPE_PRIVATE,
     NEON_FUNCTYPE_STATIC,
-    NEON_FUNCTYPE_SCRIPT,
+    NEON_FUNCTYPE_SCRIPT
 };
 
 enum NNStatus
 {
     NEON_STATUS_OK,
     NEON_STATUS_FAILCOMPILE,
-    NEON_STATUS_FAILRUNTIME,
+    NEON_STATUS_FAILRUNTIME
 };
 
 enum NNPrMode
 {
     NEON_PRMODE_UNDEFINED,
     NEON_PRMODE_STRING,
-    NEON_PRMODE_FILE,
+    NEON_PRMODE_FILE
 };
 
 enum NNObjType
@@ -486,7 +495,7 @@ enum NNObjType
     NEON_OBJTYPE_MODULE,
     NEON_OBJTYPE_SWITCH,
     /* object type that can hold any C pointer */
-    NEON_OBJTYPE_USERDATA,
+    NEON_OBJTYPE_USERDATA
 };
 
 enum NNValType
@@ -495,7 +504,7 @@ enum NNValType
     NEON_VALTYPE_BOOL,
     NEON_VALTYPE_NUMBER,
     NEON_VALTYPE_OBJ,
-    NEON_VALTYPE_EMPTY,
+    NEON_VALTYPE_EMPTY
 };
 
 enum NNFieldType
@@ -506,7 +515,7 @@ enum NNFieldType
     * indicates this field contains a function, a pseudo-getter (i.e., ".length")
     * which is called upon getting
     */
-    NEON_PROPTYPE_FUNCTION,
+    NEON_PROPTYPE_FUNCTION
 };
 
 
@@ -526,7 +535,7 @@ enum NNAstCompContext
     NEON_COMPCONTEXT_NONE,
     NEON_COMPCONTEXT_CLASS,
     NEON_COMPCONTEXT_ARRAY,
-    NEON_COMPCONTEXT_NESTEDFUNCTION,
+    NEON_COMPCONTEXT_NESTEDFUNCTION
 };
 
 typedef enum /**/NNAstCompContext NNAstCompContext;
@@ -586,6 +595,8 @@ typedef struct /**/ NNPrinter NNPrinter;
 typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/ NNArguments NNArguments;
 typedef struct /**/NNInstruction NNInstruction;
+typedef struct utf8iterator_t utf8iterator_t;
+
 
 typedef NNValue (*NNNativeFN)(NNState*, NNArguments*);
 typedef void (*NNPtrFreeFN)(void*);
@@ -596,6 +607,29 @@ typedef void (*NNModLoaderFN)(NNState*);
 typedef NNRegModule* (*NNModInitFN)(NNState*);
 typedef double(*nnbinopfunc_t)(double, double);
 
+struct utf8iterator_t
+{
+    /*input string pointer */
+    const char* plainstr;
+
+    /* input string length */
+    uint32_t plainlen;
+
+    /* the codepoint, or char */
+    uint32_t codepoint;
+
+    /* character size in bytes */
+    uint8_t charsize;
+
+    /* current character position */
+    uint32_t currpos;
+
+    /* next character position */
+    uint32_t nextpos;
+
+    /* number of counter characters currently */
+    uint32_t currcount;
+};
 
 union NNDoubleHashUnion
 {
@@ -1005,6 +1039,7 @@ struct NNState
     bool isrepl;
     bool markvalue;
     NNObjArray* cliargv;
+    NNObjString* clidirectory;
     NNObjFile* filestdout;
     NNObjFile* filestderr;
     NNObjFile* filestdin;
@@ -1194,102 +1229,305 @@ struct NNArguments
 
 #include "prot.inc"
 
+/*
+via: https://github.com/adrianwk94/utf8-iterator
+UTF-8 Iterator. Version 0.1.3
+
+Original code by Adrian Guerrero Vera (adrianwk94@gmail.com)
+MIT License
+Copyright (c) 2016 Adrian Guerrero Vera
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+neon::Value nn_util_stringutf8chars(neon::State* state, neon::Arguments* args, bool onlycodepoint)
+{
+    int cp;
+    const char* cstr;
+    utf8iterator_t iter;
+    neon::Array* res;
+    neon::String* os;
+    neon::String* instr;
+    (void)state;
+    instr = args->thisval.asString();
+    res = neon::Array::make(state);
+    nn_utf8iter_init(&iter, instr->data(), instr->length());
+    while (nn_utf8iter_next(&iter))
+    {
+        cp = iter.codepoint;
+        cstr = nn_utf8iter_getchar(&iter);
+        if(onlycodepoint)
+        {
+            res->push(neon::Value::makeNumber(cp));
+        }
+        else
+        {
+            os = neon::String::copy(state, cstr, iter.charsize);
+            res->push(neon::Value::fromObject(os));
+        }
+    }
+    return neon::Value::fromObject(res);
+}
+
+*/
+
+/* allows you to set a custom length. */
+NEON_INLINE void nn_utf8iter_init(utf8iterator_t* iter, const char* ptr, uint32_t length)
+{
+    iter->plainstr = ptr;
+    iter->plainlen = length;
+    iter->codepoint = 0;
+    iter->currpos = 0;
+    iter->nextpos = 0;
+    iter->currcount = 0;
+}
+
+/* calculate the number of bytes a UTF8 character occupies in a string. */
+NEON_INLINE uint8_t nn_utf8iter_charsize(const char* character)
+{
+    if(character == NULL)
+    {
+        return 0;
+    }
+    if(character[0] == 0)
+    {
+        return 0;
+    }
+    if((character[0] & 0x80) == 0)
+    {
+        return 1;
+    }
+    else if((character[0] & 0xE0) == 0xC0)
+    {
+        return 2;
+    }
+    else if((character[0] & 0xF0) == 0xE0)
+    {
+        return 3;
+    }
+    else if((character[0] & 0xF8) == 0xF0)
+    {
+        return 4;
+    }
+    else if((character[0] & 0xFC) == 0xF8)
+    {
+        return 5;
+    }
+    else if((character[0] & 0xFE) == 0xFC)
+    {
+        return 6;
+    }
+    return 0;
+}
+
+NEON_INLINE uint32_t nn_utf8iter_converter(const char* character, uint8_t size)
+{
+    uint8_t i;
+    static uint32_t codepoint = 0;
+    static const uint8_t g_utf8iter_table_unicode[] = { 0, 0, 0x1F, 0xF, 0x7, 0x3, 0x1 };
+    if(size == 0)
+    {
+        return 0;
+    }
+    if(character == NULL)
+    {
+        return 0;
+    }
+    if(character[0] == 0)
+    {
+        return 0;
+    }
+    if(size == 1)
+    {
+        return character[0];
+    }
+    codepoint = g_utf8iter_table_unicode[size] & character[0];
+    for(i = 1; i < size; i++)
+    {
+        codepoint = codepoint << 6;
+        codepoint = codepoint | (character[i] & 0x3F);
+    }
+    return codepoint;
+}
+
+/* returns 1 if there is a character in the next position. If there is not, return 0. */
+NEON_INLINE uint8_t nn_utf8iter_next(utf8iterator_t* iter)
+{
+    const char* pointer;
+    if(iter == NULL)
+    {
+        return 0;
+    }
+    if(iter->plainstr == NULL)
+    {
+        return 0;
+    }
+    if(iter->nextpos < iter->plainlen)
+    {
+        iter->currpos = iter->nextpos;
+        /* Set Current Pointer */
+        pointer = iter->plainstr + iter->nextpos;
+        iter->charsize = nn_utf8iter_charsize(pointer);
+        if(iter->charsize == 0)
+        {
+            return 0;
+        }
+        iter->nextpos = iter->nextpos + iter->charsize;
+        iter->codepoint = nn_utf8iter_converter(pointer, iter->charsize);
+        if(iter->codepoint == 0)
+        {
+            return 0;
+        }
+        iter->currcount++;
+        return 1;
+    }
+    iter->currpos = iter->nextpos;
+    return 0;
+}
+
+/* return current character in UFT8 - no same that iter.codepoint (not codepoint/unicode) */
+NEON_INLINE const char* nn_utf8iter_getchar(utf8iterator_t* iter)
+{
+    uint8_t i;
+    const char* pointer;
+    static char str[10];
+    str[0] = '\0';
+    if(iter == NULL)
+    {
+        return str;
+    }
+    if(iter->plainstr == NULL)
+    {
+        return str;
+    }
+    if(iter->charsize == 0)
+    {
+        return str;
+    }
+    if(iter->charsize == 1)
+    {
+        str[0] = iter->plainstr[iter->currpos];
+        str[1] = '\0';
+        return str;
+    }
+    pointer = iter->plainstr + iter->currpos;
+    for(i = 0; i < iter->charsize; i++)
+    {
+        str[i] = pointer[i];
+    }
+    str[iter->charsize] = '\0';
+    return str;
+}
+
 NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
 {
     return ((v).type == NEON_VALTYPE_OBJ);
 }
 
-NEON_FORCEINLINE  NNObject* nn_value_asobject(NNValue v)
+NEON_FORCEINLINE NNObject* nn_value_asobject(NNValue v)
 {
     return ((v).valunion.vobjpointer);
 }
 
-NEON_FORCEINLINE  bool nn_value_isobjtype(NNValue v, NNObjType t)
+NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
 {
     return nn_value_isobject(v) && nn_value_asobject(v)->type == t;
 }
 
-NEON_FORCEINLINE  bool nn_value_isnull(NNValue v)
+NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
 {
     return ((v).type == NEON_VALTYPE_NULL);
 }
 
-NEON_FORCEINLINE  bool nn_value_isbool(NNValue v)
+NEON_FORCEINLINE bool nn_value_isbool(NNValue v)
 {
     return ((v).type == NEON_VALTYPE_BOOL);
 }
 
-NEON_FORCEINLINE  bool nn_value_isnumber(NNValue v)
+NEON_FORCEINLINE bool nn_value_isnumber(NNValue v)
 {
     return ((v).type == NEON_VALTYPE_NUMBER);
 }
 
-NEON_FORCEINLINE  bool nn_value_isempty(NNValue v)
+NEON_FORCEINLINE bool nn_value_isempty(NNValue v)
 {
     return ((v).type == NEON_VALTYPE_EMPTY);
 }
 
-NEON_FORCEINLINE  bool nn_value_isstring(NNValue v)
+NEON_FORCEINLINE bool nn_value_isstring(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_STRING);
 }
 
-NEON_FORCEINLINE  bool nn_value_isfuncnative(NNValue v)
+NEON_FORCEINLINE bool nn_value_isfuncnative(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCNATIVE);
 }
 
-NEON_FORCEINLINE  bool nn_value_isfuncscript(NNValue v)
+NEON_FORCEINLINE bool nn_value_isfuncscript(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCSCRIPT);
 }
 
-NEON_FORCEINLINE  bool nn_value_isfuncclosure(NNValue v)
+NEON_FORCEINLINE bool nn_value_isfuncclosure(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCCLOSURE);
 }
 
-NEON_FORCEINLINE  bool nn_value_isfuncbound(NNValue v)
+NEON_FORCEINLINE bool nn_value_isfuncbound(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCBOUND);
 }
 
-NEON_FORCEINLINE  bool nn_value_isclass(NNValue v)
+NEON_FORCEINLINE bool nn_value_isclass(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_CLASS);
 }
 
-NEON_FORCEINLINE  bool nn_value_isinstance(NNValue v)
+NEON_FORCEINLINE bool nn_value_isinstance(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_INSTANCE);
 }
 
-NEON_FORCEINLINE  bool nn_value_isarray(NNValue v)
+NEON_FORCEINLINE bool nn_value_isarray(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_ARRAY);
 }
 
-NEON_FORCEINLINE  bool nn_value_isdict(NNValue v)
+NEON_FORCEINLINE bool nn_value_isdict(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_DICT);
 }
 
-NEON_FORCEINLINE  bool nn_value_isfile(NNValue v)
+NEON_FORCEINLINE bool nn_value_isfile(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_FILE);
 }
 
-NEON_FORCEINLINE  bool nn_value_isrange(NNValue v)
+NEON_FORCEINLINE bool nn_value_isrange(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_RANGE);
 }
 
-NEON_FORCEINLINE  bool nn_value_ismodule(NNValue v)
+NEON_FORCEINLINE bool nn_value_ismodule(NNValue v)
 {
     return nn_value_isobjtype(v, NEON_OBJTYPE_MODULE);
 }
 
-NEON_FORCEINLINE  bool nn_value_iscallable(NNValue v)
+NEON_FORCEINLINE bool nn_value_iscallable(NNValue v)
 {
     return (
         nn_value_isclass(v) ||
@@ -1300,111 +1538,111 @@ NEON_FORCEINLINE  bool nn_value_iscallable(NNValue v)
     );
 }
 
-NEON_FORCEINLINE  NNObjType nn_value_objtype(NNValue v)
+NEON_FORCEINLINE NNObjType nn_value_objtype(NNValue v)
 {
     return nn_value_asobject(v)->type;
 }
 
-NEON_FORCEINLINE  bool nn_value_asbool(NNValue v)
+NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
 {
     return ((v).valunion.vbool);
 }
 
-NEON_FORCEINLINE  double nn_value_asnumber(NNValue v)
+NEON_FORCEINLINE double nn_value_asnumber(NNValue v)
 {
     return ((v).valunion.vfltnum);
 }
 
-NEON_FORCEINLINE  NNObjString* nn_value_asstring(NNValue v)
+NEON_FORCEINLINE NNObjString* nn_value_asstring(NNValue v)
 {
     return ((NNObjString*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjFuncNative* nn_value_asfuncnative(NNValue v)
+NEON_FORCEINLINE NNObjFuncNative* nn_value_asfuncnative(NNValue v)
 {
     return ((NNObjFuncNative*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjFuncScript* nn_value_asfuncscript(NNValue v)
+NEON_FORCEINLINE NNObjFuncScript* nn_value_asfuncscript(NNValue v)
 {
     return ((NNObjFuncScript*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjFuncClosure* nn_value_asfuncclosure(NNValue v)
+NEON_FORCEINLINE NNObjFuncClosure* nn_value_asfuncclosure(NNValue v)
 {
     return ((NNObjFuncClosure*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjClass* nn_value_asclass(NNValue v)
+NEON_FORCEINLINE NNObjClass* nn_value_asclass(NNValue v)
 {
     return ((NNObjClass*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjInstance* nn_value_asinstance(NNValue v)
+NEON_FORCEINLINE NNObjInstance* nn_value_asinstance(NNValue v)
 {
     return ((NNObjInstance*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjFuncBound* nn_value_asfuncbound(NNValue v)
+NEON_FORCEINLINE NNObjFuncBound* nn_value_asfuncbound(NNValue v)
 {
     return ((NNObjFuncBound*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjSwitch* nn_value_asswitch(NNValue v)
+NEON_FORCEINLINE NNObjSwitch* nn_value_asswitch(NNValue v)
 {
     return ((NNObjSwitch*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjUserdata* nn_value_asuserdata(NNValue v)
+NEON_FORCEINLINE NNObjUserdata* nn_value_asuserdata(NNValue v)
 {
     return ((NNObjUserdata*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjModule* nn_value_asmodule(NNValue v)
+NEON_FORCEINLINE NNObjModule* nn_value_asmodule(NNValue v)
 {
     return ((NNObjModule*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjArray* nn_value_asarray(NNValue v)
+NEON_FORCEINLINE NNObjArray* nn_value_asarray(NNValue v)
 {
     return ((NNObjArray*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjDict* nn_value_asdict(NNValue v)
+NEON_FORCEINLINE NNObjDict* nn_value_asdict(NNValue v)
 {
     return ((NNObjDict*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjFile* nn_value_asfile(NNValue v)
+NEON_FORCEINLINE NNObjFile* nn_value_asfile(NNValue v)
 {
     return ((NNObjFile*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNObjRange* nn_value_asrange(NNValue v)
+NEON_FORCEINLINE NNObjRange* nn_value_asrange(NNValue v)
 {
     return ((NNObjRange*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makevalue(NNValType type)
+NEON_FORCEINLINE NNValue nn_value_makevalue(NNValType type)
 {
     NNValue v;
     v.type = type;
     return v;
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makeempty()
+NEON_FORCEINLINE NNValue nn_value_makeempty()
 {
     return nn_value_makevalue(NEON_VALTYPE_EMPTY);
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makenull()
+NEON_FORCEINLINE NNValue nn_value_makenull()
 {
     NNValue v;
     v = nn_value_makevalue(NEON_VALTYPE_NULL);
     return v;
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makebool(bool b)
+NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
 {
     NNValue v;
     v = nn_value_makevalue(NEON_VALTYPE_BOOL);
@@ -1412,7 +1650,7 @@ NEON_FORCEINLINE  NNValue nn_value_makebool(bool b)
     return v;
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makenumber(double d)
+NEON_FORCEINLINE NNValue nn_value_makenumber(double d)
 {
     NNValue v;
     v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
@@ -1420,7 +1658,7 @@ NEON_FORCEINLINE  NNValue nn_value_makenumber(double d)
     return v;
 }
 
-NEON_FORCEINLINE  NNValue nn_value_makeint(int i)
+NEON_FORCEINLINE NNValue nn_value_makeint(int i)
 {
     NNValue v;
     v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
@@ -1430,7 +1668,7 @@ NEON_FORCEINLINE  NNValue nn_value_makeint(int i)
 
 #define nn_value_fromobject(obj) nn_value_fromobject_actual((NNObject*)obj)
 
-NEON_FORCEINLINE  NNValue nn_value_fromobject_actual(NNObject* obj)
+NEON_FORCEINLINE NNValue nn_value_fromobject_actual(NNObject* obj)
 {
     NNValue v;
     v = nn_value_makevalue(NEON_VALTYPE_OBJ);
@@ -1930,11 +2168,15 @@ char* nn_util_strtolower(char* str, size_t length)
     #define NEON_APIDEBUG(state, ...)
 #endif
 
-#define NEON_ASTDEBUG(state, ...) \
-    if((NEON_UNLIKELY((state)->conf.enableastdebug))) \
-    { \
-        nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
-    }
+#if defined(__STRICT_ANSI__)
+    #define NEON_ASTDEBUG(state, ...)
+#else
+    #define NEON_ASTDEBUG(state, ...) \
+        if((NEON_UNLIKELY((state)->conf.enableastdebug))) \
+        { \
+            nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
+        }
+#endif
 
 NEON_FORCEINLINE void nn_state_apidebugv(NNState* state, const char* funcname, const char* format, va_list va)
 {
@@ -1960,7 +2202,7 @@ NEON_FORCEINLINE void nn_state_astdebugv(NNState* state, const char* funcname, c
     fprintf(stderr, "\n");
 }
 
-NEON_FORCEINLINE void nn_state_astdebug(NNState* state, const char* funcname, const char* format, ...)
+NEON_INLINE void nn_state_astdebug(NNState* state, const char* funcname, const char* format, ...)
 {
     va_list va;
     va_start(va, format);
@@ -2331,7 +2573,8 @@ void nn_gcmem_tracerefs(NNState* state)
     NNObject* object;
     while(state->gcstate.graycount > 0)
     {
-        object = state->gcstate.graystack[--state->gcstate.graycount];
+        state->gcstate.graycount--;
+        object = state->gcstate.graystack[state->gcstate.graycount];
         nn_gcmem_blackenobject(state, object);
     }
 }
@@ -3517,7 +3760,9 @@ void nn_printer_destroy(NNPrinter* pr)
     {
         if(pr->shouldclose)
         {
-            //fclose(pr->handle);
+            #if 0
+            fclose(pr->handle);
+            #endif
         }
     }
     if(!pr->fromstack)
@@ -3886,7 +4131,9 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
                 nn_printer_printvalue(&subw, resv, false, false);
                 os = nn_printer_takestring(&subw);
                 nn_printer_writestringl(pr, os->sbuf->data, os->sbuf->length);
-                //nn_vm_stackpop(state);
+                #if 0
+                    nn_vm_stackpop(state);
+                #endif
                 return;
             }
         }
@@ -4676,82 +4923,84 @@ void nn_class_destroy(NNState* state, NNObjClass* klass)
     nn_gcmem_release(state, klass, sizeof(NNObjClass));   
 }
 
-void nn_class_inheritfrom(NNObjClass* subclass, NNObjClass* superclass)
+bool nn_class_inheritfrom(NNObjClass* subclass, NNObjClass* superclass)
 {
     nn_table_addall(superclass->instprops, subclass->instprops);
     nn_table_addall(superclass->methods, subclass->methods);
     subclass->superclass = superclass;
+    return true;
 }
 
-void nn_class_defproperty(NNObjClass* klass, const char* cstrname, NNValue val)
+bool nn_class_defproperty(NNObjClass* klass, const char* cstrname, NNValue val)
 {
-    nn_table_setcstr(klass->instprops, cstrname, val);
+    return nn_table_setcstr(klass->instprops, cstrname, val);
 }
 
-void nn_class_defcallablefieldptr(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function, void* uptr)
+bool nn_class_defcallablefieldptr(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function, void* uptr)
 {
     NNObjString* oname;
     NNObjFuncNative* ofn;
     oname = nn_string_copycstr(state, cstrname);
     ofn = nn_object_makefuncnative(state, function, cstrname, uptr);
-    nn_table_setwithtype(klass->instprops, nn_value_fromobject(oname), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
+    return nn_table_setwithtype(klass->instprops, nn_value_fromobject(oname), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
-void nn_class_defcallablefield(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function)
+bool nn_class_defcallablefield(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function)
 {
     return nn_class_defcallablefieldptr(state, klass, cstrname, function, NULL);
 }
 
-void nn_class_setstaticpropertycstr(NNObjClass* klass, const char* cstrname, NNValue val)
+bool nn_class_setstaticpropertycstr(NNObjClass* klass, const char* cstrname, NNValue val)
 {
-    nn_table_setcstr(klass->staticproperties, cstrname, val);
+    return nn_table_setcstr(klass->staticproperties, cstrname, val);
 }
 
-void nn_class_setstaticproperty(NNObjClass* klass, NNObjString* name, NNValue val)
+bool nn_class_setstaticproperty(NNObjClass* klass, NNObjString* name, NNValue val)
 {
-    nn_class_setstaticpropertycstr(klass, name->sbuf->data, val);
+    return nn_class_setstaticpropertycstr(klass, name->sbuf->data, val);
 }
 
-void nn_class_defnativeconstructorptr(NNState* state, NNObjClass* klass, NNNativeFN function, void* uptr)
+bool nn_class_defnativeconstructorptr(NNState* state, NNObjClass* klass, NNNativeFN function, void* uptr)
 {
     const char* cname;
     NNObjFuncNative* ofn;
     cname = "constructor";
     ofn = nn_object_makefuncnative(state, function, cname, uptr);
     klass->constructor = nn_value_fromobject(ofn);
+    return true;
 }
 
-void nn_class_defnativeconstructor(NNState* state, NNObjClass* klass, NNNativeFN function)
+bool nn_class_defnativeconstructor(NNState* state, NNObjClass* klass, NNNativeFN function)
 {
     return nn_class_defnativeconstructorptr(state, klass, function, NULL);
 }
 
-void nn_class_defmethod(NNState* state, NNObjClass* klass, const char* name, NNValue val)
+bool nn_class_defmethod(NNState* state, NNObjClass* klass, const char* name, NNValue val)
 {
     (void)state;
-    nn_table_setcstr(klass->methods, name, val);
+    return nn_table_setcstr(klass->methods, name, val);
 }
 
-void nn_class_defnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* ptr)
+bool nn_class_defnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* ptr)
 {
     NNObjFuncNative* ofn;
     ofn = nn_object_makefuncnative(state, function, name, ptr);
-    nn_class_defmethod(state, klass, name, nn_value_fromobject(ofn));
+    return nn_class_defmethod(state, klass, name, nn_value_fromobject(ofn));
 }
 
-void nn_class_defnativemethod(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function)
+bool nn_class_defnativemethod(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function)
 {
     return nn_class_defnativemethodptr(state, klass, name, function, NULL);
 }
 
-void nn_class_defstaticnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* uptr)
+bool nn_class_defstaticnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* uptr)
 {
     NNObjFuncNative* ofn;
     ofn = nn_object_makefuncnative(state, function, name, uptr);
-    nn_table_setcstr(klass->staticmethods, name, nn_value_fromobject(ofn));
+    return nn_table_setcstr(klass->staticmethods, name, nn_value_fromobject(ofn));
 }
 
-void nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function)
+bool nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function)
 {
     return nn_class_defstaticnativemethodptr(state, klass, name, function, NULL);
 }
@@ -4834,9 +5083,9 @@ void nn_instance_destroy(NNState* state, NNObjInstance* instance)
     nn_gcmem_release(state, instance, sizeof(NNObjInstance));
 }
 
-void nn_instance_defproperty(NNObjInstance* instance, const char *cstrname, NNValue val)
+bool nn_instance_defproperty(NNObjInstance* instance, const char *cstrname, NNValue val)
 {
-    nn_table_setcstr(instance->properties, cstrname, val);
+    return nn_table_setcstr(instance->properties, cstrname, val);
 }
 
 NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncType type)
@@ -5264,7 +5513,9 @@ NNAstToken nn_astlex_skipblockcomments(NNAstLexer* lex)
         nn_astlex_advance(lex);
     }
     #if defined(NEON_PLAT_ISWINDOWS)
-    //nn_astlex_advance(lex);
+        #if 0
+            nn_astlex_advance(lex);
+        #endif
     #endif
     return nn_astlex_maketoken(lex, NEON_ASTTOK_UNDEFINED);
 }
@@ -6248,7 +6499,9 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
         case NEON_OP_IMPORTIMPORT:
         case NEON_OP_SWITCH:
         case NEON_OP_MAKEMETHOD:
-        //case NEON_OP_FUNCOPTARG:
+        #if 0
+        case NEON_OP_FUNCOPTARG:
+        #endif
             return 2;
         case NEON_OP_CALLMETHOD:
         case NEON_OP_CLASSINVOKETHIS:
@@ -6721,7 +6974,9 @@ void nn_astparser_scopeend(NNAstParser* prs)
     */
     if(prs->keeplastvalue)
     {
-        //return;
+        #if 0
+            return;
+        #endif
     }
     while(nn_astutil_scopeendcancontinue(prs))
     {
@@ -6743,7 +6998,9 @@ int nn_astparser_discardlocals(NNAstParser* prs, int depth)
     NEON_ASTDEBUG(prs->pvm, "");
     if(prs->keeplastvalue)
     {
-        //return 0;
+        #if 0
+            return 0;
+        #endif
     }
     if(prs->currentfunccompiler->scopedepth == -1)
     {
@@ -7325,12 +7582,18 @@ bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
         return false;
     }
     #endif
-    //if(prs->currentclasscompiler != NULL)
+    #if 0
+    if(prs->currentclasscompiler != NULL)
+    #endif
     {
         nn_astparser_namedvar(prs, prs->prevtoken, false);
-        //nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strthis), false);
+        #if 0
+            nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strthis), false);
+        #endif
     }
-    //nn_astemit_emitinstruc(prs, NEON_OP_CLASSGETTHIS);
+    #if 0
+        nn_astemit_emitinstruc(prs, NEON_OP_CLASSGETTHIS);
+    #endif
     return true;
 }
 
@@ -7405,7 +7668,7 @@ NNValue nn_astparser_compilenumber(NNAstParser* prs)
 {
     double dbval;
     long longval;
-    long long llval;
+    int64_t llval;
     NEON_ASTDEBUG(prs->pvm, "");
     if(prs->prevtoken.type == NEON_ASTTOK_LITNUMBIN)
     {
@@ -7637,13 +7900,17 @@ char* nn_astparser_compilestring(NNAstParser* prs, int* length)
                     break;
                 case 'x':
                     {
-                        //int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
-                        //int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
-                        //k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
-                        //k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
+                        #if 0
+                            int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
+                            int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
+                            k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
+                            k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
+                        #endif
                         c = nn_astparser_readhexescape(prs, realstr, i, 2) - 0;
                         i += 2;
-                        //continue;
+                        #if 0
+                            continue;
+                        #endif
                     }
                     break;
                 case 'u':
@@ -7842,7 +8109,6 @@ bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
     NEON_ASTDEBUG(prs->pvm, "");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
-    //return nn_astparser_rulecall(prs, prs->prevtoken, canassign);
 }
 
 bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
@@ -8439,7 +8705,9 @@ void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
         }
         else
         {
-            //if(!prs->keeplastvalue)
+            #if 0
+            if(!prs->keeplastvalue)
+            #endif
             {
                 nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
             }
@@ -9167,7 +9435,6 @@ void nn_gcmem_markcompilerroots(NNState* state)
 
 NNRegModule* nn_natmodule_load_null(NNState* state)
 {
-    (void)state;
     static NNRegFunc modfuncs[] =
     {
         /* {"somefunc",   true,  myfancymodulefunction},*/
@@ -9179,8 +9446,8 @@ NNRegModule* nn_natmodule_load_null(NNState* state)
         /*{"somefield", true, the_function_that_gets_called},*/
         {NULL, false, NULL},
     };
-
     static NNRegModule module;
+    (void)state;
     module.name = "null";
     module.fields = modfields;
     module.functions = modfuncs;
@@ -9228,7 +9495,6 @@ NNValue nn_modfn_os_readdir(NNState* state, NNArguments* args)
 
 NNRegModule* nn_natmodule_load_os(NNState* state)
 {
-    (void)state;
     static NNRegFunc modfuncs[] =
     {
         {"readdir",   true,  nn_modfn_os_readdir},
@@ -9240,6 +9506,7 @@ NNRegModule* nn_natmodule_load_os(NNState* state)
         {NULL,       false, NULL},
     };
     static NNRegModule module;
+    (void)state;
     module.name = "os";
     module.fields = modfields;
     module.functions = modfuncs;
@@ -9280,7 +9547,6 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
 NNRegModule* nn_natmodule_load_astscan(NNState* state)
 {
     NNRegModule* ret;
-    (void)state;
     static NNRegFunc modfuncs[] =
     {
         {"scan",   true,  nn_modfn_astscan_scan},
@@ -9291,6 +9557,7 @@ NNRegModule* nn_natmodule_load_astscan(NNState* state)
         {NULL,       false, NULL},
     };
     static NNRegModule module;
+    (void)state;
     module.name = "astscan";
     module.fields = modfields;
     module.functions = modfuncs;
@@ -10850,6 +11117,18 @@ void nn_array_push(NNObjArray* list, NNValue value)
     /*nn_vm_stackpop(state); */
 }
 
+bool nn_array_get(NNObjArray* list, size_t idx, NNValue* vdest)
+{
+    size_t vc;
+    vc = nn_vallist_count(list->varray);
+    if((vc > 0) && (idx < vc))
+    {
+        *vdest = nn_vallist_get(list->varray, idx);
+        return true;
+    }
+    return false;
+}
+
 NNObjArray* nn_array_copy(NNObjArray* list, long start, long length)
 {
     size_t i;
@@ -11880,7 +12159,6 @@ NNValue nn_objfnstring_utf8numbytes(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     incode = nn_value_asnumber(args->args[0]);
-    //static int utf8NumBytes(int value)
     res = nn_util_utf8numbytes(incode);
     return nn_value_makenumber(res);
 }
@@ -11909,7 +12187,6 @@ NNValue nn_objfnstring_utf8encode(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     incode = nn_value_asnumber(args->args[0]);
-    //static char* utf8Encode(unsigned int code)
     buf = nn_util_utf8encode(state, incode, &len);
     res = nn_string_takelen(state, buf, len);
     return nn_value_fromobject(res);
@@ -11926,11 +12203,11 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
     (void)state;
     instr = nn_value_asstring(args->thisval);
     res = nn_array_make(state);
-    utf8iter_init(&iter, instr->sbuf->data, instr->sbuf->length);
-    while (utf8iter_next(&iter))
+    nn_utf8iter_init(&iter, instr->sbuf->data, instr->sbuf->length);
+    while (nn_utf8iter_next(&iter))
     {
         cp = iter.codepoint;
-        cstr = utf8iter_getchar(&iter);
+        cstr = nn_utf8iter_getchar(&iter);
         if(onlycodepoint)
         {
             nn_array_push(res, nn_value_makenumber(cp));
@@ -13108,11 +13385,11 @@ NNObjString* nn_util_numbertobinstring(NNState* state, long n)
     return nn_string_copylen(state, newstr, length);
     /*
     //  // To store the binary number
-    //  long long number = 0;
+    //  int64_t number = 0;
     //  int cnt = 0;
     //  while (n != 0) {
-    //    long long rem = n % 2;
-    //    long long c = (long long) pow(10, cnt);
+    //    int64_t rem = n % 2;
+    //    int64_t c = (int64_t) pow(10, cnt);
     //    number += rem * c;
     //    n /= 2;
     //
@@ -13127,21 +13404,21 @@ NNObjString* nn_util_numbertobinstring(NNState* state, long n)
     */
 }
 
-NNObjString* nn_util_numbertooctstring(NNState* state, long long n, bool numeric)
+NNObjString* nn_util_numbertooctstring(NNState* state, int64_t n, bool numeric)
 {
     int length;
     /* assume maximum of 64 bits + 2 octal indicators (0c) */
     char str[66];
-    length = sprintf(str, numeric ? "0c%llo" : "%llo", n);
+    length = sprintf(str, numeric ? "0c%lo" : "%lo", n);
     return nn_string_copylen(state, str, length);
 }
 
-NNObjString* nn_util_numbertohexstring(NNState* state, long long n, bool numeric)
+NNObjString* nn_util_numbertohexstring(NNState* state, int64_t n, bool numeric)
 {
     int length;
     /* assume maximum of 64 bits + 2 hex indicators (0x) */
     char str[66];
-    length = sprintf(str, numeric ? "0x%llx" : "%llx", n);
+    length = sprintf(str, numeric ? "0x%lx" : "%lx", n);
     return nn_string_copylen(state, str, length);
 }
 
@@ -13202,11 +13479,16 @@ NNValue nn_objfnmath_min(NNState* state, NNArguments* args)
     return nn_value_makenumber(b);
 }
 
+NNValue nn_objfnprocess_scriptlocation(NNState* state, NNArguments* args)
+{
+    return nn_value_fromobject(state->clidirectory);
+}
 
 void nn_state_initbuiltinmethods(NNState* state)
 {
     {
         nn_class_setstaticpropertycstr(state->classprimprocess, "env", nn_value_fromobject(state->envdict));
+        nn_class_defstaticnativemethod(state, state->classprimprocess, "directory", nn_objfnprocess_scriptlocation);
     }
     {
         nn_class_defstaticnativemethod(state, state->classprimobject, "typename", nn_objfnobject_typename);
@@ -13243,8 +13525,6 @@ void nn_state_initbuiltinmethods(NNState* state)
         nn_class_defnativemethod(state, state->classprimstring, "utf8Chars", nn_objfnstring_utf8chars);
         nn_class_defnativemethod(state, state->classprimstring, "utf8Codepoints", nn_objfnstring_utf8codepoints);
         nn_class_defnativemethod(state, state->classprimstring, "utf8Bytes", nn_objfnstring_utf8codepoints);
-
-
         nn_class_defcallablefield(state, state->classprimstring, "length", nn_objfnstring_length);
         nn_class_defnativemethod(state, state->classprimstring, "@iter", nn_objfnstring_iter);
         nn_class_defnativemethod(state, state->classprimstring, "@itern", nn_objfnstring_itern);
@@ -13396,8 +13676,8 @@ void nn_state_initbuiltinmethods(NNState* state)
 NNValue nn_nativefn_time(NNState* state, NNArguments* args)
 {
     struct timeval tv;
-    (void)args;
     NNArgCheck check;
+    (void)args;
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     osfn_gettimeofday(&tv, NULL);
@@ -13407,10 +13687,9 @@ NNValue nn_nativefn_time(NNState* state, NNArguments* args)
 NNValue nn_nativefn_microtime(NNState* state, NNArguments* args)
 {
     struct timeval tv;
-    (void)args;
     NNArgCheck check;
+    (void)args;
     nn_argcheck_init(state, &check, args);
-
     NEON_ARGS_CHECKCOUNT(&check, 0);
     osfn_gettimeofday(&tv, NULL);
     return nn_value_makenumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
@@ -13474,7 +13753,6 @@ NNValue nn_nativefn_ord(NNState* state, NNArguments* args)
     return nn_value_makenumber(ord);
 }
 
-#define MT_STATE_SIZE 624
 void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index)
 {
     uint32_t i;
@@ -14349,6 +14627,7 @@ NNState* nn_state_make()
 
 NNState* nn_state_makewithuserptr(void* userptr)
 {
+    enum{ kMaxBuf = 1024 };
     static const char* defaultsearchpaths[] =
     {
         "mods",
@@ -14357,6 +14636,8 @@ NNState* nn_state_makewithuserptr(void* userptr)
         NULL
     };
     size_t i;
+    char* pathp;
+    char pathbuf[kMaxBuf];
     NNState* state;
     state = (NNState*)nn_util_rawmalloc(userptr, sizeof(NNState));
     if(state == NULL)
@@ -14444,6 +14725,10 @@ NNState* nn_state_makewithuserptr(void* userptr)
         nn_state_initbuiltinmethods(state);
     }
     {
+        pathp = osfn_getcwd(pathbuf, kMaxBuf);
+        state->clidirectory = nn_string_copycstr(state, pathp);
+    }
+    {
         {
             state->filestdout = nn_object_makefile(state, stdout, true, "<stdout>", "wb");
             nn_state_defglobalvalue(state, "STDOUT", nn_value_fromobject(state->filestdout));
@@ -14468,7 +14753,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
             fprintf(stderr, "\n"); \
         }
 #else
-    #define destrdebug(...)     
+    #define destrdebug(...)
 #endif
 void nn_state_destroy(NNState* state)
 {
@@ -16167,7 +16452,6 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
         klass = nn_value_asclass(vtarget);
         if(nn_value_iscallable(vpeek))
         {
-            //fprintf(stderr, "setting '%s' as method\n", name->sbuf->data);
             nn_class_defmethod(state, klass, name->sbuf->data, vpeek);
         }
         else
@@ -16240,7 +16524,7 @@ NEON_FORCEINLINE long nn_vmutil_valtoint(NNValue v)
     return (long)nn_vmutil_valtonum(v);
 }
 
-NEON_FORCEINLINE bool nn_vmdo_dobinary(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
 {
     bool isfail;
     long ibinright;
@@ -16333,7 +16617,6 @@ NEON_FORCEINLINE bool nn_vmdo_dobinary(NNState* state)
                 ubinright = nn_vmutil_valtouint(binvalright);
                 ubinleft = nn_vmutil_valtouint(binvalleft);
                 ubinright &= 0x1f;
-                //res = nn_value_makeint(ibinleft << ibinright);
                 res = nn_value_makeint(ubinleft << ubinright);
 
             }
@@ -16478,7 +16761,6 @@ NEON_FORCEINLINE bool nn_vmdo_funcargget(NNState* state)
     NNValue val;
     slot = nn_vmbits_readshort(state);
     ssp = state->vmstate.currentframe->stackslotpos;
-    //fprintf(stderr, "FUNCARGGET: %s\n", state->vmstate.currentframe->closure->scriptfunc->name->sbuf->data);
     val = state->vmstate.stackvalues[ssp + slot];
     nn_vmbits_stackpush(state, val);
     return true;
@@ -16576,9 +16858,7 @@ NEON_FORCEINLINE bool nn_vmdo_makedict(NNState* state)
     return true;
 }
 
-
-
-NEON_FORCEINLINE bool BINARY_MOD_OP(NNState* state, const char* opname, nnbinopfunc_t op)
+NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, nnbinopfunc_t op)
 {
     double dbinright;
     double dbinleft;
@@ -16614,7 +16894,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     NNInstruction currinstr;
     you_are_calling_exit_vm_outside_of_runvm = false;
     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
-    for(;;)
+    while(true)
     {
         /*
         // try...finally... (i.e. try without a catch but finally
@@ -16626,7 +16906,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
         {
             return NEON_STATUS_FAILRUNTIME;
         }
-        if(state->conf.shoulddumpstack)
+        if(nn_util_unlikely(state->conf.shoulddumpstack))
         {
             ofs = (int)(state->vmstate.currentframe->inscode - state->vmstate.currentframe->closure->scriptfunc->blob.instrucs);
             nn_dbg_printinstructionat(state->debugwriter, &state->vmstate.currentframe->closure->scriptfunc->blob, ofs);
@@ -16646,7 +16926,6 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
         }
         currinstr = nn_vmbits_readinstruction(state);
         state->vmstate.currentinstr = currinstr;
-        //fprintf(stderr, "now executing at line %d\n", state->vmstate.currentinstr.srcline);
         switch(currinstr.code)
         {
             case NEON_OP_RETURN:
@@ -16692,7 +16971,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     valleft = nn_vmbits_stackpeek(state, 1);
                     if(nn_value_isstring(valright) || nn_value_isstring(valleft))
                     {
-                        if(!nn_vmutil_concatenate(state))
+                        if(nn_util_unlikely(!nn_vmutil_concatenate(state)))
                         {
                             nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand + for %s and %s", nn_value_typename(valleft), nn_value_typename(valright));
                             break;
@@ -16706,13 +16985,13 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     else
                     {
-                        nn_vmdo_dobinary(state);
+                        nn_vmdo_dobinarydirect(state);
                     }
                 }
                 break;
             case NEON_OP_PRIMSUBTRACT:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMMULTIPLY:
@@ -16748,31 +17027,31 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
                         break;
                     }
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMDIVIDE:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMMODULO:
                 {
-                    if(BINARY_MOD_OP(state, "%", (nnbinopfunc_t)nn_vmutil_modulo))
+                    if(nn_vmdo_dobinaryfunc(state, "%", (nnbinopfunc_t)nn_vmutil_modulo))
                     {
                     }
                 }
                 break;
             case NEON_OP_PRIMPOW:
                 {
-                    if(BINARY_MOD_OP(state, "**", (nnbinopfunc_t)pow))
+                    if(nn_vmdo_dobinaryfunc(state, "**", (nnbinopfunc_t)pow))
                     {
                     }
                 }
                 break;
             case NEON_OP_PRIMFLOORDIVIDE:
                 {
-                    if(BINARY_MOD_OP(state, "//", (nnbinopfunc_t)nn_vmutil_floordiv))
+                    if(nn_vmdo_dobinaryfunc(state, "//", (nnbinopfunc_t)nn_vmutil_floordiv))
                     {
                     }
                 }
@@ -16803,27 +17082,27 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             }
             case NEON_OP_PRIMAND:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMOR:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMBITXOR:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMSHIFTLEFT:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMSHIFTRIGHT:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PUSHONE:
@@ -16843,12 +17122,12 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 break;
             case NEON_OP_PRIMGREATER:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMLESSTHAN:
                 {
-                    nn_vmdo_dobinary(state);
+                    nn_vmdo_dobinarydirect(state);
                 }
                 break;
             case NEON_OP_PRIMNOT:
@@ -17097,7 +17376,6 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             case NEON_OP_CLASSGETTHIS:
                 {
                     NNValue thisval;
-                    //thisval = nn_vmbits_stackpeek(state, state->vmstate.stackidx-0);
                     thisval = nn_vmbits_stackpeek(state, 3);
                     nn_printer_writefmt(state->debugwriter, "CLASSGETTHIS: thisval=");
                     nn_printer_printvalue(state->debugwriter, thisval, true, false);
@@ -17293,7 +17571,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     name = nn_value_asstring(nn_vmbits_stackpeek(state, 0));
                     fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->sbuf->data);
                     mod = nn_import_loadmodulescript(state, state->topmodule, name);
-                    fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", mod);
+                    fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", (void*)mod);
                     if(mod == NULL)
                     {
                         res = nn_value_makenull();
@@ -17467,7 +17745,9 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjA
     }
     else if(nn_value_isfuncnative(callable))
     {
-        //arity = nn_value_asfuncnative(callable);
+        #if 0
+            arity = nn_value_asfuncnative(callable);
+        #endif
     }
     if(arity > 0)
     {
@@ -17998,7 +18278,6 @@ int main(int argc, char* argv[], char** envp)
     int opt;
     int nargc;
     int longindex;
-
     int nextgcstart;
     bool ok;
     bool wasusage;
@@ -18009,18 +18288,7 @@ int main(int argc, char* argv[], char** envp)
     char* nargv[128];
     optcontext_t options;
     NNState* state;
-    #if defined(NEON_PLAT_ISWINDOWS)
-        _setmode(fileno(stdin), _O_BINARY);
-        _setmode(fileno(stdout), _O_BINARY);
-        _setmode(fileno(stderr), _O_BINARY);
-    #endif
-    ok = true;
-    wasusage = false;
-    quitafterinit = false;
-    source = NULL;
-    nextgcstart = NEON_CFG_DEFAULTGCSTART;
-    state = nn_state_make();
-    optlongflags_t longopts[] =
+    static optlongflags_t longopts[] =
     {
         {"help", 'h', OPTPARSE_NONE, "this help"},
         {"strict", 's', OPTPARSE_NONE, "enable strict mode, such as requiring explicit var declarations"},
@@ -18035,6 +18303,17 @@ int main(int argc, char* argv[], char** envp)
         {"gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC"},
         {0, 0, (optargtype_t)0, NULL}
     };
+    #if defined(NEON_PLAT_ISWINDOWS)
+        _setmode(fileno(stdin), _O_BINARY);
+        _setmode(fileno(stdout), _O_BINARY);
+        _setmode(fileno(stderr), _O_BINARY);
+    #endif
+    ok = true;
+    wasusage = false;
+    quitafterinit = false;
+    source = NULL;
+    nextgcstart = NEON_CFG_DEFAULTGCSTART;
+    state = nn_state_make();
     nargc = 0;
     optprs_init(&options, argc, argv);
     options.permute = 0;
@@ -18115,6 +18394,7 @@ int main(int argc, char* argv[], char** envp)
         {
             os = nn_string_copycstr(state, nargv[i]);
             nn_array_push(state->cliargv, nn_value_fromobject(os));
+
         }
         nn_table_setcstr(state->globals, "ARGV", nn_value_fromobject(state->cliargv));
     }
