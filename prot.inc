@@ -148,6 +148,13 @@ void nn_tableval_copy(NNHashValTable *from, NNHashValTable *to);
 NNObjString *nn_tableval_findstring(NNHashValTable *table, const char *chars, size_t length, uint32_t hash);
 NNValue nn_tableval_findkey(NNHashValTable *table, NNValue value);
 NNObjArray *nn_tableval_getkeys(NNHashValTable *table);
+NNBoxedString *nn_strbox_makelen(char *str, size_t len, bool shouldcopy);
+NNBoxedString *nn_strbox_make(char *str, bool shouldcopy);
+void nn_strbox_destroy(NNBoxedString *cs);
+NNStrMap *nn_strmap_make(void);
+void nn_strmap_destroy(NNStrMap *map);
+void nn_strmap_set(NNStrMap *map, char *name, NNValue value);
+NNValue nn_strmap_get(NNStrMap *map, char *name);
 NNObject *nn_gcmem_protect(NNState *state, NNObject *object);
 void nn_gcmem_clearprotect(NNState *state);
 const char *nn_util_color(NNColor tc);
@@ -877,8 +884,8 @@ int dyn_strbuf_appendformatnoterm(StringBuffer *sbuf, size_t pos, const char *fm
 void dyn_strbuf_triminplace(StringBuffer *sbuf);
 void dyn_strbuf_trimleftinplace(StringBuffer *sbuf, const char *list);
 void dyn_strbuf_trimrightinplace(StringBuffer *sbuf, const char *list);
-/* hashtabstr.h */
 /* hashtabval.h */
+/* hmap.h */
 /* linenoise.h */
 /* mem.h */
 /* optparse.h */

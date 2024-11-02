@@ -644,6 +644,24 @@ typedef void (*NNModLoaderFN)(NNState*);
 typedef NNRegModule* (*NNModInitFN)(NNState*);
 typedef double(*nnbinopfunc_t)(double, double);
 
+typedef struct NNStrMap NNStrMap;
+typedef struct NNBoxedString NNBoxedString;
+
+struct NNBoxedString
+{
+    bool isalloced;
+    char* data;
+    size_t length;
+};
+
+struct NNStrMap
+{
+    NNStrMap* nxt;
+    NNBoxedString* name;
+    NNValue value;
+};
+
+
 struct utf8iterator_t
 {
     /*input string pointer */
@@ -1808,6 +1826,7 @@ void nn_util_memfree(NNState* state, void* ptr)
 
 #include "vallist.h"
 #include "hashtabval.h"
+#include "hmap.h"
 
 NNObject* nn_gcmem_protect(NNState* state, NNObject* object)
 {

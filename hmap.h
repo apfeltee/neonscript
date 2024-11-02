@@ -27,27 +27,6 @@
 // FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 // OTHER DEALINGS IN THE SOFTWARE.
 
-#include <stdbool.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-typedef struct NNStrMap NNStrMap;
-typedef struct NNBoxedString NNBoxedString;
-
-struct NNBoxedString
-{
-    bool isalloced;
-    char* data;
-    size_t length;
-};
-
-struct NNStrMap
-{
-    NNStrMap* nxt;
-    NNBoxedString* name;
-    char* value;
-};
 
 NNBoxedString* nn_strbox_makelen(char* str, size_t len, bool shouldcopy)
 {
@@ -91,8 +70,9 @@ NNStrMap* nn_strmap_make()
     NNStrMap* map;
     map = (NNStrMap*)malloc(sizeof(NNStrMap));
     map->name = NULL;
-    map->value = NULL;
+    map->value = nn_value_makenull();
     map->nxt = NULL;
+    return map;
 }
 
 void nn_strmap_destroy(NNStrMap* map)
@@ -106,11 +86,6 @@ void nn_strmap_destroy(NNStrMap* map)
         {
             nn_strbox_destroy(sub->name);
         }
-        if(sub->value != NULL)
-        {
-            free(sub->value);
-            sub->value = NULL;
-        }
         tmp = sub->nxt;
         if(sub != map)
         {
@@ -122,14 +97,13 @@ void nn_strmap_destroy(NNStrMap* map)
     map = NULL;
 }
 
-void nn_strmap_set(NNStrMap* map, char* name, char* value)
+void nn_strmap_set(NNStrMap* map, char* name, NNValue value)
 {
     NNStrMap* sub;
     if(map->name == NULL)
     {
         map->name = nn_strbox_make(name, true);
-        map->value = (char*)malloc(strlen(value) + 1);
-        strcpy(map->value, value);
+        map->value = value;
         map->nxt = NULL;
         return;
     }
@@ -138,12 +112,9 @@ void nn_strmap_set(NNStrMap* map, char* name, char* value)
     {
         if(!strcmp(name, sub->name->data))
         {
-            if(sub->value != NULL)
+            if(!nn_value_isnull(sub->value))
             {
-                free(sub->value);
-                sub->value = NULL;
-                sub->value = (char*)malloc(strlen(value) + 1);
-                strcpy(sub->value, value);
+                sub->value = value;
                 return;
             }
         }
@@ -152,8 +123,7 @@ void nn_strmap_set(NNStrMap* map, char* name, char* value)
             sub->nxt = (NNStrMap*)malloc(sizeof(NNStrMap));
             sub = sub->nxt;
             sub->name = nn_strbox_make(name, true);
-            sub->value = (char*)malloc(strlen(value) + 1);
-            strcpy(sub->value, value);
+            sub->value = value;
             sub->nxt = NULL;
             return;
         }
@@ -161,7 +131,7 @@ void nn_strmap_set(NNStrMap* map, char* name, char* value)
     }
 }
 
-char* nn_strmap_get(NNStrMap* map, char* name)
+NNValue nn_strmap_get(NNStrMap* map, char* name)
 {
     NNStrMap* sub;
     sub = map;
@@ -173,45 +143,6 @@ char* nn_strmap_get(NNStrMap* map, char* name)
         }
         sub = sub->nxt;
     }
-    return "";
+    return nn_value_makenull();
 }
 
-void display_both(NNStrMap* map, char* first)
-{
-    printf("%s %s\n", first, nn_strmap_get(map, first));
-}
-
-int main(int argc, char** argv)
-{
-    NNStrMap* test;
-
-    test = nn_strmap_make();
-    nn_strmap_set(test, "One", "Won");
-    nn_strmap_set(test, "Two", "Too");
-    nn_strmap_set(test, "Four", "Fore");
-
-    // display them out of order
-    display_both(test, "Two");
-    display_both(test, "Four");
-    display_both(test, "One");
-
-    printf("\n");
-
-    // reset an existing entry
-    nn_strmap_set(test, "Two", "To");
-
-    display_both(test, "Two");
-    display_both(test, "Four");
-    display_both(test, "One");
-
-    printf("\n");
-
-    display_both(test, "Eight");
-
-    nn_strmap_set(test, "Eight", "Ate");
-
-    printf("\n");
-
-    display_both(test, "Eight");
-    nn_strmap_destroy(test);
-}
