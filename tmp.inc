@@ -82,30 +82,6 @@
 #include "optparse.h"
 #include "os.h"
 
-#define NEON_CONF_USENANTAGGING 1
-
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-    #warning "*** USING NAN TAGGING ***"
-#endif
-
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-    #define MC_NANBOX_SIGNBIT     ((uint64_t) 0x8000000000000000)
-    #define MC_NANBOX_QNAN        ((uint64_t) 0x7ffc000000000000)
-
-    #define MC_NANBOX_TAGNULL    (1ull<<47) /* 001 */
-    #define MC_NANBOX_TAGBOOL    (2ull<<47) /* 010 */
-    #define MC_NANBOX_TAGINT     (3ull<<47) /* 011 */
-    #define MC_NANBOX_TAGOBJ     (MC_NANBOX_SIGNBIT)
-
-    #define MC_NANBOX_TAGVALTRUE    1
-    #define MC_NANBOX_TAGVALFALSE   0
-
-    #define MC_NANBOX_TYPEBITS (MC_NANBOX_TAGOBJ | MC_NANBOX_TAGNULL | MC_NANBOX_TAGBOOL | MC_NANBOX_TAGINT)
-
-    #define MC_VALUE_FALSE ((NNValue) (uint64_t) (MC_NANBOX_QNAN | MC_NANBOX_TAGBOOL | MC_NANBOX_TAGVALFALSE))
-    #define MC_VALUE_TRUE ((NNValue) (uint64_t) (MC_NANBOX_QNAN | MC_NANBOX_TAGBOOL | MC_NANBOX_TAGVALTRUE))
-    #define MC_VALUE_NULL ((NNValue) (uint64_t) (MC_NANBOX_QNAN | MC_NANBOX_TAGNULL))
-#endif
 
 #if defined(__GNUC__) || defined(__clang__)
     #define nn_util_likely(x)   (__builtin_expect(!!(x), 1))
@@ -522,15 +498,14 @@ enum NNObjType
     NEON_OBJTYPE_USERDATA
 };
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
 enum NNValType
 {
     NEON_VALTYPE_NULL,
     NEON_VALTYPE_BOOL,
     NEON_VALTYPE_NUMBER,
     NEON_VALTYPE_OBJ,
+    NEON_VALTYPE_EMPTY
 };
-#endif
 
 enum NNFieldType
 {
@@ -563,21 +538,10 @@ enum NNAstCompContext
     NEON_COMPCONTEXT_NESTEDFUNCTION
 };
 
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-typedef uint64_t NNValue;
-#else
-typedef struct /**/ NNValue NNValue;
-#endif
-
-
 typedef enum /**/NNAstCompContext NNAstCompContext;
 typedef enum /**/ NNColor NNColor;
 typedef enum /**/NNFieldType NNFieldType;
-
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
 typedef enum /**/ NNValType NNValType;
-#endif
-
 typedef enum /**/ NNOpCode NNOpCode;
 typedef enum /**/ NNFuncType NNFuncType;
 typedef enum /**/ NNObjType NNObjType;
@@ -606,14 +570,13 @@ typedef struct /**/ NNObjFile NNObjFile;
 typedef struct /**/ NNObjSwitch NNObjSwitch;
 typedef struct /**/ NNObjUserdata NNObjUserdata;
 typedef union /**/ NNDoubleHashUnion NNDoubleHashUnion;
-
-
+typedef struct /**/ NNValue NNValue;
 typedef struct /**/NNPropGetSet NNPropGetSet;
 typedef struct /**/NNProperty NNProperty;
 typedef struct /**/ NNValArray NNValArray;
 typedef struct /**/ NNBlob NNBlob;
-typedef struct /**/ NNHashValEntry NNHashValEntry;
-typedef struct /**/ NNHashValTable NNHashValTable;
+typedef struct /**/ NNHashEntry NNHashEntry;
+typedef struct /**/ NNHashTable NNHashTable;
 typedef struct /**/ NNExceptionFrame NNExceptionFrame;
 typedef struct /**/ NNCallFrame NNCallFrame;
 typedef struct /**/ NNAstToken NNAstToken;
@@ -711,7 +674,6 @@ struct NNFormatInfo
     NNState* pvm;
 };
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
 struct NNValue
 {
     NNValType type;
@@ -722,7 +684,6 @@ struct NNValue
         NNObject* vobjpointer;
     } valunion;
 };
-#endif
 
 struct NNObject
 {
@@ -754,6 +715,20 @@ struct NNProperty
     NNPropGetSet getset;
 };
 
+#if 0
+struct NNValArray
+{
+    NNState* pvm;
+    /* type size of the stored value (via sizeof) */
+    int tsize;
+    /* how many entries are currently stored? */
+    int count;
+    /* how many entries can be stored before growing? */
+    int capacity;
+    NNValue* values;
+};
+#endif
+
 struct NNValArray
 {
     NNState* pvm;
@@ -762,6 +737,8 @@ struct NNValArray
     const char* listname;
     NNValue* listitems;
 };
+
+
 
 struct NNInstruction
 {
@@ -782,18 +759,18 @@ struct NNBlob
     NNValArray* argdefvals;
 };
 
-struct NNHashValEntry
+struct NNHashEntry
 {
     NNValue key;
     NNProperty value;
 };
 
-struct NNHashValTable
+struct NNHashTable
 {
     /*
     * FIXME: extremely stupid hack: $active ensures that a table that was destroyed
     * does not get marked again, et cetera.
-    * since nn_valtable_destroy() zeroes the data before freeing, $active will be
+    * since nn_table_destroy() zeroes the data before freeing, $active will be
     * false, and thus, no further marking occurs.
     * obviously the reason is that somewhere a table (from NNObjInstance) is being
     * read after being freed, but for now, this will work(-ish).
@@ -802,7 +779,7 @@ struct NNHashValTable
     int count;
     int capacity;
     NNState* pvm;
-    NNHashValEntry* entries;
+    NNHashEntry* entries;
 };
 
 struct NNObjString
@@ -825,7 +802,7 @@ struct NNObjModule
 {
     NNObject objpadding;
     bool imported;
-    NNHashValTable* deftable;
+    NNHashTable* deftable;
     NNObjString* name;
     NNObjString* physicalpath;
     void* preloader;
@@ -853,9 +830,6 @@ struct NNObjFuncClosure
     NNObjUpvalue** upvalues;
 };
 
-/**
-* TODO: use a different table implementation to avoid allocating so many strings...
-*/
 struct NNObjClass
 {
     NNObject objpadding;
@@ -873,13 +847,13 @@ struct NNObjClass
     * so `$instprops["something"] = somefunction;` remains untouched *until* an
     * instance of this class is created.
     */
-    NNHashValTable* instprops;
+    NNHashTable* instprops;
 
     /*
     * static, unchangeable(-ish) values. intended for values that are not unique, but shared
     * across classes, without being copied.
     */
-    NNHashValTable* staticproperties;
+    NNHashTable* staticproperties;
 
     /*
     * method table; they are currently not unique when instantiated; instead, they are
@@ -887,8 +861,8 @@ struct NNObjClass
     * TODO: introduce a new hashtable field for NNObjInstance for unique methods, perhaps?
     * right now, this method just prevents unnecessary copying.
     */
-    NNHashValTable* methods;
-    NNHashValTable* staticmethods;
+    NNHashTable* methods;
+    NNHashTable* staticmethods;
     NNObjString* name;
     NNObjClass* superclass;
 };
@@ -901,7 +875,7 @@ struct NNObjInstance
     * in rare circumstances s
     */
     bool active;
-    NNHashValTable* properties;
+    NNHashTable* properties;
     NNObjClass* klass;
 };
 
@@ -939,7 +913,7 @@ struct NNObjDict
 {
     NNObject objpadding;
     NNValArray* names;
-    NNHashValTable* htab;
+    NNHashTable* htab;
 };
 
 struct NNObjFile
@@ -959,7 +933,7 @@ struct NNObjSwitch
     NNObject objpadding;
     int defaultjump;
     int exitjump;
-    NNHashValTable* table;
+    NNHashTable* table;
 };
 
 struct NNObjUserdata
@@ -1036,16 +1010,20 @@ struct NNState
     } exceptions;
 
     void* memuserptr;
+
+
     char* rootphysfile;
 
     NNObjDict* envdict;
+
     NNObjString* constructorname;
     NNObjModule* topmodule;
     NNValArray* importpath;
+
     /* objects tracker */
-    NNHashValTable* modules;
-    NNHashValTable* strings;
-    NNHashValTable* globals;
+    NNHashTable* modules;
+    NNHashTable* strings;
+    NNHashTable* globals;
 
     /* object public methods */
     NNObjClass* classprimprocess;
@@ -1456,20 +1434,12 @@ NEON_INLINE const char* nn_utf8iter_getchar(utf8iterator_t* iter)
 
 NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return ((v & (MC_NANBOX_QNAN | MC_NANBOX_TYPEBITS)) == (MC_NANBOX_QNAN | MC_NANBOX_TAGOBJ));
-    #else
-        return ((v).type == NEON_VALTYPE_OBJ);
-    #endif
+    return ((v).type == NEON_VALTYPE_OBJ);
 }
 
 NEON_FORCEINLINE NNObject* nn_value_asobject(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return ((NNObject*) (uintptr_t) ((v) & (0 - ((MC_NANBOX_TAGOBJ | MC_NANBOX_QNAN) + 1))));
-    #else
-        return ((v).valunion.vobjpointer);
-    #endif
+    return ((v).valunion.vobjpointer);
 }
 
 NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
@@ -1479,29 +1449,22 @@ NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
 
 NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return (v == MC_VALUE_NULL);
-    #else
-        return ((v).type == NEON_VALTYPE_NULL);
-    #endif
+    return ((v).type == NEON_VALTYPE_NULL);
 }
 
 NEON_FORCEINLINE bool nn_value_isbool(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return ((v & (MC_NANBOX_QNAN | MC_NANBOX_TYPEBITS)) == (MC_NANBOX_QNAN | MC_NANBOX_TAGBOOL));
-    #else
-        return ((v).type == NEON_VALTYPE_BOOL);
-    #endif
+    return ((v).type == NEON_VALTYPE_BOOL);
 }
 
 NEON_FORCEINLINE bool nn_value_isnumber(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return ((v & MC_NANBOX_QNAN) != MC_NANBOX_QNAN);
-    #else
-        return ((v).type == NEON_VALTYPE_NUMBER);
-    #endif
+    return ((v).type == NEON_VALTYPE_NUMBER);
+}
+
+NEON_FORCEINLINE bool nn_value_isempty(NNValue v)
+{
+    return ((v).type == NEON_VALTYPE_EMPTY);
 }
 
 NEON_FORCEINLINE bool nn_value_isstring(NNValue v)
@@ -1582,24 +1545,12 @@ NEON_FORCEINLINE NNObjType nn_value_objtype(NNValue v)
 
 NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        if(v == MC_VALUE_TRUE)
-        {
-            return true;
-        }
-        return false;
-    #else
-        return ((v).valunion.vbool);
-    #endif
+    return ((v).valunion.vbool);
 }
 
 NEON_FORCEINLINE double nn_value_asnumber(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return mc_value_asnumintern(v);
-    #else
-        return ((v).valunion.vfltnum);
-    #endif
+    return ((v).valunion.vfltnum);
 }
 
 NEON_FORCEINLINE NNObjString* nn_value_asstring(NNValue v)
@@ -1672,92 +1623,57 @@ NEON_FORCEINLINE NNObjRange* nn_value_asrange(NNValue v)
     return ((NNObjRange*)nn_value_asobject(v));
 }
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
-    NEON_FORCEINLINE NNValue nn_value_makevalue(NNValType type)
-    {
-        NNValue v;
-        v.type = type;
-        return v;
-    }
-#endif
+NEON_FORCEINLINE NNValue nn_value_makevalue(NNValType type)
+{
+    NNValue v;
+    v.type = type;
+    return v;
+}
+
+NEON_FORCEINLINE NNValue nn_value_makeempty()
+{
+    return nn_value_makevalue(NEON_VALTYPE_EMPTY);
+}
 
 NEON_FORCEINLINE NNValue nn_value_makenull()
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return MC_VALUE_NULL;
-    #else
-        NNValue v;
-        v = nn_value_makevalue(NEON_VALTYPE_NULL);
-        return v;
-    #endif
+    NNValue v;
+    v = nn_value_makevalue(NEON_VALTYPE_NULL);
+    return v;
 }
 
 NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        if(b)
-        {
-            return MC_VALUE_TRUE;
-        }
-        return MC_VALUE_FALSE;
-    #else
-        NNValue v;
-        v = nn_value_makevalue(NEON_VALTYPE_BOOL);
-        v.valunion.vbool = b;
-        return v;
-    #endif
+    NNValue v;
+    v = nn_value_makevalue(NEON_VALTYPE_BOOL);
+    v.valunion.vbool = b;
+    return v;
 }
-
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-    typedef union {
-        uint64_t bits;
-        double num;
-    } doubleunion;
-
-    static inline NNValue mc_value_fromnumber(double num)
-    {
-        doubleunion data;
-        data.num = num;
-        return data.bits;
-    }
-
-    static inline double mc_value_asnumintern(NNValue v)
-    {
-        doubleunion data;
-        data.bits = v;
-        return data.num;
-    }
-#endif
 
 NEON_FORCEINLINE NNValue nn_value_makenumber(double d)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return mc_value_fromnumber(d);
-    #else
-        NNValue v;
-        v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
-        v.valunion.vfltnum = d;
-        return v;
-    #endif
+    NNValue v;
+    v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
+    v.valunion.vfltnum = d;
+    return v;
 }
 
 NEON_FORCEINLINE NNValue nn_value_makeint(int i)
 {
-    return nn_value_makenumber(i);
+    NNValue v;
+    v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
+    v.valunion.vfltnum = i;
+    return v;
 }
 
 #define nn_value_fromobject(obj) nn_value_fromobject_actual((NNObject*)obj)
 
 NEON_FORCEINLINE NNValue nn_value_fromobject_actual(NNObject* obj)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return ((NNValue) (MC_NANBOX_TAGOBJ | MC_NANBOX_QNAN | (uint64_t)(uintptr_t)(obj)));
-    #else
-        NNValue v;
-        v = nn_value_makevalue(NEON_VALTYPE_OBJ);
-        v.valunion.vobjpointer = obj;
-        return v;
-    #endif
+    NNValue v;
+    v = nn_value_makevalue(NEON_VALTYPE_OBJ);
+    v.valunion.vobjpointer = obj;
+    return v;
 }
 
 void* nn_util_rawrealloc(void* userptr, void* ptr, size_t size)
@@ -2392,14 +2308,14 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             {
                 NNObjModule* module;
                 module = (NNObjModule*)object;
-                nn_valtable_mark(state, module->deftable);
+                nn_table_mark(state, module->deftable);
             }
             break;
         case NEON_OBJTYPE_SWITCH:
             {
                 NNObjSwitch* sw;
                 sw = (NNObjSwitch*)object;
-                nn_valtable_mark(state, sw->table);
+                nn_table_mark(state, sw->table);
             }
             break;
         case NEON_OBJTYPE_FILE:
@@ -2414,7 +2330,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
                 NNObjDict* dict;
                 dict = (NNObjDict*)object;
                 nn_vallist_mark(dict->names);
-                nn_valtable_mark(state, dict->htab);
+                nn_table_mark(state, dict->htab);
             }
             break;
         case NEON_OBJTYPE_ARRAY:
@@ -2437,9 +2353,9 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
                 NNObjClass* klass;
                 klass = (NNObjClass*)object;
                 nn_gcmem_markobject(state, (NNObject*)klass->name);
-                nn_valtable_mark(state, klass->methods);
-                nn_valtable_mark(state, klass->staticmethods);
-                nn_valtable_mark(state, klass->staticproperties);
+                nn_table_mark(state, klass->methods);
+                nn_table_mark(state, klass->staticmethods);
+                nn_table_mark(state, klass->staticproperties);
                 nn_gcmem_markvalue(state, klass->constructor);
                 nn_gcmem_markvalue(state, klass->destructor);
                 if(klass->superclass != NULL)
@@ -2520,7 +2436,7 @@ void nn_gcmem_destroyobject(NNState* state, NNObject* object)
                 NNObjDict* dict;
                 dict = (NNObjDict*)object;
                 nn_vallist_destroy(dict->names);
-                nn_valtable_destroy(dict->htab);
+                nn_table_destroy(dict->htab);
                 nn_gcmem_release(state, object, sizeof(NNObjDict));
             }
             break;
@@ -2601,7 +2517,7 @@ void nn_gcmem_destroyobject(NNState* state, NNObject* object)
             {
                 NNObjSwitch* sw;
                 sw = (NNObjSwitch*)object;
-                nn_valtable_destroy(sw->table);
+                nn_table_destroy(sw->table);
                 nn_gcmem_release(state, object, sizeof(NNObjSwitch));
             }
             break;
@@ -2646,8 +2562,8 @@ void nn_gcmem_markroots(NNState* state)
     {
         nn_gcmem_markobject(state, (NNObject*)upvalue);
     }
-    nn_valtable_mark(state, state->globals);
-    nn_valtable_mark(state, state->modules);
+    nn_table_mark(state, state->globals);
+    nn_table_mark(state, state->modules);
     nn_gcmem_markobject(state, (NNObject*)state->exceptions.stdexception);
     nn_gcmem_markcompilerroots(state);
 }
@@ -2725,8 +2641,8 @@ void nn_gcmem_collectgarbage(NNState* state)
     #endif
     nn_gcmem_markroots(state);
     nn_gcmem_tracerefs(state);
-    nn_valtable_removewhites(state, state->strings);
-    nn_valtable_removewhites(state, state->modules);
+    nn_table_removewhites(state, state->strings);
+    nn_table_removewhites(state, state->modules);
     nn_gcmem_sweep(state);
     state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
     state->markvalue = !state->markvalue;
@@ -3234,10 +3150,10 @@ NNProperty nn_property_make(NNState* state, NNValue val, NNFieldType type)
     return nn_property_makewithpointer(state, val, type);
 }
 
-NNHashValTable* nn_valtable_make(NNState* state)
+NNHashTable* nn_table_make(NNState* state)
 {
-    NNHashValTable* table;
-    table = (NNHashValTable*)nn_gcmem_allocate(state, sizeof(NNHashValTable), 1);
+    NNHashTable* table;
+    table = (NNHashTable*)nn_gcmem_allocate(state, sizeof(NNHashTable), 1);
     if(table == NULL)
     {
         return NULL;
@@ -3250,25 +3166,25 @@ NNHashValTable* nn_valtable_make(NNState* state)
     return table;
 }
 
-void nn_valtable_destroy(NNHashValTable* table)
+void nn_table_destroy(NNHashTable* table)
 {
     NNState* state;
     if(table != NULL)
     {
         state = table->pvm;
-        nn_gcmem_freearray(state, sizeof(NNHashValEntry), table->entries, table->capacity);
-        memset(table, 0, sizeof(NNHashValTable));
-        nn_gcmem_release(state, table, sizeof(NNHashValTable));
+        nn_gcmem_freearray(state, sizeof(NNHashEntry), table->entries, table->capacity);
+        memset(table, 0, sizeof(NNHashTable));
+        nn_gcmem_release(state, table, sizeof(NNHashTable));
     }
 }
 
-NNHashValEntry* nn_valtable_findentrybyvalue(NNHashValTable* table, NNHashValEntry* entries, int capacity, NNValue key)
+NNHashEntry* nn_table_findentrybyvalue(NNHashTable* table, NNHashEntry* entries, int capacity, NNValue key)
 {
     uint32_t hash;
     uint32_t index;
     NNState* state;
-    NNHashValEntry* entry;
-    NNHashValEntry* tombstone;
+    NNHashEntry* entry;
+    NNHashEntry* tombstone;
     state = table->pvm;
     hash = nn_value_hashvalue(key);
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
@@ -3281,7 +3197,7 @@ NNHashValEntry* nn_valtable_findentrybyvalue(NNHashValTable* table, NNHashValEnt
     while(true)
     {
         entry = &entries[index];
-        if(nn_value_isnull(entry->key))
+        if(nn_value_isempty(entry->key))
         {
             if(nn_value_isnull(entry->value.value))
             {
@@ -3313,14 +3229,14 @@ NNHashValEntry* nn_valtable_findentrybyvalue(NNHashValTable* table, NNHashValEnt
     return NULL;
 }
 
-NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry* entries, int capacity, NNValue valkey, const char* kstr, size_t klen, uint32_t hash)
+NNHashEntry* nn_table_findentrybystr(NNHashTable* table, NNHashEntry* entries, int capacity, NNValue valkey, const char* kstr, size_t klen, uint32_t hash)
 {
     bool havevalhash;
     uint32_t index;
     uint32_t valhash;
     NNObjString* entoskey;
-    NNHashValEntry* entry;
-    NNHashValEntry* tombstone;
+    NNHashEntry* entry;
+    NNHashEntry* tombstone;
     NNState* state;
     state = table->pvm;
     (void)valhash;
@@ -3337,7 +3253,7 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
     while(true)
     {
         entry = &entries[index];
-        if(nn_value_isnull(entry->key))
+        if(nn_value_isempty(entry->key))
         {
             if(nn_value_isnull(entry->value.value))
             {
@@ -3373,7 +3289,7 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
         }
         else
         {
-            if(!nn_value_isnull(valkey))
+            if(!nn_value_isempty(valkey))
             {
                 if(nn_value_compare(state, valkey, entry->key))
                 {
@@ -3386,10 +3302,10 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
     return NULL;
 }
 
-NNProperty* nn_valtable_getfieldbyvalue(NNHashValTable* table, NNValue key)
+NNProperty* nn_table_getfieldbyvalue(NNHashTable* table, NNValue key)
 {
     NNState* state;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     (void)state;
     state = table->pvm;
     if(table->count == 0 || table->entries == NULL)
@@ -3399,8 +3315,8 @@ NNProperty* nn_valtable_getfieldbyvalue(NNHashValTable* table, NNValue key)
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
     #endif
-    entry = nn_valtable_findentrybyvalue(table, table->entries, table->capacity, key);
-    if(nn_value_isnull(entry->key) || nn_value_isnull(entry->key))
+    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
+    if(nn_value_isempty(entry->key) || nn_value_isnull(entry->key))
     {
         return NULL;
     }
@@ -3412,10 +3328,10 @@ NNProperty* nn_valtable_getfieldbyvalue(NNHashValTable* table, NNValue key)
     return &entry->value;
 }
 
-NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, const char* kstr, size_t klen, uint32_t hash)
+NNProperty* nn_table_getfieldbystr(NNHashTable* table, NNValue valkey, const char* kstr, size_t klen, uint32_t hash)
 {
     NNState* state;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     (void)state;
     state = table->pvm;
     if(table->count == 0 || table->entries == NULL)
@@ -3425,8 +3341,8 @@ NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, con
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "getting entry with hash %u...\n", nn_value_hashvalue(key));
     #endif
-    entry = nn_valtable_findentrybystr(table, table->entries, table->capacity, valkey, kstr, klen, hash);
-    if(nn_value_isnull(entry->key) || nn_value_isnull(entry->key))
+    entry = nn_table_findentrybystr(table, table->entries, table->capacity, valkey, kstr, klen, hash);
+    if(nn_value_isempty(entry->key) || nn_value_isnull(entry->key))
     {
         return NULL;
     }
@@ -3438,35 +3354,35 @@ NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, con
     return &entry->value;
 }
 
-NNProperty* nn_valtable_getfieldbyostr(NNHashValTable* table, NNObjString* str)
+NNProperty* nn_table_getfieldbyostr(NNHashTable* table, NNObjString* str)
 {
-    return nn_valtable_getfieldbystr(table, nn_value_makenull(), str->sbuf->data, str->sbuf->length, str->hash);
+    return nn_table_getfieldbystr(table, nn_value_makeempty(), str->sbuf->data, str->sbuf->length, str->hash);
 }
 
-NNProperty* nn_valtable_getfieldbycstr(NNHashValTable* table, const char* kstr)
+NNProperty* nn_table_getfieldbycstr(NNHashTable* table, const char* kstr)
 {
     size_t klen;
     uint32_t hash;
     klen = strlen(kstr);
     hash = nn_util_hashstring(kstr, klen);
-    return nn_valtable_getfieldbystr(table, nn_value_makenull(), kstr, klen, hash);
+    return nn_table_getfieldbystr(table, nn_value_makeempty(), kstr, klen, hash);
 }
 
-NNProperty* nn_valtable_getfield(NNHashValTable* table, NNValue key)
+NNProperty* nn_table_getfield(NNHashTable* table, NNValue key)
 {
     NNObjString* oskey;
     if(nn_value_isstring(key))
     {
         oskey = nn_value_asstring(key);
-        return nn_valtable_getfieldbystr(table, key, oskey->sbuf->data, oskey->sbuf->length, oskey->hash);
+        return nn_table_getfieldbystr(table, key, oskey->sbuf->data, oskey->sbuf->length, oskey->hash);
     }
-    return nn_valtable_getfieldbyvalue(table, key);
+    return nn_table_getfieldbyvalue(table, key);
 }
 
-bool nn_valtable_get(NNHashValTable* table, NNValue key, NNValue* value)
+bool nn_table_get(NNHashTable* table, NNValue key, NNValue* value)
 {
     NNProperty* field;
-    field = nn_valtable_getfield(table, key);
+    field = nn_table_getfield(table, key);
     if(field != NULL)
     {
         *value = field->value;
@@ -3475,18 +3391,18 @@ bool nn_valtable_get(NNHashValTable* table, NNValue key, NNValue* value)
     return false;
 }
 
-void nn_valtable_adjustcapacity(NNHashValTable* table, int capacity)
+void nn_table_adjustcapacity(NNHashTable* table, int capacity)
 {
     int i;
     NNState* state;
-    NNHashValEntry* dest;
-    NNHashValEntry* entry;
-    NNHashValEntry* entries;
+    NNHashEntry* dest;
+    NNHashEntry* entry;
+    NNHashEntry* entries;
     state = table->pvm;
-    entries = (NNHashValEntry*)nn_gcmem_allocate(state, sizeof(NNHashValEntry), capacity);
+    entries = (NNHashEntry*)nn_gcmem_allocate(state, sizeof(NNHashEntry), capacity);
     for(i = 0; i < capacity; i++)
     {
-        entries[i].key = nn_value_makenull();
+        entries[i].key = nn_value_makeempty();
         entries[i].value = nn_property_make(state, nn_value_makenull(), NEON_PROPTYPE_VALUE);
     }
     /* repopulate buckets */
@@ -3494,36 +3410,36 @@ void nn_valtable_adjustcapacity(NNHashValTable* table, int capacity)
     for(i = 0; i < table->capacity; i++)
     {
         entry = &table->entries[i];
-        if(nn_value_isnull(entry->key))
+        if(nn_value_isempty(entry->key))
         {
             continue;
         }
-        dest = nn_valtable_findentrybyvalue(table, entries, capacity, entry->key);
+        dest = nn_table_findentrybyvalue(table, entries, capacity, entry->key);
         dest->key = entry->key;
         dest->value = entry->value;
         table->count++;
     }
     /* free the old entries... */
-    nn_gcmem_freearray(state, sizeof(NNHashValEntry), table->entries, table->capacity);
+    nn_gcmem_freearray(state, sizeof(NNHashEntry), table->entries, table->capacity);
     table->entries = entries;
     table->capacity = capacity;
 }
 
-bool nn_valtable_setwithtype(NNHashValTable* table, NNValue key, NNValue value, NNFieldType ftyp, bool keyisstring)
+bool nn_table_setwithtype(NNHashTable* table, NNValue key, NNValue value, NNFieldType ftyp, bool keyisstring)
 {
     bool isnew;
     int capacity;
     NNState* state;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     (void)keyisstring;
     state = table->pvm;
     if(table->count + 1 > table->capacity * NEON_CFG_MAXTABLELOAD)
     {
         capacity = GROW_CAPACITY(table->capacity);
-        nn_valtable_adjustcapacity(table, capacity);
+        nn_table_adjustcapacity(table, capacity);
     }
-    entry = nn_valtable_findentrybyvalue(table, table->entries, table->capacity, key);
-    isnew = nn_value_isnull(entry->key);
+    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
+    isnew = nn_value_isempty(entry->key);
     if(isnew && nn_value_isnull(entry->value.value))
     {
         table->count++;
@@ -3534,99 +3450,99 @@ bool nn_valtable_setwithtype(NNHashValTable* table, NNValue key, NNValue value, 
     return isnew;
 }
 
-bool nn_valtable_set(NNHashValTable* table, NNValue key, NNValue value)
+bool nn_table_set(NNHashTable* table, NNValue key, NNValue value)
 {
-    return nn_valtable_setwithtype(table, key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
+    return nn_table_setwithtype(table, key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
 }
 
-bool nn_valtable_setcstrwithtype(NNHashValTable* table, const char* cstrkey, NNValue value, NNFieldType ftype)
+bool nn_table_setcstrwithtype(NNHashTable* table, const char* cstrkey, NNValue value, NNFieldType ftype)
 {
     NNObjString* os;
     NNState* state;
     state = table->pvm;
     os = nn_string_copycstr(state, cstrkey);
-    return nn_valtable_setwithtype(table, nn_value_fromobject(os), value, ftype, true);
+    return nn_table_setwithtype(table, nn_value_fromobject(os), value, ftype, true);
 }
 
-bool nn_valtable_setcstr(NNHashValTable* table, const char* cstrkey, NNValue value)
+bool nn_table_setcstr(NNHashTable* table, const char* cstrkey, NNValue value)
 {
-    return nn_valtable_setcstrwithtype(table, cstrkey, value, NEON_PROPTYPE_VALUE);
+    return nn_table_setcstrwithtype(table, cstrkey, value, NEON_PROPTYPE_VALUE);
 }
 
-bool nn_valtable_delete(NNHashValTable* table, NNValue key)
+bool nn_table_delete(NNHashTable* table, NNValue key)
 {
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     if(table->count == 0)
     {
         return false;
     }
     /* find the entry */
-    entry = nn_valtable_findentrybyvalue(table, table->entries, table->capacity, key);
-    if(nn_value_isnull(entry->key))
+    entry = nn_table_findentrybyvalue(table, table->entries, table->capacity, key);
+    if(nn_value_isempty(entry->key))
     {
         return false;
     }
     /* place a tombstone in the entry. */
-    entry->key = nn_value_makenull();
+    entry->key = nn_value_makeempty();
     entry->value = nn_property_make(table->pvm, nn_value_makebool(true), NEON_PROPTYPE_VALUE);
     return true;
 }
 
-void nn_valtable_addall(NNHashValTable* from, NNHashValTable* to)
+void nn_table_addall(NNHashTable* from, NNHashTable* to)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     for(i = 0; i < from->capacity; i++)
     {
         entry = &from->entries[i];
-        if(!nn_value_isnull(entry->key))
+        if(!nn_value_isempty(entry->key))
         {
-            nn_valtable_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
+            nn_table_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
         }
     }
 }
 
-void nn_valtable_importall(NNHashValTable* from, NNHashValTable* to)
+void nn_table_importall(NNHashTable* from, NNHashTable* to)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     for(i = 0; i < (int)from->capacity; i++)
     {
         entry = &from->entries[i];
-        if(!nn_value_isnull(entry->key) && !nn_value_ismodule(entry->value.value))
+        if(!nn_value_isempty(entry->key) && !nn_value_ismodule(entry->value.value))
         {
             /* Don't import private values */
             if(nn_value_isstring(entry->key) && nn_value_asstring(entry->key)->sbuf->data[0] == '_')
             {
                 continue;
             }
-            nn_valtable_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
+            nn_table_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
         }
     }
 }
 
-void nn_valtable_copy(NNHashValTable* from, NNHashValTable* to)
+void nn_table_copy(NNHashTable* from, NNHashTable* to)
 {
     int i;
     NNState* state;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     state = from->pvm;
     for(i = 0; i < (int)from->capacity; i++)
     {
         entry = &from->entries[i];
-        if(!nn_value_isnull(entry->key))
+        if(!nn_value_isempty(entry->key))
         {
-            nn_valtable_setwithtype(to, entry->key, nn_value_copyvalue(state, entry->value.value), entry->value.type, false);
+            nn_table_setwithtype(to, entry->key, nn_value_copyvalue(state, entry->value.value), entry->value.type, false);
         }
     }
 }
 
-NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, size_t length, uint32_t hash)
+NNObjString* nn_table_findstring(NNHashTable* table, const char* chars, size_t length, uint32_t hash)
 {
     size_t slen;
     uint32_t index;
     const char* sdata;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     NNObjString* string;
     if(table->count == 0)
     {
@@ -3636,7 +3552,7 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
     while(true)
     {
         entry = &table->entries[index];
-        if(nn_value_isnull(entry->key))
+        if(nn_value_isempty(entry->key))
         {
             /*
             // stop if we find an empty non-tombstone entry
@@ -3658,14 +3574,14 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
     }
 }
 
-NNValue nn_valtable_findkey(NNHashValTable* table, NNValue value)
+NNValue nn_table_findkey(NNHashTable* table, NNValue value)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     for(i = 0; i < (int)table->capacity; i++)
     {
         entry = &table->entries[i];
-        if(!nn_value_isnull(entry->key) && !nn_value_isnull(entry->key))
+        if(!nn_value_isnull(entry->key) && !nn_value_isempty(entry->key))
         {
             if(nn_value_compare(table->pvm, entry->value.value, value))
             {
@@ -3676,18 +3592,18 @@ NNValue nn_valtable_findkey(NNHashValTable* table, NNValue value)
     return nn_value_makenull();
 }
 
-NNObjArray* nn_valtable_getkeys(NNHashValTable* table)
+NNObjArray* nn_table_getkeys(NNHashTable* table)
 {
     int i;
     NNState* state;
     NNObjArray* list;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     state = table->pvm;
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < table->capacity; i++)
     {
         entry = &table->entries[i];
-        if(!nn_value_isnull(entry->key) && !nn_value_isnull(entry->key))
+        if(!nn_value_isnull(entry->key) && !nn_value_isempty(entry->key))
         {
             nn_vallist_push(list->varray, entry->key);
         }
@@ -3695,16 +3611,16 @@ NNObjArray* nn_valtable_getkeys(NNHashValTable* table)
     return list;
 }
 
-void nn_valtable_print(NNState* state, NNPrinter* pr, NNHashValTable* table, const char* name)
+void nn_table_print(NNState* state, NNPrinter* pr, NNHashTable* table, const char* name)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     (void)state;
     nn_printer_writefmt(pr, "<HashTable of %s : {\n", name);
     for(i = 0; i < table->capacity; i++)
     {
         entry = &table->entries[i];
-        if(!nn_value_isnull(entry->key))
+        if(!nn_value_isempty(entry->key))
         {
             nn_printer_printvalue(pr, entry->key, true, true);
             nn_printer_writefmt(pr, ": ");
@@ -3718,10 +3634,10 @@ void nn_valtable_print(NNState* state, NNPrinter* pr, NNHashValTable* table, con
     nn_printer_writefmt(pr, "}>\n");
 }
 
-void nn_valtable_mark(NNState* state, NNHashValTable* table)
+void nn_table_mark(NNState* state, NNHashTable* table)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     if(table == NULL)
     {
         return;
@@ -3742,19 +3658,20 @@ void nn_valtable_mark(NNState* state, NNHashValTable* table)
     }
 }
 
-void nn_valtable_removewhites(NNState* state, NNHashValTable* table)
+void nn_table_removewhites(NNState* state, NNHashTable* table)
 {
     int i;
-    NNHashValEntry* entry;
+    NNHashEntry* entry;
     for(i = 0; i < table->capacity; i++)
     {
         entry = &table->entries[i];
         if(nn_value_isobject(entry->key) && nn_value_asobject(entry->key)->mark != state->markvalue)
         {
-            nn_valtable_delete(table, entry->key);
+            nn_table_delete(table, entry->key);
         }
     }
 }
+
 
 void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
 {
@@ -4146,7 +4063,7 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
             nn_printer_printvalue(pr, val, true, true);
         }
         nn_printer_writefmt(pr, ": ");
-        field = nn_valtable_getfield(dict->htab, dict->names->listitems[i]);
+        field = nn_table_getfield(dict->htab, dict->names->listitems[i]);
         if(field != NULL)
         {
             if(nn_value_isdict(field->value))
@@ -4199,7 +4116,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
     state = pr->pvm;
     if(invmethod)
     {
-        field = nn_valtable_getfieldbycstr(instance->klass->methods, "toString");
+        field = nn_table_getfieldbycstr(instance->klass->methods, "toString");
         if(field != NULL)
         {
             args = nn_object_makearray(state);
@@ -4337,21 +4254,35 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
 
 void nn_printer_printvalue(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
 {
-    if(nn_value_isnull(value))
+    switch(value.type)
     {
-        nn_printer_writestring(pr, "null");
-    }
-    else if(nn_value_isbool(value))
-    {
-        nn_printer_writestring(pr, nn_value_asbool(value) ? "true" : "false");
-    }
-    else if(nn_value_isnumber(value))
-    {
-        nn_printer_writefmt(pr, "%.16g", nn_value_asnumber(value));
-    }
-    else
-    {
-        nn_printer_printobject(pr, value, fixstring, invmethod);
+        case NEON_VALTYPE_EMPTY:
+            {
+                nn_printer_writestring(pr, "<empty>");
+            }
+            break;
+        case NEON_VALTYPE_NULL:
+            {
+                nn_printer_writestring(pr, "null");
+            }
+            break;
+        case NEON_VALTYPE_BOOL:
+            {
+                nn_printer_writestring(pr, nn_value_asbool(value) ? "true" : "false");
+            }
+            break;
+        case NEON_VALTYPE_NUMBER:
+            {
+                nn_printer_writefmt(pr, "%.16g", nn_value_asnumber(value));
+            }
+            break;
+        case NEON_VALTYPE_OBJ:
+            {
+                nn_printer_printobject(pr, value, fixstring, invmethod);
+            }
+            break;
+        default:
+            break;
     }
 }
 
@@ -4402,7 +4333,7 @@ const char* nn_value_objecttypename(NNObject* object)
 
 const char* nn_value_typename(NNValue value)
 {
-    if(nn_value_isnull(value))
+    if(nn_value_isempty(value))
     {
         return "empty";
     }
@@ -4477,36 +4408,40 @@ bool nn_value_compobject(NNState* state, NNValue a, NNValue b)
 
 bool nn_value_compare_actual(NNState* state, NNValue a, NNValue b)
 {
-    /*
     if(a.type != b.type)
     {
         return false;
     }
-    */
-    if(nn_value_isnull(a))
+    switch(a.type)
     {
-        return true;
-    }
-    else if(nn_value_isbool(a))
-    {
-        return nn_value_asbool(a) == nn_value_asbool(b);
-    }
-    else if(nn_value_isnumber(a))
-    {
-        return (nn_value_asnumber(a) == nn_value_asnumber(b));
-    }
-    else
-    {
-        if(nn_value_isobject(a) && nn_value_isobject(b))
-        {
-            if(nn_value_asobject(a) == nn_value_asobject(b))
+        case NEON_VALTYPE_NULL:
+        case NEON_VALTYPE_EMPTY:
             {
                 return true;
             }
-            return nn_value_compobject(state, a, b);
-        }
+            break;
+        case NEON_VALTYPE_BOOL:
+            {
+                return nn_value_asbool(a) == nn_value_asbool(b);
+            }
+            break;
+        case NEON_VALTYPE_NUMBER:
+            {
+                return (nn_value_asnumber(a) == nn_value_asnumber(b));
+            }
+            break;
+        case NEON_VALTYPE_OBJ:
+            {
+                if(nn_value_asobject(a) == nn_value_asobject(b))
+                {
+                    return true;
+                }
+                return nn_value_compobject(state, a, b);
+            }
+            break;
+        default:
+            break;
     }
-
     return false;
 }
 
@@ -4593,21 +4528,19 @@ uint32_t nn_object_hashobject(NNObject* object)
 
 uint32_t nn_value_hashvalue(NNValue value)
 {
-    if(nn_value_isbool(value))
+    switch(value.type)
     {
-        return nn_value_asbool(value) ? 3 : 5;
-    }
-    else if(nn_value_isnull(value))
-    {
-        return 7;
-    }
-    else if(nn_value_isnumber(value))
-    {
-        return nn_util_hashdouble(nn_value_asnumber(value));
-    }
-    else if(nn_value_isobject(value))
-    {
-        return nn_object_hashobject(nn_value_asobject(value));
+        case NEON_VALTYPE_BOOL:
+            return nn_value_asbool(value) ? 3 : 5;
+        case NEON_VALTYPE_NULL:
+            return 7;
+        case NEON_VALTYPE_NUMBER:
+            return nn_util_hashdouble(nn_value_asnumber(value));
+        case NEON_VALTYPE_OBJ:
+            return nn_object_hashobject(nn_value_asobject(value));
+        default:
+            /* NEON_VALTYPE_EMPTY */
+            break;
     }
     return 0;
 }
@@ -4849,7 +4782,7 @@ NNObjModule* nn_module_make(NNState* state, const char* name, const char* file, 
 {
     NNObjModule* module;
     module = (NNObjModule*)nn_object_allocobject(state, sizeof(NNObjModule), NEON_OBJTYPE_MODULE);
-    module->deftable = nn_valtable_make(state);
+    module->deftable = nn_table_make(state);
     module->name = nn_string_copycstr(state, name);
     module->physicalpath = nn_string_copycstr(state, file);
     module->unloader = NULL;
@@ -4861,7 +4794,7 @@ NNObjModule* nn_module_make(NNState* state, const char* name, const char* file, 
 
 void nn_module_destroy(NNState* state, NNObjModule* module)
 {
-    nn_valtable_destroy(module->deftable);
+    nn_table_destroy(module->deftable);
     /*
     nn_util_memfree(state, module->name);
     nn_util_memfree(state, module->physicalpath);
@@ -4879,14 +4812,14 @@ void nn_module_destroy(NNState* state, NNObjModule* module)
 void nn_module_setfilefield(NNState* state, NNObjModule* module)
 {
     return;
-    nn_valtable_setcstr(module->deftable, "__file__", nn_value_fromobject(nn_string_copyobjstr(state, module->physicalpath)));
+    nn_table_setcstr(module->deftable, "__file__", nn_value_fromobject(nn_string_copyobjstr(state, module->physicalpath)));
 }
 
 NNObjSwitch* nn_object_makeswitch(NNState* state)
 {
     NNObjSwitch* sw;
     sw = (NNObjSwitch*)nn_object_allocobject(state, sizeof(NNObjSwitch), NEON_OBJTYPE_SWITCH);
-    sw->table = nn_valtable_make(state);
+    sw->table = nn_table_make(state);
     sw->defaultjump = -1;
     sw->exitjump = -1;
     return sw;
@@ -4919,7 +4852,7 @@ NNObjDict* nn_object_makedict(NNState* state)
     NNObjDict* dict;
     dict = (NNObjDict*)nn_object_allocobject(state, sizeof(NNObjDict), NEON_OBJTYPE_DICT);
     dict->names = nn_vallist_make(state);
-    dict->htab = nn_valtable_make(state);
+    dict->htab = nn_table_make(state);
     return dict;
 }
 
@@ -4967,22 +4900,22 @@ NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name)
     NNObjClass* klass;
     klass = (NNObjClass*)nn_object_allocobject(state, sizeof(NNObjClass), NEON_OBJTYPE_CLASS);
     klass->name = name;
-    klass->instprops = nn_valtable_make(state);
-    klass->staticproperties = nn_valtable_make(state);
-    klass->methods = nn_valtable_make(state);
-    klass->staticmethods = nn_valtable_make(state);
-    klass->constructor = nn_value_makenull();
-    klass->destructor = nn_value_makenull();
+    klass->instprops = nn_table_make(state);
+    klass->staticproperties = nn_table_make(state);
+    klass->methods = nn_table_make(state);
+    klass->staticmethods = nn_table_make(state);
+    klass->constructor = nn_value_makeempty();
+    klass->destructor = nn_value_makeempty();
     klass->superclass = NULL;
     return klass;
 }
 
 void nn_class_destroy(NNState* state, NNObjClass* klass)
 {
-    nn_valtable_destroy(klass->methods);
-    nn_valtable_destroy(klass->staticmethods);
-    nn_valtable_destroy(klass->instprops);
-    nn_valtable_destroy(klass->staticproperties);
+    nn_table_destroy(klass->methods);
+    nn_table_destroy(klass->staticmethods);
+    nn_table_destroy(klass->instprops);
+    nn_table_destroy(klass->staticproperties);
     /*
     // We are not freeing the initializer because it's a closure and will still be freed accordingly later.
     */
@@ -4992,15 +4925,15 @@ void nn_class_destroy(NNState* state, NNObjClass* klass)
 
 bool nn_class_inheritfrom(NNObjClass* subclass, NNObjClass* superclass)
 {
-    nn_valtable_addall(superclass->instprops, subclass->instprops);
-    nn_valtable_addall(superclass->methods, subclass->methods);
+    nn_table_addall(superclass->instprops, subclass->instprops);
+    nn_table_addall(superclass->methods, subclass->methods);
     subclass->superclass = superclass;
     return true;
 }
 
 bool nn_class_defproperty(NNObjClass* klass, const char* cstrname, NNValue val)
 {
-    return nn_valtable_setcstr(klass->instprops, cstrname, val);
+    return nn_table_setcstr(klass->instprops, cstrname, val);
 }
 
 bool nn_class_defcallablefieldptr(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function, void* uptr)
@@ -5009,7 +4942,7 @@ bool nn_class_defcallablefieldptr(NNState* state, NNObjClass* klass, const char*
     NNObjFuncNative* ofn;
     oname = nn_string_copycstr(state, cstrname);
     ofn = nn_object_makefuncnative(state, function, cstrname, uptr);
-    return nn_valtable_setwithtype(klass->instprops, nn_value_fromobject(oname), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
+    return nn_table_setwithtype(klass->instprops, nn_value_fromobject(oname), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
 bool nn_class_defcallablefield(NNState* state, NNObjClass* klass, const char* cstrname, NNNativeFN function)
@@ -5019,7 +4952,7 @@ bool nn_class_defcallablefield(NNState* state, NNObjClass* klass, const char* cs
 
 bool nn_class_setstaticpropertycstr(NNObjClass* klass, const char* cstrname, NNValue val)
 {
-    return nn_valtable_setcstr(klass->staticproperties, cstrname, val);
+    return nn_table_setcstr(klass->staticproperties, cstrname, val);
 }
 
 bool nn_class_setstaticproperty(NNObjClass* klass, NNObjString* name, NNValue val)
@@ -5045,7 +4978,7 @@ bool nn_class_defnativeconstructor(NNState* state, NNObjClass* klass, NNNativeFN
 bool nn_class_defmethod(NNState* state, NNObjClass* klass, const char* name, NNValue val)
 {
     (void)state;
-    return nn_valtable_setcstr(klass->methods, name, val);
+    return nn_table_setcstr(klass->methods, name, val);
 }
 
 bool nn_class_defnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* ptr)
@@ -5064,7 +4997,7 @@ bool nn_class_defstaticnativemethodptr(NNState* state, NNObjClass* klass, const 
 {
     NNObjFuncNative* ofn;
     ofn = nn_object_makefuncnative(state, function, name, uptr);
-    return nn_valtable_setcstr(klass->staticmethods, name, nn_value_fromobject(ofn));
+    return nn_table_setcstr(klass->staticmethods, name, nn_value_fromobject(ofn));
 }
 
 bool nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function)
@@ -5075,7 +5008,7 @@ bool nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, const cha
 NNProperty* nn_class_getmethodfield(NNObjClass* klass, NNObjString* name)
 {
     NNProperty* field;
-    field = nn_valtable_getfield(klass->methods, nn_value_fromobject(name));
+    field = nn_table_getfield(klass->methods, nn_value_fromobject(name));
     if(field != NULL)
     {
         return field;
@@ -5090,19 +5023,19 @@ NNProperty* nn_class_getmethodfield(NNObjClass* klass, NNObjString* name)
 NNProperty* nn_class_getpropertyfield(NNObjClass* klass, NNObjString* name)
 {
     NNProperty* field;
-    field = nn_valtable_getfield(klass->instprops, nn_value_fromobject(name));
+    field = nn_table_getfield(klass->instprops, nn_value_fromobject(name));
     return field;
 }
 
 NNProperty* nn_class_getstaticproperty(NNObjClass* klass, NNObjString* name)
 {
-    return nn_valtable_getfieldbyostr(klass->staticproperties, name);
+    return nn_table_getfieldbyostr(klass->staticproperties, name);
 }
 
 NNProperty* nn_class_getstaticmethodfield(NNObjClass* klass, NNObjString* name)
 {
     NNProperty* field;
-    field = nn_valtable_getfield(klass->staticmethods, nn_value_fromobject(name));
+    field = nn_table_getfield(klass->staticmethods, nn_value_fromobject(name));
     return field;
 }
 
@@ -5114,10 +5047,10 @@ NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     instance->active = true;
     instance->klass = klass;
-    instance->properties = nn_valtable_make(state);
+    instance->properties = nn_table_make(state);
     if(klass->instprops->count > 0)
     {
-        nn_valtable_copy(klass->instprops, instance->properties);
+        nn_table_copy(klass->instprops, instance->properties);
     }
     /* gc fix */
     nn_vm_stackpop(state);
@@ -5132,19 +5065,19 @@ void nn_instance_mark(NNState* state, NNObjInstance* instance)
         return;
     }
     nn_gcmem_markobject(state, (NNObject*)instance->klass);
-    nn_valtable_mark(state, instance->properties);
+    nn_table_mark(state, instance->properties);
 }
 
 void nn_instance_destroy(NNState* state, NNObjInstance* instance)
 {
-    if(!nn_value_isnull(instance->klass->destructor))
+    if(!nn_value_isempty(instance->klass->destructor))
     {
         if(!nn_vm_callvaluewithobject(state, instance->klass->constructor, nn_value_fromobject(instance), 0))
         {
             
         }
     }
-    nn_valtable_destroy(instance->properties);
+    nn_table_destroy(instance->properties);
     instance->properties = NULL;
     instance->active = false;
     nn_gcmem_release(state, instance, sizeof(NNObjInstance));
@@ -5152,7 +5085,7 @@ void nn_instance_destroy(NNState* state, NNObjInstance* instance)
 
 bool nn_instance_defproperty(NNObjInstance* instance, const char *cstrname, NNValue val)
 {
-    return nn_valtable_setcstr(instance->properties, cstrname, val);
+    return nn_table_setcstr(instance->properties, cstrname, val);
 }
 
 NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncType type)
@@ -5209,7 +5142,7 @@ NNObjString* nn_string_makefromstrbuf(NNState* state, StringBuffer* sbuf, uint32
     rs->sbuf = sbuf;
     rs->hash = hash;
     nn_vm_stackpush(state, nn_value_fromobject(rs));
-    nn_valtable_set(state->strings, nn_value_fromobject(rs), nn_value_makenull());
+    nn_table_set(state->strings, nn_value_fromobject(rs), nn_value_makenull());
     nn_vm_stackpop(state);
     return rs;
 }
@@ -5260,7 +5193,7 @@ NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
     uint32_t hash;
     NNObjString* rs;
     hash = nn_util_hashstring(chars, length);
-    rs = nn_valtable_findstring(state->strings, chars, length, hash);
+    rs = nn_table_findstring(state->strings, chars, length, hash);
     if(rs == NULL)
     {
         rs = nn_string_allocstring(state, chars, length, hash, true);
@@ -5274,7 +5207,7 @@ NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
     uint32_t hash;
     NNObjString* rs;
     hash = nn_util_hashstring(chars, length);
-    rs = nn_valtable_findstring(state->strings, chars, length, hash);
+    rs = nn_table_findstring(state->strings, chars, length, hash);
     if(rs != NULL)
     {
         return rs;
@@ -9093,11 +9026,11 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     jump = nn_value_makenumber((double)nn_astparser_currentblob(prs)->count - (double)startoffset);
                     if(prs->prevtoken.type == NEON_ASTTOK_KWTRUE)
                     {
-                        nn_valtable_set(sw->table, nn_value_makebool(true), jump);
+                        nn_table_set(sw->table, nn_value_makebool(true), jump);
                     }
                     else if(prs->prevtoken.type == NEON_ASTTOK_KWFALSE)
                     {
-                        nn_valtable_set(sw->table, nn_value_makebool(false), jump);
+                        nn_table_set(sw->table, nn_value_makebool(false), jump);
                     }
                     else if(prs->prevtoken.type == NEON_ASTTOK_LITERAL)
                     {
@@ -9105,13 +9038,13 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                         string = nn_string_takelen(prs->pvm, str, length);
                         /* gc fix */
                         nn_vm_stackpush(prs->pvm, nn_value_fromobject(string));
-                        nn_valtable_set(sw->table, nn_value_fromobject(string), jump);
+                        nn_table_set(sw->table, nn_value_fromobject(string), jump);
                         /* gc fix */
                         nn_vm_stackpop(prs->pvm);
                     }
                     else if(nn_astparser_checknumber(prs))
                     {
-                        nn_valtable_set(sw->table, nn_astparser_compilenumber(prs), jump);
+                        nn_table_set(sw->table, nn_astparser_compilenumber(prs), jump);
                     }
                     else
                     {
@@ -9557,7 +9490,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNArguments* args)
     {
         nn_exceptions_throw(state, "cannot open directory '%s'", dirn);
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNRegModule* nn_natmodule_load_os(NNState* state)
@@ -9659,7 +9592,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     NNObjString* classname;
     NNObjFuncNative* native;
     NNObjClass* klass;
-    NNHashValTable* tabdest;
+    NNHashTable* tabdest;
     module = init_fn(state);
     if(module != NULL)
     {
@@ -9674,7 +9607,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                 fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
                 v = field.fieldvalfn(state);
                 nn_vm_stackpush(state, v);
-                nn_valtable_set(themodule->deftable, fieldname, v);
+                nn_table_set(themodule->deftable, fieldname, v);
                 nn_vm_stackpop(state);
             }
         }
@@ -9686,7 +9619,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                 funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
                 funcrealvalue = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL)));
                 nn_vm_stackpush(state, funcrealvalue);
-                nn_valtable_set(themodule->deftable, funcname, funcrealvalue);
+                nn_table_set(themodule->deftable, funcname, funcrealvalue);
                 nn_vm_stackpop(state);
             }
         }
@@ -9712,7 +9645,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         {
                             native->type = NEON_FUNCTYPE_PRIVATE;
                         }
-                        nn_valtable_set(klass->methods, funcname, nn_value_fromobject(native));
+                        nn_table_set(klass->methods, funcname, nn_value_fromobject(native));
                     }
                 }
                 if(klassreg.fields != NULL)
@@ -9728,11 +9661,11 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         {
                             tabdest = klass->staticproperties;
                         }
-                        nn_valtable_set(tabdest, fieldname, v);
+                        nn_table_set(tabdest, fieldname, v);
                         nn_vm_stackpop(state);
                     }
                 }
-                nn_valtable_set(themodule->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));
+                nn_table_set(themodule->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));
             }
         }
         if(dlw != NULL)
@@ -9760,7 +9693,7 @@ void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* 
     name = nn_value_fromobject(nn_string_copyobjstr(state, module->name));
     nn_vm_stackpush(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(module));
-    nn_valtable_set(state->modules, name, nn_value_fromobject(module));
+    nn_table_set(state->modules, name, nn_value_fromobject(module));
     nn_vm_stackpopn(state, 2);
 }
 
@@ -9825,7 +9758,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     (void)os;
     (void)argc;
     (void)intomodule;
-    field = nn_valtable_getfieldbyostr(state->modules, modulename);
+    field = nn_table_getfieldbyostr(state->modules, modulename);
     if(field != NULL)
     {
         return nn_value_asmodule(field->value);
@@ -9981,12 +9914,12 @@ NNValue nn_objfndict_add(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(dict->htab, args->args[0], &tempvalue))
+    if(nn_table_get(dict->htab, args->args[0], &tempvalue))
     {
         NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, args->args[0])->sbuf->data);
     }
     nn_dict_addentry(dict, args->args[0], args->args[1]);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfndict_set(NNState* state, NNArguments* args)
@@ -9997,7 +9930,7 @@ NNValue nn_objfndict_set(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     dict = nn_value_asdict(args->thisval);
-    if(!nn_valtable_get(dict->htab, args->args[0], &value))
+    if(!nn_table_get(dict->htab, args->args[0], &value))
     {
         nn_dict_addentry(dict, args->args[0], args->args[1]);
     }
@@ -10005,7 +9938,7 @@ NNValue nn_objfndict_set(NNState* state, NNArguments* args)
     {
         nn_dict_setentry(dict, args->args[0], args->args[1]);
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfndict_clear(NNState* state, NNArguments* args)
@@ -10016,8 +9949,8 @@ NNValue nn_objfndict_clear(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(args->thisval);
     nn_vallist_destroy(dict->names);
-    nn_valtable_destroy(dict->htab);
-    return nn_value_makenull();
+    nn_table_destroy(dict->htab);
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfndict_clone(NNState* state, NNArguments* args)
@@ -10030,7 +9963,7 @@ NNValue nn_objfndict_clone(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(args->thisval);
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
-    nn_valtable_addall(dict->htab, newdict->htab);
+    nn_table_addall(dict->htab, newdict->htab);
     for(i = 0; i < dict->names->listcount; i++)
     {
         nn_vallist_push(newdict->names, dict->names->listitems[i]);
@@ -10051,7 +9984,7 @@ NNValue nn_objfndict_compact(NNState* state, NNArguments* args)
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     for(i = 0; i < dict->names->listcount; i++)
     {
-        nn_valtable_get(dict->htab, dict->names->listitems[i], &tmpvalue);
+        nn_table_get(dict->htab, dict->names->listitems[i], &tmpvalue);
         if(!nn_value_compare(state, tmpvalue, nn_value_makenull()))
         {
             nn_dict_addentry(newdict, dict->names->listitems[i], tmpvalue);
@@ -10068,7 +10001,7 @@ NNValue nn_objfndict_contains(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     dict = nn_value_asdict(args->thisval);
-    return nn_value_makebool(nn_valtable_get(dict->htab, args->args[0], &value));
+    return nn_value_makebool(nn_table_get(dict->htab, args->args[0], &value));
 }
 
 NNValue nn_objfndict_extend(NNState* state, NNArguments* args)
@@ -10085,13 +10018,13 @@ NNValue nn_objfndict_extend(NNState* state, NNArguments* args)
     dictcpy = nn_value_asdict(args->args[0]);
     for(i = 0; i < dictcpy->names->listcount; i++)
     {
-        if(!nn_valtable_get(dict->htab, dictcpy->names->listitems[i], &tmp))
+        if(!nn_table_get(dict->htab, dictcpy->names->listitems[i], &tmp))
         {
             nn_vallist_push(dict->names, dictcpy->names->listitems[i]);
         }
     }
-    nn_valtable_addall(dictcpy->htab, dict->htab);
-    return nn_value_makenull();
+    nn_table_addall(dictcpy->htab, dict->htab);
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfndict_get(NNState* state, NNArguments* args)
@@ -10163,9 +10096,9 @@ NNValue nn_objfndict_remove(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(dict->htab, args->args[0], &value))
+    if(nn_table_get(dict->htab, args->args[0], &value))
     {
-        nn_valtable_delete(dict->htab, args->args[0]);
+        nn_table_delete(dict->htab, args->args[0]);
         index = -1;
         for(i = 0; i < dict->names->listcount; i++)
         {
@@ -10198,7 +10131,7 @@ NNValue nn_objfndict_findkey(NNState* state, NNArguments* args)
     NNArgCheck check;
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    return nn_valtable_findkey(nn_value_asdict(args->thisval)->htab, args->args[0]);
+    return nn_table_findkey(nn_value_asdict(args->thisval)->htab, args->args[0]);
 }
 
 NNValue nn_objfndict_tolist(NNState* state, NNArguments* args)
@@ -10218,7 +10151,7 @@ NNValue nn_objfndict_tolist(NNState* state, NNArguments* args)
     {
         nn_array_push(namelist, dict->names->listitems[i]);
         NNValue value;
-        if(nn_valtable_get(dict->htab, dict->names->listitems[i], &value))
+        if(nn_table_get(dict->htab, dict->names->listitems[i], &value))
         {
             nn_array_push(valuelist, value);
         }
@@ -10242,7 +10175,7 @@ NNValue nn_objfndict_iter(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check,  args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(dict->htab, args->args[0], &result))
+    if(nn_table_get(dict->htab, args->args[0], &result))
     {
         return result;
     }
@@ -10297,7 +10230,7 @@ NNValue nn_objfndict_each(NNState* state, NNArguments* args)
     {
         if(arity > 0)
         {
-            nn_valtable_get(dict->htab, dict->names->listitems[i], &value);
+            nn_table_get(dict->htab, dict->names->listitems[i], &value);
             nestargs->varray->listitems[0] = value;
             if(arity > 1)
             {
@@ -10308,7 +10241,7 @@ NNValue nn_objfndict_each(NNState* state, NNArguments* args)
     }
     /* pop the argument list */
     nn_vm_stackpop(state);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfndict_filter(NNState* state, NNArguments* args)
@@ -10333,7 +10266,7 @@ NNValue nn_objfndict_filter(NNState* state, NNArguments* args)
     resultdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     for(i = 0; i < dict->names->listcount; i++)
     {
-        nn_valtable_get(dict->htab, dict->names->listitems[i], &value);
+        nn_table_get(dict->htab, dict->names->listitems[i], &value);
         if(arity > 0)
         {
             nestargs->varray->listitems[0] = value;
@@ -10375,7 +10308,7 @@ NNValue nn_objfndict_some(NNState* state, NNArguments* args)
     {
         if(arity > 0)
         {
-            nn_valtable_get(dict->htab, dict->names->listitems[i], &value);
+            nn_table_get(dict->htab, dict->names->listitems[i], &value);
             nestargs->varray->listitems[0] = value;
             if(arity > 1)
             {
@@ -10418,7 +10351,7 @@ NNValue nn_objfndict_every(NNState* state, NNArguments* args)
     {
         if(arity > 0)
         {
-            nn_valtable_get(dict->htab, dict->names->listitems[i], &value);
+            nn_table_get(dict->htab, dict->names->listitems[i], &value);
             nestargs->varray->listitems[0] = value;
             if(arity > 1)
             {
@@ -10462,7 +10395,7 @@ NNValue nn_objfndict_reduce(NNState* state, NNArguments* args)
     }
     if(nn_value_isnull(accumulator) && dict->names->listcount > 0)
     {
-        nn_valtable_get(dict->htab, dict->names->listitems[0], &accumulator);
+        nn_table_get(dict->htab, dict->names->listitems[0], &accumulator);
         startindex = 1;
     }
     nestargs = nn_object_makearray(state);
@@ -10471,14 +10404,14 @@ NNValue nn_objfndict_reduce(NNState* state, NNArguments* args)
     for(i = startindex; i < dict->names->listcount; i++)
     {
         /* only call map for non-empty values in a list. */
-        if(!nn_value_isnull(dict->names->listitems[i]) && !nn_value_isnull(dict->names->listitems[i]))
+        if(!nn_value_isnull(dict->names->listitems[i]) && !nn_value_isempty(dict->names->listitems[i]))
         {
             if(arity > 0)
             {
                 nestargs->varray->listitems[0] = accumulator;
                 if(arity > 1)
                 {
-                    nn_valtable_get(dict->htab, dict->names->listitems[i], &value);
+                    nn_table_get(dict->htab, dict->names->listitems[i], &value);
                     nestargs->varray->listitems[1] = value;
                     if(arity > 2)
                     {
@@ -10627,7 +10560,7 @@ NNValue nn_objfnfile_close(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     nn_fileobject_close(nn_value_asfile(args->thisval));
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnfile_open(NNState* state, NNArguments* args)
@@ -10636,7 +10569,7 @@ NNValue nn_objfnfile_open(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     nn_fileobject_open(nn_value_asfile(args->thisval));
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnfile_isopen(NNState* state, NNArguments* args)
@@ -11008,7 +10941,7 @@ NNValue nn_objfnfile_flush(NNState* state, NNArguments* args)
     #else
     fflush(file->handle);
     #endif
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnfile_stats(NNState* state, NNArguments* args)
@@ -11171,7 +11104,7 @@ NNObjArray* nn_array_makefilled(NNState* state, size_t cnt, NNValue filler)
 
 NNObjArray* nn_array_make(NNState* state)
 {
-    return nn_array_makefilled(state, 0, nn_value_makenull());
+    return nn_array_makefilled(state, 0, nn_value_makeempty());
 }
 
 void nn_array_push(NNObjArray* list, NNValue value)
@@ -11236,7 +11169,7 @@ NNValue nn_objfnarray_append(NNState* state, NNArguments* args)
     {
         nn_array_push(nn_value_asarray(args->thisval), args->args[i]);
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnarray_clear(NNState* state, NNArguments* args)
@@ -11245,7 +11178,7 @@ NNValue nn_objfnarray_clear(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     nn_vallist_destroy(nn_value_asarray(args->thisval)->varray);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnarray_clone(NNState* state, NNArguments* args)
@@ -11293,7 +11226,7 @@ NNValue nn_objfnarray_extend(NNState* state, NNArguments* args)
     {
         nn_array_push(list, list2->varray->listitems[i]);
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnarray_indexof(NNState* state, NNArguments* args)
@@ -11331,7 +11264,7 @@ NNValue nn_objfnarray_insert(NNState* state, NNArguments* args)
     list = nn_value_asarray(args->thisval);
     index = (int)nn_value_asnumber(args->args[1]);
     nn_vallist_insert(list->varray, args->args[0], index);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 
@@ -11449,7 +11382,7 @@ NNValue nn_objfnarray_remove(NNState* state, NNArguments* args)
         }
         list->varray->listcount--;
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnarray_reverse(NNState* state, NNArguments* args)
@@ -11490,7 +11423,7 @@ NNValue nn_objfnarray_sort(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     list = nn_value_asarray(args->thisval);
     nn_value_sortvalues(state, list->varray->listitems, list->varray->listcount);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnarray_contains(NNState* state, NNArguments* args)
@@ -11846,7 +11779,7 @@ NNValue nn_objfnarray_each(NNState* state, NNArguments* args)
         nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
     }
     nn_vm_stackpop(state);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 
@@ -11871,7 +11804,7 @@ NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
     resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < list->varray->listcount; i++)
     {
-        if(!nn_value_isnull(list->varray->listitems[i]))
+        if(!nn_value_isempty(list->varray->listitems[i]))
         {
             if(arity > 0)
             {
@@ -11886,7 +11819,7 @@ NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
         }
         else
         {
-            nn_array_push(resultlist, nn_value_makenull());
+            nn_array_push(resultlist, nn_value_makeempty());
         }
     }
     nn_vm_stackpop(state);
@@ -11915,7 +11848,7 @@ NNValue nn_objfnarray_filter(NNState* state, NNArguments* args)
     resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < list->varray->listcount; i++)
     {
-        if(!nn_value_isnull(list->varray->listitems[i]))
+        if(!nn_value_isempty(list->varray->listitems[i]))
         {
             if(arity > 0)
             {
@@ -11955,7 +11888,7 @@ NNValue nn_objfnarray_some(NNState* state, NNArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = 0; i < list->varray->listcount; i++)
     {
-        if(!nn_value_isnull(list->varray->listitems[i]))
+        if(!nn_value_isempty(list->varray->listitems[i]))
         {
             if(arity > 0)
             {
@@ -11997,7 +11930,7 @@ NNValue nn_objfnarray_every(NNState* state, NNArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = 0; i < list->varray->listcount; i++)
     {
-        if(!nn_value_isnull(list->varray->listitems[i]))
+        if(!nn_value_isempty(list->varray->listitems[i]))
         {
             if(arity > 0)
             {
@@ -12050,7 +11983,7 @@ NNValue nn_objfnarray_reduce(NNState* state, NNArguments* args)
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     for(i = startindex; i < list->varray->listcount; i++)
     {
-        if(!nn_value_isnull(list->varray->listitems[i]) && !nn_value_isnull(list->varray->listitems[i]))
+        if(!nn_value_isnull(list->varray->listitems[i]) && !nn_value_isempty(list->varray->listitems[i]))
         {
             if(arity > 0)
             {
@@ -12187,7 +12120,7 @@ NNValue nn_objfnrange_loop(NNState* state, NNArguments* args)
         nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
     }
     nn_vm_stackpop(state);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnrange_expand(NNState* state, NNArguments* args)
@@ -12781,7 +12714,7 @@ NNValue nn_objfnarray_constructor(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    filler = nn_value_makenull();
+    filler = nn_value_makeempty();
     if(args->count > 1)
     {
         filler = args->args[1];
@@ -13244,7 +13177,7 @@ NNValue nn_objfnstring_each(NNState* state, NNArguments* args)
     }
     /* pop the argument list */
     nn_vm_stackpop(state);
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_objfnobject_dump(NNState* state, NNArguments* args)
@@ -13375,8 +13308,8 @@ NNValue nn_objfnobject_isiterable(NNState* state, NNArguments* args)
     if(!isiterable && nn_value_isinstance(selfval))
     {
         klass = nn_value_asinstance(selfval)->klass;
-        isiterable = nn_valtable_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
-            && nn_valtable_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
+        isiterable = nn_table_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
+            && nn_table_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
     }
     return nn_value_makebool(isiterable);
 }
@@ -13546,39 +13479,16 @@ NNValue nn_objfnmath_min(NNState* state, NNArguments* args)
     return nn_value_makenumber(b);
 }
 
-NNValue nn_objfnprocess_exedirectory(NNState* state, NNArguments* args)
+NNValue nn_objfnprocess_scriptlocation(NNState* state, NNArguments* args)
 {
-    (void)args;
     return nn_value_fromobject(state->clidirectory);
-}
-
-NNValue nn_objfnprocess_exit(NNState* state, NNArguments* args)
-{
-    int rc;
-    (void)state;
-    rc = 0;
-    if(args->count > 0)
-    {
-        rc = nn_value_asnumber(args->args[0]);
-    }
-    exit(rc);
-    return nn_value_makenull();
 }
 
 void nn_state_initbuiltinmethods(NNState* state)
 {
     {
         nn_class_setstaticpropertycstr(state->classprimprocess, "env", nn_value_fromobject(state->envdict));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "directory", nn_value_fromobject(state->clidirectory));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stdin", nn_value_fromobject(state->filestdin));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stdout", nn_value_fromobject(state->filestdout));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stderr", nn_value_fromobject(state->filestderr));
-
-
-        #if 0
-            nn_class_setstaticpropertycstr(state->classprimprocess, "pid", nn_value_makenumber(state->cliprocessid));
-        #endif
-        nn_class_defstaticnativemethod(state, state->classprimprocess, "exit", nn_objfnprocess_exit);
+        nn_class_defstaticnativemethod(state, state->classprimprocess, "directory", nn_objfnprocess_scriptlocation);
     }
     {
         nn_class_defstaticnativemethod(state, state->classprimobject, "typename", nn_objfnobject_typename);
@@ -14024,7 +13934,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                 if((int)argpos > argc)
                 {
                     failed = true;
-                    cval = nn_value_makenull();
+                    cval = nn_value_makeempty();
                 }
                 else
                 {
@@ -14118,7 +14028,7 @@ NNValue nn_nativefn_print(NNState* state, NNArguments* args)
     {
         nn_printer_writestring(state->stdoutprinter, "\n");
     }
-    return nn_value_makenull();
+    return nn_value_makeempty();
 }
 
 NNValue nn_nativefn_println(NNState* state, NNArguments* args)
@@ -14273,19 +14183,19 @@ bool nn_exceptions_propagate(NNState* state)
     fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->sbuf->data, colreset);
     srcfile = "none";
     srcline = 0;
-    field = nn_valtable_getfieldbycstr(exception->properties, "srcline");
+    field = nn_table_getfieldbycstr(exception->properties, "srcline");
     if(field != NULL)
     {
         srcline = nn_value_asnumber(field->value);
     }
-    field = nn_valtable_getfieldbycstr(exception->properties, "srcfile");
+    field = nn_table_getfieldbycstr(exception->properties, "srcfile");
     if(field != NULL)
     {
         srcfile = nn_value_asstring(field->value)->sbuf->data;
     }
     fprintf(stderr, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
     
-    field = nn_valtable_getfieldbycstr(exception->properties, "message");
+    field = nn_table_getfieldbycstr(exception->properties, "message");
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
@@ -14303,7 +14213,7 @@ bool nn_exceptions_propagate(NNState* state)
     {
         fprintf(stderr, "\n");
     }
-    field = nn_valtable_getfieldbycstr(exception->properties, "stacktrace");
+    field = nn_table_getfieldbycstr(exception->properties, "stacktrace");
     if(field != NULL)
     {
         fprintf(stderr, "  stacktrace:\n");
@@ -14462,12 +14372,12 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     nn_vm_stackpop(state);
     /* set class constructor */
     nn_vm_stackpush(state, nn_value_fromobject(closure));
-    nn_valtable_set(klass->methods, nn_value_fromobject(classname), nn_value_fromobject(closure));
+    nn_table_set(klass->methods, nn_value_fromobject(classname), nn_value_fromobject(closure));
     klass->constructor = nn_value_fromobject(closure);
     /* set class properties */
     nn_class_defproperty(klass, "message", nn_value_makenull());
     nn_class_defproperty(klass, "stacktrace", nn_value_makenull());
-    nn_valtable_set(state->globals, nn_value_fromobject(classname), nn_value_fromobject(klass));
+    nn_table_set(state->globals, nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
     nn_vm_stackpop(state);
     nn_vm_stackpop(state);
@@ -14540,7 +14450,7 @@ void nn_state_defglobalvalue(NNState* state, const char* name, NNValue val)
     oname = nn_string_copycstr(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(oname));
     nn_vm_stackpush(state, val);
-    nn_valtable_set(state->globals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
+    nn_table_set(state->globals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
     nn_vm_stackpopn(state, 2);
 }
 
@@ -14563,7 +14473,7 @@ NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* pare
     os = nn_string_copycstr(state, name);
     cl = nn_object_makeclass(state, os);
     cl->superclass = parent;
-    nn_valtable_set(state->globals, nn_value_fromobject(os), nn_value_fromobject(cl));
+    nn_table_set(state->globals, nn_value_fromobject(os), nn_value_fromobject(cl));
     return cl;
 }
 
@@ -14770,9 +14680,9 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->debugwriter->maxvallength = 15;
     }
     {
-        state->modules = nn_valtable_make(state);
-        state->strings = nn_valtable_make(state);
-        state->globals = nn_valtable_make(state);
+        state->modules = nn_table_make(state);
+        state->strings = nn_table_make(state);
+        state->globals = nn_table_make(state);
     }
     {
         state->topmodule = nn_module_make(state, "", "<state>", false);
@@ -14811,6 +14721,10 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->exceptions.argumenterror = nn_exceptions_makeclass(state, NULL, "ArgumentError");
     }
     {
+        nn_state_initbuiltinfunctions(state);
+        nn_state_initbuiltinmethods(state);
+    }
+    {
         pathp = osfn_getcwd(pathbuf, kMaxBuf);
         state->clidirectory = nn_string_copycstr(state, pathp);
     }
@@ -14827,10 +14741,6 @@ NNState* nn_state_makewithuserptr(void* userptr)
             state->filestdin = nn_object_makefile(state, stdin, true, "<stdin>", "rb");
             nn_state_defglobalvalue(state, "STDIN", nn_value_fromobject(state->filestdin));
         }
-    }
-    {
-        nn_state_initbuiltinfunctions(state);
-        nn_state_initbuiltinmethods(state);
     }
     return state;
 }
@@ -14853,11 +14763,11 @@ void nn_state_destroy(NNState* state)
     nn_gcmem_destroylinkedobjects(state);
     /* since object in module can exist in globals, it must come before */
     destrdebug("destroying module table...");
-    nn_valtable_destroy(state->modules);
+    nn_table_destroy(state->modules);
     destrdebug("destroying globals table...");
-    nn_valtable_destroy(state->globals);
+    nn_table_destroy(state->globals);
     destrdebug("destroying strings table...");
-    nn_valtable_destroy(state->strings);
+    nn_table_destroy(state->strings);
     destrdebug("destroying stdoutprinter...");
     nn_printer_destroy(state->stdoutprinter);
     destrdebug("destroying stderrprinter...");
@@ -14975,11 +14885,11 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     klass = nn_value_asclass(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
-                    if(!nn_value_isnull(klass->constructor))
+                    if(!nn_value_isempty(klass->constructor))
                     {
                         return nn_vm_callvaluewithobject(state, klass->constructor, thisval, argcount);
                     }
-                    else if(klass->superclass != NULL && !nn_value_isnull(klass->superclass->constructor))
+                    else if(klass->superclass != NULL && !nn_value_isempty(klass->superclass->constructor))
                     {
                         return nn_vm_callvaluewithobject(state, klass->superclass->constructor, thisval, argcount);
                     }
@@ -14995,7 +14905,7 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     NNObjModule* module;
                     NNProperty* field;
                     module = nn_value_asmodule(callable);
-                    field = nn_valtable_getfieldbyostr(module->deftable, module->name);
+                    field = nn_table_getfieldbyostr(module->deftable, module->name);
                     if(field != NULL)
                     {
                         return nn_vm_callvalue(state, field->value, thisval, argcount);
@@ -15032,7 +14942,7 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                     NNObjFuncBound* bound;
                     bound = nn_value_asfuncbound(callable);
                     actualthisval = bound->receiver;
-                    if(!nn_value_isnull(thisval))
+                    if(!nn_value_isempty(thisval))
                     {
                         actualthisval = thisval;
                     }
@@ -15047,7 +14957,7 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                     klass = nn_value_asclass(callable);
                     instance = nn_object_makeinstance(state, klass);
                     actualthisval = nn_value_fromobject(instance);
-                    if(!nn_value_isnull(thisval))
+                    if(!nn_value_isempty(thisval))
                     {
                         actualthisval = thisval;
                     }
@@ -15220,7 +15130,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
 {
     NNProperty* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
-    field = nn_valtable_getfieldbyostr(klass->methods, name);
+    field = nn_table_getfieldbyostr(klass->methods, name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -15243,12 +15153,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     if(nn_value_isinstance(receiver))
     {
         instance = nn_value_asinstance(receiver);
-        field = nn_valtable_getfieldbyostr(instance->klass->methods, name);
+        field = nn_table_getfieldbyostr(instance->klass->methods, name);
         if(field != NULL)
         {
             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
         }
-        field = nn_valtable_getfieldbyostr(instance->properties, name);
+        field = nn_table_getfieldbyostr(instance->properties, name);
         if(field != NULL)
         {
             spos = (state->vmstate.stackidx + (-argcount - 1));
@@ -15263,7 +15173,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     }
     else if(nn_value_isclass(receiver))
     {
-        field = nn_valtable_getfieldbyostr(nn_value_asclass(receiver)->methods, name);
+        field = nn_table_getfieldbyostr(nn_value_asclass(receiver)->methods, name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -15295,7 +15205,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                     NNObjModule* module;
                     NEON_APIDEBUG(state, "receiver is a module");
                     module = nn_value_asmodule(receiver);
-                    field = nn_valtable_getfieldbyostr(module->deftable, name);
+                    field = nn_table_getfieldbyostr(module->deftable, name);
                     if(field != NULL)
                     {
                         if(nn_util_methodisprivate(name))
@@ -15311,7 +15221,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
                     klass = nn_value_asclass(receiver);
-                    field = nn_valtable_getfieldbyostr(klass->methods, name);
+                    field = nn_table_getfieldbyostr(klass->methods, name);
                     if(field != NULL)
                     {
                         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -15340,7 +15250,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                     NNObjInstance* instance;
                     NEON_APIDEBUG(state, "receiver is an instance");
                     instance = nn_value_asinstance(receiver);
-                    field = nn_valtable_getfieldbyostr(instance->properties, name);
+                    field = nn_table_getfieldbyostr(instance->properties, name);
                     if(field != NULL)
                     {
                         spos = (state->vmstate.stackidx + (-argcount - 1));
@@ -15365,7 +15275,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
                     {
-                        field = nn_valtable_getfieldbyostr(nn_value_asdict(receiver)->htab, name);
+                        field = nn_table_getfieldbyostr(nn_value_asdict(receiver)->htab, name);
                         if(field != NULL)
                         {
                             if(nn_value_iscallable(field->value))
@@ -15401,7 +15311,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     NNValue val;
     NNProperty* field;
     NNObjFuncBound* bound;
-    field = nn_valtable_getfieldbyostr(klass->methods, name);
+    field = nn_table_getfieldbyostr(klass->methods, name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -15464,7 +15374,7 @@ NEON_FORCEINLINE void nn_vmutil_definemethod(NNState* state, NNObjString* name)
     NNObjClass* klass;
     method = nn_vmbits_stackpeek(state, 0);
     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
-    nn_valtable_set(klass->methods, nn_value_fromobject(name), method);
+    nn_table_set(klass->methods, nn_value_fromobject(name), method);
     if(nn_value_getmethodtype(method) == NEON_FUNCTYPE_INITIALIZER)
     {
         klass->constructor = method;
@@ -15495,7 +15405,7 @@ bool nn_value_isfalse(NNValue value)
     {
         return nn_value_isbool(value) && !nn_value_asbool(value);
     }
-    if(nn_value_isnull(value) || nn_value_isnull(value))
+    if(nn_value_isnull(value) || nn_value_isempty(value))
     {
         return true;
     }
@@ -15553,12 +15463,12 @@ bool nn_util_isinstanceof(NNObjClass* klass1, NNObjClass* expected)
 bool nn_dict_setentry(NNObjDict* dict, NNValue key, NNValue value)
 {
     NNValue tempvalue;
-    if(!nn_valtable_get(dict->htab, key, &tempvalue))
+    if(!nn_table_get(dict->htab, key, &tempvalue))
     {
         /* add key if it doesn't exist. */
         nn_vallist_push(dict->names, key);
     }
-    return nn_valtable_set(dict->htab, key, value);
+    return nn_table_set(dict->htab, key, value);
 }
 
 void nn_dict_addentry(NNObjDict* dict, NNValue key, NNValue value)
@@ -15577,7 +15487,7 @@ void nn_dict_addentrycstr(NNObjDict* dict, const char* ckey, NNValue value)
 
 NNProperty* nn_dict_getentry(NNObjDict* dict, NNValue key)
 {
-    return nn_valtable_getfield(dict->htab, key);
+    return nn_table_getfield(dict->htab, key);
 }
 
 NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjString* str, double number)
@@ -15823,7 +15733,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetdict(NNState* state, NNObjDict* dict, 
         return true;
     }
     nn_vmbits_stackpopn(state, 1);
-    nn_vmbits_stackpush(state, nn_value_makenull());
+    nn_vmbits_stackpush(state, nn_value_makeempty());
     return true;
 }
 
@@ -15832,7 +15742,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(NNState* state, NNObjModule* mo
     NNValue vindex;
     NNValue result;
     vindex = nn_vmbits_stackpeek(state, 0);
-    if(nn_valtable_get(module->deftable, vindex, &result))
+    if(nn_table_get(module->deftable, vindex, &result))
     {
         if(!willassign)
         {
@@ -15896,7 +15806,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
     #if 0
         return nn_exceptions_throw(state, "string index %d out of range of %d", realindex, maxlength);
     #else
-        nn_vmbits_stackpush(state, nn_value_makenull());
+        nn_vmbits_stackpush(state, nn_value_makeempty());
         return true;
     #endif
 }
@@ -16024,7 +15934,7 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexdict(NNState* state, NNObjDict* dict, 
 
 NEON_FORCEINLINE bool nn_vmutil_dosetindexmodule(NNState* state, NNObjModule* module, NNValue index, NNValue value)
 {
-    nn_valtable_set(module->deftable, index, value);
+    nn_table_set(module->deftable, index, value);
     /* pop the value, index and dict out */
     nn_vmbits_stackpopn(state, 3);
     /*
@@ -16078,14 +15988,14 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
         {
             if(position == 0)
             {
-                nn_array_push(list, nn_value_makenull());
+                nn_array_push(list, nn_value_makeempty());
             }
             else
             {
                 tmp = position + 1;
                 while(tmp > vasz)
                 {
-                    nn_array_push(list, nn_value_makenull());
+                    nn_array_push(list, nn_value_makeempty());
                     tmp--;
                 }
             }
@@ -16105,7 +16015,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     // pop the value, index and list out
     //nn_vmbits_stackpopn(state, 3);
     //return nn_exceptions_throw(state, "lists index %d out of range", rawpos);
-    //nn_vmbits_stackpush(state, nn_value_makenull());
+    //nn_vmbits_stackpush(state, nn_value_makeempty());
     //return true;
     */
 }
@@ -16163,6 +16073,10 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     {
         value = nn_vmbits_stackpeek(state, 0);
         index = nn_vmbits_stackpeek(state, 1);
+        if(NEON_UNLIKELY(nn_value_isempty(value)))
+        {
+            return nn_exceptions_throw(state, "empty cannot be assigned");
+        }
         switch(nn_value_asobject(target)->type)
         {
             case NEON_OBJTYPE_ARRAY:
@@ -16253,7 +16167,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             {
                 NNObjModule* module;
                 module = nn_value_asmodule(peeked);
-                field = nn_valtable_getfieldbyostr(module->deftable, name);
+                field = nn_table_getfieldbyostr(module->deftable, name);
                 if(field != NULL)
                 {
                     if(nn_util_methodisprivate(name))
@@ -16269,7 +16183,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             break;
         case NEON_OBJTYPE_CLASS:
             {
-                field = nn_valtable_getfieldbyostr(nn_value_asclass(peeked)->methods, name);
+                field = nn_table_getfieldbyostr(nn_value_asclass(peeked)->methods, name);
                 if(field != NULL)
                 {
                     if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -16306,7 +16220,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             {
                 NNObjInstance* instance;
                 instance = nn_value_asinstance(peeked);
-                field = nn_valtable_getfieldbyostr(instance->properties, name);
+                field = nn_table_getfieldbyostr(instance->properties, name);
                 if(field != NULL)
                 {
                     if(nn_util_methodisprivate(name))
@@ -16365,7 +16279,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             break;
         case NEON_OBJTYPE_DICT:
             {
-                field = nn_valtable_getfieldbyostr(nn_value_asdict(peeked)->htab, name);
+                field = nn_table_getfieldbyostr(nn_value_asdict(peeked)->htab, name);
                 if(field == NULL)
                 {
                     field = nn_class_getpropertyfield(state->classprimdict, name);
@@ -16448,7 +16362,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
     if(nn_value_isinstance(peeked))
     {
         instance = nn_value_asinstance(peeked);
-        field = nn_valtable_getfieldbyostr(instance->properties, name);
+        field = nn_table_getfieldbyostr(instance->properties, name);
         if(field != NULL)
         {
             /* pop the instance... */
@@ -16467,7 +16381,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
     else if(nn_value_isclass(peeked))
     {
         klass = nn_value_asclass(peeked);
-        field = nn_valtable_getfieldbyostr(klass->methods, name);
+        field = nn_table_getfieldbyostr(klass->methods, name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -16495,7 +16409,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
     else if(nn_value_ismodule(peeked))
     {
         module = nn_value_asmodule(peeked);
-        field = nn_valtable_getfieldbyostr(module->deftable, name);
+        field = nn_table_getfieldbyostr(module->deftable, name);
         if(field != NULL)
         {
             /* pop the module... */
@@ -16524,6 +16438,11 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
     if(!nn_value_isclass(vtarget) && !nn_value_isinstance(vtarget) && !nn_value_isdict(vtarget))
     {
         nn_exceptions_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
+        return false;
+    }
+    else if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+    {
+        nn_exceptions_throw(state, "empty cannot be assigned");
         return false;
     }
     name = nn_vmbits_readstring(state);
@@ -16632,7 +16551,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
     }
     binvalright = nn_vmbits_stackpop(state);
     binvalleft = nn_vmbits_stackpop(state);
-    res = nn_value_makenull();
+    res = nn_value_makeempty();
     switch(instruction)
     {
         case NEON_OP_PRIMADD:
@@ -16745,14 +16664,19 @@ NEON_FORCEINLINE bool nn_vmdo_globaldefine(NNState* state)
 {
     NNValue val;
     NNObjString* name;
-    NNHashValTable* tab;
+    NNHashTable* tab;
     name = nn_vmbits_readstring(state);
     val = nn_vmbits_stackpeek(state, 0);
+    if(nn_value_isempty(val))
+    {
+        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        return false;
+    }
     tab = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    nn_valtable_set(tab, nn_value_fromobject(name), val);
+    nn_table_set(tab, nn_value_fromobject(name), val);
     nn_vmbits_stackpop(state);
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
-    nn_valtable_print(state, state->debugwriter, state->globals, "globals");
+    nn_table_print(state, state->debugwriter, state->globals, "globals");
     #endif
     return true;
 }
@@ -16760,14 +16684,14 @@ NEON_FORCEINLINE bool nn_vmdo_globaldefine(NNState* state)
 NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
 {
     NNObjString* name;
-    NNHashValTable* tab;
+    NNHashTable* tab;
     NNProperty* field;
     name = nn_vmbits_readstring(state);
     tab = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    field = nn_valtable_getfieldbyostr(tab, name);
+    field = nn_table_getfieldbyostr(tab, name);
     if(field == NULL)
     {
-        field = nn_valtable_getfieldbyostr(state->globals, name);
+        field = nn_table_getfieldbyostr(state->globals, name);
         if(field == NULL)
         {
             nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf->data);
@@ -16781,14 +16705,19 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
 NEON_FORCEINLINE bool nn_vmdo_globalset(NNState* state)
 {
     NNObjString* name;
-    NNHashValTable* table;
+    NNHashTable* table;
+    if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+    {
+        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        return false;
+    }
     name = nn_vmbits_readstring(state);
     table = state->vmstate.currentframe->closure->scriptfunc->module->deftable;
-    if(nn_valtable_set(table, nn_value_fromobject(name), nn_vmbits_stackpeek(state, 0)))
+    if(nn_table_set(table, nn_value_fromobject(name), nn_vmbits_stackpeek(state, 0)))
     {
         if(state->conf.enablestrictmode)
         {
-            nn_valtable_delete(table, nn_value_fromobject(name));
+            nn_table_delete(table, nn_value_fromobject(name));
             nn_vmmac_tryraise(state, false, "global name '%s' was not declared", name->sbuf->data);
             return false;
         }
@@ -16815,6 +16744,11 @@ NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
     NNValue peeked;
     slot = nn_vmbits_readshort(state);
     peeked = nn_vmbits_stackpeek(state, 0);
+    if(nn_value_isempty(peeked))
+    {
+        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        return false;
+    }
     ssp = state->vmstate.currentframe->stackslotpos;
     state->vmstate.stackvalues[ssp + slot] = peeked;
     return true;
@@ -16839,6 +16773,11 @@ NEON_FORCEINLINE bool nn_vmdo_funcargset(NNState* state)
     NNValue peeked;
     slot = nn_vmbits_readshort(state);
     peeked = nn_vmbits_stackpeek(state, 0);
+    if(nn_value_isempty(peeked))
+    {
+        nn_vmmac_tryraise(state, false, "empty cannot be assigned");
+        return false;
+    }
     ssp = state->vmstate.currentframe->stackslotpos;
     state->vmstate.stackvalues[ssp + slot] = peeked;
     return true;
@@ -17203,7 +17142,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 break;
             case NEON_OP_PUSHEMPTY:
                 {
-                    nn_vmbits_stackpush(state, nn_value_makenull());
+                    nn_vmbits_stackpush(state, nn_value_makeempty());
                 }
                 break;
             case NEON_OP_PUSHTRUE:
@@ -17246,7 +17185,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNValue val;
                     val = nn_vmbits_stackpeek(state, 0);
                     nn_printer_printvalue(state->stdoutprinter, val, state->isrepl, true);
-                    if(!nn_value_isnull(val))
+                    if(!nn_value_isempty(val))
                     {
                         nn_printer_writestring(state->stdoutprinter, "\n");
                     }
@@ -17394,7 +17333,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     else
                     {
-                        nn_vmbits_stackpush(state, nn_value_makenull());
+                        nn_vmbits_stackpush(state, nn_value_makeempty());
                     }
                 }
                 break;
@@ -17402,6 +17341,11 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 {
                     int index;
                     index = nn_vmbits_readshort(state);
+                    if(nn_value_isempty(nn_vmbits_stackpeek(state, 0)))
+                    {
+                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "empty cannot be assigned");
+                        break;
+                    }
                     state->vmstate.currentframe->closure->upvalues[index]->location = nn_vmbits_stackpeek(state, 0);
                 }
                 break;
@@ -17409,7 +17353,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 {
                     int argcount;
                     argcount = nn_vmbits_readbyte(state);
-                    if(!nn_vm_callvalue(state, nn_vmbits_stackpeek(state, argcount), nn_value_makenull(), argcount))
+                    if(!nn_vm_callvalue(state, nn_vmbits_stackpeek(state, argcount), nn_value_makeempty(), argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
@@ -17461,7 +17405,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNProperty* field;
                     haveval = false;
                     name = nn_vmbits_readstring(state);
-                    field = nn_valtable_getfieldbyostr(state->vmstate.currentframe->closure->scriptfunc->module->deftable, name);
+                    field = nn_table_getfieldbyostr(state->vmstate.currentframe->closure->scriptfunc->module->deftable, name);
                     if(field != NULL)
                     {
                         if(nn_value_isclass(field->value))
@@ -17470,7 +17414,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             pushme = field->value;
                         }
                     }
-                    field = nn_valtable_getfieldbyostr(state->globals, name);
+                    field = nn_table_getfieldbyostr(state->globals, name);
                     if(field != NULL)
                     {
                         if(nn_value_isclass(field->value))
@@ -17710,7 +17654,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     finaddr = nn_vmbits_readshort(state);
                     if(addr != 0)
                     {
-                        if(!nn_valtable_get(state->globals, nn_value_fromobject(type), &value))
+                        if(!nn_table_get(state->globals, nn_value_fromobject(type), &value))
                         {
                             if(nn_value_isclass(value))
                             {
@@ -17721,7 +17665,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         if(!haveclass)
                         {
                             /*
-                            if(!nn_valtable_get(state->vmstate.currentframe->closure->scriptfunc->module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
+                            if(!nn_table_get(state->vmstate.currentframe->closure->scriptfunc->module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
                             {
                                 nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->sbuf->data);
                                 break;
@@ -17760,7 +17704,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjSwitch* sw;
                     sw = nn_value_asswitch(nn_vmbits_readconst(state));
                     expr = nn_vmbits_stackpeek(state, 0);
-                    if(nn_valtable_get(sw->table, expr, &value))
+                    if(nn_table_get(sw->table, expr, &value))
                     {
                         state->vmstate.currentframe->inscode += (int)nn_value_asnumber(value);
                     }
@@ -18220,8 +18164,8 @@ void nn_cli_printtypesizes()
     ptyp(NNProperty);
     ptyp(NNValArray);
     ptyp(NNBlob);
-    ptyp(NNHashValEntry);
-    ptyp(NNHashValTable);
+    ptyp(NNHashEntry);
+    ptyp(NNHashTable);
     ptyp(NNObjString);
     ptyp(NNObjUpvalue);
     ptyp(NNObjModule);
@@ -18452,7 +18396,7 @@ int main(int argc, char* argv[], char** envp)
             nn_array_push(state->cliargv, nn_value_fromobject(os));
 
         }
-        nn_valtable_setcstr(state->globals, "ARGV", nn_value_fromobject(state->cliargv));
+        nn_table_setcstr(state->globals, "ARGV", nn_value_fromobject(state->cliargv));
     }
     state->gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);
