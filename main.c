@@ -85,7 +85,11 @@
 #define NEON_CONF_USENANTAGGING 1
 
 #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-    #warning "*** USING NAN TAGGING ***"
+    #if defined(_MSC_VER)
+        #pragma message("*** USING NAN TAGGING ***")
+    #else
+        #warning "*** USING NAN TAGGING ***"
+    #endif
 #endif
 
 #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
@@ -149,34 +153,34 @@
 #define NEON_CFG_INITSTACKCOUNT (32 * 1)
 
 /* how many locals per function can be compiled */
-#define NEON_CFG_ASTMAXLOCALS 64
+#define NEON_CFG_ASTMAXLOCALS (64*2)
 
 /* how many upvalues per function can be compiled */
-#define NEON_CFG_ASTMAXUPVALS 64
+#define NEON_CFG_ASTMAXUPVALS (64*2)
 
 /* how many switch cases per switch statement */
-#define NEON_CFG_ASTMAXSWITCHCASES 32
+#define NEON_CFG_ASTMAXSWITCHCASES (32)
 
 /* max number of function parameters */
-#define NEON_CFG_ASTMAXFUNCPARAMS 32
+#define NEON_CFG_ASTMAXFUNCPARAMS (32)
 
 /* how deep template strings can be nested (i.e., "foo${getBar("quux${getBonk("...")}")}") */
-#define NEON_CFG_ASTMAXSTRTPLDEPTH 8
+#define NEON_CFG_ASTMAXSTRTPLDEPTH (8)
 
 /* how many catch() clauses per try statement */
-#define NEON_CFG_MAXEXCEPTHANDLERS 16
+#define NEON_CFG_MAXEXCEPTHANDLERS (16)
 
 /*
 // Maximum load factor of 12/14
 // see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
 */
-#define NEON_CFG_MAXTABLELOAD 0.85714286
+#define NEON_CFG_MAXTABLELOAD (0.85714286)
 
 /* how much memory can be allocated before the garbage collector kicks in */
 #define NEON_CFG_DEFAULTGCSTART (1024 * 1024)
 
 /* growth factor for GC heap objects */
-#define NEON_CFG_GCHEAPGROWTHFACTOR 1.25
+#define NEON_CFG_GCHEAPGROWTHFACTOR (1.25)
 
 #define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
 
@@ -586,6 +590,7 @@ typedef enum /**/ NNAstTokType NNAstTokType;
 typedef enum /**/ NNAstPrecedence NNAstPrecedence;
 typedef enum /**/ NNPrMode NNPrMode;
 
+typedef struct /**/ NNProcessInfo NNProcessInfo;
 typedef struct /**/NNFormatInfo NNFormatInfo;
 typedef struct /**/NNIOResult NNIOResult;
 typedef struct /**/ NNAstFuncCompiler NNAstFuncCompiler;
@@ -605,7 +610,6 @@ typedef struct /**/ NNObjDict NNObjDict;
 typedef struct /**/ NNObjFile NNObjFile;
 typedef struct /**/ NNObjSwitch NNObjSwitch;
 typedef struct /**/ NNObjUserdata NNObjUserdata;
-typedef union /**/ NNDoubleHashUnion NNDoubleHashUnion;
 
 
 typedef struct /**/NNPropGetSet NNPropGetSet;
@@ -633,7 +637,9 @@ typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/ NNArguments NNArguments;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
-
+typedef struct NNStrMap NNStrMap;
+typedef struct NNBoxedString NNBoxedString;
+typedef union NNUtilDblUnion NNUtilDblUnion;
 
 typedef NNValue (*NNNativeFN)(NNState*, NNArguments*);
 typedef void (*NNPtrFreeFN)(void*);
@@ -644,23 +650,11 @@ typedef void (*NNModLoaderFN)(NNState*);
 typedef NNRegModule* (*NNModInitFN)(NNState*);
 typedef double(*nnbinopfunc_t)(double, double);
 
-typedef struct NNStrMap NNStrMap;
-typedef struct NNBoxedString NNBoxedString;
-
-struct NNBoxedString
+union NNUtilDblUnion
 {
-    bool isalloced;
-    char* data;
-    size_t length;
+    uint64_t bits;
+    double num;
 };
-
-struct NNStrMap
-{
-    NNStrMap* nxt;
-    NNBoxedString* name;
-    NNValue value;
-};
-
 
 struct utf8iterator_t
 {
@@ -686,11 +680,6 @@ struct utf8iterator_t
     uint32_t currcount;
 };
 
-union NNDoubleHashUnion
-{
-    uint64_t bits;
-    double num;
-};
 
 struct NNIOResult
 {
@@ -741,6 +730,22 @@ struct NNValue
     } valunion;
 };
 #endif
+
+
+struct NNBoxedString
+{
+    bool isalloced;
+    char* data;
+    size_t length;
+};
+
+struct NNStrMap
+{
+    NNStrMap* nxt;
+    NNBoxedString* name;
+    NNValue value;
+};
+
 
 struct NNObject
 {
@@ -894,6 +899,7 @@ struct NNObjClass
     * instance of this class is created.
     */
     NNHashValTable* instprops;
+    
 
     /*
     * static, unchangeable(-ish) values. intended for values that are not unique, but shared
@@ -907,7 +913,7 @@ struct NNObjClass
     * TODO: introduce a new hashtable field for NNObjInstance for unique methods, perhaps?
     * right now, this method just prevents unnecessary copying.
     */
-    NNHashValTable* methods;
+    NNHashValTable* classmethods;
     NNHashValTable* staticmethods;
     NNObjString* name;
     NNObjClass* superclass;
@@ -1004,7 +1010,18 @@ struct NNCallFrame
     int stackslotpos;
     NNInstruction* inscode;
     NNObjFuncClosure* closure;
+    /* TODO: should be dynamically allocated */
     NNExceptionFrame handlers[NEON_CFG_MAXEXCEPTHANDLERS];
+};
+
+struct NNProcessInfo
+{
+    int cliproccessid;
+    NNObjArray* cliargv;
+    NNObjString* clidirectory;
+    NNObjFile* filestdout;
+    NNObjFile* filestderr;
+    NNObjFile* filestdin;
 };
 
 struct NNState
@@ -1080,11 +1097,7 @@ struct NNState
 
     bool isrepl;
     bool markvalue;
-    NNObjArray* cliargv;
-    NNObjString* clidirectory;
-    NNObjFile* filestdout;
-    NNObjFile* filestderr;
-    NNObjFile* filestdin;
+    NNProcessInfo* processinfo;
 
     /* miscellaneous */
     NNPrinter* stdoutprinter;
@@ -1134,6 +1147,7 @@ struct NNAstFuncCompiler
     /* current function */
     NNObjFuncScript* targetfunc;
     NNFuncType type;
+    /* TODO: these should be dynamically allocated */
     NNAstLocal locals[NEON_CFG_ASTMAXLOCALS];
     NNAstUpvalue upvalues[NEON_CFG_ASTMAXUPVALS];
 };
@@ -1616,7 +1630,9 @@ NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
 NEON_FORCEINLINE double nn_value_asnumber(NNValue v)
 {
     #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return mc_value_asnumintern(v);
+        NNUtilDblUnion data;
+        data.bits = v;
+        return data.num;
     #else
         return ((v).valunion.vfltnum);
     #endif
@@ -1728,31 +1744,12 @@ NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
     #endif
 }
 
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-    typedef union {
-        uint64_t bits;
-        double num;
-    } doubleunion;
-
-    static inline NNValue mc_value_fromnumber(double num)
-    {
-        doubleunion data;
-        data.num = num;
-        return data.bits;
-    }
-
-    static inline double mc_value_asnumintern(NNValue v)
-    {
-        doubleunion data;
-        data.bits = v;
-        return data.num;
-    }
-#endif
-
 NEON_FORCEINLINE NNValue nn_value_makenumber(double d)
 {
     #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
-        return mc_value_fromnumber(d);
+        NNUtilDblUnion data;
+        data.num = d;
+        return data.bits;
     #else
         NNValue v;
         v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
@@ -2459,7 +2456,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
                 NNObjClass* klass;
                 klass = (NNObjClass*)object;
                 nn_gcmem_markobject(state, (NNObject*)klass->name);
-                nn_tableval_mark(state, klass->methods);
+                nn_tableval_mark(state, klass->classmethods);
                 nn_tableval_mark(state, klass->staticmethods);
                 nn_tableval_mark(state, klass->staticproperties);
                 nn_gcmem_markvalue(state, klass->constructor);
@@ -3761,7 +3758,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
     state = pr->pvm;
     if(invmethod)
     {
-        field = nn_tableval_getfieldbycstr(instance->klass->methods, "toString");
+        field = nn_tableval_getfieldbycstr(instance->klass->classmethods, "toString");
         if(field != NULL)
         {
             args = nn_object_makearray(state);
@@ -4100,7 +4097,7 @@ uint32_t nn_util_hashbits(uint64_t hash)
 
 uint32_t nn_util_hashdouble(double value)
 {
-    NNDoubleHashUnion bits;
+    NNUtilDblUnion bits;
     bits.num = value;
     return nn_util_hashbits(bits.bits);
 }
@@ -4257,7 +4254,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isclass(a) && nn_value_isclass(b))
         {
-            if(nn_value_asclass(a)->methods->count >= nn_value_asclass(b)->methods->count)
+            if(nn_value_asclass(a)->classmethods->count >= nn_value_asclass(b)->classmethods->count)
             {
                 return a;
             }
@@ -4531,7 +4528,7 @@ NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name)
     klass->name = name;
     klass->instprops = nn_tableval_make(state);
     klass->staticproperties = nn_tableval_make(state);
-    klass->methods = nn_tableval_make(state);
+    klass->classmethods = nn_tableval_make(state);
     klass->staticmethods = nn_tableval_make(state);
     klass->constructor = nn_value_makenull();
     klass->destructor = nn_value_makenull();
@@ -4541,7 +4538,7 @@ NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name)
 
 void nn_class_destroy(NNState* state, NNObjClass* klass)
 {
-    nn_tableval_destroy(klass->methods);
+    nn_tableval_destroy(klass->classmethods);
     nn_tableval_destroy(klass->staticmethods);
     nn_tableval_destroy(klass->instprops);
     nn_tableval_destroy(klass->staticproperties);
@@ -4555,7 +4552,7 @@ void nn_class_destroy(NNState* state, NNObjClass* klass)
 bool nn_class_inheritfrom(NNObjClass* subclass, NNObjClass* superclass)
 {
     nn_tableval_addall(superclass->instprops, subclass->instprops);
-    nn_tableval_addall(superclass->methods, subclass->methods);
+    nn_tableval_addall(superclass->classmethods, subclass->classmethods);
     subclass->superclass = superclass;
     return true;
 }
@@ -4607,7 +4604,7 @@ bool nn_class_defnativeconstructor(NNState* state, NNObjClass* klass, NNNativeFN
 bool nn_class_defmethod(NNState* state, NNObjClass* klass, const char* name, NNValue val)
 {
     (void)state;
-    return nn_tableval_setcstr(klass->methods, name, val);
+    return nn_tableval_setcstr(klass->classmethods, name, val);
 }
 
 bool nn_class_defnativemethodptr(NNState* state, NNObjClass* klass, const char* name, NNNativeFN function, void* ptr)
@@ -4637,7 +4634,7 @@ bool nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, const cha
 NNProperty* nn_class_getmethodfield(NNObjClass* klass, NNObjString* name)
 {
     NNProperty* field;
-    field = nn_tableval_getfield(klass->methods, nn_value_fromobject(name));
+    field = nn_tableval_getfield(klass->classmethods, nn_value_fromobject(name));
     if(field != NULL)
     {
         return field;
@@ -9274,7 +9271,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         {
                             native->type = NEON_FUNCTYPE_PRIVATE;
                         }
-                        nn_tableval_set(klass->methods, funcname, nn_value_fromobject(native));
+                        nn_tableval_set(klass->classmethods, funcname, nn_value_fromobject(native));
                     }
                 }
                 if(klassreg.fields != NULL)
@@ -12937,8 +12934,8 @@ NNValue nn_objfnobject_isiterable(NNState* state, NNArguments* args)
     if(!isiterable && nn_value_isinstance(selfval))
     {
         klass = nn_value_asinstance(selfval)->klass;
-        isiterable = nn_tableval_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
-            && nn_tableval_get(klass->methods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
+        isiterable = nn_tableval_get(klass->classmethods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
+            && nn_tableval_get(klass->classmethods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
     }
     return nn_value_makebool(isiterable);
 }
@@ -13111,7 +13108,7 @@ NNValue nn_objfnmath_min(NNState* state, NNArguments* args)
 NNValue nn_objfnprocess_exedirectory(NNState* state, NNArguments* args)
 {
     (void)args;
-    return nn_value_fromobject(state->clidirectory);
+    return nn_value_fromobject(state->processinfo->clidirectory);
 }
 
 NNValue nn_objfnprocess_exit(NNState* state, NNArguments* args)
@@ -13131,15 +13128,11 @@ void nn_state_initbuiltinmethods(NNState* state)
 {
     {
         nn_class_setstaticpropertycstr(state->classprimprocess, "env", nn_value_fromobject(state->envdict));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "directory", nn_value_fromobject(state->clidirectory));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stdin", nn_value_fromobject(state->filestdin));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stdout", nn_value_fromobject(state->filestdout));
-        nn_class_setstaticpropertycstr(state->classprimprocess, "stderr", nn_value_fromobject(state->filestderr));
-
-
-        #if 0
-            nn_class_setstaticpropertycstr(state->classprimprocess, "pid", nn_value_makenumber(state->cliprocessid));
-        #endif
+        nn_class_setstaticpropertycstr(state->classprimprocess, "directory", nn_value_fromobject(state->processinfo->clidirectory));
+        nn_class_setstaticpropertycstr(state->classprimprocess, "stdin", nn_value_fromobject(state->processinfo->filestdin));
+        nn_class_setstaticpropertycstr(state->classprimprocess, "stdout", nn_value_fromobject(state->processinfo->filestdout));
+        nn_class_setstaticpropertycstr(state->classprimprocess, "stderr", nn_value_fromobject(state->processinfo->filestderr));
+        nn_class_setstaticpropertycstr(state->classprimprocess, "pid", nn_value_makenumber(state->processinfo->cliproccessid));
         nn_class_defstaticnativemethod(state, state->classprimprocess, "exit", nn_objfnprocess_exit);
     }
     {
@@ -14024,7 +14017,7 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     nn_vm_stackpop(state);
     /* set class constructor */
     nn_vm_stackpush(state, nn_value_fromobject(closure));
-    nn_tableval_set(klass->methods, nn_value_fromobject(classname), nn_value_fromobject(closure));
+    nn_tableval_set(klass->classmethods, nn_value_fromobject(classname), nn_value_fromobject(closure));
     klass->constructor = nn_value_fromobject(closure);
     /* set class properties */
     nn_class_defproperty(klass, "message", nn_value_makenull());
@@ -14272,6 +14265,41 @@ bool nn_state_addsearchpath(NNState* state, const char* path)
     return nn_state_addsearchpathobj(state, nn_string_copycstr(state, path));
 }
 
+void nn_state_buildprocessinfo(NNState* state)
+{
+    enum{ kMaxBuf = 1024 };
+    char* pathp;
+    char pathbuf[kMaxBuf];
+    state->processinfo = (NNProcessInfo*)nn_util_rawmalloc(NULL, sizeof(NNProcessInfo));
+    state->processinfo->cliargv = nn_object_makearray(state);
+    {
+        pathp = osfn_getcwd(pathbuf, kMaxBuf);
+        if(pathp == NULL)
+        {
+            pathp = ".";
+        }
+        fprintf(stderr, "pathp=<%s>\n", pathp);
+        state->processinfo->clidirectory = nn_string_copycstr(state, pathp);
+    }
+    {
+        state->processinfo->cliproccessid = osfn_getpid();
+    }
+    {
+        {
+            state->processinfo->filestdout = nn_object_makefile(state, stdout, true, "<stdout>", "wb");
+            nn_state_defglobalvalue(state, "STDOUT", nn_value_fromobject(state->processinfo->filestdout));
+        }
+        {
+            state->processinfo->filestderr = nn_object_makefile(state, stderr, true, "<stderr>", "wb");
+            nn_state_defglobalvalue(state, "STDERR", nn_value_fromobject(state->processinfo->filestderr));
+        }
+        {
+            state->processinfo->filestdin = nn_object_makefile(state, stdin, true, "<stdin>", "rb");
+            nn_state_defglobalvalue(state, "STDIN", nn_value_fromobject(state->processinfo->filestdin));
+        }
+    }
+}
+
 NNState* nn_state_make()
 {
     return nn_state_makewithuserptr(NULL);
@@ -14279,7 +14307,6 @@ NNState* nn_state_make()
 
 NNState* nn_state_makewithuserptr(void* userptr)
 {
-    enum{ kMaxBuf = 1024 };
     static const char* defaultsearchpaths[] =
     {
         "mods",
@@ -14288,8 +14315,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         NULL
     };
     size_t i;
-    char* pathp;
-    char pathbuf[kMaxBuf];
+
     NNState* state;
     state = (NNState*)nn_util_rawmalloc(userptr, sizeof(NNState));
     if(state == NULL)
@@ -14300,7 +14326,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
     state->memuserptr = userptr;
     state->exceptions.stdexception = NULL;
     state->rootphysfile = NULL;
-    state->cliargv = NULL;
+    state->processinfo = NULL;
     state->isrepl = false;
     state->markvalue = true;
     nn_vm_initvmstate(state);
@@ -14372,24 +14398,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->exceptions.oserror = nn_exceptions_makeclass(state, NULL, "OSError");
         state->exceptions.argumenterror = nn_exceptions_makeclass(state, NULL, "ArgumentError");
     }
-    {
-        pathp = osfn_getcwd(pathbuf, kMaxBuf);
-        state->clidirectory = nn_string_copycstr(state, pathp);
-    }
-    {
-        {
-            state->filestdout = nn_object_makefile(state, stdout, true, "<stdout>", "wb");
-            nn_state_defglobalvalue(state, "STDOUT", nn_value_fromobject(state->filestdout));
-        }
-        {
-            state->filestderr = nn_object_makefile(state, stderr, true, "<stderr>", "wb");
-            nn_state_defglobalvalue(state, "STDERR", nn_value_fromobject(state->filestderr));
-        }
-        {
-            state->filestdin = nn_object_makefile(state, stdin, true, "<stdin>", "rb");
-            nn_state_defglobalvalue(state, "STDIN", nn_value_fromobject(state->filestdin));
-        }
-    }
+    nn_state_buildprocessinfo(state);
     {
         nn_state_initbuiltinfunctions(state);
         nn_state_initbuiltinmethods(state);
@@ -14782,7 +14791,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
 {
     NNProperty* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
-    field = nn_tableval_getfieldbyostr(klass->methods, name);
+    field = nn_tableval_getfieldbyostr(klass->classmethods, name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -14805,7 +14814,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     if(nn_value_isinstance(receiver))
     {
         instance = nn_value_asinstance(receiver);
-        field = nn_tableval_getfieldbyostr(instance->klass->methods, name);
+        field = nn_tableval_getfieldbyostr(instance->klass->classmethods, name);
         if(field != NULL)
         {
             return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
@@ -14825,7 +14834,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     }
     else if(nn_value_isclass(receiver))
     {
-        field = nn_tableval_getfieldbyostr(nn_value_asclass(receiver)->methods, name);
+        field = nn_tableval_getfieldbyostr(nn_value_asclass(receiver)->classmethods, name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -14873,7 +14882,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
                     klass = nn_value_asclass(receiver);
-                    field = nn_tableval_getfieldbyostr(klass->methods, name);
+                    field = nn_tableval_getfieldbyostr(klass->classmethods, name);
                     if(field != NULL)
                     {
                         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -14963,7 +14972,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     NNValue val;
     NNProperty* field;
     NNObjFuncBound* bound;
-    field = nn_tableval_getfieldbyostr(klass->methods, name);
+    field = nn_tableval_getfieldbyostr(klass->classmethods, name);
     if(field != NULL)
     {
         if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
@@ -15026,7 +15035,7 @@ NEON_FORCEINLINE void nn_vmutil_definemethod(NNState* state, NNObjString* name)
     NNObjClass* klass;
     method = nn_vmbits_stackpeek(state, 0);
     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
-    nn_tableval_set(klass->methods, nn_value_fromobject(name), method);
+    nn_tableval_set(klass->classmethods, nn_value_fromobject(name), method);
     if(nn_value_getmethodtype(method) == NEON_FUNCTYPE_INITIALIZER)
     {
         klass->constructor = method;
@@ -15831,7 +15840,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             break;
         case NEON_OBJTYPE_CLASS:
             {
-                field = nn_tableval_getfieldbyostr(nn_value_asclass(peeked)->methods, name);
+                field = nn_tableval_getfieldbyostr(nn_value_asclass(peeked)->classmethods, name);
                 if(field != NULL)
                 {
                     if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -16029,7 +16038,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
     else if(nn_value_isclass(peeked))
     {
         klass = nn_value_asclass(peeked);
-        field = nn_tableval_getfieldbyostr(klass->methods, name);
+        field = nn_tableval_getfieldbyostr(klass->classmethods, name);
         if(field != NULL)
         {
             if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
@@ -18007,14 +18016,13 @@ int main(int argc, char* argv[], char** envp)
     }
     {
         NNObjString* os;
-        state->cliargv = nn_object_makearray(state);
         for(i=0; i<nargc; i++)
         {
             os = nn_string_copycstr(state, nargv[i]);
-            nn_array_push(state->cliargv, nn_value_fromobject(os));
+            nn_array_push(state->processinfo->cliargv, nn_value_fromobject(os));
 
         }
-        nn_tableval_setcstr(state->globals, "ARGV", nn_value_fromobject(state->cliargv));
+        nn_tableval_setcstr(state->globals, "ARGV", nn_value_fromobject(state->processinfo->cliargv));
     }
     state->gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);
@@ -18024,7 +18032,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = nn_value_asstring(state->cliargv->varray->listitems[0])->sbuf->data;
+        filename = nn_value_asstring(state->processinfo->cliargv->varray->listitems[0])->sbuf->data;
         fprintf(stderr, "nargv[0]=%s\n", filename);
         ok = nn_cli_runfile(state,  filename);
     }

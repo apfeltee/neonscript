@@ -14,23 +14,23 @@
 #include <time.h>
 
 #if defined(__unix__) || defined(__linux__)
-    #define OSFN_ISUNIXY 1
+    #define OSFN_ISUNIXLIKE 1
 #endif
 
 #define TINDIR_PATHSIZE 1024
 #if defined(__unix__) || defined(__linux__)
-    #define TINDIR_ISUNIX
+    #define OSFN_ISLINUX
 #elif defined(_WIN32) || defined(_WIN64)
-    #define TINDIR_ISWINDOWS
+    #define OSFN_ISWINNT
 #endif
 
-#if defined(TINDIR_ISUNIX)
+#if defined(OSFN_ISLINUX)
     #include <unistd.h>
     #include <dirent.h>
     #include <libgen.h>
     #include <sys/time.h>
 #else
-    #if defined(TINDIR_ISWINDOWS)
+    #if defined(OSFN_ISWINNT)
         #include <windows.h>
     #endif
 #endif
@@ -143,3 +143,4 @@ unsigned int osfn_sleep(unsigned int seconds);
 int osfn_gettimeofday(struct timeval* tp, void* tzp);
 int osfn_mkdir(const char *path, size_t mode);
 int osfn_chdir(const char *path);
+int osfn_getpid();

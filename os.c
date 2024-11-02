@@ -24,7 +24,7 @@ char* osfn_utilstrdup(const char* src)
 
 bool fslib_diropen(FSDirReader* rd, const char* path)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISLINUX)
         if((rd->handle = opendir(path)) == NULL)
         {
             return false;
@@ -39,7 +39,7 @@ bool fslib_dirread(FSDirReader* rd, FSDirItem* itm)
     itm->isdir = false;
     itm->isfile = false;
     memset(itm->name, 0, TINDIR_PATHSIZE);
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISLINUX)
         struct dirent* ent;
         if((ent = readdir((DIR*)(rd->handle))) == NULL)
         {
@@ -61,7 +61,7 @@ bool fslib_dirread(FSDirReader* rd, FSDirItem* itm)
 
 bool fslib_dirclose(FSDirReader* rd)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISLINUX)
         closedir((DIR*)(rd->handle));
     #endif
     return false;
@@ -69,7 +69,7 @@ bool fslib_dirclose(FSDirReader* rd)
 
 FILE* osfn_popen(const char* cmd, const char* type)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISLINUX)
         return popen(cmd, type);
     #endif
     return NULL;
@@ -77,14 +77,14 @@ FILE* osfn_popen(const char* cmd, const char* type)
 
 void osfn_pclose(FILE* fh)
 {
-    #if defined(TINDIR_ISUNIX)
+    #if defined(OSFN_ISLINUX)
         pclose(fh);
     #endif
 }
 
 int osfn_chmod(const char* path, int mode)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return chmod(path, mode);
     #else
         return -1;
@@ -94,7 +94,7 @@ int osfn_chmod(const char* path, int mode)
 char* osfn_realpath(const char* path, char* respath)
 {
     char* copy;
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         char* rt;
         rt = realpath(path, respath);
         if(rt != NULL)
@@ -112,7 +112,7 @@ char* osfn_realpath(const char* path, char* respath)
 char* osfn_dirname(const char* path)
 {
     char* copy;
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         char* rt;
         rt = dirname((char*)path);
         if(rt != NULL)
@@ -152,7 +152,7 @@ char* osfn_fallbackbasename(const char* opath)
 
 char* osfn_basename(const char* path)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         char* rt;
         rt = basename((char*)path);
         if(rt != NULL)
@@ -167,7 +167,7 @@ char* osfn_basename(const char* path)
 
 int osfn_isatty(int fd)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return isatty(fd);
     #else
         return 0;
@@ -176,7 +176,7 @@ int osfn_isatty(int fd)
 
 int osfn_symlink(const char* path1, const char* path2)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return symlink(path1, path2);
     #else
         return -1;
@@ -185,7 +185,7 @@ int osfn_symlink(const char* path1, const char* path2)
 
 int osfn_symlinkat(const char* path1, int fd, const char* path2)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return symlinkat(path1, fd, path2);
     #else
         return -1;
@@ -194,16 +194,21 @@ int osfn_symlinkat(const char* path1, int fd, const char* path2)
 
 char* osfn_getcwd(char* buf, size_t size)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return getcwd(buf, size);
     #else
-        return NULL;
+        #if defined(OSFN_ISWINNT)
+            GetCurrentDirectory(size, buf);
+            return buf;
+        #endif
     #endif
+    return NULL;
+
 }
 
 int osfn_lstat(const char* path, struct stat* buf)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return lstat(path, buf);
     #else
         return stat(path, buf);
@@ -213,7 +218,7 @@ int osfn_lstat(const char* path, struct stat* buf)
 
 int osfn_truncate(const char* path, size_t length)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return truncate(path, length);
     #else
         return -1;
@@ -222,7 +227,7 @@ int osfn_truncate(const char* path, size_t length)
 
 unsigned int osfn_sleep(unsigned int seconds)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return sleep(seconds);
     #else
         return 0;
@@ -231,7 +236,7 @@ unsigned int osfn_sleep(unsigned int seconds)
 
 int osfn_gettimeofday(struct timeval* tp, void* tzp)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return gettimeofday(tp, tzp);
     #else
         return 0;
@@ -240,7 +245,7 @@ int osfn_gettimeofday(struct timeval* tp, void* tzp)
 
 int osfn_mkdir(const char* path, size_t mode)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return mkdir(path, mode);
     #else
         return -1;
@@ -250,10 +255,15 @@ int osfn_mkdir(const char* path, size_t mode)
 
 int osfn_chdir(const char* path)
 {
-    #if defined(OSFN_ISUNIXY)
+    #if defined(OSFN_ISUNIXLIKE)
         return chdir(path);
     #else
         return -1;
     #endif
+}
+
+int osfn_getpid()
+{
+    return getpid();
 }
 
