@@ -37,12 +37,12 @@ while(y0 > bottomedge)
         var cb = ((tch % (64 / 2)) >> 1)
         switch(cb)
         {
-            case 0: sch = '+';
-            case 8: sch = '-';
-            case 9: sch = '*';
-            case 10: sch = '.';
-            case 11: sch = '#';
-            case 12: sch = '%';
+            case 0: sch = '+'; break;
+            case 8: sch = '-'; break;
+            case 9: sch = '*'; break;
+            case 10: sch = '.'; break;
+            case 11: sch = '#'; break;
+            case 12: sch = '%'; break;
         }
         print(sch);
         x0 = x0 + xstep;
