@@ -4,14 +4,14 @@ try
     {
         throw Exception("Second exception thrown")
     }
-    catch(Exception e)
+    catch(e)
     {
-        println("inner: ${e.message}");
+        println(`inner: ${e.message}`);
     }
 }
-catch(Exception e)
+catch(e)
 {
-    echo "outer: ${e.message}" ;
+    echo `outer: ${e.message}`;
 }
 
 try
@@ -22,16 +22,16 @@ try
     {
         echo {}[10]()
     }
-    catch(Exception e)
+    catch(e)
     {
-        echo "\nMessage: ${e.message}"
+        echo `\nMessage: ${e.message}`
     }
     finally
     {
         echo "Despite the error, I run because I am in finally"
     }
 }
-catch(Exception e)
+catch(e)
 {
     echo e
 }
@@ -41,11 +41,11 @@ try
     throw Exception("I am a thrown exception")
     throw Exception("Second exception we will never reach")
 }
-catch(Exception e)
+catch(e)
 {
     echo "\nCatching exception..."
-    echo "Exception message: ${e.message}"
-    echo "Exception trace: ${e.stacktrace}"
+    echo `Exception message: ${e.message}`
+    echo `Exception trace: ${e.stacktrace}`
 }
 
 try
@@ -61,7 +61,7 @@ try
 {
     echo []["10"]
 }
-catch(Exception e)
+catch(e)
 {
     print("past finally: ", e.message, "\n")
 }

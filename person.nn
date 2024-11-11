@@ -12,7 +12,7 @@ class Individual
     }
 }
 
-class Person < Individual
+class Person extends Individual
 {
     constructor(name, age, livesat)
     {
@@ -44,7 +44,7 @@ class Person < Individual
 
 }
 
-class Pet < Individual
+class Pet extends Individual
 {
     constructor(name, species, liveswith)
     {

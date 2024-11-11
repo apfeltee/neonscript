@@ -12,7 +12,7 @@ NNValArray* nn_vallist_make(NNState* state)
     size_t initialsize;
     NNValArray* list;
     initialsize = 32;
-    list = (NNValArray*)nn_util_memmalloc(state, sizeof(NNValArray));
+    list = (NNValArray*)nn_memory_malloc(sizeof(NNValArray));
     list->pvm = state;
     list->listcount = 0;
     list->listcapacity = 0;
@@ -35,8 +35,8 @@ void nn_vallist_destroy(NNValArray* list)
     #endif
     if(list != NULL)
     {
-        nn_util_memfree(list->pvm, list->listitems);
-        nn_util_memfree(list->pvm, list);
+        nn_memory_free(list->listitems);
+        nn_memory_free(list);
         list = NULL;
     }
 }
@@ -79,11 +79,11 @@ NEON_INLINE bool nn_vallist_push(NNValArray* list, NNValue value)
         list->listcapacity = MC_UTIL_INCCAPACITY(oldcap);
         if(list->listitems == NULL)
         {
-            list->listitems = (NNValue*)nn_util_memmalloc(list->pvm, sizeof(NNValue) * list->listcapacity);
+            list->listitems = (NNValue*)nn_memory_malloc(sizeof(NNValue) * list->listcapacity);
         }
         else
         {
-            list->listitems = (NNValue*)nn_util_memrealloc(list->pvm, list->listitems, sizeof(NNValue) * list->listcapacity);
+            list->listitems = (NNValue*)nn_memory_realloc(list->listitems, sizeof(NNValue) * list->listcapacity);
         }
     }
     list->listitems[list->listcount] = value;
@@ -183,11 +183,11 @@ NEON_INLINE void nn_vallist_ensurecapacity(NNValArray* list, size_t needsize, NN
         list->listcapacity = ncap;
         if(list->listitems == NULL)
         {
-            list->listitems = (NNValue*)nn_util_memmalloc(list->pvm, sizeof(NNValue) * ncap);
+            list->listitems = (NNValue*)nn_memory_malloc(sizeof(NNValue) * ncap);
         }
         else
         {
-            list->listitems = (NNValue*)nn_util_memrealloc(list->pvm, list->listitems, sizeof(NNValue) * ncap);
+            list->listitems = (NNValue*)nn_memory_realloc(list->listitems, sizeof(NNValue) * ncap);
         }
         for(i = oldcap; i < ncap; i++)
         {

@@ -17,7 +17,7 @@ try
     */
 }
 //catch(e)
-catch(Exception e)
+catch(e)
 {
     print("exception: ", e.message, "\n")
 }

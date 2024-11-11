@@ -1,7 +1,10 @@
 
-class Code
+
+function foo(name, lastname="doe")
 {
-    static var T_OP = 46
+    println("name=", name, ", lastname=", lastname)
 }
 
-println(Code.T_OP)
+foo("john")
+foo("emily", "hart")
+

@@ -249,10 +249,10 @@ size_t dyn_strutil_split(const char* splitat, const char* sourcetxt, char*** res
         }
         else
         {
-            arr = (char**)mc_memory_malloc(txtlen * sizeof(char*));
+            arr = (char**)nn_memory_malloc(txtlen * sizeof(char*));
             for(i = 0; i < txtlen; i++)
             {
-                arr[i] = (char*)mc_memory_malloc(2 * sizeof(char));
+                arr[i] = (char*)nn_memory_malloc(2 * sizeof(char));
                 arr[i][0] = sourcetxt[i];
                 arr[i][1] = '\0';
             }
@@ -267,13 +267,13 @@ size_t dyn_strutil_split(const char* splitat, const char* sourcetxt, char*** res
     {
     }
     /* Create return array */
-    arr = (char**)mc_memory_malloc(count * sizeof(char*));
+    arr = (char**)nn_memory_malloc(count * sizeof(char*));
     count = 0;
     plastpos = sourcetxt;
     while((find = strstr(plastpos, splitat)) != NULL)
     {
         slen = (size_t)(find - plastpos);
-        arr[count] = (char*)mc_memory_malloc((slen + 1) * sizeof(char));
+        arr[count] = (char*)nn_memory_malloc((slen + 1) * sizeof(char));
         strncpy(arr[count], plastpos, slen);
         arr[count][slen] = '\0';
         count++;
@@ -281,7 +281,7 @@ size_t dyn_strutil_split(const char* splitat, const char* sourcetxt, char*** res
     }
     /* Copy last item */
     slen = (size_t)(sourcetxt + txtlen - plastpos);
-    arr[count] = (char*)mc_memory_malloc((slen + 1) * sizeof(char));
+    arr[count] = (char*)nn_memory_malloc((slen + 1) * sizeof(char));
     if(count == 0)
     {
         strcpy(arr[count], sourcetxt);
@@ -323,6 +323,19 @@ void dyn_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start
 // Constructors / Destructors
 */
 
+void dyn_strbuf_convertfromintern(StringBuffer* sbuf)
+{
+    char* abuf;
+    if(sbuf->isintern)
+    {
+        fprintf(stderr, "converting stringbuffer from const to dynamic!!\n");
+        abuf = (char*)nn_memory_malloc(sizeof(char) * (sbuf->capacity));
+        memcpy(abuf, sbuf->data, sbuf->length);
+        /* if sbuf->data is NOT stack memory, it'll be orphaned here!!!!! */
+        sbuf->data = abuf;
+    }
+}
+
 /*
 // Place a string buffer into existing memory. Example:
 //   StringBuffer buf;
@@ -334,7 +347,7 @@ StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
 {
     sbuf->length = 0;
     sbuf->capacity = ROUNDUP2POW(len + 1);
-    sbuf->data = (char*)mc_memory_malloc(sbuf->capacity);
+    sbuf->data = (char*)nn_memory_malloc(sbuf->capacity);
     if(!sbuf->data)
     {
         return NULL;
@@ -343,20 +356,42 @@ StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
     return sbuf;
 }
 
-StringBuffer* dyn_strbuf_makeempty(size_t len)
+bool dyn_strbuf_initbasicempty(StringBuffer* sbuf, size_t len, bool isintern, bool onstack)
+{
+    sbuf->length = len;
+    sbuf->capacity = 0;
+    sbuf->data = NULL;
+    sbuf->isintern = isintern;
+    if(isintern)
+    {
+        return true;
+    }
+    if(!dyn_strbuf_makefromptr(sbuf, len))
+    {
+        if(!onstack)
+        {
+            nn_memory_free(sbuf);
+        }
+        return false;
+    }
+    return true;
+}
+
+bool dyn_strbuf_makebasicemptystack(StringBuffer* sbuf, size_t len, bool isintern)
+{
+    return dyn_strbuf_initbasicempty(sbuf, len, isintern, true);
+}
+
+StringBuffer* dyn_strbuf_makebasicempty(size_t len, bool isintern)
 {
     StringBuffer* sbuf;
-    sbuf = (StringBuffer*)mc_memory_calloc(1, sizeof(StringBuffer));
+    sbuf = (StringBuffer*)nn_memory_calloc(1, sizeof(StringBuffer));
     if(!sbuf)
     {
         return NULL;
     }
-    sbuf->length = 0;
-    sbuf->capacity = 0;
-    sbuf->data = NULL;
-    if(!dyn_strbuf_makefromptr(sbuf, len))
+    if(!dyn_strbuf_initbasicempty(sbuf, len, isintern, false))
     {
-        mc_memory_free(sbuf);
         return NULL;
     }
     return sbuf;
@@ -364,14 +399,20 @@ StringBuffer* dyn_strbuf_makeempty(size_t len)
 
 bool dyn_strbuf_destroy(StringBuffer* sb)
 {
-    mc_memory_free(sb->data);
-    mc_memory_free(sb);
+    if(!sb->isintern)
+    {
+        nn_memory_free(sb->data);
+    }
+    nn_memory_free(sb);
     return true;
 }
 
 bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 {
-    mc_memory_free(sb->data);
+    if(!sb->isintern)
+    {
+        nn_memory_free(sb->data);
+    }
     memset(sb, 0, sizeof(*sb));
     return true;
 }
@@ -379,16 +420,24 @@ bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 /*
 // Copy a string or existing string buffer
 */
-StringBuffer* dyn_strbuf_makefromstring(const char* str, size_t slen)
+StringBuffer* dyn_strbuf_makefromstring(const char* str, size_t slen, bool isintern)
 {
     StringBuffer* sbuf;
-    sbuf = dyn_strbuf_makeempty(slen + 1);
+    sbuf = dyn_strbuf_makebasicempty(slen + 1, isintern);
     if(!sbuf)
     {
         return NULL;
     }
-    memcpy(sbuf->data, str, slen);
-    sbuf->data[sbuf->length = slen] = '\0';
+    sbuf->length = slen;
+    if(isintern)
+    {
+        sbuf->data = (char*)str;
+    }
+    else
+    {
+        memcpy(sbuf->data, str, slen);
+        sbuf->data[sbuf->length] = '\0';
+    }
     return sbuf;
 }
 
@@ -396,13 +445,21 @@ StringBuffer* dyn_strbuf_makeclone(const StringBuffer* sbuf)
 {
     /* One byte for the string end / null char \0 */
     StringBuffer* cpy;
-    cpy = dyn_strbuf_makeempty(sbuf->length + 1);
+    cpy = dyn_strbuf_makebasicempty(sbuf->length + 1, sbuf->isintern);
     if(!cpy)
     {
         return NULL;
     }
-    memcpy(cpy->data, sbuf->data, sbuf->length);
-    cpy->data[cpy->length = sbuf->length] = '\0';
+    cpy->length = sbuf->length;
+    if(cpy->isintern)
+    {
+        cpy->data = sbuf->data;
+    }
+    else
+    {
+        memcpy(cpy->data, sbuf->data, sbuf->length);
+        cpy->data[cpy->length] = '\0';
+    }
     return cpy;
 }
 
@@ -428,7 +485,7 @@ void dyn_strutil_cbufcapacity(char** buf, size_t* sizeptr, size_t len)
     {
         *sizeptr = ROUNDUP2POW(len);
         /* fprintf(stderr, "sizeptr=%ld\n", *sizeptr); */
-        if((*buf = (char*)mc_memory_realloc(*buf, *sizeptr)) == NULL)
+        if((*buf = (char*)nn_memory_realloc(*buf, *sizeptr)) == NULL)
         {
             fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
             abort();
@@ -453,7 +510,7 @@ bool dyn_strbuf_resize(StringBuffer* sbuf, size_t newlen)
     size_t capacity;
     char* newbuf;
     capacity = ROUNDUP2POW(newlen + 1);
-    newbuf = (char*)mc_memory_realloc(sbuf->data, capacity * sizeof(char));
+    newbuf = (char*)nn_memory_realloc(sbuf->data, capacity * sizeof(char));
     if(newbuf == NULL)
     {
         return false;
@@ -472,6 +529,7 @@ bool dyn_strbuf_resize(StringBuffer* sbuf, size_t newlen)
 /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
 void dyn_strbuf_ensurecapacity(StringBuffer* sb, size_t len)
 {
+    dyn_strbuf_convertfromintern(sb);
     dyn_strutil_cbufcapacity(&sb->data, &sb->capacity, len);
 }
 
@@ -543,7 +601,7 @@ size_t dyn_strutil_strreplace1(char **str, size_t selflen, const char* findstr, 
             i += findlen - 1;
         }
     }
-    buff = (char*)mc_memory_calloc((i + oldcount * (sublen - findlen) + 1), sizeof(char));
+    buff = (char*)nn_memory_calloc((i + oldcount * (sublen - findlen) + 1), sizeof(char));
     if (!buff)
     {
         perror("bad allocation\n");
@@ -564,8 +622,8 @@ size_t dyn_strutil_strreplace1(char **str, size_t selflen, const char* findstr, 
             buff[i++] = *temp++;
         }
     }
-    mc_memory_free(*str);
-    *str = (char*)mc_memory_calloc(i + 1, sizeof(char));
+    nn_memory_free(*str);
+    *str = (char*)nn_memory_calloc(i + 1, sizeof(char));
     if (!(*str))
     {
         perror("bad allocation\n");
@@ -573,7 +631,7 @@ size_t dyn_strutil_strreplace1(char **str, size_t selflen, const char* findstr, 
     }
     i = 0;
     dyn_strutil_faststrncat(*str, (const char *)buff, &i);
-    mc_memory_free(buff);
+    nn_memory_free(buff);
     return i;
 }
 
@@ -986,7 +1044,7 @@ char* dyn_strbuf_substr(const StringBuffer* sbuf, size_t start, size_t len)
 {
     char* newstr;
     dyn_strbuf_boundscheckreadrange(sbuf, start, len);
-    newstr = (char*)mc_memory_malloc((len + 1) * sizeof(char));
+    newstr = (char*)nn_memory_malloc((len + 1) * sizeof(char));
     strncpy(newstr, sbuf->data + start, len);
     newstr[len] = '\0';
     return newstr;
@@ -1002,7 +1060,6 @@ void dyn_strbuf_touppercase(StringBuffer* sbuf)
         *pos = (char)toupper(*pos);
     }
 }
-
 
 void dyn_strbuf_tolowercase(StringBuffer* sbuf)
 {

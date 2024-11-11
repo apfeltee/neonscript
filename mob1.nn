@@ -24,7 +24,7 @@ for(var i=0; i<11; i++)
     {
         println(A(i, vone, vminusone, vminusone, vone, vnull));
     }
-    catch(Exception e)
+    catch(e)
     {
         println("error: ${e.message} (from ${e.srcfile}:${e.srcline})");
         break;

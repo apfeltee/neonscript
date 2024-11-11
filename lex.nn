@@ -1,12 +1,8 @@
 
-return
 var scanner = import "astscan";
 var infile;
-infile = "hello.nn";
-if(!File.isFile(infile))
-{
-    infile = "../hello.nn";
-}
+infile = Process.directory + "/hello.nn";
+
 var src = File(infile).read()
 var toks = scanner.scan(src)
 println(toks)

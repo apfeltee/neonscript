@@ -368,7 +368,7 @@ function main()
     {
         if(fpath == "-")
         {
-            src = STDIN.read(1024)
+            src = Process.stdin.read(1024)
         }
         else
         {

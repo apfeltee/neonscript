@@ -3,15 +3,15 @@ var g_failed = 0;
 
 function check(name, subfn)
 {
-    println("testing ${name} ... ");
+    println(`testing ${name} ... `);
     try
     {
         subfn();
-        println("testing ${name}: ok!");
+        println(`testing ${name}: ok!`);
     }
-    catch(Exception e)
+    catch(e)
     {
-        println("testing ${name}: failed: ${e.message}!");
+        println(`testing ${name}: failed: ${e.message}!`);
         g_failed++;
     }
 }
@@ -71,12 +71,12 @@ check("exceptions", function()
         {
             throw Exception("ok")
         }
-        catch(Exception e)
+        catch(e)
         {
             throw e;
         }
     }
-    catch(Exception e)
+    catch(e)
     {
         res = e.message;
     }

@@ -29,7 +29,7 @@ function testutf(s)
 {
     var cps = s.utf8Codepoints();
     var clen = cps.length
-    print("len=${s.length}: ${cps}: ${s}:\n   ")
+    print(`len=${s.length}: ${cps}: ${s}:`, "\n   ")
     for(i=0; i<clen; i++)
     {
         var cc = cps[i]

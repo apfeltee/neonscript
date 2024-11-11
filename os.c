@@ -267,3 +267,8 @@ int osfn_getpid()
     return getpid();
 }
 
+int osfn_kill(int pid, int code)
+{
+    return kill(pid, code);
+}
+

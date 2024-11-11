@@ -219,13 +219,13 @@ class LighTemplate
 
 class Response
 {
-    write(...)
+    write(...args)
     {
         var i;
-        var ia = __args__.length;
+        var ia = args.length;
         for(i=0; i<ia; i++)
         {
-            print(__args__[i])
+            print(args[i])
         }
     }
 }

@@ -1,0 +1,29 @@
+
+const os = import "os";
+
+
+function scan(dir)
+{
+    var items = os.readdir(dir);
+    for(var i=0; i<items.length; i++)
+    {
+        var item = items[i];
+        if((item == '.') || (item == '..'))
+        {
+            continue;
+        }
+        //var fp = File.join(dir, item);
+        var fp = dir + '/' + item;
+        var isdir = File.isDirectory(fp);
+        if(isdir)
+        {
+            scan(fp);
+        }
+        else
+        {
+            println(fp);
+        }
+    }
+}
+
+scan("mods");

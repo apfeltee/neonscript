@@ -28,14 +28,16 @@ typedef struct StringBuffer StringBuffer;
 
 struct StringBuffer
 {
-
-    char* data;
+    bool isintern;
 
     /* total length of this buffer */
     size_t length;
 
     /* capacity should be >= length+1 to allow for \0 */
     size_t capacity;
+
+    char* data;
+
 };
 
 
@@ -53,10 +55,10 @@ size_t dyn_strutil_split(const char *splitat, const char *sourcetxt, char ***res
 void dyn_strutil_callboundscheckinsert(const StringBuffer *sbuf, size_t pos, const char *file, int line);
 void dyn_strutil_callboundscheckreadrange(const StringBuffer *sbuf, size_t start, size_t len, const char *file, int line);
 StringBuffer *dyn_strbuf_makefromptr(StringBuffer *sbuf, size_t len);
-StringBuffer *dyn_strbuf_makeempty(size_t len);
+StringBuffer *dyn_strbuf_makebasicempty(size_t len, bool isintern);
 bool dyn_strbuf_destroy(StringBuffer *sb);
 bool dyn_strbuf_destroyfromptr(StringBuffer *sb);
-StringBuffer *dyn_strbuf_makefromstring(const char *str, size_t slen);
+StringBuffer *dyn_strbuf_makefromstring(const char *str, size_t slen, bool isintern);
 StringBuffer *dyn_strbuf_makeclone(const StringBuffer *sbuf);
 void dyn_strbuf_reset(StringBuffer *sb);
 void dyn_strutil_cbufcapacity(char **buf, size_t *sizeptr, size_t len);

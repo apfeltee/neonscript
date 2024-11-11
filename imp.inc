@@ -4353,7 +4353,7 @@ NNValue nn_value_copyvalue(NNState* state, NNValue value)
                 {
                     NNObjString* string;
                     string = nn_value_asstring(value);
-                    return nn_value_fromobject(nn_string_copyobject(state, string));
+                    return nn_value_fromobject(nn_string_copylen(state, string->sbuf->data, string->sbuf->length));
                 }
                 break;
             case NEON_OBJTYPE_ARRAY:
@@ -4877,17 +4877,6 @@ NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 {
     return nn_string_copylen(state, chars, strlen(chars));
 }
-
-NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
-{
-    NNObjString* ros;
-    if(origos->sbuf->isintern)
-    {
-        return nn_string_internlen(state, origos->sbuf->data, origos->sbuf->length);
-    }
-    return nn_string_copylen(state, origos->sbuf->data, origos->sbuf->length);
-}
-
 
 NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
 {
@@ -9470,28 +9459,18 @@ bool nn_util_fsfileexists(NNState* state, const char* filepath)
     #endif
 }
 
-bool nn_util_fsfileistype(NNState* state, const char* filepath, int typ)
-{
-    int tmp;
-    struct stat st;
-    (void)state;
-    (void)filepath;
-    if(stat(filepath, &st) == -1)
-    {
-        return false;
-    }
-    tmp = (st.st_mode & S_IFMT);
-    return (tmp == typ);
-}
-
 bool nn_util_fsfileisfile(NNState* state, const char* filepath)
 {
-    return nn_util_fsfileistype(state, filepath, S_IFREG);
+    (void)state;
+    (void)filepath;
+    return false;
 }
 
 bool nn_util_fsfileisdirectory(NNState* state, const char* filepath)
 {
-    return nn_util_fsfileistype(state, filepath, S_IFDIR);
+    (void)state;
+    (void)filepath;
+    return false;
 }
 
 NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule, NNObjString* modulename)
@@ -10313,27 +10292,6 @@ NNValue nn_objfnfile_isdirectory(NNState* state, NNArguments* args)
     return nn_value_makebool(nn_util_fsfileisdirectory(state, file->sbuf->data));
 }
 
-
-NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
-{
-    NNObjString* file;
-    NNArgCheck check;
-    NNObjDict* dict;
-    struct stat st;
-    nn_argcheck_init(state, &check, args);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
-    file = nn_value_asstring(args->args[0]);
-    if(osfn_lstat(file->sbuf->data, &st) == 0)
-    {
-        nn_util_statfilldictphysfile(state, dict, &st);
-        return nn_value_fromobject(dict);
-    }
-    return nn_value_makenull();
-}
-
-
 NNValue nn_objfnfile_close(NNState* state, NNArguments* args)
 {
     NNArgCheck check;
@@ -10724,34 +10682,7 @@ NNValue nn_objfnfile_flush(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-void nn_util_statfilldictphysfile(NNState* state, NNObjDict* dict, struct stat* st)
-{
-    #if !defined(NEON_PLAT_ISWINDOWS)
-    nn_dict_addentrycstr(dict, "isreadable", nn_value_makebool(((st->st_mode & S_IRUSR) != 0)));
-    nn_dict_addentrycstr(dict, "iswritable", nn_value_makebool(((st->st_mode & S_IWUSR) != 0)));
-    nn_dict_addentrycstr(dict, "isexecutable", nn_value_makebool(((st->st_mode & S_IXUSR) != 0)));
-    nn_dict_addentrycstr(dict, "issymbolic", nn_value_makebool((S_ISLNK(st->st_mode) != 0)));
-    #else
-    nn_dict_addentrycstr(dict, "isreadable", nn_value_makebool(((st->st_mode & S_IREAD) != 0)));
-    nn_dict_addentrycstr(dict, "iswritable", nn_value_makebool(((st->st_mode & S_IWRITE) != 0)));
-    nn_dict_addentrycstr(dict, "isexecutable", nn_value_makebool(((st->st_mode & S_IEXEC) != 0)));
-    nn_dict_addentrycstr(dict, "issymbolic", nn_value_makebool(false));
-    #endif
-    nn_dict_addentrycstr(dict, "size", nn_value_makenumber(st->st_size));
-    nn_dict_addentrycstr(dict, "mode", nn_value_makenumber(st->st_mode));
-    nn_dict_addentrycstr(dict, "dev", nn_value_makenumber(st->st_dev));
-    nn_dict_addentrycstr(dict, "ino", nn_value_makenumber(st->st_ino));
-    nn_dict_addentrycstr(dict, "nlink", nn_value_makenumber(st->st_nlink));
-    nn_dict_addentrycstr(dict, "uid", nn_value_makenumber(st->st_uid));
-    nn_dict_addentrycstr(dict, "gid", nn_value_makenumber(st->st_gid));
-    nn_dict_addentrycstr(dict, "mtime", nn_value_makenumber(st->st_mtime));
-    nn_dict_addentrycstr(dict, "atime", nn_value_makenumber(st->st_atime));
-    nn_dict_addentrycstr(dict, "ctime", nn_value_makenumber(st->st_ctime));
-    nn_dict_addentrycstr(dict, "blocks", nn_value_makenumber(0));
-    nn_dict_addentrycstr(dict, "blksize", nn_value_makenumber(0));
-}
-
-NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_stats(NNState* state, NNArguments* args)
 {
     struct stat stats;
     NNObjFile* file;
@@ -10767,7 +10698,29 @@ NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
         {
             if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
             {
-                nn_util_statfilldictphysfile(state, dict, &stats);
+                #if !defined(NEON_PLAT_ISWINDOWS)
+                nn_dict_addentrycstr(dict, "isreadable", nn_value_makebool(((stats.st_mode & S_IRUSR) != 0)));
+                nn_dict_addentrycstr(dict, "iswritable", nn_value_makebool(((stats.st_mode & S_IWUSR) != 0)));
+                nn_dict_addentrycstr(dict, "isexecutable", nn_value_makebool(((stats.st_mode & S_IXUSR) != 0)));
+                nn_dict_addentrycstr(dict, "issymbolic", nn_value_makebool((S_ISLNK(stats.st_mode) != 0)));
+                #else
+                nn_dict_addentrycstr(dict, "isreadable", nn_value_makebool(((stats.st_mode & S_IREAD) != 0)));
+                nn_dict_addentrycstr(dict, "iswritable", nn_value_makebool(((stats.st_mode & S_IWRITE) != 0)));
+                nn_dict_addentrycstr(dict, "isexecutable", nn_value_makebool(((stats.st_mode & S_IEXEC) != 0)));
+                nn_dict_addentrycstr(dict, "issymbolic", nn_value_makebool(false));
+                #endif
+                nn_dict_addentrycstr(dict, "size", nn_value_makenumber(stats.st_size));
+                nn_dict_addentrycstr(dict, "mode", nn_value_makenumber(stats.st_mode));
+                nn_dict_addentrycstr(dict, "dev", nn_value_makenumber(stats.st_dev));
+                nn_dict_addentrycstr(dict, "ino", nn_value_makenumber(stats.st_ino));
+                nn_dict_addentrycstr(dict, "nlink", nn_value_makenumber(stats.st_nlink));
+                nn_dict_addentrycstr(dict, "uid", nn_value_makenumber(stats.st_uid));
+                nn_dict_addentrycstr(dict, "gid", nn_value_makenumber(stats.st_gid));
+                nn_dict_addentrycstr(dict, "mtime", nn_value_makenumber(stats.st_mtime));
+                nn_dict_addentrycstr(dict, "atime", nn_value_makenumber(stats.st_atime));
+                nn_dict_addentrycstr(dict, "ctime", nn_value_makenumber(stats.st_ctime));
+                nn_dict_addentrycstr(dict, "blocks", nn_value_makenumber(0));
+                nn_dict_addentrycstr(dict, "blksize", nn_value_makenumber(0));
             }
         }
         else
@@ -13532,7 +13485,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"isOpen", nn_objfnfile_isopen},
             {"isClosed", nn_objfnfile_isclosed},
             {"flush", nn_objfnfile_flush},
-            {"stats", nn_objfnfile_statmethod},
+            {"stats", nn_objfnfile_stats},
             {"path", nn_objfnfile_path},
             {"seek", nn_objfnfile_seek},
             {"tell", nn_objfnfile_tell},
@@ -13542,10 +13495,6 @@ void nn_state_initbuiltinmethods(NNState* state)
         };
         nn_class_defnativeconstructor(state, state->classprimfile, nn_objfnfile_constructor);
         nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "exists"), nn_objfnfile_exists);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isFile"), nn_objfnfile_isfile);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isDirectory"), nn_objfnfile_isdirectory);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "stat"), nn_objfnfile_statstatic);
-
         installmethods(state, state->classprimfile, filemethods);
     }
     {
@@ -15405,7 +15354,7 @@ void nn_dict_addentrycstr(NNObjDict* dict, const char* ckey, NNValue value)
     NNObjString* os;
     NNState* state;
     state = ((NNObject*)dict)->pvm;
-    os = nn_string_intern(state, ckey);
+    os = nn_string_copycstr(state, ckey);
     nn_dict_addentry(dict, nn_value_fromobject(os), value);
 }
 

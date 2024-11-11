@@ -2,7 +2,7 @@
 NNHashValTable* nn_tableval_make(NNState* state)
 {
     NNHashValTable* table;
-    table = (NNHashValTable*)nn_gcmem_allocate(state, sizeof(NNHashValTable), 1);
+    table = (NNHashValTable*)nn_memory_malloc(sizeof(NNHashValTable));
     if(table == NULL)
     {
         return NULL;
@@ -17,13 +17,11 @@ NNHashValTable* nn_tableval_make(NNState* state)
 
 void nn_tableval_destroy(NNHashValTable* table)
 {
-    NNState* state;
     if(table != NULL)
     {
-        state = table->pvm;
-        nn_gcmem_freearray(state, sizeof(NNHashValEntry), table->entries, table->capacity);
+        nn_memory_free(table->entries);
         memset(table, 0, sizeof(NNHashValTable));
-        nn_gcmem_release(state, table, sizeof(NNHashValTable));
+        nn_memory_free(table);
     }
 }
 
@@ -248,13 +246,12 @@ void nn_tableval_adjustcapacity(NNHashValTable* table, int capacity)
     NNHashValEntry* entry;
     NNHashValEntry* entries;
     state = table->pvm;
-    entries = (NNHashValEntry*)nn_gcmem_allocate(state, sizeof(NNHashValEntry), capacity);
+    entries = (NNHashValEntry*)nn_memory_malloc(sizeof(NNHashValEntry) * capacity);
     for(i = 0; i < capacity; i++)
     {
         entries[i].key = nn_value_makenull();
         entries[i].value = nn_property_make(state, nn_value_makenull(), NEON_PROPTYPE_VALUE);
     }
-    /* repopulate buckets */
     table->count = 0;
     for(i = 0; i < table->capacity; i++)
     {
@@ -268,11 +265,11 @@ void nn_tableval_adjustcapacity(NNHashValTable* table, int capacity)
         dest->value = entry->value;
         table->count++;
     }
-    /* free the old entries... */
-    nn_gcmem_freearray(state, sizeof(NNHashValEntry), table->entries, table->capacity);
+    nn_memory_free(table->entries);
     table->entries = entries;
     table->capacity = capacity;
 }
+
 
 bool nn_tableval_setwithtype(NNHashValTable* table, NNValue key, NNValue value, NNFieldType ftyp, bool keyisstring)
 {
@@ -304,19 +301,6 @@ bool nn_tableval_set(NNHashValTable* table, NNValue key, NNValue value)
     return nn_tableval_setwithtype(table, key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
 }
 
-bool nn_tableval_setcstrwithtype(NNHashValTable* table, const char* cstrkey, NNValue value, NNFieldType ftype)
-{
-    NNObjString* os;
-    NNState* state;
-    state = table->pvm;
-    os = nn_string_copycstr(state, cstrkey);
-    return nn_tableval_setwithtype(table, nn_value_fromobject(os), value, ftype, true);
-}
-
-bool nn_tableval_setcstr(NNHashValTable* table, const char* cstrkey, NNValue value)
-{
-    return nn_tableval_setcstrwithtype(table, cstrkey, value, NEON_PROPTYPE_VALUE);
-}
 
 bool nn_tableval_delete(NNHashValTable* table, NNValue key)
 {
@@ -459,3 +443,45 @@ NNObjArray* nn_tableval_getkeys(NNHashValTable* table)
     }
     return list;
 }
+
+void nn_tableval_mark(NNState* state, NNHashValTable* table)
+{
+    int i;
+    NNHashValEntry* entry;
+    if(table == NULL)
+    {
+        return;
+    }
+    if(!table->active)
+    {
+        nn_state_warn(state, "trying to mark inactive hashtable <%p>!", table);
+        return;
+    }
+    for(i = 0; i < table->capacity; i++)
+    {
+        entry = &table->entries[i];
+        if(entry != NULL)
+        {
+            if(entry->key != NEON_VALUE_NULL)
+            {
+                nn_gcmem_markvalue(state, entry->key);
+                nn_gcmem_markvalue(state, entry->value.value);
+            }
+        }
+    }
+}
+
+void nn_tableval_removewhites(NNState* state, NNHashValTable* table)
+{
+    int i;
+    NNHashValEntry* entry;
+    for(i = 0; i < table->capacity; i++)
+    {
+        entry = &table->entries[i];
+        if(nn_value_isobject(entry->key) && nn_value_asobject(entry->key)->mark != state->markvalue)
+        {
+            nn_tableval_delete(table, entry->key);
+        }
+    }
+}
+

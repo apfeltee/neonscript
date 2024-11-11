@@ -105,9 +105,16 @@ function bf(src, input)
 
 var bfsource = "++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++."
 
-
 if(ARGV.length > 1)
 {
-    bfsource = File(ARGV[1], "rb").read()
+    if(ARGV[1] == '-')
+    {
+        bfsource = Process.stdin.read(1024*1024);
+    }
+    else
+    {
+        bfsource = File(ARGV[1], "rb").read()
+    }
 }
+println("bfsource: ", bfsource)
 bf(bfsource, "")

@@ -54,7 +54,7 @@ class A {
   }
 }
 
-class B < A {
+class B extends A {
   getClosure() {
     function closure() {
       super.say()
@@ -67,7 +67,7 @@ class B < A {
   }
 }
 
-class C < B {
+class C extends B {
   say() {
     println("C")
   }
@@ -91,7 +91,7 @@ class Animal {
   }
 }
 
-class Dog < Animal {
+class Dog extends Animal {
 
   var myx = 50
 

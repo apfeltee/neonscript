@@ -10,7 +10,9 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <signal.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 
 #if defined(__unix__) || defined(__linux__)
@@ -144,3 +146,5 @@ int osfn_gettimeofday(struct timeval* tp, void* tzp);
 int osfn_mkdir(const char *path, size_t mode);
 int osfn_chdir(const char *path);
 int osfn_getpid();
+int osfn_kill(int pid, int code);
+
