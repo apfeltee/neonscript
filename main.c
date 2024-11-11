@@ -4881,10 +4881,12 @@ NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
 {
     NNObjString* ros;
+    #if 0
     if(origos->sbuf->isintern)
     {
         return nn_string_internlen(state, origos->sbuf->data, origos->sbuf->length);
     }
+    #endif
     return nn_string_copylen(state, origos->sbuf->data, origos->sbuf->length);
 }
 
@@ -4907,7 +4909,6 @@ NNObjString* nn_string_intern(NNState* state, const char* chars)
 {
     return nn_string_internlen(state, chars, strlen(chars));
 }
-
 
 NNObjString* nn_string_copyobjstr(NNState* state, NNObjString* os)
 {
@@ -6412,7 +6413,7 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* compiler, NNFu
         }
         else
         {
-            fname = nn_string_internlen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length);
+            fname = nn_string_copylen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length);
         }
         prs->currentfunccompiler->targetfunc->name = fname;
         nn_vm_stackpop(prs->pvm);
@@ -6450,7 +6451,7 @@ int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
         rawstr++;
         rawlen--;
     }
-    str = nn_string_internlen(prs->pvm, rawstr, rawlen);
+    str = nn_string_copylen(prs->pvm, rawstr, rawlen);
     return nn_astparser_pushconst(prs, nn_value_fromobject(str));
 }
 
@@ -7168,7 +7169,7 @@ bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
                 if(nn_astparser_check(prs, NEON_ASTTOK_IDENTNORMAL))
                 {
                     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "");
-                    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_internlen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length)));
+                    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_copylen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length)));
                 }
                 else
                 {
@@ -14221,11 +14222,13 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     NNObjString* classname;
     NNObjFuncScript* function;
     NNObjFuncClosure* closure;
+    #if 0
     if(iscs)
     {
         classname = nn_string_intern(state, cstrname);
     }
     else
+    #endif
     {
         classname = nn_string_copycstr(state, cstrname);
     }
@@ -14662,6 +14665,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->exceptions.argumenterror = nn_exceptions_makeclass(state, NULL, "ArgumentError", true);
     }
     nn_state_buildprocessinfo(state);
+    nn_state_addsearchpathobj(state, state->processinfo->clidirectory);
     {
         nn_state_initbuiltinfunctions(state);
         nn_state_initbuiltinmethods(state);

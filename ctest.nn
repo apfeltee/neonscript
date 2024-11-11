@@ -9,7 +9,7 @@ try
 }
 catch(e)
 {
-    colors = import "../mods/colors"
+    throw Exception("FAILED TO IMPORT COLORS");
 }
 
 println("colors=", colors);
