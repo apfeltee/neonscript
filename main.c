@@ -142,6 +142,8 @@
 
 /* global debug mode flag */
 #define NEON_CFG_BUILDDEBUGMODE 0
+#define NEON_CONF_MAXSYNTAXERRORS 10
+
 
 #if NEON_CFG_BUILDDEBUGMODE == 1
     #define DEBUG_PRINT_CODE 1
@@ -644,11 +646,9 @@ typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/ NNArguments NNArguments;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
-typedef struct NNStrMap NNStrMap;
 typedef struct NNBoxedString NNBoxedString;
 typedef struct NNHashPtrTable NNHashPtrTable;
 typedef union NNUtilDblUnion NNUtilDblUnion;
-
 
 typedef NNValue (*NNNativeFN)(NNState*, NNArguments*);
 typedef void (*NNPtrFreeFN)(void*);
@@ -661,7 +661,6 @@ typedef double(*nnbinopfunc_t)(double, double);
 
 typedef size_t (*mcitemhashfn_t)(void*);
 typedef bool (*mcitemcomparefn_t)(void*, void*);
-
 
 union NNUtilDblUnion
 {
@@ -722,12 +721,11 @@ struct NNPrinter
 struct NNFormatInfo
 {
     /* length of the format string */
-    size_t fmtlen;
+	size_t                     fmtlen;               /*     0     8 */
     /* the actual format string */
-    const char* fmtstr;
-    /* destination writer */
-    NNPrinter* writer;
-    NNState* pvm;
+	const char  *              fmtstr;               /*     8     8 */
+	NNPrinter *                writer;               /*    16     8 */
+	NNState *                  pvm;                  /*    24     8 */
 };
 
 #if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
@@ -748,13 +746,6 @@ struct NNBoxedString
     bool isalloced;
     char* data;
     size_t length;
-};
-
-struct NNStrMap
-{
-    NNStrMap* nxt;
-    NNBoxedString* name;
-    NNValue value;
 };
 
 
@@ -782,19 +773,19 @@ struct NNPropGetSet
 
 struct NNProperty
 {
+    bool havegetset;
     NNFieldType type;
     NNValue value;
-    bool havegetset;
     NNPropGetSet getset;
 };
 
 struct NNValArray
 {
     NNState* pvm;
-    size_t listcapacity;
-    size_t listcount;
     const char* listname;
     NNValue* listitems;
+    size_t listcapacity;
+    size_t listcount;
 };
 
 struct NNInstruction
@@ -804,7 +795,7 @@ struct NNInstruction
     /* opcode or value */
     uint8_t code;
     /* line corresponding to where this instruction was emitted */
-    int srcline;
+    short srcline;
 };
 
 struct NNBlob
@@ -962,7 +953,6 @@ struct NNObjInstance
     NNObject objpadding;
     /*
     * whether this instance is still "active", i.e., not destroyed, deallocated, etc.
-    * in rare circumstances s
     */
     bool active;
     NNHashValTable* properties;
@@ -1060,6 +1050,7 @@ struct NNProcessInfo
     NNObjFile* filestdout;
     NNObjFile* filestderr;
     NNObjFile* filestdin;
+
 };
 
 struct NNState
@@ -1075,6 +1066,7 @@ struct NNState
         bool showfullstack;
         bool enableapidebug;
         bool enableastdebug;
+        int maxsyntaxerrors;
     } conf;
 
     struct
@@ -1210,10 +1202,13 @@ struct NNAstParser
     bool lastwasstatement;
     bool infunction;
     bool inswitch;
+    bool stopprintingsyntaxerrors;
+    
     /* used for tracking loops for the continue statement... */
     int innermostloopstart;
     int innermostloopscopedepth;
     int blockcount;
+    int errorcount;
     /* the context in which the parser resides; none (outer level), inside a class, dict, array, etc */
     NNAstCompContext compcontext;
     const char* currentfile;
@@ -1866,16 +1861,20 @@ void nn_gcmem_clearprotect(NNState* state)
     frame->gcprotcount = 0;
 }
 
+static int g_neon_ttycheck = -1;
+
 const char* nn_util_color(NNColor tc)
 {
     #if !defined(NEON_CFG_FORCEDISABLECOLOR)
-        bool istty;
         int fdstdout;
         int fdstderr;
-        fdstdout = fileno(stdout);
-        fdstderr = fileno(stderr);
-        istty = (osfn_isatty(fdstderr) && osfn_isatty(fdstdout));
-        if(istty)
+        if(g_neon_ttycheck == -1)
+        {
+            fdstdout = fileno(stdout);
+            fdstderr = fileno(stderr);
+            g_neon_ttycheck = (osfn_isatty(fdstderr) && osfn_isatty(fdstdout));
+        }
+        if(g_neon_ttycheck)
         {
             switch(tc)
             {
@@ -5811,7 +5810,9 @@ NNAstParser* nn_astparser_make(NNState* state, NNAstLexer* lexer, NNObjModule* m
     parser->currentfunccompiler = NULL;
     parser->haderror = false;
     parser->panicmode = false;
+    parser->stopprintingsyntaxerrors = false;
     parser->blockcount = 0;
+    parser->errorcount = 0;
     parser->replcanecho = false;
     parser->isreturning = false;
     parser->istrying = false;
@@ -5840,7 +5841,26 @@ NNBlob* nn_astparser_currentblob(NNAstParser* prs)
 
 bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args)
 {
+    const char* colred;
+    const char* colblue;
+    const char* colyeller;
+    const char* colreset;
+    
+    colred = nn_util_color(NEON_COLOR_RED);
+    colblue = nn_util_color(NEON_COLOR_MAGENTA);
+    colyeller = nn_util_color(NEON_COLOR_YELLOW);
+    colreset = nn_util_color(NEON_COLOR_RESET);
     fflush(stdout);
+    if(prs->stopprintingsyntaxerrors)
+    {
+        return false;
+    }
+    if((prs->pvm->conf.maxsyntaxerrors != 0) && (prs->errorcount >= prs->pvm->conf.maxsyntaxerrors))
+    {
+        fprintf(stderr, "%stoo many errors emitted%s (maximum is %d)\n", colred, colreset, prs->pvm->conf.maxsyntaxerrors);
+        prs->stopprintingsyntaxerrors = true;
+        return false;
+    }
     /*
     // do not cascade error
     // suppress error if already in panic mode
@@ -5850,7 +5870,10 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
         return false;
     }
     prs->panicmode = true;
-    fprintf(stderr, "SyntaxError");
+    fprintf(stderr, "(%d) %sSyntaxError%s ",  prs->errorcount, colred, colreset);
+    fprintf(stderr, " [%s:%d]:\n", prs->currentmodule->physicalpath->sbuf->data, t->line);
+    vfprintf(stderr, message, args);
+    fprintf(stderr, " ");
     if(t->type == NEON_ASTTOK_EOF)
     {
         fprintf(stderr, " at end");
@@ -5858,6 +5881,7 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
     else if(t->type == NEON_ASTTOK_ERROR)
     {
         /* do nothing */
+        fprintf(stderr, "at <internal error>");
     }
     else
     {
@@ -5870,11 +5894,9 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
             fprintf(stderr, " at '%.*s'", t->length, t->start);
         }
     }
-    fprintf(stderr, ": ");
-    vfprintf(stderr, message, args);
-    fputs("\n", stderr);
-    fprintf(stderr, "  %s:%d\n", prs->currentmodule->physicalpath->sbuf->data, t->line);
+    fprintf(stderr, "\n");
     prs->haderror = true;
+    prs->errorcount++;
     return false;
 }
 
@@ -9615,8 +9637,14 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
                 return NULL;
             }
             #endif
-            path1 = osfn_realpath(cstrpath, NULL);
-            path2 = osfn_realpath(currentfile, NULL);
+            #if 0
+                path1 = osfn_realpath(cstrpath, NULL);
+                path2 = osfn_realpath(currentfile, NULL);
+            #else
+                path1 = strdup(cstrpath);
+                path2 = strdup(currentfile);
+            #endif
+            
             if(path1 != NULL && path2 != NULL)
             {
                 if(memcmp(path1, path2, (int)strlen(path2)) == 0)
@@ -13478,9 +13506,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"@itern", nn_objfnarray_itern},
             {NULL, NULL}
         };
-        #if 1
         nn_class_defnativeconstructor(state, state->classprimarray, nn_objfnarray_constructor);
-        #endif
         nn_class_defcallablefield(state, state->classprimarray, nn_string_intern(state, "length"), nn_objfnarray_length);
         installmethods(state, state->classprimarray, arraymethods);
     }
@@ -13811,13 +13837,13 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
     int ch;
     int ival;
     int nextch;
-    bool failed;
+    bool ok;
     size_t i;
     size_t argpos;
     NNValue cval;
     i = 0;
     argpos = argbegin;
-    failed = false;
+    ok = true;
     while(i < nfi->fmtlen)
     {
         ch = nfi->fmtstr[i];
@@ -13838,7 +13864,8 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                 i++;
                 if((int)argpos > argc)
                 {
-                    failed = true;
+                    nn_exceptions_throw(nfi->pvm, "too few arguments");
+                    ok = false;
                     cval = nn_value_makenull();
                 }
                 else
@@ -13882,7 +13909,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
             nn_printer_writechar(nfi->writer, ch);
         }
     }
-    return failed;
+    return ok;
 }
 
 NNValue nn_nativefn_sprintf(NNState* state, NNArguments* args)
@@ -14222,13 +14249,11 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     NNObjString* classname;
     NNObjFuncScript* function;
     NNObjFuncClosure* closure;
-    #if 0
     if(iscs)
     {
         classname = nn_string_intern(state, cstrname);
     }
     else
-    #endif
     {
         classname = nn_string_copycstr(state, cstrname);
     }
@@ -14604,6 +14629,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->conf.showfullstack = false;
         state->conf.enableapidebug = false;
         state->conf.enableastdebug = false;
+        state->conf.maxsyntaxerrors = NEON_CONF_MAXSYNTAXERRORS;
     }
     {
         state->gcstate.bytesallocated = 0;
@@ -15090,13 +15116,8 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
         if(field != NULL)
         {
             spos = (state->vmstate.stackidx + (-argcount - 1));
-            #if 0
-                state->vmstate.stackvalues[spos] = field->value;
-                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
-            #else
-                state->vmstate.stackvalues[spos] = receiver;
-                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
-            #endif
+            state->vmstate.stackvalues[spos] = receiver;
+            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
         }
     }
     else if(nn_value_isclass(receiver))
@@ -15182,11 +15203,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                     if(field != NULL)
                     {
                         spos = (state->vmstate.stackidx + (-argcount - 1));
-                        #if 0
-                            state->vmstate.stackvalues[spos] = field->value;
-                        #else
-                            state->vmstate.stackvalues[spos] = receiver;
-                        #endif
+                        state->vmstate.stackvalues[spos] = receiver;
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
                     return nn_vmutil_invokemethodfromclass(state, instance->klass, name, argcount);
@@ -16381,13 +16398,6 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
     NNObjDict* dict;
     NNObjInstance* instance;
     vtarget = nn_vmbits_stackpeek(state, 1);
-    #if 0
-    if(!nn_value_isclass(vtarget) && !nn_value_isinstance(vtarget) && !nn_value_isdict(vtarget))
-    {
-        nn_exceptions_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
-        return false;
-    }
-    #endif
     name = nn_vmbits_readstring(state);
     vpeek = nn_vmbits_stackpeek(state, 0);
     if(nn_value_isinstance(vtarget))
@@ -16423,6 +16433,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
         else
         {
             klass = nn_value_getclassfor(state, vtarget);
+            /* still no class found? then it cannot carry properties */
             if(klass == NULL)
             {
                 nn_exceptions_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
@@ -17813,9 +17824,10 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
     NNStatus status;
     NNObjFuncClosure* closure;
     state->rootphysfile = filename;
-    rp = osfn_realpath(filename, NULL);
+    //rp = osfn_realpath(filename, NULL);
+    rp = filename;
     state->topmodule->physicalpath = nn_string_copycstr(state, rp);
-    nn_memory_free(rp);
+    //nn_memory_free(rp);
 
     nn_module_setfilefield(state, module);
     closure = nn_state_compilesource(state, module, false, source);

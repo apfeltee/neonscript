@@ -1,0 +1,11 @@
+
+
+{
+    var text = "hello and goodbye!"
+    var reset = "\e[0m"
+    for(var i=0; i<80; i++)
+    {
+      var cc = `\e[${i}m`
+      println(`color ${i}: ${cc}${text}${reset}`)
+    }
+}

@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <ctype.h>
+#include <assert.h>
 #include "strbuf.h"
 #include "mem.h"
 
@@ -329,6 +330,7 @@ void dyn_strbuf_convertfromintern(StringBuffer* sbuf)
     if(sbuf->isintern)
     {
         fprintf(stderr, "converting stringbuffer from const to dynamic!!\n");
+        assert(false);
         abuf = (char*)nn_memory_malloc(sizeof(char) * (sbuf->capacity));
         memcpy(abuf, sbuf->data, sbuf->length);
         /* if sbuf->data is NOT stack memory, it'll be orphaned here!!!!! */
