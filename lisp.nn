@@ -1,0 +1,576 @@
+//
+// fpLISP.js: fpLISP in JavaScript
+//
+// (C) 2021 TAKIZAWA Yozo
+// This code is licensed under CC0.
+// https://creativecommons.org/publicdomain/zero/1.0/
+//
+
+
+const conf_enabledebug = true;
+
+// Basic functions for conscell operations:
+// cons, car, cdr, eq, atom
+function fp_cons(x, y)
+{
+    return [x, y];
+}
+
+function fp_car(s)
+{
+    var t = typeof(s);
+    if((t == "number") || (t == "function"))
+    {
+        return s;
+    }
+    return s[0];
+}
+
+function fp_cdr(s)
+{
+    return s[1];
+}
+
+function fp_eq(s1, s2)
+{
+    return s1 == s2;
+    if((s1 == false && s2 == null) || (s1 == null && s2 == false))
+    {
+        return true;
+    }
+    else if((s1 == false && s2 == "nil") || (s1 == "nil" && s2 == false))
+    {
+        return true;
+    }
+    else if((s1 == null && s2 == "nil") || (s1 == "nil" && s2 == null))
+    {
+        return true;
+    }
+    return s1 == s2;
+}
+
+function fp_isatom(s)
+{
+    return (
+        (typeof(s) == "string") ||
+        (typeof(s) == "number") ||
+        fp_eq(s, null) ||
+        fp_eq(s, true) ||
+        fp_eq(s, false)
+    );
+}
+
+function fp_lexissingledigit(b)
+{
+    return ((b >= 48) && (b <= 57));
+}
+
+function fp_lexisnumber(buf)
+{
+    var i;
+    for(i = 0; i < buf.length; i++)
+    {
+        var b = buf.charCodeAt(i);
+        if(!fp_lexissingledigit(b))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+class Tokenizer
+{
+    constructor(src)
+    {
+        this.tokens = [];
+        this.chars = src;
+        this.buffer = [];
+    }
+    
+    // Writes characters in the buffer as a token, takes the positions, and clears the buffer
+    flushbuffer()
+    {
+        if(this.buffer.length > 0)
+        {
+            var sbuf = this.buffer.join("")
+            if(fp_lexisnumber(sbuf))
+            {
+                this.tokens.push(Number(sbuf));
+            }
+            else
+            {
+                this.tokens.push(sbuf);
+            }
+        }
+        this.buffer = [];
+    }
+
+    run()
+    {
+        for(var i = 0; i < this.chars.length; i++)
+        {
+            var ch = this.chars[i];
+            var nextch = this.chars[i + 1];
+            if(ch != "\n")
+            {
+                // Support the ability to escape symbols
+                if(ch == "\\")
+                {
+                    this.buffer.push(ch + nextch);
+                    // skip lexing the next character altogether
+                    i += 1;
+                }
+                else
+                {
+                    // Tokenize grouping symbols
+                    if(ch == "(" || ch == ")" || ch == "\"")
+                    {
+                        this.flushbuffer();
+                        this.buffer.push(ch);
+                        this.flushbuffer();
+                    }
+                    else
+                    {
+                        // Build up tokens
+                        //if(ch.match(/\S/))
+                        //if((ch != " ") || (ch != "\t") || (ch != "\n") || (ch != "\r"))
+                        if((ch != " ") && (ch != "\t") && (ch != "\n") && (ch != "\r"))
+                        {
+                            this.buffer.push(ch);
+                        }
+                        else
+                        {
+                            this.flushbuffer();
+                            // account for whitespace
+                        }
+                    }
+                }
+            }
+        }
+        // Tokenize anything remaining in the buffer
+        this.flushbuffer();
+        println("tokenize: ", JSON.stringify(this.tokens))
+        return this.tokens;
+    }
+}
+
+function fp_quote(x, s)
+{
+    if(s.length != 0)
+    {
+        var piece = s[s.length - 1];
+        if(piece == "'")
+        {
+            s.pop();
+            var tmp = [x, null];
+            return ["quote", tmp];
+        }
+    }
+    return x
+}
+
+function fp_syn(s)
+{
+    var t = s.pop();
+    if(t == ")")
+    {
+        var r = null;
+        while(true)
+        {
+            var bit = s[(s.length - 1)]
+            if(bit == "(")
+            {
+                break;
+            }
+            else
+            {
+                var iend = (s.length - 1);
+                bit = s[iend]
+                if(bit == ".")
+                {
+                    s.pop();
+                    r = [fp_syn(s), fp_car(r)];
+                }
+                else
+                {
+                    r = [fp_syn(s), r];
+                }
+            }
+        }
+        s.pop();
+        return fp_quote(r, s);
+    }
+    else
+    {
+        return fp_quote(t, s);
+    }
+}
+
+function fp_read(s)
+{
+    var tt = new Tokenizer(s);
+    var toks = tt.run();
+    println("toks=", JSON.stringify(toks));
+    return fp_syn(toks);
+}
+
+// S-expression output: fp_string
+
+function fp_strcons(s)
+{
+    var sa_r = fp_string(fp_car(s));
+    var sd = fp_cdr(s);
+    if(fp_null(sd))
+    {
+        return sa_r;
+    }
+    else if(fp_isatom(sd))
+    {
+        return sa_r + " . " + sd;
+    }
+    return sa_r + " " + fp_strcons(sd);
+}
+
+function fp_string(s)
+{
+    if(fp_eq(s, null))
+    {
+        return "nil";
+    }
+    else if(fp_eq(s, true))
+    {
+        return "t";
+    }
+    else if(fp_eq(s, false))
+    {
+        return "nil";
+    }
+    else if(fp_isatom(s))
+    {
+        return s;
+    }
+    return "(" + fp_strcons(s) + ")";
+}
+
+// The evaluator: fp_eval and utility functions
+
+function fp_caar(x)
+{
+    return fp_car(fp_car(x));
+}
+
+function fp_cadr(x)
+{
+    return fp_car(fp_cdr(x));
+}
+
+function fp_cdar(x)
+{
+    return fp_cdr(fp_car(x));
+}
+
+function fp_cadar(x)
+{
+    return fp_car(fp_cdr(fp_car(x)));
+}
+
+function fp_caddr(x)
+{
+    return fp_car(fp_cdr(fp_cdr(x)));
+}
+
+function fp_cadddr(x)
+{
+    var third = fp_cdr(x);
+    var second = fp_cdr(third);
+    var first = fp_cdr(second);
+    return fp_car(first);
+}
+
+function fp_null(x)
+{
+    return fp_eq(x, null);
+}
+
+function fp_append(x, y)
+{
+    if(fp_null(x))
+    {
+        return y;
+    }
+    return [fp_car(x), fp_append(fp_cdr(x), y)];
+}
+
+function fp_pair(x, y)
+{
+    if(fp_null(x) || fp_null(y))
+    {
+        return null;
+    }
+    else if(!fp_isatom(x) && !fp_isatom(y))
+    {
+        return [[fp_car(x), fp_car(y)], fp_pair(fp_cdr(x), fp_cdr(y))];
+    }
+    return null;
+}
+
+function fp_assq(x, y)
+{
+    if(fp_null(y))
+    {
+        return null;
+    }
+    else if(fp_eq(fp_caar(y), x))
+    {
+        return fp_cdar(y);
+    }
+    return fp_assq(x, fp_cdr(y));
+}
+
+function fp_debugargs(name, a, b)
+{
+    if(conf_enabledebug)
+    {
+        //printf("%s: a=(%s) %q | b=(%s) %q", name, typeof(a), a, typeof(b), b);
+        println("", name, ": a=(", typeof(a), ") ", JSON.stringify(a), " | b=(", typeof(b), ") ", JSON.stringify(b));
+    }
+}
+
+function fp_builtinplus(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtinplus", a, b);
+    return a + b;
+    //return String(Number(a) + Number(b));
+}
+
+function fp_builtinminus(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtinminus", a, b);
+    return a - b;
+}
+
+function fp_builtinmult(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtinmult", a, b);
+    return a * b;
+    //return String(Number(a) * Number(b));
+}
+
+function fp_builtindiv(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtindiv", a, b);
+    return a / b;
+    //return String(Number(a) / Number(b));
+}
+
+function fp_builtinmod(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtinmod", a, b);
+    return a % b;
+    //return String(Number(a) % Number(b));
+}
+
+function fp_builtinlessthan(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtinlessthan", a, b);
+    return Number(a) < Number(b);
+}
+
+function fp_builtinatom(v)
+{
+    fp_debugargs("fp_builtinmod", a, null);
+    return fp_isatom(fp_car(v));
+}
+
+function fp_builtineq(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    fp_debugargs("fp_builtineq", a, b);
+    return fp_eq(a, b);
+}
+
+function fp_builtincdr(v)
+{
+    return fp_cdr(fp_car(v));
+}
+
+function fp_builtincar(v)
+{
+    return fp_car(fp_car(v));
+}
+
+function fp_builtincons(v)
+{
+    var a = fp_car(v);
+    var b = fp_cadr(v);
+    return [a, b];
+}
+
+var fp_builtins = {}
+fp_builtins["cons"] = fp_builtincons;
+fp_builtins["car"] = fp_builtincar;
+fp_builtins["cdr"] = fp_builtincdr;
+fp_builtins["eq"] = fp_builtineq;
+fp_builtins["atom"] = fp_builtinatom;
+fp_builtins["+"] = fp_builtinplus;
+fp_builtins["-"] = fp_builtinminus;
+fp_builtins["*"] = fp_builtinmult;
+fp_builtins["/"] = fp_builtindiv;
+fp_builtins["%"] = fp_builtinmod;
+fp_builtins["lt"] = fp_builtinlessthan;
+
+
+function fp_apply(f, v)
+{
+    println("fp_apply: ", f, "");
+    if(fp_isatom(f))
+    {
+        return fp_builtins[f](v);
+    }
+
+    var lvars = fp_cadr(f);
+    var lbody = fp_caddr(f);
+    var lenvs;
+    if(fp_null(fp_cdr(fp_cdr(fp_cdr(f)))))
+    {
+        lenvs = null;
+    }
+    else
+    {
+        lenvs = fp_cadddr(f);
+    }
+    if(fp_isatom(lvars))
+    {
+        if(fp_null(lvars))
+        {
+            return fp_eval(lbody, lenvs);
+        }
+        else
+        {
+            return fp_eval(lbody, fp_append([[lvars, v], null], lenvs));
+        }
+    }
+    return fp_eval(lbody, fp_pair(lvars, v));
+}
+
+function fp_lookup(t, a)
+{
+    if(fp_eq(t, "t"))
+    {
+        return true;
+    }
+    else if(fp_eq(t, "nil"))
+    {
+        return false;
+    }
+    //else if(Object.keys(fp_builtins).includes(t) || !isNaN(t))
+    else if(fp_builtins[t] != null || !isNaN(t))
+    {
+        return t;
+    }
+    var envinit = null;
+    return fp_assq(t, fp_append(a, envinit));
+}
+
+function fp_eargs(v, a)
+{
+    if(fp_null(v))
+    {
+        return null;
+    }
+    return [fp_eval(fp_car(v), a), fp_eargs(fp_cdr(v), a)];
+}
+
+function fp_eval(e, a)
+{
+    if(fp_isatom(e))
+    {
+        return fp_lookup(e, a);
+    }
+    else if(fp_eq(fp_car(e), "quote"))
+    {
+        return fp_cadr(e);
+    }
+    else if(fp_eq(fp_car(e), "if"))
+    {
+        if(fp_eval(fp_cadr(e), a))
+        {
+            return fp_eval(fp_caddr(e), a);
+        }
+        else
+        {
+            return fp_eval(fp_cadddr(e), a);
+        }
+    }
+    else if(fp_eq(fp_car(e), "lambda"))
+    {
+        return [fp_car(e), [fp_cadr(e), [fp_caddr(e), [a, null]]]];
+    }
+    return fp_apply(fp_eval(fp_car(e), a), fp_eargs(fp_cdr(e), a));
+}
+
+// REP (no Loop): fp_rep
+
+var ENVINIT = "(quote ( \
+(unfold .                                              \
+ (lambda a                                             \
+   ((lambda (f seed i)                                 \
+      (((lambda (u) (u u)) (lambda (u) (lambda (e r)   \
+          (if (eq e nil) r                             \
+              ((u u) (f (car e)) (cons (cdr e) r)))))) \
+       (f seed) (if (eq i nil) nil (car i))))          \
+    (car a) (car (cdr a)) (cdr (cdr a)))))             \
+(fold .                                                \
+ (lambda x                                             \
+   ((lambda (f i0 a0 b0)                               \
+      (((lambda (u) (u u)) (lambda (u) (lambda (i a b) \
+          (if (eq a nil) i                             \
+          (if (eq b nil)                               \
+              ((u u) (f i (car a)) (cdr a) b)          \
+              ((u u) (f i (car a) (car b))             \
+                     (cdr a) (cdr b)))))))             \
+       i0 a0 (if (eq b0 nil) nil (car b0))))           \
+    (car x) (car (cdr x)) (car (cdr (cdr x)))          \
+    (cdr (cdr (cdr x))))))                             \
+(unfold-stream .                                         \
+ (lambda (f seed)                                        \
+   (((lambda (u) (u u)) (lambda (u) (lambda (e)          \
+       (cons (car e) (lambda () ((u u) (f (cdr e)))))))) \
+    (f seed))))                                          \
+(take-stream .                                           \
+ (lambda (s k)                                           \
+   (((lambda (u) (u u)) (lambda (u) (lambda (s k)        \
+       (if (eq k 0) nil                                  \
+           (cons (car s) ((u u) ((cdr s)) (- k 1)))))))  \
+    s k)))                                               \
+))";
+const envinit = fp_eval(fp_read(ENVINIT), null);
+//const envinit = null;
+
+
+function fp_rep(e)
+{
+    var first = fp_read(e);
+    var second = fp_read("()");
+    println("first: ", JSON.stringify(first))
+    var evaled = fp_eval(first, second);
+    println("evaled=", evaled)
+    return fp_string(evaled);
+}
+
+println(fp_rep("(+ 5 5)"));
+

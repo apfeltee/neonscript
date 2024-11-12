@@ -1,0 +1,309 @@
+// This code works with Lisp-like s-expressions.
+
+
+function util_isspace(c)
+{
+    return ((c == ' ') || (c == '\t') || (c == '\n'));
+}
+
+function util_isnum(c)
+{
+    var nums = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    for(var i=0; i<nums.length; i++)
+    {
+        if(c == nums[i])
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+function util_isnumber(str)
+{
+    for(var i=0; i<str.length; i++)
+    {
+        if(!util_isnum(str[0]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+function util_isfloat(str)
+{
+    var i;
+    var len = str.length;
+    if(!util_isnum(str[0]))
+    {
+        return false;
+    }
+    for(i=0; i<len; i++)
+    {
+        if(str[i] == '.')
+        {
+            continue;
+        }
+        if(!util_isnum(str[i]))
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// We lex tokens then do recursive descent on the tokens
+// to build our data structures.
+function parsedtosexp(data)
+{
+    var elem;
+    var j, len, results;
+    // Convert a JS data structure to a string s-expression.  A sexier version
+    // would remove quotes around strings that don't need them.
+    if(data instanceof Array)
+    {
+        results = []
+        j = 0;
+        len = data.length;
+        results.push('(');
+        while(j < len)
+        {
+            elem = data[j];
+            j++;
+            results.push(parsedtosexp(elem));
+        }
+        results.push(')')
+        return results.join(' ');
+    }
+    return data.dump();
+};
+
+
+class Lexer
+{
+    constructor(source)
+    {
+        this.srcpos = 0;
+        this.tokens = [];
+        this.source = source+"";
+        this.srclen = source.length;
+    }
+
+
+    getChar(pos)
+    {
+        return this.source[pos];
+    }
+
+    testCurrent(func)
+    {
+        if(!(this.srcpos < this.srclen))
+        {
+            return false;
+        }
+        return func(this.getChar(this.srcpos));
+    }
+
+    eatChar(c)
+    {
+        this.tokens.push({ type: c });
+        return this.srcpos += 1;
+    }
+
+    eatSpace()
+    {
+        var results;
+        this.srcpos += 1;
+        results = [];
+        while(this.testCurrent(util_isspace))
+        {
+            results.push(this.srcpos += 1);
+        }
+        return results;
+    }
+
+    eatWord(c)
+    {
+        this.srcpos += 1;
+        var token = c;
+        var word_char = function(c)
+        {
+            return c != ')' && !util_isspace(c);
+        };
+        while(this.testCurrent(word_char))
+        {
+            token += this.getChar(this.srcpos);
+            this.srcpos += 1;
+        }
+        return this.tokens.push({
+            type: "word",
+            word: token
+        });
+    }
+
+    eatQuotedWord()
+    {
+        var start, token;
+        start = this.srcpos;
+        this.srcpos += 1;
+        token = '';
+        while(this.testCurrent(function(c){ return (c != '"'); }))
+        {
+            if(this.getChar(this.srcpos) == '\\')
+            {
+                this.srcpos += 1;
+                if(!(this.srcpos < this.srclen))
+                {
+                    throw Exception("escaping error");
+                }
+            }
+            token += this.getChar(this.srcpos);
+            this.srcpos += 1;
+        }
+        if(this.testCurrent(function(c){return (c == '"'); }))
+        {
+            this.tokens.push({type: "string", word: token});
+            return this.srcpos += 1;
+        }
+        else
+        {
+            throw Exception(`end quote missing ${this.source.substring(start, this.srcpos)}`);
+        }
+    }
+
+    run()
+    {
+        while(this.srcpos < this.srclen)
+        {
+            var c = this.getChar(this.srcpos);
+            if(c == '(' || c == ')')
+            {
+                this.eatChar(c);
+            }
+            else if(util_isspace(c))
+            {
+                this.eatSpace();
+            }
+            else if(c == '"')
+            {
+                this.eatQuotedWord();
+            }
+            else
+            {
+                this.eatWord(c);
+            }
+        }
+        return this.tokens;
+    }
+};
+
+class Parser
+{
+    constructor(source)
+    {
+        this.source = source+"";
+        this.tokens = new Lexer(this.source).run();
+        this.tokpos = 0;
+    }
+
+    parseList()
+    {
+        var arr;
+        this.tokpos += 1;
+        arr = [];
+        while((this.tokpos < this.tokens.length) && (this.tokens[this.tokpos].type != ')'))
+        {
+            arr.push(this.parseAll());
+        }
+        if(this.tokpos < this.tokens.length)
+        {
+            this.tokpos += 1;
+        }
+        else
+        {
+            throw Exception("missing end paren");
+        }
+        return arr;
+    };
+
+    guessType(word)
+    {
+        // This is crude, doesn't handle all forms of floats.
+        //if(word.match(/^\d+\.\d+$/))
+        if(util_isfloat(word))
+        {
+            return word.toNumber();
+        }
+        //else if(word.match(/^\d+/))
+        else if(util_isnumber(word))
+        {
+            return int(word.toNumber());
+        }
+        else
+        {
+            return word;
+        }
+    };
+
+    parseWord()
+    {
+        var token;
+        token = this.tokens[this.tokpos];
+        this.tokpos += 1;
+        if(token.type == 'string')
+        {
+            return token.word;
+        }
+        else
+        {
+            return this.guessType(token.word);
+        }
+    };
+
+    parseAll()
+    {
+        var token;
+        var tpos = this.tokpos;
+        var tlen = this.tokens.length;
+        if(!(tpos < tlen))
+        {
+            return void 0;
+        }
+        token = this.tokens[this.tokpos];
+        if(token.type == '(')
+        {
+            return this.parseList();
+        }
+        else
+        {
+            return this.parseWord();
+        }
+    };
+
+    run()
+    {
+        var exp = this.parseAll();
+        if(this.tokpos < this.tokens.length)
+        {
+            throw Exception(`premature termination (tokpos (${this.tokpos}) is less than token count ${this.tokens.length})`);
+        }
+        return exp;
+    }
+};
+
+var input, output, pp;
+if(ARGV.length > 1)
+{
+    input = File(ARGV[1]).read();
+}
+else
+{
+    input = "((data \"quoted data with escaped \\\"\" 123 4.5 \"14\")\n (data (!@# (4.5) \"(more\" \"data)\")))\n";
+}
+println(`input:\n${input}`);
+output = new Parser(input).run();
+println(`output:\n${output.dump()}\n`);
+println(`round trip:\n${parsedtosexp(output)}\n`);
+
+

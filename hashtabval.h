@@ -279,7 +279,7 @@ bool nn_tableval_setwithtype(NNHashValTable* table, NNValue key, NNValue value, 
     NNHashValEntry* entry;
     (void)keyisstring;
     state = table->pvm;
-    if(table->count + 1 > table->capacity * NEON_CFG_MAXTABLELOAD)
+    if(table->count + 1 > table->capacity * NEON_CONFIG_MAXTABLELOAD)
     {
         capacity = GROW_CAPACITY(table->capacity);
         nn_tableval_adjustcapacity(table, capacity);

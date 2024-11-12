@@ -4,7 +4,7 @@
 #if 1
     #define MC_UTIL_INCCAPACITY(capacity) (((capacity) < 8) ? 8 : ((capacity) * 2))
 #else
-    #define MC_UTIL_INCCAPACITY(capacity) ((capacity) + 15) / 16 * 16;
+    #define MC_UTIL_INCCAPACITY(capacity) ((capacity) + 2)
 #endif
 
 NNValArray* nn_vallist_make(NNState* state)

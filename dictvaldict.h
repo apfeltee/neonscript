@@ -26,7 +26,7 @@ bool nn_valdict_init(NNState* state, NNHashPtrTable* dict, unsigned int initialc
     }
     for(i = 0; i < dict->vdcellcapacity; i++)
     {
-        dict->vdcells[i] = MC_CONF_VALDICTINVALIDIX;
+        dict->vdcells[i] = NEON_CONFIG_VALDICTINVALIDIX;
     }
     return true;
 dictallocfailed:
@@ -59,7 +59,7 @@ void nn_valdict_deinit(NNHashPtrTable* dict)
 
 NNHashPtrTable* nn_valdict_makedefault(NNState* state, size_t ktsz, size_t vtsz)
 {
-    return nn_valdict_makecapacity(state, MC_CONF_GENERICDICTINITSIZE, ktsz, vtsz);
+    return nn_valdict_makecapacity(state, NEON_CONFIG_GENERICDICTINITSIZE, ktsz, vtsz);
 }
 
 NNHashPtrTable* nn_valdict_makecapacity(NNState* state, unsigned int mincapacity, size_t ktsz, size_t vtsz)
@@ -248,7 +248,7 @@ NEON_INLINE bool nn_valdict_removebykey(NNHashPtrTable* dict, void* key)
     for(x = 0; x < (dict->vdcellcapacity - 1); x++)
     {
         j = (j + 1) & (dict->vdcellcapacity - 1);
-        if(dict->vdcells[j] == MC_CONF_VALDICTINVALIDIX)
+        if(dict->vdcells[j] == NEON_CONFIG_VALDICTINVALIDIX)
         {
             break;
         }
@@ -260,7 +260,7 @@ NEON_INLINE bool nn_valdict_removebykey(NNHashPtrTable* dict, void* key)
             i = j;
         }
     }
-    dict->vdcells[i] = MC_CONF_VALDICTINVALIDIX;
+    dict->vdcells[i] = NEON_CONFIG_VALDICTINVALIDIX;
     return true;
 }
 
@@ -270,7 +270,7 @@ NEON_INLINE void nn_valdict_clear(NNHashPtrTable* dict)
     dict->vdcount = 0;
     for(i = 0; i < dict->vdcellcapacity; i++)
     {
-        dict->vdcells[i] = MC_CONF_VALDICTINVALIDIX;
+        dict->vdcells[i] = NEON_CONFIG_VALDICTINVALIDIX;
     }
 }
 
@@ -289,7 +289,7 @@ NEON_INLINE unsigned int nn_valdict_getcellindex(NNHashPtrTable* dict, void* key
     {
         ix = (cellix + i) & (dict->vdcellcapacity - 1);
         cell = dict->vdcells[ix];
-        if(cell == MC_CONF_VALDICTINVALIDIX)
+        if(cell == NEON_CONFIG_VALDICTINVALIDIX)
         {
             return ix;
         }
@@ -306,7 +306,7 @@ NEON_INLINE unsigned int nn_valdict_getcellindex(NNHashPtrTable* dict, void* key
             return ix;
         }
     }
-    return MC_CONF_VALDICTINVALIDIX;
+    return NEON_CONFIG_VALDICTINVALIDIX;
 }
 
 NEON_INLINE bool nn_valdict_growandrehash(NNHashPtrTable* dict)

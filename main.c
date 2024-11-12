@@ -5,10 +5,10 @@
 #endif
 
 #if !defined(NEON_PLAT_ISWASM) && !defined(NEON_PLAT_ISWINDOWS)
-    #define NEON_USE_LINENOISE
+    #define NEON_CONFIG_USELINENOISE
 #endif
 
-#if defined(NEON_USE_LINENOISE)
+#if defined(NEON_CONFIG_USELINENOISE)
     #include "linenoise.h"
 #endif
 
@@ -83,9 +83,9 @@
 #include "os.h"
 #include "mem.h"
 
-#define NEON_CONF_USENANTAGGING 1
+#define NEON_CONFIG_USENANTAGGING 1
 
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+#if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
     #if defined(_MSC_VER)
         #pragma message("*** USING NAN TAGGING ***")
     #else
@@ -93,7 +93,7 @@
     #endif
 #endif
 
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+#if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
     #define NEON_NANBOX_SIGNBIT     ((uint64_t) 0x8000000000000000)
     #define NEON_NANBOX_QNAN        ((uint64_t) 0x7ffc000000000000)
 
@@ -133,19 +133,19 @@
     #endif
 #endif
 
-#define MC_CONF_VALDICTINVALIDIX (UINT_MAX)
-#define MC_CONF_GENERICDICTINITSIZE (32)
+#define NEON_CONFIG_VALDICTINVALIDIX (UINT_MAX)
+#define NEON_CONFIG_GENERICDICTINITSIZE (32)
 
-#define MT_STATE_SIZE 624
+#define NEON_CONFIG_MTSTATESIZE 624
 
-#define NEON_CFG_FILEEXT ".nn"
+#define NEON_CONFIG_FILEEXT ".nn"
 
 /* global debug mode flag */
-#define NEON_CFG_BUILDDEBUGMODE 0
-#define NEON_CONF_MAXSYNTAXERRORS 10
+#define NEON_CONFIG_BUILDDEBUGMODE 0
+#define NEON_CONFIG_MAXSYNTAXERRORS 10
 
 
-#if NEON_CFG_BUILDDEBUGMODE == 1
+#if NEON_CONFIG_BUILDDEBUGMODE == 1
     #define DEBUG_PRINT_CODE 1
     #define DEBUG_TABLE 0
     #define DEBUG_GC 1
@@ -153,40 +153,40 @@
 #endif
 
 /* initial amount of frames (will grow dynamically if needed) */
-#define NEON_CFG_INITFRAMECOUNT (32)
+#define NEON_CONFIG_INITFRAMECOUNT (32)
 
 /* initial amount of stack values (will grow dynamically if needed) */
-#define NEON_CFG_INITSTACKCOUNT (32 * 1)
+#define NEON_CONFIG_INITSTACKCOUNT (32 * 1)
 
 /* how many locals per function can be compiled */
-#define NEON_CFG_ASTMAXLOCALS (64*2)
+#define NEON_CONFIG_ASTMAXLOCALS (64*2)
 
 /* how many upvalues per function can be compiled */
-#define NEON_CFG_ASTMAXUPVALS (64*2)
+#define NEON_CONFIG_ASTMAXUPVALS (64*2)
 
 /* how many switch cases per switch statement */
-#define NEON_CFG_ASTMAXSWITCHCASES (32)
+#define NEON_CONFIG_ASTMAXSWITCHCASES (32)
 
 /* max number of function parameters */
-#define NEON_CFG_ASTMAXFUNCPARAMS (32)
+#define NEON_CONFIG_ASTMAXFUNCPARAMS (32)
 
 /* how deep template strings can be nested (i.e., "foo${getBar("quux${getBonk("...")}")}") */
-#define NEON_CFG_ASTMAXSTRTPLDEPTH (8)
+#define NEON_CONFIG_ASTMAXSTRTPLDEPTH (8)
 
 /* how many catch() clauses per try statement */
-#define NEON_CFG_MAXEXCEPTHANDLERS (16)
+#define NEON_CONFIG_MAXEXCEPTHANDLERS (16)
 
 /*
 // Maximum load factor of 12/14
 // see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
 */
-#define NEON_CFG_MAXTABLELOAD (0.85714286)
+#define NEON_CONFIG_MAXTABLELOAD (0.85714286)
 
 /* how much memory can be allocated before the garbage collector kicks in */
-#define NEON_CFG_DEFAULTGCSTART (1024 * 1024)
+#define NEON_CONFIG_DEFAULTGCSTART (1024 * 1024)
 
 /* growth factor for GC heap objects */
-#define NEON_CFG_GCHEAPGROWTHFACTOR (1.25)
+#define NEON_CONFIG_GCHEAPGROWTHFACTOR (1.25)
 
 #define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
 
@@ -535,7 +535,7 @@ enum NNObjType
     NEON_OBJTYPE_USERDATA
 };
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
+#if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
 enum NNValType
 {
     NEON_VALTYPE_NULL,
@@ -576,7 +576,7 @@ enum NNAstCompContext
     NEON_COMPCONTEXT_NESTEDFUNCTION
 };
 
-#if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+#if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
 typedef uint64_t NNValue;
 #else
 typedef struct /**/ NNValue NNValue;
@@ -587,7 +587,7 @@ typedef enum /**/NNAstCompContext NNAstCompContext;
 typedef enum /**/ NNColor NNColor;
 typedef enum /**/NNFieldType NNFieldType;
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
+#if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
 typedef enum /**/ NNValType NNValType;
 #endif
 
@@ -728,7 +728,7 @@ struct NNFormatInfo
 	NNState *                  pvm;                  /*    24     8 */
 };
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
+#if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
 struct NNValue
 {
     NNValType type;
@@ -1039,7 +1039,7 @@ struct NNCallFrame
     NNInstruction* inscode;
     NNObjFuncClosure* closure;
     /* TODO: should be dynamically allocated */
-    NNExceptionFrame handlers[NEON_CFG_MAXEXCEPTHANDLERS];
+    NNExceptionFrame handlers[NEON_CONFIG_MAXEXCEPTHANDLERS];
 };
 
 struct NNProcessInfo
@@ -1124,7 +1124,6 @@ struct NNState
     NNObjClass* classprimdict;
     NNObjClass* classprimfile;
     NNObjClass* classprimrange;
-    NNObjClass* classprimmath;
     NNObjClass* classprimcallable;
 
     bool isrepl;
@@ -1153,7 +1152,7 @@ struct NNAstLexer
     const char* sourceptr;
     int line;
     int tplstringcount;
-    int tplstringbuffer[NEON_CFG_ASTMAXSTRTPLDEPTH];
+    int tplstringbuffer[NEON_CONFIG_ASTMAXSTRTPLDEPTH];
 };
 
 struct NNAstLocal
@@ -1180,8 +1179,8 @@ struct NNAstFuncCompiler
     NNObjFuncScript* targetfunc;
     NNFuncType type;
     /* TODO: these should be dynamically allocated */
-    NNAstLocal locals[NEON_CFG_ASTMAXLOCALS];
-    NNAstUpvalue upvalues[NEON_CFG_ASTMAXUPVALS];
+    NNAstLocal locals[NEON_CONFIG_ASTMAXLOCALS];
+    NNAstUpvalue upvalues[NEON_CONFIG_ASTMAXUPVALS];
 };
 
 struct NNAstClassCompiler
@@ -1529,7 +1528,7 @@ NEON_INLINE const char* nn_utf8iter_getchar(utf8iterator_t* iter)
 
 NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return ((v & (NEON_NANBOX_QNAN | NEON_NANBOX_TYPEBITS)) == (NEON_NANBOX_QNAN | NEON_NANBOX_TAGOBJ));
     #else
         return ((v).type == NEON_VALTYPE_OBJ);
@@ -1538,7 +1537,7 @@ NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
 
 NEON_FORCEINLINE NNObject* nn_value_asobject(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return ((NNObject*) (uintptr_t) ((v) & (0 - ((NEON_NANBOX_TAGOBJ | NEON_NANBOX_QNAN) + 1))));
     #else
         return ((v).valunion.vobjpointer);
@@ -1552,7 +1551,7 @@ NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
 
 NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return (v == NEON_VALUE_NULL);
     #else
         return ((v).type == NEON_VALTYPE_NULL);
@@ -1561,7 +1560,7 @@ NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
 
 NEON_FORCEINLINE bool nn_value_isbool(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return ((v & (NEON_NANBOX_QNAN | NEON_NANBOX_TYPEBITS)) == (NEON_NANBOX_QNAN | NEON_NANBOX_TAGBOOL));
     #else
         return ((v).type == NEON_VALTYPE_BOOL);
@@ -1570,7 +1569,7 @@ NEON_FORCEINLINE bool nn_value_isbool(NNValue v)
 
 NEON_FORCEINLINE bool nn_value_isnumber(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return ((v & NEON_NANBOX_QNAN) != NEON_NANBOX_QNAN);
     #else
         return ((v).type == NEON_VALTYPE_NUMBER);
@@ -1655,7 +1654,7 @@ NEON_FORCEINLINE NNObjType nn_value_objtype(NNValue v)
 
 NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         if(v == NEON_VALUE_TRUE)
         {
             return true;
@@ -1668,7 +1667,7 @@ NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
 
 NEON_FORCEINLINE double nn_value_asnumber(NNValue v)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         NNUtilDblUnion data;
         data.bits = v;
         return data.num;
@@ -1747,7 +1746,7 @@ NEON_FORCEINLINE NNObjRange* nn_value_asrange(NNValue v)
     return ((NNObjRange*)nn_value_asobject(v));
 }
 
-#if !defined(NEON_CONF_USENANTAGGING) || (NEON_CONF_USENANTAGGING == 0)
+#if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
     NEON_FORCEINLINE NNValue nn_value_makevalue(NNValType type)
     {
         NNValue v;
@@ -1758,7 +1757,7 @@ NEON_FORCEINLINE NNObjRange* nn_value_asrange(NNValue v)
 
 NEON_FORCEINLINE NNValue nn_value_makenull()
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return NEON_VALUE_NULL;
     #else
         NNValue v;
@@ -1769,7 +1768,7 @@ NEON_FORCEINLINE NNValue nn_value_makenull()
 
 NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         if(b)
         {
             return NEON_VALUE_TRUE;
@@ -1785,7 +1784,7 @@ NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
 
 NEON_FORCEINLINE NNValue nn_value_makenumber(double d)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         NNUtilDblUnion data;
         data.num = d;
         return data.bits;
@@ -1806,7 +1805,7 @@ NEON_FORCEINLINE NNValue nn_value_makeint(int i)
 
 NEON_FORCEINLINE NNValue nn_value_fromobject_actual(NNObject* obj)
 {
-    #if defined(NEON_CONF_USENANTAGGING) && (NEON_CONF_USENANTAGGING == 1)
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
         return ((NNValue) (NEON_NANBOX_TAGOBJ | NEON_NANBOX_QNAN | (uint64_t)(uintptr_t)(obj)));
     #else
         NNValue v;
@@ -1865,7 +1864,7 @@ static int g_neon_ttycheck = -1;
 
 const char* nn_util_color(NNColor tc)
 {
-    #if !defined(NEON_CFG_FORCEDISABLECOLOR)
+    #if !defined(NEON_CONFIG_FORCEDISABLECOLOR)
         int fdstdout;
         int fdstderr;
         if(g_neon_ttycheck == -1)
@@ -2787,7 +2786,7 @@ void nn_gcmem_collectgarbage(NNState* state)
     nn_tableval_removewhites(state, state->allocatedstrings);
     nn_tableval_removewhites(state, state->modules);
     nn_gcmem_sweep(state);
-    state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CFG_GCHEAPGROWTHFACTOR;
+    state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
     state->markvalue = !state->markvalue;
     #if defined(DEBUG_GC) && DEBUG_GC
     nn_printer_printf(state->debugwriter, "GC: gc ends\n");
@@ -3667,7 +3666,7 @@ void nn_printer_printarray(NNPrinter* pr, NNObjArray* list)
         }
         if(i != vsz - 1)
         {
-            nn_printer_printf(pr, ", ");
+            nn_printer_printf(pr, ",");
         }
         if(pr->shortenvalues && (i >= pr->maxvallength))
         {
@@ -4879,13 +4878,10 @@ NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 
 NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
 {
-    NNObjString* ros;
-    #if 0
     if(origos->sbuf->isintern)
     {
         return nn_string_internlen(state, origos->sbuf->data, origos->sbuf->length);
     }
-    #endif
     return nn_string_copylen(state, origos->sbuf->data, origos->sbuf->length);
 }
 
@@ -4928,16 +4924,31 @@ NNObjUpvalue* nn_object_makeupvalue(NNState* state, NNValue* slot, int stackpos)
 static const char* g_strthis = "this";
 static const char* g_strsuper = "super";
 
-NNAstLexer* nn_astlex_init(NNState* state, const char* source)
+/*
+{
+    NNState* pvm;
+    const char* start;
+    const char* sourceptr;
+    int line;
+    int tplstringcount;
+    int tplstringbuffer[NEON_CONFIG_ASTMAXSTRTPLDEPTH];
+*/
+void nn_astlex_init(NNAstLexer* lex, NNState* state, const char* source)
+{
+    lex->pvm = state;
+    lex->sourceptr = source;
+    lex->start = source;
+    lex->sourceptr = lex->start;
+    lex->line = 1;
+    lex->tplstringcount = -1;
+}
+
+NNAstLexer* nn_astlex_make(NNState* state, const char* source)
 {
     NNAstLexer* lex;
     NEON_ASTDEBUG(state, "");
     lex = (NNAstLexer*)nn_memory_malloc(sizeof(NNAstLexer));
-    lex->pvm = state;
-    lex->sourceptr = source;
-    lex->start = source;
-    lex->line = 1;
-    lex->tplstringcount = -1;
+    nn_astlex_init(lex, state, source);
     return lex;
 }
 
@@ -4952,7 +4963,7 @@ bool nn_astlex_isatend(NNAstLexer* lex)
     return *lex->sourceptr == '\0';
 }
 
-NNAstToken nn_astlex_maketoken(NNAstLexer* lex, NNAstTokType type)
+NNAstToken nn_astlex_createtoken(NNAstLexer* lex, NNAstTokType type)
 {
     NNAstToken t;
     t.isglobal = false;
@@ -5156,6 +5167,10 @@ char nn_astlex_peekcurr(NNAstLexer* lex)
 
 char nn_astlex_peekprev(NNAstLexer* lex)
 {
+    if(lex->sourceptr == lex->start)
+    {
+        return -1;
+    }
     return lex->sourceptr[-1];
 }
 
@@ -5202,7 +5217,7 @@ NNAstToken nn_astlex_skipblockcomments(NNAstLexer* lex)
             nn_astlex_advance(lex);
         #endif
     #endif
-    return nn_astlex_maketoken(lex, NEON_ASTTOK_UNDEFINED);
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
 }
 
 NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
@@ -5248,7 +5263,7 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
                     {
                         nn_astlex_advance(lex);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_UNDEFINED);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
                 }
                 else if(nn_astlex_peeknext(lex) == '*')
                 {
@@ -5263,7 +5278,7 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
                 }
                 else
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_UNDEFINED);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
                 }
             }
             break;
@@ -5274,7 +5289,7 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
         }
     }
     finished:
-    return nn_astlex_maketoken(lex, NEON_ASTTOK_UNDEFINED);
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
 }
 
 NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate)
@@ -5288,17 +5303,17 @@ NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate)
             /* interpolation started */
             if(nn_astlex_peekcurr(lex) == '$' && nn_astlex_peeknext(lex) == '{' && nn_astlex_peekprev(lex) != '\\')
             {
-                if(lex->tplstringcount - 1 < NEON_CFG_ASTMAXSTRTPLDEPTH)
+                if(lex->tplstringcount - 1 < NEON_CONFIG_ASTMAXSTRTPLDEPTH)
                 {
                     lex->tplstringcount++;
                     lex->tplstringbuffer[lex->tplstringcount] = (int)quote;
                     lex->sourceptr++;
-                    tkn = nn_astlex_maketoken(lex, NEON_ASTTOK_INTERPOLATION);
+                    tkn = nn_astlex_createtoken(lex, NEON_ASTTOK_INTERPOLATION);
                     lex->sourceptr++;
                     return tkn;
                 }
-                return nn_astlex_errortoken(lex, "maximum interpolation nesting of %d exceeded by %d", NEON_CFG_ASTMAXSTRTPLDEPTH,
-                    NEON_CFG_ASTMAXSTRTPLDEPTH - lex->tplstringcount + 1);
+                return nn_astlex_errortoken(lex, "maximum interpolation nesting of %d exceeded by %d", NEON_CONFIG_ASTMAXSTRTPLDEPTH,
+                    NEON_CONFIG_ASTMAXSTRTPLDEPTH - lex->tplstringcount + 1);
             }
         }
         if(nn_astlex_peekcurr(lex) == '\\' && (nn_astlex_peeknext(lex) == quote || nn_astlex_peeknext(lex) == '\\'))
@@ -5313,7 +5328,7 @@ NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate)
     }
     /* the closing quote */
     nn_astlex_match(lex, quote);
-    return nn_astlex_maketoken(lex, NEON_ASTTOK_LITERAL);
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_LITERAL);
 }
 
 NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
@@ -5329,7 +5344,7 @@ NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return nn_astlex_maketoken(lex, NEON_ASTTOK_LITNUMBIN);
+            return nn_astlex_createtoken(lex, NEON_ASTTOK_LITNUMBIN);
         }
         else if(nn_astlex_match(lex, 'c'))
         {
@@ -5337,7 +5352,7 @@ NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return nn_astlex_maketoken(lex, NEON_ASTTOK_LITNUMOCT);
+            return nn_astlex_createtoken(lex, NEON_ASTTOK_LITNUMOCT);
         }
         else if(nn_astlex_match(lex, 'x'))
         {
@@ -5345,7 +5360,7 @@ NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
             {
                 nn_astlex_advance(lex);
             }
-            return nn_astlex_maketoken(lex, NEON_ASTTOK_LITNUMHEX);
+            return nn_astlex_createtoken(lex, NEON_ASTTOK_LITNUMHEX);
         }
     }
     while(nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
@@ -5373,7 +5388,7 @@ NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
             }
         }
     }
-    return nn_astlex_maketoken(lex, NEON_ASTTOK_LITNUMREG);
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_LITNUMREG);
 }
 
 NNAstTokType nn_astlex_getidenttype(NNAstLexer* lex)
@@ -5468,7 +5483,7 @@ NNAstToken nn_astlex_scanident(NNAstLexer* lex, bool isdollar)
             break;
         }
     }
-    tok = nn_astlex_maketoken(lex, nn_astlex_getidenttype(lex));
+    tok = nn_astlex_createtoken(lex, nn_astlex_getidenttype(lex));
     tok.isglobal = isdollar;
     return tok;
 }
@@ -5479,7 +5494,7 @@ NNAstToken nn_astlex_scandecorator(NNAstLexer* lex)
     {
         nn_astlex_advance(lex);
     }
-    return nn_astlex_maketoken(lex, NEON_ASTTOK_DECORATOR);
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_DECORATOR);
 }
 
 NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
@@ -5496,7 +5511,7 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
     lex->start = lex->sourceptr;
     if(nn_astlex_isatend(lex))
     {
-        return nn_astlex_maketoken(lex, NEON_ASTTOK_EOF);
+        return nn_astlex_createtoken(lex, NEON_ASTTOK_EOF);
     }
     c = nn_astlex_advance(lex);
     if(nn_astutil_isdigit(c))
@@ -5512,27 +5527,27 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
     {
         case '(':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_PARENOPEN);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_PARENOPEN);
             }
             break;
         case ')':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_PARENCLOSE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_PARENCLOSE);
             }
             break;
         case '[':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BRACKETOPEN);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BRACKETOPEN);
             }
             break;
         case ']':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BRACKETCLOSE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BRACKETCLOSE);
             }
             break;
         case '{':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BRACEOPEN);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BRACEOPEN);
             }
             break;
         case '}':
@@ -5543,34 +5558,34 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
                     lex->tplstringcount--;
                     return token;
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BRACECLOSE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BRACECLOSE);
             }
             break;
         case ';':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_SEMICOLON);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_SEMICOLON);
             }
             break;
         case '\\':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BACKSLASH);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BACKSLASH);
             }
             break;
         case ':':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_COLON);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_COLON);
             }
             break;
         case ',':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_COMMA);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_COMMA);
             }
             break;
         case '@':
             {
                 if(!nn_astutil_isalpha(nn_astlex_peekcurr(lex)))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_AT);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_AT);
                 }
                 return nn_astlex_scandecorator(lex);
             }
@@ -5579,9 +5594,9 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_NOTEQUAL);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_NOTEQUAL);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_EXCLMARK);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_EXCLMARK);
 
             }
             break;
@@ -5591,26 +5606,26 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '.'))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_TRIPLEDOT);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_TRIPLEDOT);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_DOUBLEDOT);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_DOUBLEDOT);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_DOT);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_DOT);
             }
             break;
         case '+':
         {
             if(nn_astlex_match(lex, '+'))
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_INCREMENT);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_INCREMENT);
             }
             if(nn_astlex_match(lex, '='))
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_PLUSASSIGN);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_PLUSASSIGN);
             }
             else
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_PLUS);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_PLUS);
             }
         }
         break;
@@ -5618,15 +5633,15 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '-'))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_DECREMENT);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_DECREMENT);
                 }
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_MINUSASSIGN);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_MINUSASSIGN);
                 }
                 else
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_MINUS);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_MINUS);
                 }
             }
             break;
@@ -5636,17 +5651,17 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_POWASSIGN);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_POWASSIGN);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_POWEROF);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_POWEROF);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_MULTASSIGN);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_MULTASSIGN);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_MULTIPLY);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_MULTIPLY);
                 }
             }
             break;
@@ -5654,18 +5669,18 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_DIVASSIGN);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_DIVASSIGN);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_DIVIDE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_DIVIDE);
             }
             break;
         case '=':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_EQUAL);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_EQUAL);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_ASSIGN);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_ASSIGN);
             }        
             break;
         case '<':
@@ -5674,17 +5689,17 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_LEFTSHIFTASSIGN);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_LEFTSHIFTASSIGN);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_LEFTSHIFT);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_LEFTSHIFT);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_LESSEQUAL);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_LESSEQUAL);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_LESSTHAN);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_LESSTHAN);
 
                 }
             }
@@ -5695,17 +5710,17 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_RIGHTSHIFTASSIGN);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_RIGHTSHIFTASSIGN);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_RIGHTSHIFT);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_RIGHTSHIFT);
                 }
                 else
                 {
                     if(nn_astlex_match(lex, '='))
                     {
-                        return nn_astlex_maketoken(lex, NEON_ASTTOK_GREATER_EQ);
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_GREATER_EQ);
                     }
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_GREATERTHAN);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_GREATERTHAN);
                 }
             }
             break;
@@ -5713,58 +5728,58 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_PERCENT_EQ);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_PERCENT_EQ);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_MODULO);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_MODULO);
             }
             break;
         case '&':
             {
                 if(nn_astlex_match(lex, '&'))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_KWAND);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_KWAND);
                 }
                 else if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_AMP_EQ);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_AMP_EQ);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_AMP);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_AMP);
             }
             break;
         case '|':
             {
                 if(nn_astlex_match(lex, '|'))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_KWOR);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_KWOR);
                 }
                 else if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_BAR_EQ);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_BAR_EQ);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_BAR);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_BAR);
             }
             break;
         case '~':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_TILDE_EQ);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_TILDE_EQ);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_TILDE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_TILDE);
             }
             break;
         case '^':
             {
                 if(nn_astlex_match(lex, '='))
                 {
-                    return nn_astlex_maketoken(lex, NEON_ASTTOK_XOR_EQ);
+                    return nn_astlex_createtoken(lex, NEON_ASTTOK_XOR_EQ);
                 }
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_XOR);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_XOR);
             }
             break;
         case '\n':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_NEWLINE);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_NEWLINE);
             }
             break;
         case '"':
@@ -5784,7 +5799,7 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             break;
         case '?':
             {
-                return nn_astlex_maketoken(lex, NEON_ASTTOK_QUESTION);
+                return nn_astlex_createtoken(lex, NEON_ASTTOK_QUESTION);
             }
             break;
         /*
@@ -5842,13 +5857,8 @@ NNBlob* nn_astparser_currentblob(NNAstParser* prs)
 bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args)
 {
     const char* colred;
-    const char* colblue;
-    const char* colyeller;
-    const char* colreset;
-    
+    const char* colreset;    
     colred = nn_util_color(NEON_COLOR_RED);
-    colblue = nn_util_color(NEON_COLOR_MAGENTA);
-    colyeller = nn_util_color(NEON_COLOR_YELLOW);
     colreset = nn_util_color(NEON_COLOR_RESET);
     fflush(stdout);
     if(prs->stopprintingsyntaxerrors)
@@ -5870,8 +5880,8 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
         return false;
     }
     prs->panicmode = true;
-    fprintf(stderr, "(%d) %sSyntaxError%s ",  prs->errorcount, colred, colreset);
-    fprintf(stderr, " [%s:%d]:\n", prs->currentmodule->physicalpath->sbuf->data, t->line);
+    fprintf(stderr, "(%d) %sSyntaxError%s",  prs->errorcount, colred, colreset);
+    fprintf(stderr, " in [%s:%d]: ", prs->currentmodule->physicalpath->sbuf->data, t->line);
     vfprintf(stderr, message, args);
     fprintf(stderr, " ");
     if(t->type == NEON_ASTTOK_EOF)
@@ -6518,7 +6528,7 @@ int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* compiler,
             return i;
         }
     }
-    if(upcnt == NEON_CFG_ASTMAXUPVALS)
+    if(upcnt == NEON_CONFIG_ASTMAXUPVALS)
     {
         nn_astparser_raiseerror(prs, "too many closure variables in function");
         return 0;
@@ -6553,7 +6563,7 @@ int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* compi
 int nn_astparser_addlocal(NNAstParser* prs, NNAstToken name)
 {
     NNAstLocal* local;
-    if(prs->currentfunccompiler->localcount == NEON_CFG_ASTMAXLOCALS)
+    if(prs->currentfunccompiler->localcount == NEON_CONFIG_ASTMAXLOCALS)
     {
         /* we've reached maximum local variables per scope */
         nn_astparser_raiseerror(prs, "too many local variables in scope");
@@ -7385,32 +7395,34 @@ bool nn_astparser_rulegrouping(NNAstParser* prs, bool canassign)
     return true;
 }
 
-NNValue nn_astparser_compilenumber(NNAstParser* prs)
+NNValue nn_astparser_compilestrnumber(NNAstTokType type, const char* source)
 {
     double dbval;
     long longval;
     int64_t llval;
-    NEON_ASTDEBUG(prs->pvm, "");
-    if(prs->prevtoken.type == NEON_ASTTOK_LITNUMBIN)
+    if(type == NEON_ASTTOK_LITNUMBIN)
     {
-        llval = strtoll(prs->prevtoken.start + 2, NULL, 2);
+        llval = strtoll(source + 2, NULL, 2);
         return nn_value_makenumber(llval);
     }
-    else if(prs->prevtoken.type == NEON_ASTTOK_LITNUMOCT)
+    else if(type == NEON_ASTTOK_LITNUMOCT)
     {
-        longval = strtol(prs->prevtoken.start + 2, NULL, 8);
+        longval = strtol(source + 2, NULL, 8);
         return nn_value_makenumber(longval);
     }
-    else if(prs->prevtoken.type == NEON_ASTTOK_LITNUMHEX)
+    else if(type == NEON_ASTTOK_LITNUMHEX)
     {
-        longval = strtol(prs->prevtoken.start, NULL, 16);
+        longval = strtol(source, NULL, 16);
         return nn_value_makenumber(longval);
     }
-    else
-    {
-        dbval = strtod(prs->prevtoken.start, NULL);
-        return nn_value_makenumber(dbval);
-    }
+    dbval = strtod(source, NULL);
+    return nn_value_makenumber(dbval);
+}
+
+NNValue nn_astparser_compilenumber(NNAstParser* prs)
+{
+    NEON_ASTDEBUG(prs->pvm, "");
+    return nn_astparser_compilestrnumber(prs->prevtoken.type, prs->prevtoken.start);
 }
 
 bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
@@ -8127,9 +8139,9 @@ uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
         {
             nn_astparser_ignorewhitespace(prs);
             nn_astparser_parseexpression(prs);
-            if(argcount == NEON_CFG_ASTMAXFUNCPARAMS)
+            if(argcount == NEON_CONFIG_ASTMAXFUNCPARAMS)
             {
-                nn_astparser_raiseerror(prs, "cannot have more than %d arguments to a function", NEON_CFG_ASTMAXFUNCPARAMS);
+                nn_astparser_raiseerror(prs, "cannot have more than %d arguments to a function", NEON_CONFIG_ASTMAXFUNCPARAMS);
             }
             argcount++;
         } while(nn_astparser_match(prs, NEON_ASTTOK_COMMA));
@@ -8654,9 +8666,9 @@ void nn_astparser_parseforeachstmt(NNAstParser* prs)
     /* Evaluate the sequence expression and store it in a hidden local variable. */
     nn_astparser_parseexpression(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'foreach'");
-    if(prs->currentfunccompiler->localcount + 3 > NEON_CFG_ASTMAXLOCALS)
+    if(prs->currentfunccompiler->localcount + 3 > NEON_CONFIG_ASTMAXLOCALS)
     {
-        nn_astparser_raiseerror(prs, "cannot declare more than %d variables in one scope", NEON_CFG_ASTMAXLOCALS);
+        nn_astparser_raiseerror(prs, "cannot declare more than %d variables in one scope", NEON_CONFIG_ASTMAXLOCALS);
         return;
     }
     /* add the iterator to the local scope */
@@ -8729,7 +8741,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
     int casecount;
     int switchcode;
     int startoffset;
-    int caseends[NEON_CFG_ASTMAXSWITCHCASES];
+    int caseends[NEON_CONFIG_ASTMAXSWITCHCASES];
     char* str;
     NNValue jump;
     NNAstTokType casetype;
@@ -8911,7 +8923,7 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     int continueexecutionaddress;
     bool catchexists;
     bool finalexists;
-    if(prs->currentfunccompiler->handlercount == NEON_CFG_MAXEXCEPTHANDLERS)
+    if(prs->currentfunccompiler->handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
     {
         nn_astparser_raiseerror(prs, "maximum exception handler in scope exceeded");
     }
@@ -9170,7 +9182,7 @@ NNObjFuncScript* nn_astparser_compilesource(NNState* state, NNObjModule* module,
     NNObjFuncScript* function;
     (void)blob;
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
-    lexer = nn_astlex_init(state, source);
+    lexer = nn_astlex_make(state, source);
     parser = nn_astparser_make(state, lexer, module, keeplast);
     nn_astfunccompiler_init(parser, &compiler, NEON_FUNCTYPE_SCRIPT, true);
     compiler.fromimport = fromimport;
@@ -9294,7 +9306,7 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     insrc = nn_value_asstring(args->args[0]);
-    scn = nn_astlex_init(state, insrc->sbuf->data);
+    scn = nn_astlex_make(state, insrc->sbuf->data);
     arr = nn_array_make(state);
     while(!nn_astlex_isatend(scn))
     {
@@ -9612,7 +9624,7 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
         {
             dyn_strbuf_appendstr(pathbuf, "/");
             dyn_strbuf_appendstr(pathbuf, modulename);
-            dyn_strbuf_appendstr(pathbuf, NEON_CFG_FILEEXT);
+            dyn_strbuf_appendstr(pathbuf, NEON_CONFIG_FILEEXT);
         }
         cstrpath = pathbuf->data; 
         fprintf(stderr, "import: trying '%s' ... ", cstrpath);
@@ -13273,6 +13285,37 @@ NNValue nn_objfnnumber_tooctstring(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(args->thisval), false));
 }
 
+NNValue nn_objfnnumber_constructor(NNState* state, NNArguments* args)
+{
+    NNValue val;
+    NNValue rtval;
+    NNObjString* os;
+    if(args->count == 0)
+    {
+        return nn_value_makenumber(0);
+    }
+    val = args->args[0];
+    if(nn_value_isnumber(val))
+    {
+        return val;
+    }
+    if(nn_value_isnull(val))
+    {
+        return nn_value_makenumber(0);
+    }
+    if(!nn_value_isstring(val))
+    {
+        NEON_RETURNERROR("Number() expects no arguments, or number, or string");
+    }
+    NNAstToken tok;
+    NNAstLexer lex;
+    os = nn_value_asstring(val);
+    nn_astlex_init(&lex, state, os->sbuf->data);
+    tok = nn_astlex_scannumber(&lex);
+    rtval = nn_astparser_compilestrnumber(tok.type, tok.start);
+    return rtval;
+}
+
 NNValue nn_objfnnumber_tohexstring(NNState* state, NNArguments* args)
 {
     return nn_value_fromobject(nn_util_numbertohexstring(state, nn_value_asnumber(args->thisval), false));
@@ -13350,6 +13393,18 @@ NNValue nn_objfnprocess_kill(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
+NNValue nn_objfnjson_stringify(NNState* state, NNArguments* args)
+{
+    NNValue v;
+    NNPrinter pr;
+    NNObjString* os;
+    v = args->args[0];
+    nn_printer_makestackstring(state, &pr);
+    nn_printer_printvalue(&pr, v, true, false);
+    os = nn_printer_takestring(&pr);
+    return nn_value_fromobject(os);
+}
+
 
 typedef struct ClsListMethods ClsListMethods;
 struct ClsListMethods
@@ -13369,6 +13424,7 @@ struct ClsListMethods
 
 void nn_state_initbuiltinmethods(NNState* state)
 {
+    NNObjClass* klass;
     {
         nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "env"), nn_value_fromobject(state->envdict));
         nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->clidirectory));
@@ -13414,6 +13470,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"toBinString", nn_objfnnumber_tobinstring},
             {NULL, NULL},
         };
+        nn_class_defnativeconstructor(state, state->classprimnumber, nn_objfnnumber_constructor);
         installmethods(state, state->classprimnumber, numbermethods);
     }
     {
@@ -13440,8 +13497,8 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"rpad", nn_objfnstring_rpad},
             {"replace", nn_objfnstring_replace},
             {"each", nn_objfnstring_each},
-            {"startswith", nn_objfnstring_startswith},
-            {"endswith", nn_objfnstring_endswith},
+            {"startsWith", nn_objfnstring_startswith},
+            {"endsWith", nn_objfnstring_endswith},
             {"isAscii", nn_objfnstring_isascii},
             {"isAlpha", nn_objfnstring_isalpha},
             {"isAlnum", nn_objfnstring_isalnum},
@@ -13453,7 +13510,6 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"utf8Chars", nn_objfnstring_utf8chars},
             {"utf8Codepoints", nn_objfnstring_utf8codepoints},
             {"utf8Bytes", nn_objfnstring_utf8codepoints},
-
             {NULL, NULL},
         };
         nn_class_defnativeconstructor(state, state->classprimstring, nn_objfnstring_constructor);
@@ -13572,7 +13628,6 @@ void nn_state_initbuiltinmethods(NNState* state)
         nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isFile"), nn_objfnfile_isfile);
         nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isDirectory"), nn_objfnfile_isdirectory);
         nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "stat"), nn_objfnfile_statstatic);
-
         installmethods(state, state->classprimfile, filemethods);
     }
     {
@@ -13592,15 +13647,17 @@ void nn_state_initbuiltinmethods(NNState* state)
         installmethods(state, state->classprimrange, rangemethods);
     }
     {
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "abs"), nn_objfnmath_abs);
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "round"), nn_objfnmath_round);
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "floor"), nn_objfnmath_floor);
-        nn_class_defstaticnativemethod(state, state->classprimmath, nn_string_intern(state, "min"), nn_objfnmath_min);
-
-
-
+        klass = nn_util_makeclass(state, "Math", state->classprimobject);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "abs"), nn_objfnmath_abs);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "round"), nn_objfnmath_round);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "floor"), nn_objfnmath_floor);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "min"), nn_objfnmath_min);
+    }
+    {
+        klass = nn_util_makeclass(state, "JSON", state->classprimobject);
+        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "stringify"), nn_objfnjson_stringify);
     }
 }
 
@@ -13688,31 +13745,31 @@ void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index)
 {
     uint32_t i;
     binst[0] = seed;
-    for(i = 1; i < MT_STATE_SIZE; i++)
+    for(i = 1; i < NEON_CONFIG_MTSTATESIZE; i++)
     {
         binst[i] = (uint32_t)(1812433253UL * (binst[i - 1] ^ (binst[i - 1] >> 30)) + i);
     }
-    *index = MT_STATE_SIZE;
+    *index = NEON_CONFIG_MTSTATESIZE;
 }
 
 uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index)
 {
     uint32_t i;
     uint32_t y;
-    if(*index >= MT_STATE_SIZE)
+    if(*index >= NEON_CONFIG_MTSTATESIZE)
     {
-        for(i = 0; i < MT_STATE_SIZE - 397; i++)
+        for(i = 0; i < NEON_CONFIG_MTSTATESIZE - 397; i++)
         {
             y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
             binst[i] = binst[i + 397] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
         }
-        for(; i < MT_STATE_SIZE - 1; i++)
+        for(; i < NEON_CONFIG_MTSTATESIZE - 1; i++)
         {
             y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-            binst[i] = binst[i + (397 - MT_STATE_SIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
+            binst[i] = binst[i + (397 - NEON_CONFIG_MTSTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
         }
-        y = (binst[MT_STATE_SIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
-        binst[MT_STATE_SIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
+        y = (binst[NEON_CONFIG_MTSTATESIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
+        binst[NEON_CONFIG_MTSTATESIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
         *index = 0;
     }
     y = binst[*index];
@@ -13729,9 +13786,9 @@ double nn_util_mtrand(double lowerlimit, double upperlimit)
     double randnum;
     uint32_t randval;
     struct timeval tv;
-    static uint32_t mtstate[MT_STATE_SIZE];
-    static uint32_t mtindex = MT_STATE_SIZE + 1;
-    if(mtindex >= MT_STATE_SIZE)
+    static uint32_t mtstate[NEON_CONFIG_MTSTATESIZE];
+    static uint32_t mtindex = NEON_CONFIG_MTSTATESIZE + 1;
+    if(mtindex >= NEON_CONFIG_MTSTATESIZE)
     {
         osfn_gettimeofday(&tv, NULL);
         nn_util_mtseed((uint32_t)(1000000 * tv.tv_sec + tv.tv_usec), mtstate, &mtindex);
@@ -13971,6 +14028,15 @@ NNValue nn_nativefn_println(NNState* state, NNArguments* args)
     return v;
 }
 
+
+NNValue nn_nativefn_isnan(NNState* state, NNArguments* args)
+{
+    (void)state;
+    (void)args;
+    return nn_value_makebool(false);
+}
+
+
 void nn_state_initbuiltinfunctions(NNState* state)
 {
     nn_state_defnativefunction(state, "chr", nn_nativefn_chr);
@@ -13985,7 +14051,8 @@ void nn_state_initbuiltinfunctions(NNState* state)
     nn_state_defnativefunction(state, "println", nn_nativefn_println);
     nn_state_defnativefunction(state, "rand", nn_nativefn_rand);
     nn_state_defnativefunction(state, "time", nn_nativefn_time);
-    nn_state_defnativefunction(state, "eval", nn_nativefn_eval);    
+    nn_state_defnativefunction(state, "eval", nn_nativefn_eval);
+    nn_state_defnativefunction(state, "isNaN", nn_nativefn_isnan);
 }
 
 void nn_state_vwarn(NNState* state, const char* fmt, va_list va)
@@ -14175,7 +14242,7 @@ bool nn_exceptions_pushhandler(NNState* state, NNObjClass* type, int address, in
 {
     NNCallFrame* frame;
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
-    if(frame->handlercount == NEON_CFG_MAXEXCEPTHANDLERS)
+    if(frame->handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
     {
         nn_vm_raisefatalerror(state, "too many nested exception handlers in one function");
         return false;
@@ -14416,24 +14483,24 @@ void nn_vm_initvmstate(NNState* state)
     state->vmstate.linkedobjects = NULL;
     state->vmstate.currentframe = NULL;
     {
-        state->vmstate.stackcapacity = NEON_CFG_INITSTACKCOUNT;
-        state->vmstate.stackvalues = (NNValue*)nn_memory_malloc(NEON_CFG_INITSTACKCOUNT * sizeof(NNValue));
+        state->vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
+        state->vmstate.stackvalues = (NNValue*)nn_memory_malloc(NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue));
         if(state->vmstate.stackvalues == NULL)
         {
             fprintf(stderr, "error: failed to allocate stackvalues!\n");
             abort();
         }
-        memset(state->vmstate.stackvalues, 0, NEON_CFG_INITSTACKCOUNT * sizeof(NNValue));
+        memset(state->vmstate.stackvalues, 0, NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue));
     }
     {
-        state->vmstate.framecapacity = NEON_CFG_INITFRAMECOUNT;
-        state->vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(NEON_CFG_INITFRAMECOUNT * sizeof(NNCallFrame));
+        state->vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
+        state->vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame));
         if(state->vmstate.framevalues == NULL)
         {
             fprintf(stderr, "error: failed to allocate framevalues!\n");
             abort();
         }
-        memset(state->vmstate.framevalues, 0, NEON_CFG_INITFRAMECOUNT * sizeof(NNCallFrame));
+        memset(state->vmstate.framevalues, 0, NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame));
     }
 }
 
@@ -14599,7 +14666,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
     static const char* defaultsearchpaths[] =
     {
         "mods",
-        "mods/@/index" NEON_CFG_FILEEXT,
+        "mods/@/index" NEON_CONFIG_FILEEXT,
         ".",
         NULL
     };
@@ -14629,12 +14696,12 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->conf.showfullstack = false;
         state->conf.enableapidebug = false;
         state->conf.enableastdebug = false;
-        state->conf.maxsyntaxerrors = NEON_CONF_MAXSYNTAXERRORS;
+        state->conf.maxsyntaxerrors = NEON_CONFIG_MAXSYNTAXERRORS;
     }
     {
         state->gcstate.bytesallocated = 0;
         /* default is 1mb. Can be modified via the -g flag. */
-        state->gcstate.nextgc = NEON_CFG_DEFAULTGCSTART;
+        state->gcstate.nextgc = NEON_CONFIG_DEFAULTGCSTART;
         state->gcstate.graycount = 0;
         state->gcstate.graycapacity = 0;
         state->gcstate.graystack = NULL;
@@ -14672,7 +14739,6 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->classprimdict = nn_util_makeclass(state, "Dict", state->classprimobject);
         state->classprimfile = nn_util_makeclass(state, "File", state->classprimobject);
         state->classprimrange = nn_util_makeclass(state, "Range", state->classprimobject);
-        state->classprimmath = nn_util_makeclass(state, "Math", state->classprimobject);
         state->classprimcallable = nn_util_makeclass(state, "Function", state->classprimobject);
         
     }
@@ -17867,7 +17933,7 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
 
 char* nn_cli_getinput(const char* prompt)
 {
-    #if !defined(NEON_USE_LINENOISE)
+    #if !defined(NEON_CONFIG_USELINENOISE)
         enum { kMaxLineSize = 1024 };
         size_t len;
         char* rt;
@@ -17885,7 +17951,7 @@ char* nn_cli_getinput(const char* prompt)
 
 void nn_cli_addhistoryline(const char* line)
 {
-    #if !defined(NEON_USE_LINENOISE)
+    #if !defined(NEON_CONFIG_USELINENOISE)
         (void)line;
     #else
         linenoiseHistoryAdd(line);
@@ -17894,7 +17960,7 @@ void nn_cli_addhistoryline(const char* line)
 
 void nn_cli_freeline(char* line)
 {
-    #if !defined(NEON_USE_LINENOISE)
+    #if !defined(NEON_CONFIG_USELINENOISE)
         (void)line;
     #else
         linenoiseFree(line);
@@ -18303,7 +18369,7 @@ int main(int argc, char* argv[], char** envp)
     wasusage = false;
     quitafterinit = false;
     source = NULL;
-    nextgcstart = NEON_CFG_DEFAULTGCSTART;
+    nextgcstart = NEON_CONFIG_DEFAULTGCSTART;
     state = nn_state_make();
     nargc = 0;
     optprs_init(&options, argc, argv);
