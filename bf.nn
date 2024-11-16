@@ -59,7 +59,8 @@ function bf(src, input)
             memptr = memptr - 1
             if(memptr < 0)
             {
-                throw Exception("data pointer cannot go below 0")
+                //throw Exception("data pointer cannot go below 0")
+                memptr = 0
             }
         }
         else if(c == "[")

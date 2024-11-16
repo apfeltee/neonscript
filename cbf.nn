@@ -104,4 +104,4 @@ genSource = function(b)
     return f
 };
 
-println(genSource("hello and goodbye"))
+println(genSource("Hello World!\n"))

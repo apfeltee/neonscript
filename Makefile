@@ -28,8 +28,8 @@ OPTFLAGS = -O0
 
 #EXTRAFLAGS = -fsanitize=address -fsanitize=undefined -fstack-protector-all -ftrapv
 
-CC = gcc $(WFLAGS) $(EXTRAFLAGS)
-#CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
+#CC = gcc $(WFLAGS) $(EXTRAFLAGS)
+CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
 
 #CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
 CFLAGS = $(INCFLAGS) $(OPTFLAGS) -g3 -ggdb3

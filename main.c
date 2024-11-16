@@ -82,6 +82,7 @@
 #include "optparse.h"
 #include "os.h"
 #include "mem.h"
+#include "deps/myregex/mrx.h"
 
 #define NEON_CONFIG_USENANTAGGING 1
 
@@ -214,8 +215,6 @@
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
 
-#define NORMALIZE(token) #token
-
 #define nn_exceptions_throwclass(state, exklass, ...) \
     nn_exceptions_throwwithclass(state, exklass, __FILE__, __LINE__, __VA_ARGS__)
 
@@ -262,7 +261,7 @@
 #define NEON_ARGS_CHECKTYPE(chp, i, type) \
     if(nn_util_unlikely(!type((chp)->argv[i]))) \
     { \
-        return NEON_ARGS_FAIL(chp, "%s() expects argument %d as " NORMALIZE(type) ", %s given", (chp)->name, (i) + 1, nn_value_typename((chp)->argv[i])); \
+        return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", (chp)->name, (i) + 1, nn_value_typefromfunction(type), nn_value_typename((chp)->argv[i])); \
     }
 
 enum NNOpCode
@@ -341,6 +340,7 @@ enum NNOpCode
     NEON_OP_SWITCH,
     NEON_OP_TYPEOF,
     NEON_OP_OPINSTANCEOF,
+    NEON_OP_HALT,
     NEON_OP_BREAK_PL
 };
 
@@ -650,6 +650,7 @@ typedef struct NNBoxedString NNBoxedString;
 typedef struct NNHashPtrTable NNHashPtrTable;
 typedef union NNUtilDblUnion NNUtilDblUnion;
 
+typedef bool(*NNValIsFuncFN)(NNValue);
 typedef NNValue (*NNNativeFN)(NNState*, NNArguments*);
 typedef void (*NNPtrFreeFN)(void*);
 typedef bool (*NNAstParsePrefixFN)(NNAstParser*, bool);
@@ -661,6 +662,7 @@ typedef double(*nnbinopfunc_t)(double, double);
 
 typedef size_t (*mcitemhashfn_t)(void*);
 typedef bool (*mcitemcomparefn_t)(void*, void*);
+
 
 union NNUtilDblUnion
 {
@@ -1102,6 +1104,8 @@ struct NNState
         NNObjClass* argumenterror;
     } exceptions;
 
+    NNValue lastreplvalue;
+
     void* memuserptr;
     const char* rootphysfile;
 
@@ -1109,21 +1113,35 @@ struct NNState
     NNObjString* constructorname;
     NNObjModule* topmodule;
     NNValArray* importpath;
+
     /* objects tracker */
-    NNHashValTable* modules;
+    NNHashValTable* openedmodules;
     NNHashValTable* allocatedstrings;
     NNHashValTable* conststrings;
-    NNHashValTable* globals;
+    NNHashValTable* declaredglobals;
 
-    /* object public methods */
-    NNObjClass* classprimprocess;
+    /*
+    * these classes are used for runtime objects, specifically in nn_value_getclassfor.
+    * every other global class needed (as created by nn_util_makeclass) need NOT be declared here.
+    * simply put, these classes are primitive types.
+    */
+    /* the class from which every other class derives */
     NNObjClass* classprimobject;
+    /**/
+    NNObjClass* classprimclass;
+    /* class for numbers, et al */
     NNObjClass* classprimnumber;
+    /* class for strings */
     NNObjClass* classprimstring;
+    /* class for arrays */
     NNObjClass* classprimarray;
+    /* class for dictionaries */
     NNObjClass* classprimdict;
+    /* class for I/O file objects */
     NNObjClass* classprimfile;
+    /* class for range constructs */
     NNObjClass* classprimrange;
+    /* class for anything callable: functions, lambdas, constructors ... */
     NNObjClass* classprimcallable;
 
     bool isrepl;
@@ -1148,6 +1166,7 @@ struct NNAstToken
 struct NNAstLexer
 {
     NNState* pvm;
+    bool onstack;
     const char* start;
     const char* sourceptr;
     int line;
@@ -1946,7 +1965,7 @@ char* nn_util_strdup(const char* src)
     return nn_util_strndup(src, strlen(src));
 }
 
-char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen)
+char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
 {
     long rawtold;
     /*
@@ -1971,6 +1990,13 @@ char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen)
     if(fseek(hnd, 0, SEEK_SET) == -1)
     {
         return NULL;
+    }
+    if(havemaxsz)
+    {
+        if(toldlen > maxsize)
+        {
+            toldlen = maxsize;
+        }
     }
     buf = (char*)nn_memory_malloc(sizeof(char) * (toldlen + 1));
     memset(buf, 0, toldlen+1);
@@ -1997,7 +2023,7 @@ char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen)
     return NULL;
 }
 
-char* nn_util_readfile(NNState* state, const char* filename, size_t* dlen)
+char* nn_util_readfile(NNState* state, const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
 {
     char* b;
     FILE* fh;
@@ -2009,7 +2035,7 @@ char* nn_util_readfile(NNState* state, const char* filename, size_t* dlen)
     #if defined(NEON_PLAT_ISWINDOWS)
         _setmode(fileno(fh), _O_BINARY);
     #endif
-    b = nn_util_readhandle(state, fh, dlen);
+    b = nn_util_readhandle(state, fh, dlen, havemaxsz, maxsize);
     fclose(fh);
     return b;
 }
@@ -2464,7 +2490,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             {
                 NNObjFile* file;
                 file = (NNObjFile*)object;
-                nn_file_mark(state, file);
+                nn_file_mark(file);
             }
             break;
         case NEON_OBJTYPE_DICT:
@@ -2531,7 +2557,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             {
                 NNObjInstance* instance;
                 instance = (NNObjInstance*)object;
-                nn_instance_mark(state, instance);
+                nn_instance_mark(instance);
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
@@ -2570,7 +2596,7 @@ void nn_gcmem_destroyobject(NNState* state, NNObject* object)
             {
                 NNObjFile* file;
                 file = (NNObjFile*)object;
-                nn_file_destroy(state, file);
+                nn_file_destroy(file);
             }
             break;
         case NEON_OBJTYPE_DICT:
@@ -2603,7 +2629,7 @@ void nn_gcmem_destroyobject(NNState* state, NNObject* object)
             {
                 NNObjClass* klass;
                 klass = (NNObjClass*)object;
-                nn_class_destroy(state, klass);
+                nn_class_destroy(klass);
             }
             break;
         case NEON_OBJTYPE_FUNCCLOSURE:
@@ -2630,7 +2656,7 @@ void nn_gcmem_destroyobject(NNState* state, NNObject* object)
             {
                 NNObjInstance* instance;
                 instance = (NNObjInstance*)object;
-                nn_instance_destroy(state, instance);
+                nn_instance_destroy(instance);
             }
             break;
         case NEON_OBJTYPE_FUNCNATIVE:
@@ -2704,8 +2730,8 @@ void nn_gcmem_markroots(NNState* state)
     {
         nn_gcmem_markobject(state, (NNObject*)upvalue);
     }
-    nn_tableval_mark(state, state->globals);
-    nn_tableval_mark(state, state->modules);
+    nn_tableval_mark(state, state->declaredglobals);
+    nn_tableval_mark(state, state->openedmodules);
     nn_gcmem_markobject(state, (NNObject*)state->exceptions.stdexception);
     nn_gcmem_markcompilerroots(state);
 }
@@ -2784,7 +2810,7 @@ void nn_gcmem_collectgarbage(NNState* state)
     nn_gcmem_markroots(state);
     nn_gcmem_tracerefs(state);
     nn_tableval_removewhites(state, state->allocatedstrings);
-    nn_tableval_removewhites(state, state->modules);
+    nn_tableval_removewhites(state, state->openedmodules);
     nn_gcmem_sweep(state);
     state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
     state->markvalue = !state->markvalue;
@@ -2800,6 +2826,8 @@ NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, cons
     nn_exceptions_vthrowwithclass(ch->pvm, ch->pvm->exceptions.argumenterror, srcfile, srcline, fmt, va);
     return nn_value_makebool(false);
 }
+
+
 
 NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, ...)
 {
@@ -3007,8 +3035,9 @@ const char* nn_dbg_op2str(uint8_t instruc)
         case NEON_OP_TYPEOF: return "NEON_OP_TYPEOF";
         case NEON_OP_BREAK_PL: return "NEON_OP_BREAK_PL";
         case NEON_OP_OPINSTANCEOF: return "NEON_OP_OPINSTANCEOF";
-        default:
-            break;
+        case NEON_OP_HALT: return "NEON_OP_HALT";
+        //default:
+            //break;
     }
     return "<?unknown?>";
 }
@@ -3207,6 +3236,8 @@ int nn_dbg_printinstructionat(NNPrinter* pr, NNBlob* blob, int offset)
         case NEON_OP_CLASSINVOKESUPER:
             return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
         case NEON_OP_CLASSINVOKESUPERSELF:
+            return nn_dbg_printbyteinstr(pr, opname, blob, offset);
+        case NEON_OP_HALT:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
         default:
             {
@@ -3991,8 +4022,66 @@ const char* nn_value_typename(NNValue value)
     {
         return nn_value_objecttypename(nn_value_asobject(value));
     }
-    return "unknown";
+    return "?unknown?";
 }
+
+const char* nn_value_typefromfunction(NNValIsFuncFN func)
+{
+    if(func == nn_value_isstring)
+    {
+        return "string";
+    }
+    else if(func == nn_value_isnull)
+    {
+        return "null";
+    }        
+    else if(func == nn_value_isbool)
+    {
+        return "bool";
+    }        
+    else if(func == nn_value_isnumber)
+    {
+        return "number";
+    }
+    else if(func == nn_value_isstring)
+    {
+        return "string";
+    }
+    else if((func == nn_value_isfuncnative) || (func == nn_value_isfuncbound) || (func == nn_value_isfuncscript) || (func == nn_value_isfuncclosure) || (func == nn_value_iscallable))
+    {
+        return "function";
+    }
+    else if(func == nn_value_isclass)
+    {
+        return "class";
+    }
+    else if(func == nn_value_isinstance)
+    {
+        return "instance";
+    }
+    else if(func == nn_value_isarray)
+    {
+        return "array";
+    }
+    else if(func == nn_value_isdict)
+    {
+        return "dictionary";
+    }
+    else if(func == nn_value_isfile)
+    {
+        return "file";
+    }
+    else if(func == nn_value_isrange)
+    {
+        return "range";
+    }
+    else if(func == nn_value_ismodule)
+    {
+        return "module";
+    }
+    return "?unknown?";
+}
+
 
 bool nn_value_compobject(NNState* state, NNValue a, NNValue b)
 {
@@ -4510,16 +4599,98 @@ NNObjFile* nn_object_makefile(NNState* state, FILE* handle, bool isstd, const ch
     return file;
 }
 
-void nn_file_destroy(NNState* state, NNObjFile* file)
+void nn_file_destroy(NNObjFile* file)
 {
+    NNState* state;
+    state = ((NNObject*)file)->pvm;
     nn_fileobject_close(file);
     nn_gcmem_release(state, file, sizeof(NNObjFile));
 }
 
-void nn_file_mark(NNState* state, NNObjFile* file)
+void nn_file_mark(NNObjFile* file)
 {
+    NNState* state;
+    state = ((NNObject*)file)->pvm;
     nn_gcmem_markobject(state, (NNObject*)file->mode);
     nn_gcmem_markobject(state, (NNObject*)file->path);
+}
+
+bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
+{
+    NNState* state;
+    size_t filesizereal;
+    struct stat stats;
+    state = ((NNObject*)file)->pvm;
+    filesizereal = -1;
+    dest->success = false;
+    dest->length = 0;
+    dest->data = NULL;
+    if(!file->isstd)
+    {
+        if(!nn_util_fsfileexists(state, file->path->sbuf->data))
+        {
+            return false;
+        }
+        /* file is in write only mode */
+        /*
+        else if(strstr(file->mode->sbuf->data, "w") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
+        {
+            FILE_ERROR(Unsupported, "cannot read file in write mode");
+        }
+        */
+        if(!file->isopen)
+        {
+            /* open the file if it isn't open */
+            nn_fileobject_open(file);
+        }
+        else if(file->handle == NULL)
+        {
+            return false;
+        }
+        if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
+        {
+            filesizereal = (size_t)stats.st_size;
+        }
+        else
+        {
+            /* fallback */
+            fseek(file->handle, 0L, SEEK_END);
+            filesizereal = ftell(file->handle);
+            rewind(file->handle);
+        }
+        if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
+        {
+            readhowmuch = filesizereal;
+        }
+    }
+    else
+    {
+        /*
+        // for non-file objects such as stdin
+        // minimum read bytes should be 1
+        */
+        if(readhowmuch == (size_t)-1)
+        {
+            readhowmuch = 1;
+        }
+    }
+    /* +1 for terminator '\0' */
+    dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
+    if(dest->data == NULL && readhowmuch != 0)
+    {
+        return false;
+    }
+    dest->length = fread(dest->data, sizeof(char), readhowmuch, file->handle);
+    if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
+    {
+        return false;
+    }
+    /* we made use of +1 so we can terminate the string. */
+    if(dest->data != NULL)
+    {
+        dest->data[dest->length] = '\0';
+    }
+    return true;
 }
 
 NNObjFuncBound* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFuncClosure* method)
@@ -4546,8 +4717,10 @@ NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name, NNObjClass* p
     return klass;
 }
 
-void nn_class_destroy(NNState* state, NNObjClass* klass)
+void nn_class_destroy(NNObjClass* klass)
 {
+    NNState* state;
+    state = ((NNObject*)klass)->pvm;
     nn_tableval_destroy(klass->instmethods);
     nn_tableval_destroy(klass->staticmethods);
     nn_tableval_destroy(klass->instproperties);
@@ -4572,28 +4745,32 @@ bool nn_class_defproperty(NNObjClass* klass, NNObjString* cstrname, NNValue val)
     return nn_tableval_set(klass->instproperties, nn_value_fromobject(cstrname), val);
 }
 
-bool nn_class_defcallablefieldptr(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
+bool nn_class_defcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
+    NNState* state;
     NNObjFuncNative* ofn;
+    state = ((NNObject*)klass)->pvm;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->instproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
-bool nn_class_defcallablefield(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function)
+bool nn_class_defcallablefield(NNObjClass* klass, NNObjString* name, NNNativeFN function)
 {
-    return nn_class_defcallablefieldptr(state, klass, name, function, NULL);
+    return nn_class_defcallablefieldptr(klass, name, function, NULL);
 }
 
-bool nn_class_defstaticcallablefieldptr(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
+bool nn_class_defstaticcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
+    NNState* state;
     NNObjFuncNative* ofn;
+    state = ((NNObject*)klass)->pvm;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->staticproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
-bool nn_class_defstaticcallablefield(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function)
+bool nn_class_defstaticcallablefield(NNObjClass* klass, NNObjString* name, NNNativeFN function)
 {
-    return nn_class_defstaticcallablefieldptr(state, klass, name, function, NULL);
+    return nn_class_defstaticcallablefieldptr(klass, name, function, NULL);
 }
 
 bool nn_class_setstaticproperty(NNObjClass* klass, NNObjString* name, NNValue val)
@@ -4601,50 +4778,54 @@ bool nn_class_setstaticproperty(NNObjClass* klass, NNObjString* name, NNValue va
     return nn_tableval_set(klass->staticproperties, nn_value_fromobject(name), val);
 }
 
-
-bool nn_class_defnativeconstructorptr(NNState* state, NNObjClass* klass, NNNativeFN function, void* uptr)
+bool nn_class_defnativeconstructorptr(NNObjClass* klass, NNNativeFN function, void* uptr)
 {
     const char* cname;
+    NNState* state;
     NNObjFuncNative* ofn;
+    state = ((NNObject*)klass)->pvm;
     cname = "constructor";
     ofn = nn_object_makefuncnative(state, function, cname, uptr);
     klass->constructor = nn_value_fromobject(ofn);
     return true;
 }
 
-bool nn_class_defnativeconstructor(NNState* state, NNObjClass* klass, NNNativeFN function)
+bool nn_class_defnativeconstructor(NNObjClass* klass, NNNativeFN function)
 {
-    return nn_class_defnativeconstructorptr(state, klass, function, NULL);
+    return nn_class_defnativeconstructorptr(klass, function, NULL);
 }
 
-bool nn_class_defmethod(NNState* state, NNObjClass* klass, NNObjString* name, NNValue val)
+bool nn_class_defmethod(NNObjClass* klass, NNObjString* name, NNValue val)
 {
-    (void)state;
     return nn_tableval_set(klass->instmethods, nn_value_fromobject(name), val);
 }
 
-bool nn_class_defnativemethodptr(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function, void* ptr)
+bool nn_class_defnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* ptr)
 {
     NNObjFuncNative* ofn;
+    NNState* state;
+    state = ((NNObject*)klass)->pvm;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, ptr);
-    return nn_class_defmethod(state, klass, name, nn_value_fromobject(ofn));
+    return nn_class_defmethod(klass, name, nn_value_fromobject(ofn));
 }
 
-bool nn_class_defnativemethod(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function)
+bool nn_class_defnativemethod(NNObjClass* klass, NNObjString* name, NNNativeFN function)
 {
-    return nn_class_defnativemethodptr(state, klass, name, function, NULL);
+    return nn_class_defnativemethodptr(klass, name, function, NULL);
 }
 
-bool nn_class_defstaticnativemethodptr(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
+bool nn_class_defstaticnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
+    NNState* state;
     NNObjFuncNative* ofn;
+    state = ((NNObject*)klass)->pvm;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_set(klass->staticmethods, nn_value_fromobject(name), nn_value_fromobject(ofn));
 }
 
-bool nn_class_defstaticnativemethod(NNState* state, NNObjClass* klass, NNObjString* name, NNNativeFN function)
+bool nn_class_defstaticnativemethod(NNObjClass* klass, NNObjString* name, NNNativeFN function)
 {
-    return nn_class_defstaticnativemethodptr(state, klass, name, function, NULL);
+    return nn_class_defstaticnativemethodptr(klass, name, function, NULL);
 }
 
 NNProperty* nn_class_getmethodfield(NNObjClass* klass, NNObjString* name)
@@ -4709,8 +4890,10 @@ NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
     return instance;
 }
 
-void nn_instance_mark(NNState* state, NNObjInstance* instance)
+void nn_instance_mark(NNObjInstance* instance)
 {
+    NNState* state;
+    state = ((NNObject*)instance)->pvm;
     if(instance->active == false)
     {
         nn_state_warn(state, "trying to mark inactive instance <%p>!", instance);
@@ -4720,8 +4903,10 @@ void nn_instance_mark(NNState* state, NNObjInstance* instance)
     nn_gcmem_markobject(state, (NNObject*)instance->klass);
 }
 
-void nn_instance_destroy(NNState* state, NNObjInstance* instance)
+void nn_instance_destroy(NNObjInstance* instance)
 {
+    NNState* state;
+    state = ((NNObject*)instance)->pvm;
     if(!nn_value_isnull(instance->klass->destructor))
     {
         if(!nn_vm_callvaluewithobject(state, instance->klass->constructor, nn_value_fromobject(instance), 0))
@@ -4925,13 +5110,7 @@ static const char* g_strthis = "this";
 static const char* g_strsuper = "super";
 
 /*
-{
-    NNState* pvm;
-    const char* start;
-    const char* sourceptr;
-    int line;
-    int tplstringcount;
-    int tplstringbuffer[NEON_CONFIG_ASTMAXSTRTPLDEPTH];
+* allows for the lexer to created on the stack.
 */
 void nn_astlex_init(NNAstLexer* lex, NNState* state, const char* source)
 {
@@ -4941,6 +5120,7 @@ void nn_astlex_init(NNAstLexer* lex, NNState* state, const char* source)
     lex->sourceptr = lex->start;
     lex->line = 1;
     lex->tplstringcount = -1;
+    lex->onstack = true;
 }
 
 NNAstLexer* nn_astlex_make(NNState* state, const char* source)
@@ -4949,13 +5129,17 @@ NNAstLexer* nn_astlex_make(NNState* state, const char* source)
     NEON_ASTDEBUG(state, "");
     lex = (NNAstLexer*)nn_memory_malloc(sizeof(NNAstLexer));
     nn_astlex_init(lex, state, source);
+    lex->onstack = false;
     return lex;
 }
 
 void nn_astlex_destroy(NNState* state, NNAstLexer* lex)
 {
     NEON_ASTDEBUG(state, "");
-    nn_memory_free(lex);
+    if(!lex->onstack)
+    {
+        nn_memory_free(lex);
+    }
 }
 
 bool nn_astlex_isatend(NNAstLexer* lex)
@@ -5437,9 +5621,9 @@ NNAstTokType nn_astlex_getidenttype(NNAstLexer* lex)
         { "switch", NEON_ASTTOK_KWSWITCH },
         { "case", NEON_ASTTOK_KWCASE },
         { "var", NEON_ASTTOK_KWVAR },
+        { "let", NEON_ASTTOK_KWVAR },
         { "const", NEON_ASTTOK_KWVAR },
         { "while", NEON_ASTTOK_KWWHILE },
-        
         { NULL, (NNAstTokType)0 }
     };
     size_t i;
@@ -6197,6 +6381,7 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
         case NEON_OP_PUSHEMPTY:
         case NEON_OP_EXPUBLISHTRY:
         case NEON_OP_CLASSGETTHIS:
+        case NEON_OP_HALT:
             return 0;
         case NEON_OP_CALLFUNCTION:
         case NEON_OP_CLASSINVOKESUPERSELF:
@@ -6648,11 +6833,14 @@ NNAstToken nn_astparser_synthtoken(const char* name)
     return token;
 }
 
-NNObjFuncScript* nn_astparser_endcompiler(NNAstParser* prs)
+NNObjFuncScript* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
 {
     const char* fname;
     NNObjFuncScript* function;
     nn_astemit_emitreturn(prs);
+    if(istoplevel)
+    {
+    }
     function = prs->currentfunccompiler->targetfunc;
     fname = NULL;
     if(function->name == NULL)
@@ -8161,6 +8349,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
     size_t paramid;
     NNAstToken paramname;
     NNAstToken vargname;
+    (void)paramid;
     (void)paramname;
     (void)defvalconst;
     paramid = 0;
@@ -8216,7 +8405,7 @@ void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* compile
     {
         nn_astparser_scopeend(prs);
     }
-    function = nn_astparser_endcompiler(prs);
+    function = nn_astparser_endcompiler(prs, false);
     nn_vm_stackpush(prs->pvm, nn_value_fromobject(function));
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLOSURE, nn_astparser_pushconst(prs, nn_value_fromobject(function)));
     for(i = 0; i < function->upvalcount; i++)
@@ -8252,12 +8441,15 @@ void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, bool issta
     NNFuncType type;
     static NNAstTokType tkns[] = { NEON_ASTTOK_IDENTNORMAL, NEON_ASTTOK_DECORATOR };
     (void)classname;
-    (void)isstatic;
     sc = "constructor";
     sn = strlen(sc);
     nn_astparser_consumeor(prs, "method name expected", tkns, 2);
     constant = nn_astparser_makeidentconst(prs, &prs->prevtoken);
     type = NEON_FUNCTYPE_METHOD;
+    if(isstatic)
+    {
+        type = NEON_FUNCTYPE_STATIC;
+    }
     if((prs->prevtoken.length == (int)sn) && (memcmp(prs->prevtoken.start, sc, sn) == 0))
     {
         type = NEON_FUNCTYPE_INITIALIZER;
@@ -9187,7 +9379,7 @@ NNObjFuncScript* nn_astparser_compilesource(NNState* state, NNObjModule* module,
     nn_astfunccompiler_init(parser, &compiler, NEON_FUNCTYPE_SCRIPT, true);
     compiler.fromimport = fromimport;
     nn_astparser_runparser(parser);
-    function = nn_astparser_endcompiler(parser);
+    function = nn_astparser_endcompiler(parser, true);
     if(parser->haderror)
     {
         function = NULL;
@@ -9472,7 +9664,7 @@ void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* 
     name = nn_value_fromobject(nn_string_copyobjstr(state, module->name));
     nn_vm_stackpush(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(module));
-    nn_tableval_set(state->modules, name, nn_value_fromobject(module));
+    nn_tableval_set(state->openedmodules, name, nn_value_fromobject(module));
     nn_vm_stackpopn(state, 2);
 }
 
@@ -9547,7 +9739,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     (void)os;
     (void)argc;
     (void)intomodule;
-    field = nn_tableval_getfieldbyostr(state->modules, modulename);
+    field = nn_tableval_getfieldbyostr(state->openedmodules, modulename);
     if(field != NULL)
     {
         return nn_value_asmodule(field->value);
@@ -9559,7 +9751,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
-    source = nn_util_readfile(state, physpath, &fsz);
+    source = nn_util_readfile(state, physpath, &fsz, false, 0);
     if(source == NULL)
     {
         nn_exceptions_throw(state, "could not read import file %s", physpath);
@@ -10355,6 +10547,67 @@ NNValue nn_objfnfile_isdirectory(NNState* state, NNArguments* args)
 }
 
 
+NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
+{
+    char* buf;
+    size_t thismuch;
+    size_t actualsz;
+    NNObjString* filepath;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, args);
+    thismuch = -1;
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    if(args->count > 1)
+    {
+        NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
+        thismuch = (size_t)nn_value_asnumber(args->args[1]);
+    }
+    filepath = nn_value_asstring(args->args[0]);
+    buf = nn_util_readfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
+    if(buf == NULL)
+    {
+        return nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+    }
+    return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
+}
+
+
+NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
+{
+    bool appending;
+    size_t rt;
+    FILE* fh;
+    const char* mode;
+    NNObjString* filepath;
+    NNObjString* data;
+    NNArgCheck check;
+    appending = false;
+    mode = "wb";
+    nn_argcheck_init(state, &check, args);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
+    if(args->count > 2)
+    {
+        NEON_ARGS_CHECKTYPE(&check, 2, nn_value_isbool);
+        appending = nn_value_asbool(args->args[2]);
+    }
+    if(appending)
+    {
+        mode = "ab";
+    }
+    filepath = nn_value_asstring(args->args[0]);
+    data = nn_value_asstring(args->args[1]);
+    fh = fopen(filepath->sbuf->data, mode);
+    if(fh == NULL)
+    {
+        return nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+    }
+    rt = fwrite(data->sbuf->data, sizeof(char), data->sbuf->length, fh);
+    fclose(fh);
+    return nn_value_makenumber(rt);
+}
+
+
 NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
 {
     NNObjString* file;
@@ -10368,12 +10621,11 @@ NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
     file = nn_value_asstring(args->args[0]);
     if(osfn_lstat(file->sbuf->data, &st) == 0)
     {
-        nn_util_statfilldictphysfile(state, dict, &st);
+        nn_util_statfilldictphysfile(dict, &st);
         return nn_value_fromobject(dict);
     }
     return nn_value_makenull();
 }
-
 
 NNValue nn_objfnfile_close(NNState* state, NNArguments* args)
 {
@@ -10409,83 +10661,7 @@ NNValue nn_objfnfile_isclosed(NNState* state, NNArguments* args)
     return nn_value_makebool(!file->isstd && !file->isopen);
 }
 
-bool nn_file_read(NNState* state, NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
-{
-    size_t filesizereal;
-    struct stat stats;
-    filesizereal = -1;
-    dest->success = false;
-    dest->length = 0;
-    dest->data = NULL;
-    if(!file->isstd)
-    {
-        if(!nn_util_fsfileexists(state, file->path->sbuf->data))
-        {
-            return false;
-        }
-        /* file is in write only mode */
-        /*
-        else if(strstr(file->mode->sbuf->data, "w") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
-        {
-            FILE_ERROR(Unsupported, "cannot read file in write mode");
-        }
-        */
-        if(!file->isopen)
-        {
-            /* open the file if it isn't open */
-            nn_fileobject_open(file);
-        }
-        else if(file->handle == NULL)
-        {
-            return false;
-        }
-        if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
-        {
-            filesizereal = (size_t)stats.st_size;
-        }
-        else
-        {
-            /* fallback */
-            fseek(file->handle, 0L, SEEK_END);
-            filesizereal = ftell(file->handle);
-            rewind(file->handle);
-        }
-        if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
-        {
-            readhowmuch = filesizereal;
-        }
-    }
-    else
-    {
-        /*
-        // for non-file objects such as stdin
-        // minimum read bytes should be 1
-        */
-        if(readhowmuch == (size_t)-1)
-        {
-            readhowmuch = 1;
-        }
-    }
-    /* +1 for terminator '\0' */
-    dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
-    if(dest->data == NULL && readhowmuch != 0)
-    {
-        return false;
-    }
-    dest->length = fread(dest->data, sizeof(char), readhowmuch, file->handle);
-    if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
-    {
-        return false;
-    }
-    /* we made use of +1 so we can terminate the string. */
-    if(dest->data != NULL)
-    {
-        dest->data[dest->length] = '\0';
-    }
-    return true;
-}
-
-NNValue nn_objfnfile_read(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_readmethod(NNState* state, NNArguments* args)
 {
     size_t readhowmuch;
     NNIOResult res;
@@ -10500,7 +10676,7 @@ NNValue nn_objfnfile_read(NNState* state, NNArguments* args)
         readhowmuch = (size_t)nn_value_asnumber(args->args[0]);
     }
     file = nn_value_asfile(args->thisval);
-    if(!nn_file_read(state, file, readhowmuch, &res))
+    if(!nn_file_read(file, readhowmuch, &res))
     {
         FILE_ERROR(NotFound, strerror(errno));
     }
@@ -10765,7 +10941,7 @@ NNValue nn_objfnfile_flush(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-void nn_util_statfilldictphysfile(NNState* state, NNObjDict* dict, struct stat* st)
+void nn_util_statfilldictphysfile(NNObjDict* dict, struct stat* st)
 {
     #if !defined(NEON_PLAT_ISWINDOWS)
     nn_dict_addentrycstr(dict, "isreadable", nn_value_makebool(((st->st_mode & S_IRUSR) != 0)));
@@ -10808,7 +10984,7 @@ NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
         {
             if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
             {
-                nn_util_statfilldictphysfile(state, dict, &stats);
+                nn_util_statfilldictphysfile(dict, &stats);
             }
         }
         else
@@ -12026,7 +12202,6 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
     NNObjString* os;
     NNObjString* instr;
     utf8iterator_t iter;
-    (void)state;
     instr = nn_value_asstring(args->thisval);
     res = nn_array_make(state);
     nn_utf8iter_init(&iter, instr->sbuf->data, instr->sbuf->length);
@@ -12658,6 +12833,131 @@ NNValue nn_objfnstring_endswith(NNState* state, NNArguments* args)
     return nn_value_makebool(memcmp(substr->sbuf->data, string->sbuf->data + difference, substr->sbuf->length) == 0);
 }
 
+
+/*
+    //  Returns 0 on success, or -1 on invalid or unsupported regex, or -2 on not enough tokens given to parse regex.
+    REMIMU_INLINE int mrx_regex_parse(
+        //  Regex pattern to parse. Must be null-terminated.
+        const char * pattern,       
+        //  Output buffer of tokencount regex tokens
+        RegexToken * tokens,
+        //  Maximum allowed number of tokens to write
+        int16_t * tokencount,
+        // Optional bitflags.
+        int32_t flags
+        
+    )
+    
+    // Returns match length, or -1 on no match, or -2 on out of memory, or -3 ifthe regex is invalid.
+    REMIMU_INLINE int64_t mrx_regex_match(
+        // Parsed regex to match against text.
+        const RegexToken * tokens,
+        // Text to match against tokens.
+        const char * text,
+        // index value to match at.
+        size_t starti,
+        // Number of allowed capture info output slots.
+        uint16_t capslots,
+        // Capture position info output buffer.
+        int64_t* cappos,
+        // Capture length info output buffer.
+        int64_t* capspan
+    ) 
+    
+*/
+
+NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjString* pattern, bool capture)
+{
+    enum {
+        matchMaxTokens = 128*4,
+        matchMaxCaptures = 128,
+    };
+    int prc;
+    int64_t i;
+    int64_t mtstart;
+    int64_t mtlength;
+    int64_t actualmaxcaptures;
+    int64_t res;
+    int16_t restokens;
+    int64_t capstarts[matchMaxCaptures + 1] = {0};
+    int64_t caplengths[matchMaxCaptures + 1] = {0};
+    RegexToken tokens[matchMaxTokens + 1] = {};
+    const char* str;
+    NNObjString* rstr;
+    restokens = matchMaxTokens;
+    actualmaxcaptures = 0;
+    if(capture)
+    {
+        actualmaxcaptures = matchMaxCaptures;
+    }
+    prc = mrx_regex_parse(pattern->sbuf->data, tokens, &restokens, 0);
+    if(prc == 0)
+    {
+        res = mrx_regex_match(tokens, string->sbuf->data, 0, actualmaxcaptures, capstarts, caplengths);
+        if(res > 0)
+        {
+            if(capture)
+            {
+                NNObjArray* oa;
+                oa = nn_object_makearray(state);
+                for(i=0; i<res; i++)
+                {
+                    mtstart = capstarts[i];
+                    mtlength = caplengths[i];
+                    if(mtlength > 0)
+                    {
+                        str = &string->sbuf->data[mtstart];
+                        fprintf(stderr, "match:capture: start=%ld length=%ld <%.*s>\n", mtstart, mtlength, mtlength, str);
+                        rstr = nn_string_copylen(state, str, mtlength);
+                        nn_array_push(oa, nn_value_fromobject(rstr));
+                    }
+                }
+                return nn_value_fromobject(oa);
+            }
+            else
+            {
+                return nn_value_makebool(true);
+            }
+        }
+    }
+    else
+    {
+        fprintf(stderr, "failed to parse regex: <%s>\n", pattern->sbuf->data);
+    }
+    if(capture)
+    {
+        return nn_value_makenull();
+    }
+    return nn_value_makebool(false);
+}
+
+NNValue nn_objfnstring_matchcapture(NNState* state, NNArguments* args)
+{
+    NNObjString* pattern;
+    NNObjString* string;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, args);
+    NEON_ARGS_CHECKCOUNT(&check, 1);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    string = nn_value_asstring(args->thisval);
+    pattern = nn_value_asstring(args->args[0]);
+    return nn_util_stringregexmatch(state, string, pattern, true);
+}
+
+
+NNValue nn_objfnstring_matchonly(NNState* state, NNArguments* args)
+{
+    NNObjString* pattern;
+    NNObjString* string;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, args);
+    NEON_ARGS_CHECKCOUNT(&check, 1);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    string = nn_value_asstring(args->thisval);
+    pattern = nn_value_asstring(args->args[0]);
+    return nn_util_stringregexmatch(state, string, pattern, false);
+}
+
 NNValue nn_objfnstring_count(NNState* state, NNArguments* args)
 {
     int count;
@@ -12878,7 +13178,6 @@ NNValue nn_objfnstring_split(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-
 NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
 {
     size_t i;
@@ -13006,7 +13305,7 @@ NNValue nn_objfnstring_each(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnobject_dump(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_dumpself(NNState* state, NNArguments* args)
 {
     NNValue v;
     NNPrinter pr;
@@ -13191,6 +13490,16 @@ NNValue nn_objfnobject_isinstance(NNState* state, NNArguments* args)
     return nn_value_makebool(nn_value_isinstance(selfval));
 }
 
+
+NNValue nn_objfnclass_getselfname(NNState* state, NNArguments* args)
+{
+    NNValue selfval;
+    NNObjClass* klass;
+    (void)state;
+    selfval = args->thisval;
+    klass = nn_value_asclass(selfval);
+    return nn_value_fromobject(klass->name);
+}
 
 NNObjString* nn_util_numbertobinstring(NNState* state, long n)
 {
@@ -13418,7 +13727,7 @@ struct ClsListMethods
         int i; \
         for(i=0; listmethods[i].name != NULL; i++) \
         { \
-            nn_class_defnativemethod(state, klass, nn_string_intern(state, listmethods[i].name), listmethods[i].fn); \
+            nn_class_defnativemethod(klass, nn_string_intern(state, listmethods[i].name), listmethods[i].fn); \
         } \
     }
 
@@ -13426,20 +13735,21 @@ void nn_state_initbuiltinmethods(NNState* state)
 {
     NNObjClass* klass;
     {
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "env"), nn_value_fromobject(state->envdict));
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->clidirectory));
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
-        nn_class_setstaticproperty(state->classprimprocess, nn_string_intern(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
-        nn_class_defstaticnativemethod(state, state->classprimprocess, nn_string_intern(state, "kill"), nn_objfnprocess_kill);
-        nn_class_defstaticnativemethod(state, state->classprimprocess, nn_string_intern(state, "exit"), nn_objfnprocess_exit);
+        klass = nn_util_makeclass(state, "Process", state->classprimobject);
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "env"), nn_value_fromobject(state->envdict));
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->clidirectory));
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "kill"), nn_objfnprocess_kill);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "exit"), nn_objfnprocess_exit);
 
     }
     {
         static ClsListMethods objectmethods[] =
         {
-            {"dump", nn_objfnobject_dump},
+            {"dump", nn_objfnobject_dumpself},
             {"isa", nn_objfnobject_isa},
             {"toString", nn_objfnobject_tostring},
             {"isArray", nn_objfnobject_isarray},
@@ -13457,11 +13767,14 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"isInstance", nn_objfnobject_isinstance},
             {NULL, NULL},
         };
-        nn_class_defstaticnativemethod(state, state->classprimobject, nn_string_intern(state, "typename"), nn_objfnobject_typename);
-        nn_class_defstaticcallablefield(state, state->classprimobject, nn_string_intern(state, "prototype"), nn_objfnobject_getselfclass);
+        nn_class_defstaticnativemethod(state->classprimobject, nn_string_intern(state, "typename"), nn_objfnobject_typename);
+        nn_class_defstaticcallablefield(state->classprimobject, nn_string_intern(state, "prototype"), nn_objfnobject_getselfclass);
         installmethods(state, state->classprimobject, objectmethods);
     }
-    
+    {
+        nn_class_defstaticcallablefield(state->classprimclass, nn_string_intern(state, "name"), nn_objfnclass_getselfname);
+
+    }    
     {
         static ClsListMethods numbermethods[] =
         {
@@ -13470,7 +13783,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"toBinString", nn_objfnnumber_tobinstring},
             {NULL, NULL},
         };
-        nn_class_defnativeconstructor(state, state->classprimnumber, nn_objfnnumber_constructor);
+        nn_class_defnativeconstructor(state->classprimnumber, nn_objfnnumber_constructor);
         installmethods(state, state->classprimnumber, numbermethods);
     }
     {
@@ -13510,14 +13823,16 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"utf8Chars", nn_objfnstring_utf8chars},
             {"utf8Codepoints", nn_objfnstring_utf8codepoints},
             {"utf8Bytes", nn_objfnstring_utf8codepoints},
+            {"match", nn_objfnstring_matchcapture},
+            {"matches", nn_objfnstring_matchonly},
             {NULL, NULL},
         };
-        nn_class_defnativeconstructor(state, state->classprimstring, nn_objfnstring_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimstring, nn_string_intern(state, "fromCharCode"), nn_objfnstring_fromcharcode);
-        nn_class_defstaticnativemethod(state, state->classprimstring, nn_string_intern(state, "utf8Decode"), nn_objfnstring_utf8decode);
-        nn_class_defstaticnativemethod(state, state->classprimstring, nn_string_intern(state, "utf8Encode"), nn_objfnstring_utf8encode);
-        nn_class_defstaticnativemethod(state, state->classprimstring, nn_string_intern(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
-        nn_class_defcallablefield(state, state->classprimstring, nn_string_intern(state, "length"), nn_objfnstring_length);
+        nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "fromCharCode"), nn_objfnstring_fromcharcode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Decode"), nn_objfnstring_utf8decode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Encode"), nn_objfnstring_utf8encode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
+        nn_class_defcallablefield(state->classprimstring, nn_string_intern(state, "length"), nn_objfnstring_length);
         installmethods(state, state->classprimstring, stringmethods);
         
     }
@@ -13562,8 +13877,8 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"@itern", nn_objfnarray_itern},
             {NULL, NULL}
         };
-        nn_class_defnativeconstructor(state, state->classprimarray, nn_objfnarray_constructor);
-        nn_class_defcallablefield(state, state->classprimarray, nn_string_intern(state, "length"), nn_objfnarray_length);
+        nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
+        nn_class_defcallablefield(state->classprimarray, nn_string_intern(state, "length"), nn_objfnarray_length);
         installmethods(state, state->classprimarray, arraymethods);
     }
     {
@@ -13594,8 +13909,8 @@ void nn_state_initbuiltinmethods(NNState* state)
             {NULL, NULL},
         };
         #if 0
-        nn_class_defnativeconstructor(state, state->classprimdict, nn_objfndict_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimdict, nn_string_intern(state, "keys"), nn_objfndict_keys);
+        nn_class_defnativeconstructor(state->classprimdict, nn_objfndict_constructor);
+        nn_class_defstaticnativemethod(state->classprimdict, nn_string_intern(state, "keys"), nn_objfndict_keys);
         #endif
         installmethods(state, state->classprimdict, dictmethods);
     }
@@ -13604,7 +13919,7 @@ void nn_state_initbuiltinmethods(NNState* state)
         {
             {"close", nn_objfnfile_close},
             {"open", nn_objfnfile_open},
-            {"read", nn_objfnfile_read},
+            {"read", nn_objfnfile_readmethod},
             {"get", nn_objfnfile_get},
             {"gets", nn_objfnfile_gets},
             {"write", nn_objfnfile_write},
@@ -13623,11 +13938,14 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"name", nn_objfnfile_name},
             {NULL, NULL},
         };
-        nn_class_defnativeconstructor(state, state->classprimfile, nn_objfnfile_constructor);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "exists"), nn_objfnfile_exists);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isFile"), nn_objfnfile_isfile);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "isDirectory"), nn_objfnfile_isdirectory);
-        nn_class_defstaticnativemethod(state, state->classprimfile, nn_string_intern(state, "stat"), nn_objfnfile_statstatic);
+        nn_class_defnativeconstructor(state->classprimfile, nn_objfnfile_constructor);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "read"), nn_objfnfile_readstatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "write"), nn_objfnfile_writestatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "put"), nn_objfnfile_writestatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "exists"), nn_objfnfile_exists);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "isFile"), nn_objfnfile_isfile);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "isDirectory"), nn_objfnfile_isdirectory);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "stat"), nn_objfnfile_statstatic);
         installmethods(state, state->classprimfile, filemethods);
     }
     {
@@ -13643,21 +13961,21 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"@itern", nn_objfnrange_itern},
             {NULL, NULL},
         };
-        nn_class_defnativeconstructor(state, state->classprimrange, nn_objfnrange_constructor);
+        nn_class_defnativeconstructor(state->classprimrange, nn_objfnrange_constructor);
         installmethods(state, state->classprimrange, rangemethods);
     }
     {
         klass = nn_util_makeclass(state, "Math", state->classprimobject);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "abs"), nn_objfnmath_abs);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "round"), nn_objfnmath_round);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "floor"), nn_objfnmath_floor);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "min"), nn_objfnmath_min);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "abs"), nn_objfnmath_abs);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "round"), nn_objfnmath_round);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "floor"), nn_objfnmath_floor);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "min"), nn_objfnmath_min);
     }
     {
         klass = nn_util_makeclass(state, "JSON", state->classprimobject);
-        nn_class_defstaticnativemethod(state, klass, nn_string_intern(state, "stringify"), nn_objfnjson_stringify);
+        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "stringify"), nn_objfnjson_stringify);
     }
 }
 
@@ -13710,12 +14028,14 @@ NNValue nn_nativefn_chr(NNState* state, NNArguments* args)
 {
     size_t len;
     char* string;
+    int ch;
     NNArgCheck check;
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_util_utf8encode((int)nn_value_asnumber(args->args[0]), &len);
-    return nn_value_fromobject(nn_string_takecstr(state, string));
+    ch = nn_value_asnumber(args->args[0]);
+    string = nn_util_utf8encode(ch, &len);
+    return nn_value_fromobject(nn_string_takelen(state, string, len));
 }
 
 NNValue nn_nativefn_ord(NNState* state, NNArguments* args)
@@ -14012,10 +14332,6 @@ NNValue nn_nativefn_print(NNState* state, NNArguments* args)
     for(i = 0; i < args->count; i++)
     {
         nn_printer_printvalue(state->stdoutprinter, args->args[i], false, true);
-    }
-    if(state->isrepl)
-    {
-        nn_printer_writestring(state->stdoutprinter, "\n");
     }
     return nn_value_makenull();
 }
@@ -14377,7 +14693,7 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     /* set class properties */
     nn_class_defproperty(klass, nn_string_intern(state, "message"), nn_value_makenull());
     nn_class_defproperty(klass, nn_string_intern(state, "stacktrace"), nn_value_makenull());
-    nn_tableval_set(state->globals, nn_value_fromobject(classname), nn_value_fromobject(klass));
+    nn_tableval_set(state->declaredglobals, nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
     nn_vm_stackpop(state);
     nn_vm_stackpop(state);
@@ -14451,7 +14767,7 @@ bool nn_state_defglobalvalue(NNState* state, const char* name, NNValue val)
     oname = nn_string_copycstr(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(oname));
     nn_vm_stackpush(state, val);
-    r = nn_tableval_set(state->globals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
+    r = nn_tableval_set(state->declaredglobals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
     nn_vm_stackpopn(state, 2);
     return r;
 }
@@ -14474,7 +14790,7 @@ NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* pare
     NNObjString* os;
     os = nn_string_intern(state, name);
     cl = nn_object_makeclass(state, os, parent);
-    nn_tableval_set(state->globals, nn_value_fromobject(os), nn_value_fromobject(cl));
+    nn_tableval_set(state->declaredglobals, nn_value_fromobject(os), nn_value_fromobject(cl));
     return cl;
 }
 
@@ -14705,6 +15021,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->gcstate.graycount = 0;
         state->gcstate.graycapacity = 0;
         state->gcstate.graystack = NULL;
+        state->lastreplvalue = nn_value_makenull();
     }
     {
         state->stdoutprinter = nn_printer_makeio(state, stdout, false);
@@ -14715,9 +15032,9 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->debugwriter->maxvallength = 15;
     }
     {
-        state->modules = nn_tableval_make(state);
+        state->openedmodules = nn_tableval_make(state);
         state->allocatedstrings = nn_tableval_make(state);
-        state->globals = nn_tableval_make(state);
+        state->declaredglobals = nn_tableval_make(state);
     }
     {
         state->topmodule = nn_module_make(state, "", "<state>", false);
@@ -14731,8 +15048,8 @@ NNState* nn_state_makewithuserptr(void* userptr)
         }
     }
     {
-        state->classprimobject = nn_util_makeclass(state, "Object", NULL);
-        state->classprimprocess = nn_util_makeclass(state, "Process", state->classprimobject);
+        state->classprimclass = nn_util_makeclass(state, "Class", NULL);
+        state->classprimobject = nn_util_makeclass(state, "Object", state->classprimclass);
         state->classprimnumber = nn_util_makeclass(state, "Number", state->classprimobject);
         state->classprimstring = nn_util_makeclass(state, "String", state->classprimobject);
         state->classprimarray = nn_util_makeclass(state, "Array", state->classprimobject);
@@ -14781,11 +15098,11 @@ void nn_state_destroy(NNState* state)
     nn_vallist_destroy(state->importpath);
     destrdebug("destroying linked objects...");
     nn_gcmem_destroylinkedobjects(state);
-    /* since object in module can exist in globals, it must come before */
+    /* since object in module can exist in declaredglobals, it must come before */
     destrdebug("destroying module table...");
-    nn_tableval_destroy(state->modules);
+    nn_tableval_destroy(state->openedmodules);
     destrdebug("destroying globals table...");
-    nn_tableval_destroy(state->globals);
+    nn_tableval_destroy(state->declaredglobals);
     destrdebug("destroying strings table...");
     nn_tableval_destroy(state->allocatedstrings);
     destrdebug("destroying stdoutprinter...");
@@ -15201,7 +15518,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     return nn_exceptions_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf->data, nn_value_typename(receiver));
 }
 
-NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, int argcount)
+NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* name, int argcount)
 {
     size_t spos;
     NNObjType rectype;
@@ -15236,28 +15553,41 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethod(NNState* state, NNObjString* name, 
                 {
                     NEON_APIDEBUG(state, "receiver is a class");
                     klass = nn_value_asclass(receiver);
-                    field = nn_tableval_getfieldbyostr(klass->instmethods, name);
+                    field = nn_class_getstaticproperty(klass, name);
                     if(field != NULL)
                     {
-                        if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
-                        {
-                            return nn_exceptions_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
-                        }
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
+                    field = nn_class_getstaticmethodfield(klass, name);
+                    if(field != NULL)
+                    {
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                    }
+                    /*
+                    * TODO:
+                    * should this return the function? the returned value cannot be called without an object,
+                    * so ... whats the right move here?
+                    */
+                    #if 1
                     else
                     {
-                        field = nn_class_getstaticproperty(klass, name);
+                        NNFuncType fntyp;
+                        field = nn_tableval_getfieldbyostr(klass->instmethods, name);
                         if(field != NULL)
                         {
-                            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
-                        }
-                        field = nn_class_getstaticmethodfield(klass, name);
-                        if(field != NULL)
-                        {
-                            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                            fntyp = nn_value_getmethodtype(field->value);
+                            fprintf(stderr, "fntyp: %d\n", fntyp);
+                            if(fntyp == NEON_FUNCTYPE_PRIVATE)
+                            {
+                                return nn_exceptions_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
+                            }
+                            if(fntyp == NEON_FUNCTYPE_STATIC)
+                            {
+                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                            }
                         }
                     }
+                    #endif
                     return nn_exceptions_throw(state, "unknown method %s() in class %s", name->sbuf->data, klass->name->sbuf->data);
                 }
             case NEON_OBJTYPE_INSTANCE:
@@ -16508,7 +16838,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
         }
         if(nn_value_iscallable(vpeek))
         {
-            nn_class_defmethod(state, klass, name, vpeek);
+            nn_class_defmethod(klass, name, vpeek);
         }
         else
         {
@@ -16710,7 +17040,7 @@ NEON_FORCEINLINE bool nn_vmdo_globaldefine(NNState* state)
     nn_tableval_set(tab, nn_value_fromobject(name), val);
     nn_vmbits_stackpop(state);
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
-    nn_tableval_print(state, state->debugwriter, state->globals, "globals");
+    nn_tableval_print(state, state->debugwriter, state->declaredglobals, "globals");
     #endif
     return true;
 }
@@ -16725,10 +17055,11 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
     field = nn_tableval_getfieldbyostr(tab, name);
     if(field == NULL)
     {
-        field = nn_tableval_getfieldbyostr(state->globals, name);
+        field = nn_tableval_getfieldbyostr(state->declaredglobals, name);
         if(field == NULL)
         {
-            nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf->data);
+            //nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf->data);
+            nn_exceptions_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", name->sbuf->data);
             return false;
         }
     }
@@ -16912,6 +17243,24 @@ void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, ...)
     nn_printer_printf(pr, "\n");
 }
 
+#define NEON_CONFIG_USECOMPUTEDGOTO 0
+
+#if 1
+    #if defined(__GNUC__)
+        #undef NEON_CONFIG_USECOMPUTEDGOTO
+        #define NEON_CONFIG_USECOMPUTEDGOTO 1
+    #endif
+#endif
+
+#if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+    #define VM_MAKELABEL(op) LABEL_##op
+    #define VM_CASE(op) LABEL_##op:
+    #define VM_DISPATCH() goto readnextinstruction
+#else
+    #define VM_CASE(op) case op:
+    #define VM_DISPATCH() break
+#endif
+
 NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
 {
     int iterpos;
@@ -16922,12 +17271,97 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     * switch tree are not calling nn_vmmac_exitvm(), as its behavior could be undefined.
     */
     bool you_are_calling_exit_vm_outside_of_runvm;
+    #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+        void* computedaddr;
+    #endif
     NNValue* dbgslot;
     NNInstruction currinstr;
     you_are_calling_exit_vm_outside_of_runvm = false;
     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
+    #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+        static const void** dispatchtable[] =
+        {
+            &&VM_MAKELABEL(NEON_OP_GLOBALDEFINE),
+            &&VM_MAKELABEL(NEON_OP_GLOBALGET),
+            &&VM_MAKELABEL(NEON_OP_GLOBALSET),
+            &&VM_MAKELABEL(NEON_OP_LOCALGET),
+            &&VM_MAKELABEL(NEON_OP_LOCALSET),
+            &&VM_MAKELABEL(NEON_OP_FUNCARGSET),
+            &&VM_MAKELABEL(NEON_OP_FUNCARGGET),
+            &&VM_MAKELABEL(NEON_OP_UPVALUEGET),
+            &&VM_MAKELABEL(NEON_OP_UPVALUESET),
+            &&VM_MAKELABEL(NEON_OP_UPVALUECLOSE),
+            &&VM_MAKELABEL(NEON_OP_PROPERTYGET),
+            &&VM_MAKELABEL(NEON_OP_PROPERTYGETSELF),
+            &&VM_MAKELABEL(NEON_OP_PROPERTYSET),
+            &&VM_MAKELABEL(NEON_OP_JUMPIFFALSE),
+            &&VM_MAKELABEL(NEON_OP_JUMPNOW),
+            &&VM_MAKELABEL(NEON_OP_LOOP),
+            &&VM_MAKELABEL(NEON_OP_EQUAL),
+            &&VM_MAKELABEL(NEON_OP_PRIMGREATER),
+            &&VM_MAKELABEL(NEON_OP_PRIMLESSTHAN),
+            &&VM_MAKELABEL(NEON_OP_PUSHEMPTY),
+            &&VM_MAKELABEL(NEON_OP_PUSHNULL),
+            &&VM_MAKELABEL(NEON_OP_PUSHTRUE),
+            &&VM_MAKELABEL(NEON_OP_PUSHFALSE),
+            &&VM_MAKELABEL(NEON_OP_PRIMADD),
+            &&VM_MAKELABEL(NEON_OP_PRIMSUBTRACT),
+            &&VM_MAKELABEL(NEON_OP_PRIMMULTIPLY),
+            &&VM_MAKELABEL(NEON_OP_PRIMDIVIDE),
+            &&VM_MAKELABEL(NEON_OP_PRIMFLOORDIVIDE),
+            &&VM_MAKELABEL(NEON_OP_PRIMMODULO),
+            &&VM_MAKELABEL(NEON_OP_PRIMPOW),
+            &&VM_MAKELABEL(NEON_OP_PRIMNEGATE),
+            &&VM_MAKELABEL(NEON_OP_PRIMNOT),
+            &&VM_MAKELABEL(NEON_OP_PRIMBITNOT),
+            &&VM_MAKELABEL(NEON_OP_PRIMAND),
+            &&VM_MAKELABEL(NEON_OP_PRIMOR),
+            &&VM_MAKELABEL(NEON_OP_PRIMBITXOR),
+            &&VM_MAKELABEL(NEON_OP_PRIMSHIFTLEFT),
+            &&VM_MAKELABEL(NEON_OP_PRIMSHIFTRIGHT),
+            &&VM_MAKELABEL(NEON_OP_PUSHONE),
+            &&VM_MAKELABEL(NEON_OP_PUSHCONSTANT),
+            &&VM_MAKELABEL(NEON_OP_ECHO),
+            &&VM_MAKELABEL(NEON_OP_POPONE),
+            &&VM_MAKELABEL(NEON_OP_DUPONE),
+            &&VM_MAKELABEL(NEON_OP_POPN),
+            &&VM_MAKELABEL(NEON_OP_ASSERT),
+            &&VM_MAKELABEL(NEON_OP_EXTHROW),
+            &&VM_MAKELABEL(NEON_OP_MAKECLOSURE),
+            &&VM_MAKELABEL(NEON_OP_CALLFUNCTION),
+            &&VM_MAKELABEL(NEON_OP_CALLMETHOD),
+            &&VM_MAKELABEL(NEON_OP_CLASSINVOKETHIS),
+            &&VM_MAKELABEL(NEON_OP_RETURN),
+            &&VM_MAKELABEL(NEON_OP_MAKECLASS),
+            &&VM_MAKELABEL(NEON_OP_MAKEMETHOD),
+            &&VM_MAKELABEL(NEON_OP_CLASSGETTHIS),
+            &&VM_MAKELABEL(NEON_OP_CLASSPROPERTYDEFINE),
+            &&VM_MAKELABEL(NEON_OP_CLASSINHERIT),
+            &&VM_MAKELABEL(NEON_OP_CLASSGETSUPER),
+            &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPER),
+            &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPERSELF),
+            &&VM_MAKELABEL(NEON_OP_MAKERANGE),
+            &&VM_MAKELABEL(NEON_OP_MAKEARRAY),
+            &&VM_MAKELABEL(NEON_OP_MAKEDICT),
+            &&VM_MAKELABEL(NEON_OP_INDEXGET),
+            &&VM_MAKELABEL(NEON_OP_INDEXGETRANGED),
+            &&VM_MAKELABEL(NEON_OP_INDEXSET),
+            &&VM_MAKELABEL(NEON_OP_IMPORTIMPORT),
+            &&VM_MAKELABEL(NEON_OP_EXTRY),
+            &&VM_MAKELABEL(NEON_OP_EXPOPTRY),
+            &&VM_MAKELABEL(NEON_OP_EXPUBLISHTRY),
+            &&VM_MAKELABEL(NEON_OP_STRINGIFY),
+            &&VM_MAKELABEL(NEON_OP_SWITCH),
+            &&VM_MAKELABEL(NEON_OP_TYPEOF),
+            &&VM_MAKELABEL(NEON_OP_OPINSTANCEOF),
+            &&VM_MAKELABEL(NEON_OP_HALT),
+        };
+    #endif
     while(true)
     {
+        #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+            readnextinstruction:
+        #endif
         /*
         // try...finally... (i.e. try without a catch but finally
         // whose try body raises an exception)
@@ -16944,7 +17378,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             nn_dbg_printinstructionat(state->debugwriter, &state->vmstate.currentframe->closure->scriptfunc->blob, ofs);
             fprintf(stderr, "stack (before)=[\n");
             iterpos = 0;
-            for(dbgslot = state->vmstate.stackvalues; dbgslot < &state->vmstate.stackvalues[state->vmstate.stackidx]; dbgslot++)
+            dbgslot = state->vmstate.stackvalues;
+            while(dbgslot < &state->vmstate.stackvalues[state->vmstate.stackidx])
             {
                 printpos = iterpos + 1;
                 iterpos++;
@@ -16953,14 +17388,28 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 nn_printer_printvalue(state->debugwriter, *dbgslot, true, false);
                 nn_printer_printf(state->debugwriter, "%s", nn_util_color(NEON_COLOR_RESET));
                 fprintf(stderr, "\n");
+                dbgslot++;
             }
             fprintf(stderr, "]\n");
         }
+        #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+            trynext:
+        #endif
         currinstr = nn_vmbits_readinstruction(state);
         state->vmstate.currentinstr = currinstr;
-        switch(currinstr.code)
+        #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+            computedaddr = dispatchtable[currinstr.code];
+            /* TODO: figure out why this happens (failing instruction is 255) */
+            if(nn_util_unlikely(computedaddr == NULL))
+            {
+                goto trynext;
+            }
+            goto* computedaddr;
+        #else
+            switch(currinstr.code)
+        #endif
         {
-            case NEON_OP_RETURN:
+            VM_CASE(NEON_OP_RETURN)
                 {
                     size_t ssp;
                     NNValue result;
@@ -16986,15 +17435,20 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         return NEON_STATUS_OK;
                     }
                 }
-                break;
-            case NEON_OP_PUSHCONSTANT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_HALT)
+                {
+                    printf("**halting vm**\n");
+                }
+                goto finished;
+            VM_CASE(NEON_OP_PUSHCONSTANT)
                 {
                     NNValue constant;
                     constant = nn_vmbits_readconst(state);
                     nn_vmbits_stackpush(state, constant);
                 }
-                break;
-            case NEON_OP_PRIMADD:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMADD)
                 {
                     NNValue valright;
                     NNValue valleft;
@@ -17006,7 +17460,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         if(nn_util_unlikely(!nn_vmutil_concatenate(state)))
                         {
                             nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand + for %s and %s", nn_value_typename(valleft), nn_value_typename(valright));
-                            break;
+                            VM_DISPATCH();
                         }
                     }
                     else if(nn_value_isarray(valleft) && nn_value_isarray(valright))
@@ -17020,13 +17474,13 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmdo_dobinarydirect(state);
                     }
                 }
-                break;
-            case NEON_OP_PRIMSUBTRACT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMSUBTRACT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMMULTIPLY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMMULTIPLY)
                 {
                     int intnum;
                     double dbnum;
@@ -17045,7 +17499,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         result = nn_value_fromobject(nn_vmutil_multiplystring(state, string, dbnum));
                         nn_vmbits_stackpopn(state, 2);
                         nn_vmbits_stackpush(state, result);
-                        break;
+                        VM_DISPATCH();
                     }
                     else if(nn_value_isarray(peekleft) && nn_value_isnumber(peekright))
                     {
@@ -17057,93 +17511,93 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmutil_multiplyarray(state, list, newlist, intnum);
                         nn_vmbits_stackpopn(state, 2);
                         nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
-                        break;
+                        VM_DISPATCH();
                     }
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMDIVIDE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMDIVIDE)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMMODULO:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMMODULO)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "%", (nnbinopfunc_t)nn_vmutil_modulo))
                     {
                     }
                 }
-                break;
-            case NEON_OP_PRIMPOW:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMPOW)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "**", (nnbinopfunc_t)pow))
                     {
                     }
                 }
-                break;
-            case NEON_OP_PRIMFLOORDIVIDE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMFLOORDIVIDE)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "//", (nnbinopfunc_t)nn_vmutil_floordiv))
                     {
                     }
                 }
-                break;
-            case NEON_OP_PRIMNEGATE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMNEGATE)
                 {
                     NNValue peeked;
                     peeked = nn_vmbits_stackpeek(state, 0);
                     if(!nn_value_isnumber(peeked))
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator - not defined for object of type %s", nn_value_typename(peeked));
-                        break;
+                        VM_DISPATCH();
                     }
                     nn_vmbits_stackpush(state, nn_value_makenumber(-nn_value_asnumber(nn_vmbits_stackpop(state))));
                 }
-                break;
-            case NEON_OP_PRIMBITNOT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMBITNOT)
             {
                 NNValue peeked;
                 peeked = nn_vmbits_stackpeek(state, 0);
                 if(!nn_value_isnumber(peeked))
                 {
                     nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator ~ not defined for object of type %s", nn_value_typename(peeked));
-                    break;
+                    VM_DISPATCH();
                 }
                 nn_vmbits_stackpush(state, nn_value_makeint(~((int)nn_value_asnumber(nn_vmbits_stackpop(state)))));
-                break;
+                VM_DISPATCH();
             }
-            case NEON_OP_PRIMAND:
+            VM_CASE(NEON_OP_PRIMAND)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMOR:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMOR)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMBITXOR:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMBITXOR)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMSHIFTLEFT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMSHIFTLEFT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMSHIFTRIGHT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMSHIFTRIGHT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PUSHONE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PUSHONE)
                 {
                     nn_vmbits_stackpush(state, nn_value_makenumber(1));
                 }
-                break;
+                VM_DISPATCH();
             /* comparisons */
-            case NEON_OP_EQUAL:
+            VM_CASE(NEON_OP_EQUAL)
                 {
                     NNValue a;
                     NNValue b;
@@ -17151,51 +17605,51 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     a = nn_vmbits_stackpop(state);
                     nn_vmbits_stackpush(state, nn_value_makebool(nn_value_compare(state, a, b)));
                 }
-                break;
-            case NEON_OP_PRIMGREATER:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMGREATER)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMLESSTHAN:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMLESSTHAN)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
-                break;
-            case NEON_OP_PRIMNOT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PRIMNOT)
                 {
                     nn_vmbits_stackpush(state, nn_value_makebool(nn_value_isfalse(nn_vmbits_stackpop(state))));
                 }
-                break;
-            case NEON_OP_PUSHNULL:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PUSHNULL)
                 {
                     nn_vmbits_stackpush(state, nn_value_makenull());
                 }
-                break;
-            case NEON_OP_PUSHEMPTY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PUSHEMPTY)
                 {
                     nn_vmbits_stackpush(state, nn_value_makenull());
                 }
-                break;
-            case NEON_OP_PUSHTRUE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PUSHTRUE)
                 {
                     nn_vmbits_stackpush(state, nn_value_makebool(true));
                 }
-                break;
-            case NEON_OP_PUSHFALSE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PUSHFALSE)
                 {
                     nn_vmbits_stackpush(state, nn_value_makebool(false));
                 }
-                break;
+                VM_DISPATCH();
 
-            case NEON_OP_JUMPNOW:
+            VM_CASE(NEON_OP_JUMPNOW)
                 {
                     uint16_t offset;
                     offset = nn_vmbits_readshort(state);
                     state->vmstate.currentframe->inscode += offset;
                 }
-                break;
-            case NEON_OP_JUMPIFFALSE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_JUMPIFFALSE)
                 {
                     uint16_t offset;
                     offset = nn_vmbits_readshort(state);
@@ -17204,15 +17658,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         state->vmstate.currentframe->inscode += offset;
                     }
                 }
-                break;
-            case NEON_OP_LOOP:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_LOOP)
                 {
                     uint16_t offset;
                     offset = nn_vmbits_readshort(state);
                     state->vmstate.currentframe->inscode -= offset;
                 }
-                break;
-            case NEON_OP_ECHO:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_ECHO)
                 {
                     NNValue val;
                     val = nn_vmbits_stackpeek(state, 0);
@@ -17223,8 +17677,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     nn_vmbits_stackpop(state);
                 }
-                break;
-            case NEON_OP_STRINGIFY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_STRINGIFY)
                 {
                     NNValue peeked;
                     NNObjString* value;
@@ -17242,29 +17696,29 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         }
                     }
                 }
-                break;
-            case NEON_OP_DUPONE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_DUPONE)
                 {
                     nn_vmbits_stackpush(state, nn_vmbits_stackpeek(state, 0));
                 }
-                break;
-            case NEON_OP_POPONE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_POPONE)
                 {
                     nn_vmbits_stackpop(state);
                 }
-                break;
-            case NEON_OP_POPN:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_POPN)
                 {
                     nn_vmbits_stackpopn(state, nn_vmbits_readshort(state));
                 }
-                break;
-            case NEON_OP_UPVALUECLOSE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_UPVALUECLOSE)
                 {
                     nn_vmutil_upvaluesclose(state, &state->vmstate.stackvalues[state->vmstate.stackidx - 1]);
                     nn_vmbits_stackpop(state);
                 }
-                break;
-            case NEON_OP_OPINSTANCEOF:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_OPINSTANCEOF)
                 {
                     bool rt;
                     NNValue first;
@@ -17290,97 +17744,97 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     nn_vmbits_stackpush(state, nn_value_makebool(rt));
                 }
-                break;
-            case NEON_OP_GLOBALDEFINE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_GLOBALDEFINE)
                 {
                     if(!nn_vmdo_globaldefine(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_GLOBALGET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_GLOBALGET)
                 {
                     if(!nn_vmdo_globalget(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_GLOBALSET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_GLOBALSET)
                 {
                     if(!nn_vmdo_globalset(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_LOCALGET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_LOCALGET)
                 {
                     if(!nn_vmdo_localget(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_LOCALSET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_LOCALSET)
                 {
                     if(!nn_vmdo_localset(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_FUNCARGGET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_FUNCARGGET)
                 {
                     if(!nn_vmdo_funcargget(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_FUNCARGSET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_FUNCARGSET)
                 {
                     if(!nn_vmdo_funcargset(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
+                VM_DISPATCH();
 
-            case NEON_OP_PROPERTYGET:
+            VM_CASE(NEON_OP_PROPERTYGET)
                 {
                     if(!nn_vmdo_propertyget(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_PROPERTYSET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PROPERTYSET)
                 {
                     if(!nn_vmdo_propertyset(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_PROPERTYGETSELF:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_PROPERTYGETSELF)
                 {
                     if(!nn_vmdo_propertygetself(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_MAKECLOSURE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_MAKECLOSURE)
                 {
                     if(!nn_vmdo_makeclosure(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_UPVALUEGET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_UPVALUEGET)
                 {
                     int index;
                     NNObjFuncClosure* closure;
@@ -17395,15 +17849,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmbits_stackpush(state, nn_value_makenull());
                     }
                 }
-                break;
-            case NEON_OP_UPVALUESET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_UPVALUESET)
                 {
                     int index;
                     index = nn_vmbits_readshort(state);
                     state->vmstate.currentframe->closure->upvalues[index]->location = nn_vmbits_stackpeek(state, 0);
                 }
-                break;
-            case NEON_OP_CALLFUNCTION:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CALLFUNCTION)
                 {
                     int argcount;
                     argcount = nn_vmbits_readbyte(state);
@@ -17413,21 +17867,21 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                 }
-                break;
-            case NEON_OP_CALLMETHOD:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CALLMETHOD)
                 {
                     int argcount;
                     NNObjString* method;
                     method = nn_vmbits_readstring(state);
                     argcount = nn_vmbits_readbyte(state);
-                    if(!nn_vmutil_invokemethod(state, method, argcount))
+                    if(!nn_vmutil_invokemethodnormal(state, method, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
                     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                 }
-                break;
-            case NEON_OP_CLASSGETTHIS:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSGETTHIS)
                 {
                     NNValue thisval;
                     thisval = nn_vmbits_stackpeek(state, 3);
@@ -17436,8 +17890,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     nn_printer_printf(state->debugwriter, "\n");
                     nn_vmbits_stackpush(state, thisval);
                 }
-                break;
-            case NEON_OP_CLASSINVOKETHIS:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSINVOKETHIS)
                 {
                     int argcount;
                     NNObjString* method;
@@ -17449,8 +17903,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                 }
-                break;
-            case NEON_OP_MAKECLASS:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_MAKECLASS)
                 {
                     bool haveval;
                     NNValue pushme;
@@ -17468,7 +17922,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             pushme = field->value;
                         }
                     }
-                    field = nn_tableval_getfieldbyostr(state->globals, name);
+                    field = nn_tableval_getfieldbyostr(state->declaredglobals, name);
                     if(field != NULL)
                     {
                         if(nn_value_isclass(field->value))
@@ -17484,15 +17938,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     nn_vmbits_stackpush(state, pushme);
                 }
-                break;
-            case NEON_OP_MAKEMETHOD:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_MAKEMETHOD)
                 {
                     NNObjString* name;
                     name = nn_vmbits_readstring(state);
                     nn_vmutil_definemethod(state, name);
                 }
-                break;
-            case NEON_OP_CLASSPROPERTYDEFINE:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSPROPERTYDEFINE)
                 {
                     int isstatic;
                     NNObjString* name;
@@ -17500,15 +17954,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     isstatic = nn_vmbits_readbyte(state);
                     nn_vmutil_defineproperty(state, name, isstatic == 1);
                 }
-                break;
-            case NEON_OP_CLASSINHERIT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSINHERIT)
                 {
                     NNObjClass* superclass;
                     NNObjClass* subclass;
                     if(!nn_value_isclass(nn_vmbits_stackpeek(state, 1)))
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "cannot inherit from non-class object");
-                        break;
+                        VM_DISPATCH();
                     }
                     superclass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
                     subclass = nn_value_asclass(nn_vmbits_stackpeek(state, 0));
@@ -17516,8 +17970,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     /* pop the subclass */
                     nn_vmbits_stackpop(state);
                 }
-                break;
-            case NEON_OP_CLASSGETSUPER:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSGETSUPER)
                 {
                     NNObjClass* klass;
                     NNObjString* name;
@@ -17528,8 +17982,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "class %s does not define a function %s", klass->name->sbuf->data, name->sbuf->data);
                     }
                 }
-                break;
-            case NEON_OP_CLASSINVOKESUPER:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSINVOKESUPER)
                 {
                     int argcount;
                     NNObjClass* klass;
@@ -17543,8 +17997,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                 }
-                break;
-            case NEON_OP_CLASSINVOKESUPERSELF:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_CLASSINVOKESUPERSELF)
                 {
                     int argcount;
                     NNObjClass* klass;
@@ -17556,17 +18010,17 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                 }
-                break;
-            case NEON_OP_MAKEARRAY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_MAKEARRAY)
                 {
                     if(!nn_vmdo_makearray(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
+                VM_DISPATCH();
 
-            case NEON_OP_MAKERANGE:
+            VM_CASE(NEON_OP_MAKERANGE)
                 {
                     double lower;
                     double upper;
@@ -17577,47 +18031,47 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     if(!nn_value_isnumber(vupper) || !nn_value_isnumber(vlower))
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "invalid range boundaries");
-                        break;
+                        VM_DISPATCH();
                     }
                     lower = nn_value_asnumber(vlower);
                     upper = nn_value_asnumber(vupper);
                     nn_vmbits_stackpopn(state, 2);
                     nn_vmbits_stackpush(state, nn_value_fromobject(nn_object_makerange(state, lower, upper)));
                 }
-                break;
-            case NEON_OP_MAKEDICT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_MAKEDICT)
                 {
                     if(!nn_vmdo_makedict(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_INDEXGETRANGED:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_INDEXGETRANGED)
                 {
                     if(!nn_vmdo_getrangedindex(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_INDEXGET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_INDEXGET)
                 {
                     if(!nn_vmdo_indexget(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_INDEXSET:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_INDEXSET)
                 {
                     if(!nn_vmdo_indexset(state))
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
-                break;
-            case NEON_OP_IMPORTIMPORT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_IMPORTIMPORT)
                 {
                     NNValue res;
                     NNObjString* name;
@@ -17636,8 +18090,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     nn_vmbits_stackpush(state, res);
                 }
-                break;
-            case NEON_OP_TYPEOF:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_TYPEOF)
                 {
                     NNValue res;
                     NNValue thing;
@@ -17647,8 +18101,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     res = nn_value_fromobject(nn_string_copycstr(state, result));
                     nn_vmbits_stackpush(state, res);
                 }
-                break;
-            case NEON_OP_ASSERT:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_ASSERT)
                 {
                     NNValue message;
                     NNValue expression;
@@ -17666,8 +18120,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         }
                     }
                 }
-                break;
-            case NEON_OP_EXTHROW:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_EXTHROW)
                 {
                     bool isok;
                     NNValue peeked;
@@ -17681,7 +18135,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     if(!isok)
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "instance of Exception expected");
-                        break;
+                        VM_DISPATCH();
                     }
                     stacktrace = nn_exceptions_getstacktrace(state);
                     instance = nn_value_asinstance(peeked);
@@ -17689,11 +18143,11 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     if(nn_exceptions_propagate(state))
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
-                        break;
+                        VM_DISPATCH();
                     }
                     nn_vmmac_exitvm(state);
                 }
-            case NEON_OP_EXTRY:
+            VM_CASE(NEON_OP_EXTRY)
                 {
                     bool haveclass;
                     uint16_t addr;
@@ -17709,7 +18163,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     if(addr != 0)
                     {
                         value = nn_value_makenull();
-                        if(!nn_tableval_get(state->globals, nn_value_fromobject(type), &value))
+                        if(!nn_tableval_get(state->declaredglobals, nn_value_fromobject(type), &value))
                         {
                             if(nn_value_isclass(value))
                             {
@@ -17723,7 +18177,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             if(!nn_tableval_get(state->vmstate.currentframe->closure->scriptfunc->module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
                             {
                                 nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->sbuf->data);
-                                break;
+                                VM_DISPATCH();
                             }
                             */
                             exclass = state->exceptions.stdexception;
@@ -17735,24 +18189,24 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_exceptions_pushhandler(state, NULL, addr, finaddr);
                     }
                 }
-                break;
-            case NEON_OP_EXPOPTRY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_EXPOPTRY)
                 {
                     state->vmstate.currentframe->handlercount--;
                 }
-                break;
-            case NEON_OP_EXPUBLISHTRY:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_EXPUBLISHTRY)
                 {
                     state->vmstate.currentframe->handlercount--;
                     if(nn_exceptions_propagate(state))
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
-                        break;
+                        VM_DISPATCH();
                     }
                     nn_vmmac_exitvm(state);
                 }
-                break;
-            case NEON_OP_SWITCH:
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_SWITCH)
                 {
                     NNValue expr;
                     NNValue value;
@@ -17773,14 +18227,19 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     nn_vmbits_stackpop(state);
                 }
-                break;
+                VM_DISPATCH();
+            #if 0
             default:
                 {
+                    fprintf(stderr, "UNHANDLED OPCODE %d\n", currinstr.code);
                 }
                 break;
+            #endif
         }
-
+        
     }
+    finished:
+    return NEON_STATUS_OK;
 }
 
 int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjArray* callarr)
@@ -17854,11 +18313,12 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
     return true;
 }
 
-NNObjFuncClosure* nn_state_compilesource(NNState* state, NNObjModule* module, bool fromeval, const char* source)
+NNObjFuncClosure* nn_state_compilesource(NNState* state, NNObjModule* module, bool fromeval, const char* source, bool toplevel)
 {
     NNBlob blob;
     NNObjFuncScript* function;
     NNObjFuncClosure* closure;
+    (void)toplevel;
     nn_blob_init(state, &blob);
     function = nn_astparser_compilesource(state, module, source, &blob, false, fromeval);
     if(function == NULL)
@@ -17891,12 +18351,11 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
     NNObjFuncClosure* closure;
     state->rootphysfile = filename;
     //rp = osfn_realpath(filename, NULL);
-    rp = filename;
+    rp = (char*)filename;
     state->topmodule->physicalpath = nn_string_copycstr(state, rp);
     //nn_memory_free(rp);
-
     nn_module_setfilefield(state, module);
-    closure = nn_state_compilesource(state, module, false, source);
+    closure = nn_state_compilesource(state, module, false, source, true);
     if(closure == NULL)
     {
         return NEON_STATUS_FAILCOMPILE;
@@ -17919,7 +18378,7 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
     NNObjFuncClosure* closure;
     NNObjArray* args;
     (void)argc;
-    closure = nn_state_compilesource(state, state->topmodule, true, source);
+    closure = nn_state_compilesource(state, state->topmodule, true, source, false);
     callme = nn_value_fromobject(closure);
     args = nn_array_make(state);
     argc = nn_nestcall_prepare(state, callme, nn_value_makenull(), args);
@@ -17970,7 +18429,9 @@ void nn_cli_freeline(char* line)
 #if !defined(NEON_PLAT_ISWASM)
 bool nn_cli_repl(NNState* state)
 {
+    enum { kMaxVarName = 512 };
     size_t i;
+    size_t rescnt;
     int linelength;
     int bracecount;
     int parencount;
@@ -17979,9 +18440,13 @@ bool nn_cli_repl(NNState* state)
     int singlequotecount;
     bool continuerepl;
     char* line;
+    char varnamebuf[kMaxVarName];
     StringBuffer* source;
     const char* cursor;
     NNValue dest;
+    NNPrinter* pr;
+    pr = state->stdoutprinter;
+    rescnt = 0;
     state->isrepl = true;
     continuerepl = true;
     printf("Type \".exit\" to quit or \".credits\" for more information\n");
@@ -18018,7 +18483,7 @@ bool nn_cli_repl(NNState* state)
             cursor = "";
         }
         line = nn_cli_getinput(cursor);
-        fprintf(stderr, "line = %s. isexit=%d\n", line, strcmp(line, ".exit"));
+        //fprintf(stderr, "line = %s. isexit=%d\n", line, strcmp(line, ".exit"));
         if(line == NULL || strcmp(line, ".exit") == 0)
         {
             dyn_strbuf_destroy(source);
@@ -18098,7 +18563,19 @@ bool nn_cli_repl(NNState* state)
         nn_cli_freeline(line);
         if(bracketcount == 0 && parencount == 0 && bracecount == 0 && singlequotecount == 0 && doublequotecount == 0)
         {
+            memset(varnamebuf, 0, kMaxVarName);
+            sprintf(varnamebuf, "_%ld", rescnt);
             nn_state_execsource(state, state->topmodule, source->data, "<repl>", &dest);
+            dest = state->lastreplvalue;
+            if(!nn_value_isnull(dest))
+            {
+                nn_printer_printf(pr, "%s = ", varnamebuf);
+                nn_printer_printvalue(pr, dest, true, true);
+                nn_state_defglobalvalue(state, varnamebuf, dest);
+                nn_printer_printf(pr, "\n");
+                rescnt++;
+            }
+            state->lastreplvalue = nn_value_makenull();
             fflush(stdout);
             continuerepl = false;
         }
@@ -18113,11 +18590,11 @@ bool nn_cli_runfile(NNState* state, const char* file)
     char* source;
     const char* oldfile;
     NNStatus result;
-    source = nn_util_readfile(state, file, &fsz);
+    source = nn_util_readfile(state, file, &fsz, false, 0);
     if(source == NULL)
     {
         oldfile = file;
-        source = nn_util_readfile(state, file, &fsz);
+        source = nn_util_readfile(state, file, &fsz, false, 0);
         if(source == NULL)
         {
             fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
@@ -18452,7 +18929,7 @@ int main(int argc, char* argv[], char** envp)
             nn_array_push(state->processinfo->cliargv, nn_value_fromobject(os));
 
         }
-        nn_tableval_set(state->globals, nn_value_internstr(state, "ARGV"), nn_value_fromobject(state->processinfo->cliargv));
+        nn_tableval_set(state->declaredglobals, nn_value_internstr(state, "ARGV"), nn_value_fromobject(state->processinfo->cliargv));
     }
     state->gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);

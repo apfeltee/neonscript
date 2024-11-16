@@ -1,8 +1,6 @@
 {
-    for (var a = 0; a < 5; a = a + 1)
-    {
-        if (a == 3)
-        {
+    for (var a = 0; a < 5; a = a + 1) {
+        if (a == 3) {
             break;
         }
         println(a);
@@ -23,7 +21,7 @@ var a = "no";
             while (true) {
                 a = "yes";
                 break;
-                throw Exception("nope");
+                println("nope");
             }
             break;
         }
@@ -32,21 +30,18 @@ var a = "no";
     }
 }
 
-var i
-var j
-for(i=0; i<100; i++)
+var i;
+var j;
+for(i=0; i<100; i=i+1)
 {
-    if(i == 56)
-    {
-        break
+    if(i == 56) {
+        break;
     }
-    for(j=0; j<100; j++)
-    {
-        if(j == 48)
-        {
-            break
+    for(j=0; j<100; j=j+1) {
+        if(j == 48) {
+            break;
         }
     }
 }
 
-println("i=", i, ", j=", j)
+println("i=", i, ", j=", j);

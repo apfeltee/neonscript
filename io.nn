@@ -6,15 +6,17 @@ try
 {
     fh = File("Makefile", "rb")
     var raw = fh.read()
-    println("raw: ", raw.toString())
-    /*
+    //println("raw: ", raw.toString())
     var lines = raw.split("\n")
     println(lines)
     for(var i=0; i<lines.size(); i++)
     {
-        println("[", i, "]: ", lines[i]);
+        var line = lines[i];
+        if(line.matches(`^#`))
+        {
+            println("[", i, "]: ", lines[i]);
+        }
     }
-    */
 }
 //catch(e)
 catch(e)

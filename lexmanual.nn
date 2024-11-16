@@ -1,0 +1,414 @@
+/*
+    Token: type, value, line, pos
+*/
+
+const TokenType = {
+    Keyword_if: 1,
+    Keyword_else: 2,
+    Keyword_print: 3,
+    Keyword_putc: 4,
+    Keyword_while: 5,
+    Op_add: 6,
+    Op_and: 7,
+    Op_assign: 8,
+    Op_divide: 9,
+    Op_equal: 10,
+    Op_greater: 11,
+    Op_greaterequal: 12,
+    Op_less: 13,
+    Op_lessequal: 14,
+    Op_mod: 15,
+    Op_multiply: 16,
+    Op_not: 17,
+    Op_notequal: 18,
+    Op_or: 19,
+    Op_subtract: 20,
+    Integer: 21,
+    String: 22,
+    Identifier: 23,
+    Semicolon: 24,
+    Comma: 25,
+    LeftBrace: 26,
+    RightBrace: 27,
+    LeftParen: 28,
+    RightParen: 29,
+    Dot: 30,
+    End_of_input: 99
+}
+
+function test_charof(s, strings)
+{
+    var i;
+    if(s == null)
+    {
+        return false;
+    }
+    for(i = 0; i < strings.length; i++)
+    {
+        if(s == strings[i])
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+function test_isspace(s)
+{
+    return test_charof(s, [" ", "\n", "\r", "\t"]);
+}
+
+
+function test_isdigit(s)
+{
+    return test_charof(s, ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+}
+
+function test_isident(s)
+{
+    var nums = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"];
+    var alph1 = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n", "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z"];
+    var alph2 = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
+    return (test_charof(s, alph1) || test_charof(s, alph2) || test_charof(s, nums) || test_charof(s, ["_"]));
+}
+
+
+class Lexer
+{
+    constructor(source)
+    {
+        this.source = source
+        this.pos = 1 // position in line
+        this.position = 0 // position in source
+        this.line = 1
+        this.currchar = this.source.charAt(0)
+        this.keywords = {}
+        this.keywords["if"] = TokenType.Keyword_if
+        this.keywords["else"] = TokenType.Keyword_else
+        this.keywords["print"] = TokenType.Keyword_print
+        this.keywords["putc"] = TokenType.Keyword_putc
+        this.keywords["while"] = TokenType.Keyword_while
+
+    }
+    getNextChar()
+    {
+        this.pos++
+        this.position++
+
+        if(this.position >= this.source.length)
+        {
+            this.currchar = null
+            return this.currchar
+        }
+        this.currchar = this.source.charAt(this.position)
+        if(this.currchar == "\n")
+        {
+            this.line++
+            this.pos = 0
+        }
+        return this.currchar
+    }
+    error(line, pos, message)
+    {
+        if(line > 0 && pos > 0)
+        {
+            println(message + " in line " + line + ", pos " + pos + "\n")
+        }
+        else
+        {
+            println(message)
+        }
+        Process.exit(1)
+    }
+
+    maketoken(typ, value, line, pos)
+    {
+        return /**/ {
+            type: typ,
+            value: value,
+            line: line,
+            pos: pos
+        }
+    }
+
+    follow(expect, ifyes, ifno, line, pos)
+    {
+        if(this.getNextChar() == expect)
+        {
+            this.getNextChar()
+            return this.maketoken(ifyes, "", line, pos);
+        }
+        if(ifno == TokenType.End_of_input)
+        {
+            this.error(line, pos, "follow: unrecognized character: (" + this.currchar.charCodeAt(0) + ") '" + this.currchar + "'")
+        }
+        return this.maketoken(ifno, "", line, pos)
+    }
+    div_or_comment(line, pos)
+    {
+        if(this.getNextChar() != "*")
+        {
+            return this.maketoken(TokenType.Op_divide, "/", line, pos)
+        }
+        this.getNextChar()
+        while(true)
+        {
+            if(this.currchar == "\0")
+            {
+                this.error(line, pos, "EOF in comment")
+            }
+            else if(this.currchar == "*")
+            {
+                if(this.getNextChar() == "/")
+                {
+                    this.getNextChar()
+                    return this.getToken()
+                }
+            }
+            else
+            {
+                this.getNextChar()
+            }
+        }
+    }
+    char_lit(line, pos)
+    {
+        var c = this.getNextChar() // skip opening quote
+        var n = c.charCodeAt(0)
+        if(c == "'")
+        {
+            this.error(line, pos, "empty character constant")
+        }
+        else if(c == "\\")
+        {
+            c = this.getNextChar()
+            if(c == "n")
+            {
+                n = 10
+            }
+            else if(c == "\\")
+            {
+                n = 92
+            }
+            else
+            {
+                this.error(line, pos, "unknown escape sequence \\" + c)
+            }
+        }
+        if(this.getNextChar() != "'")
+        {
+            this.error(line, pos, "multi-character constant")
+        }
+        this.getNextChar()
+        return this.maketoken(TokenType.Integer, n, line, pos)
+    }
+    string_lit(start, line, pos)
+    {
+        var value = ""
+        while(this.getNextChar() != start)
+        {
+            if(this.currchar == null)
+            {
+                this.error(line, pos, "EOF while scanning string literal")
+            }
+            if(this.currchar == "\n")
+            {
+                this.error(line, pos, "EOL while scanning string literal")
+            }
+            value += this.currchar
+        }
+        this.getNextChar()
+        return this.maketoken(TokenType.String, value, line, pos)
+    }
+    identifier_or_integer(line, pos)
+    {
+        var is_number = true
+        var text = ""
+
+        while(test_isident(this.currchar) || this.currchar == "_")
+        {
+            text += this.currchar
+            if(!test_isdigit(this.currchar))
+            {
+                is_number = false
+            }
+            this.getNextChar()
+        }
+        if(text == "")
+        {
+            this.error(line, pos, "identifer_or_integer unrecognized character: follow: unrecognized character: (" + this.currchar.charCodeAt(0) + ") '" + this.currchar + "'")
+        }
+
+        if(test_isdigit(text.charAt(0)))
+        {
+            if(!is_number)
+            {
+                this.error(line, pos, "invalid number: " + text)
+            }
+            return this.maketoken(TokenType.Integer, text, line, pos)
+        }
+        if(this.keywords[text] != null)
+        {
+            var tmp = this.keywords[text];
+            return this.maketoken(tmp, "", line, pos)
+        }
+        return this.maketoken(TokenType.Identifier, text, line, pos)
+    }
+    getToken()
+    {
+        var pos;
+        var line
+        // Ignore whitespaces
+        while(test_isspace(this.currchar))
+        {
+            this.getNextChar()
+        }
+        line = this.line;
+        pos = this.pos
+        if(this.currchar == null)
+        {
+            return this.maketoken(TokenType.End_of_input, "", this.line, this.pos)
+        }
+        else if(this.currchar == "/")
+        {
+            return this.div_or_comment(line, pos)
+        }
+        else if(this.currchar == "'")
+        {
+            return this.char_lit(line, pos)
+        }
+        else if(this.currchar == "\"")
+        {
+            return this.string_lit(this.currchar, line, pos)
+        }
+        else if(this.currchar == "<")
+        {
+            return this.follow("=", TokenType.Op_lessequal, TokenType.Op_less, line, pos)
+        }
+        else if(this.currchar == ">")
+        {
+            return this.follow("=", TokenType.Op_greaterequal, TokenType.Op_greater, line, pos)
+        }
+        else if(this.currchar == "=")
+        {
+            return this.follow("=", TokenType.Op_equal, TokenType.Op_assign, line, pos)
+        }
+        else if(this.currchar == "!")
+        {
+            return this.follow("=", TokenType.Op_notequal, TokenType.Op_not, line, pos)
+        }
+        else if(this.currchar == "&")
+        {
+            return this.follow("&", TokenType.Op_and, TokenType.End_of_input, line, pos)
+        }
+        else if(this.currchar == "|")
+        {
+            return this.follow("|", TokenType.Op_or, TokenType.End_of_input, line, pos)
+        }
+        else if(this.currchar == ".")
+        {
+            this.getNextChar();
+            return this.maketoken(".", TokenType.Dot, line, pos);
+        }
+        else if(this.currchar == "{")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.LeftBrace, "{", line, pos)
+        }
+        else if(this.currchar == "}")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.RightBrace, "}", line, pos)
+        }
+        else if(this.currchar == "(")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.LeftParen, "(", line, pos)
+        }
+        else if(this.currchar == ")")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.RightParen, ")", line, pos)
+        }
+        else if(this.currchar == "+")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Op_add, "+", line, pos)
+        }
+        else if(this.currchar == "-")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Op_subtract, "-", line, pos)
+        }
+        else if(this.currchar == "*")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Op_multiply, "*", line, pos)
+        }
+        else if(this.currchar == "%")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Op_mod, "%", line, pos)
+        }
+        else if(this.currchar == ";")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Semicolon, ";", line, pos)
+        }
+        else if(this.currchar == ",")
+        {
+            this.getNextChar();
+            return this.maketoken(TokenType.Comma, ",", line, pos)
+        }
+        return this.identifier_or_integer(line, pos)
+    }
+    /*
+    https://stackoverflow.com/questions/9907419/how-to-get-a-key-in-a-javascript-object-by-its-value
+    */
+    getTokenType(value)
+    {
+        foreach(key, val in TokenType)
+        {
+            if(val == value)
+            {
+                return key
+            }
+        }
+        return null
+    }
+
+    printToken(t)
+    {
+        print(" <type ", this.getTokenType(t.type), ">: ")
+        if(t.type == TokenType.Integer)
+        {
+            print(" <number>", t.value)
+        }
+        else if(t.type == TokenType.Identifier)
+        {
+            print(" <ident>", t.value)
+        }
+        else if(t.type == TokenType.String)
+        {
+            print(" <string>",  JSON.stringify(t.value), "")
+        }
+        println()
+        //println(result)
+    }
+
+    printTokens()
+    {
+        var t;
+        while((t = this.getToken()).type != TokenType.End_of_input)
+        {
+            this.printToken(t)
+            //println(t)
+        }
+        this.printToken(t)
+    }
+}
+
+var inputsource = File.read("mandel2.nn", 1024*2)
+println(inputsource)
+l = new Lexer(inputsource)
+l.printTokens()

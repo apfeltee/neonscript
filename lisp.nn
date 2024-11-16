@@ -79,7 +79,7 @@ function fp_lexisnumber(buf)
     return true;
 }
 
-class Tokenizer
+class FPTokenizer
 {
     constructor(src)
     {
@@ -209,14 +209,13 @@ function fp_syn(s)
 
 function fp_read(s)
 {
-    var tt = new Tokenizer(s);
+    var tt = new FPTokenizer(s);
     var toks = tt.run();
     println("toks=", JSON.stringify(toks));
     return fp_syn(toks);
 }
 
 // S-expression output: fp_string
-
 function fp_strcons(s)
 {
     var sa_r = fp_string(fp_car(s));
