@@ -17,16 +17,6 @@
     #define va_copy(...)
 #endif
 
-#if defined(__GNUC__)
-    #define NEON_LIKELY(x) \
-        __builtin_expect(!!(x), 1)
-
-    #define NEON_UNLIKELY(x) \
-        __builtin_expect(!!(x), 0)
-#else
-    #define NEON_LIKELY(x) x
-    #define NEON_UNLIKELY(x) x
-#endif
 
 /* needed when compiling with wasi. must be defined *before* signal.h is included! */
 #if defined(__wasi__)
@@ -433,7 +423,8 @@ enum NNAstTokType
     NEON_ASTTOK_KWCASE,
     NEON_ASTTOK_KWWHILE,
     NEON_ASTTOK_KWEXTENDS,
-    NEON_ASTTOK_LITERAL,
+    NEON_ASTTOK_LITERALSTRING,
+    NEON_ASTTOK_LITERALRAWSTRING,
     NEON_ASTTOK_LITNUMREG,
     NEON_ASTTOK_LITNUMBIN,
     NEON_ASTTOK_LITNUMOCT,
@@ -712,6 +703,7 @@ struct NNPrinter
     /* was this writer instance created on stack? */
     bool fromstack;
     bool shortenvalues;
+    bool deepexpand;
     size_t maxvallength;
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
@@ -1048,7 +1040,9 @@ struct NNProcessInfo
 {
     int cliprocessid;
     NNObjArray* cliargv;
-    NNObjString* clidirectory;
+    NNObjString* cliexedirectory;
+    NNObjString* cliscriptfile;
+    NNObjString* cliscriptdirectory;
     NNObjFile* filestdout;
     NNObjFile* filestderr;
     NNObjFile* filestdin;
@@ -1102,6 +1096,7 @@ struct NNState
         NNObjClass* ioerror;
         NNObjClass* oserror;
         NNObjClass* argumenterror;
+        NNObjClass* regexerror;
     } exceptions;
 
     NNValue lastreplvalue;
@@ -1143,6 +1138,7 @@ struct NNState
     NNObjClass* classprimrange;
     /* class for anything callable: functions, lambdas, constructors ... */
     NNObjClass* classprimcallable;
+    NNObjClass* classprimprocess;
 
     bool isrepl;
     bool markvalue;
@@ -1848,7 +1844,6 @@ NEON_FORCEINLINE NNValue nn_value_internstr(NNState* state, const char* str)
 #include "hashtabval.h"
 #include "dictvaldict.h"
 
-
 NNObject* nn_gcmem_protect(NNState* state, NNObject* object)
 {
     size_t frpos;
@@ -1965,7 +1960,7 @@ char* nn_util_strdup(const char* src)
     return nn_util_strndup(src, strlen(src));
 }
 
-char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
+char* nn_util_filereadhandle(NNState* state, FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
 {
     long rawtold;
     /*
@@ -2023,7 +2018,7 @@ char* nn_util_readhandle(NNState* state, FILE* hnd, size_t* dlen, bool havemaxsz
     return NULL;
 }
 
-char* nn_util_readfile(NNState* state, const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
+char* nn_util_filereadfile(NNState* state, const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
 {
     char* b;
     FILE* fh;
@@ -2035,10 +2030,87 @@ char* nn_util_readfile(NNState* state, const char* filename, size_t* dlen, bool 
     #if defined(NEON_PLAT_ISWINDOWS)
         _setmode(fileno(fh), _O_BINARY);
     #endif
-    b = nn_util_readhandle(state, fh, dlen, havemaxsz, maxsize);
+    b = nn_util_filereadhandle(state, fh, dlen, havemaxsz, maxsize);
     fclose(fh);
     return b;
 }
+
+char* nn_util_filegetshandle(char* s, int size, FILE *f, size_t* lendest)
+{
+    int c;
+    char *p;
+    p = s;
+    (*lendest) = 0;
+    if (size > 0)
+    {
+        while (--size > 0) 
+        {
+            if ((c = getc(f)) == -1)
+            {
+                if (ferror(f) == EINTR)
+                {
+                    continue;
+                }
+                break;
+            }
+            *p++ = c & 0xff;
+            (*lendest) += 1;
+            if(c == '\n')
+            {
+                break;
+            }
+        }
+        *p = '\0';
+    }
+    if(p > s)
+    {
+        return s;
+    }
+    return NULL;
+}
+
+int nn_util_filegetlinehandle(char **lineptr, size_t *n, FILE* hnd)
+{
+    enum { kInitialStrBufSize = 256 };
+    static char stackbuf[kInitialStrBufSize];
+    char *heapbuf;
+    size_t getlen;
+    unsigned int linelen;
+    getlen = 0;
+    if(lineptr == NULL || n == NULL)
+    {
+        errno = EINVAL;
+        return -1;
+    }
+    if(ferror(hnd))
+    {
+        return -1;
+    }
+    if (feof(hnd))
+    {
+        return -1;     
+    }
+    nn_util_filegetshandle(stackbuf,kInitialStrBufSize,hnd, &getlen);
+    heapbuf = strchr(stackbuf,'\n');   
+    if(heapbuf)
+    {
+        *heapbuf = '\0';
+    }
+    linelen = getlen;
+    if((linelen+1) < kInitialStrBufSize)
+    {
+        heapbuf = realloc(*lineptr, kInitialStrBufSize);
+        if(heapbuf == NULL)
+        {
+            return -1;
+        }
+        *lineptr = heapbuf;
+        *n = kInitialStrBufSize;
+    }
+    strcpy(*lineptr,stackbuf); 
+    return linelen;
+}
+
 
 /* returns the number of bytes contained in a unicode character */
 int nn_util_utf8numbytes(int value)
@@ -2072,7 +2144,7 @@ char* nn_util_utf8encode(unsigned int code, size_t* dlen)
     char* chars;
     *dlen = 0;
     count = nn_util_utf8numbytes((int)code);
-    if(count > 0)
+    if(nn_util_likely(count > 0))
     {
         *dlen = count;
         chars = (char*)nn_memory_malloc(sizeof(char) * ((size_t)count + 1));
@@ -2328,7 +2400,7 @@ char* nn_util_strtolower(char* str, size_t length)
 
 #if 0
     #define NEON_APIDEBUG(state, ...) \
-        if((NEON_UNLIKELY((state)->conf.enableapidebug))) \
+        if((nn_util_unlikely((state)->conf.enableapidebug))) \
         { \
             nn_state_apidebug(state, __FUNCTION__, __VA_ARGS__); \
         }
@@ -2340,12 +2412,13 @@ char* nn_util_strtolower(char* str, size_t length)
     #define NEON_ASTDEBUG(state, ...)
 #else
     #define NEON_ASTDEBUG(state, ...) \
-        if((NEON_UNLIKELY((state)->conf.enableastdebug))) \
+        if((nn_util_unlikely((state)->conf.enableastdebug))) \
         { \
             nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
         }
 #endif
 
+/*
 NEON_FORCEINLINE void nn_state_apidebugv(NNState* state, const char* funcname, const char* format, va_list va)
 {
     (void)state;
@@ -2361,6 +2434,7 @@ NEON_FORCEINLINE void nn_state_apidebug(NNState* state, const char* funcname, co
     nn_state_apidebugv(state, funcname, format, va);
     va_end(va);
 }
+*/
 
 NEON_FORCEINLINE void nn_state_astdebugv(NNState* state, const char* funcname, const char* format, va_list va)
 {
@@ -2403,7 +2477,7 @@ void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t 
     */
     if(result == NULL)
     {
-        fprintf(stderr, "fatal error: failed to allocate %ld bytes\n", newsize);
+        fprintf(stderr, "fatal error: failed to allocate %zd bytes\n", newsize);
         abort();
     }
     return result;
@@ -2826,8 +2900,6 @@ NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, cons
     nn_exceptions_vthrowwithclass(ch->pvm, ch->pvm->exceptions.argumenterror, srcfile, srcline, fmt, va);
     return nn_value_makebool(false);
 }
-
-
 
 NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, ...)
 {
@@ -3360,6 +3432,7 @@ void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
     pr->shouldflush = false;
     pr->stringtaken = false;
     pr->shortenvalues = false;
+    pr->deepexpand = false;
     pr->maxvallength = 15;
     pr->strbuf = NULL;
     pr->handle = NULL;
@@ -3820,6 +3893,100 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
     nn_printer_printf(pr, "<instance of %s at %p>", instance->klass->name->sbuf->data, (void*)instance);
 }
 
+//void nn_printer_printvalue(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
+void nn_printer_printtable(NNPrinter* pr, NNHashValTable* table)
+{
+    size_t i;
+    NNHashValEntry* entry;
+    nn_printer_printf(pr, "{");
+    for(i = 0; i < (size_t)table->capacity; i++)
+    {
+        entry = &table->entries[i];
+        if(nn_value_isnull(entry->key))
+        {
+            continue;
+        }
+        nn_printer_printvalue(pr, entry->key, true, false);
+        nn_printer_printf(pr, ":");
+        nn_printer_printvalue(pr, entry->value.value, true, false);
+        if(!nn_value_isnull(table->entries[i+1].key))
+        {
+            if((i+1) < (size_t)table->capacity)
+            {
+                nn_printer_printf(pr, ",");
+            }
+        }
+    }
+    nn_printer_printf(pr, "}");
+}
+
+void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
+{
+    bool oldexp;
+    NNObjClass* klass;
+    (void)fixstring;
+    (void)invmethod;
+    klass = nn_value_asclass(value);
+    nn_printer_printf(pr, "<class %s at %p", klass->name->sbuf->data, (void*)klass);
+    if(pr->deepexpand)
+    {
+        /*
+            NNValue constructor;
+            NNValue destructor;
+            NNHashValTable* instproperties;
+            NNHashValTable* staticproperties;
+            NNHashValTable* instmethods;
+            NNHashValTable* staticmethods;
+            NNObjString* name;
+            NNObjClass* superclass;
+        */
+        nn_printer_printf(pr, "{");
+        {
+            {
+                nn_printer_printf(pr, "name: ");
+                nn_printer_printvalue(pr, nn_value_fromobject(klass->name), true, false);
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "superclass: ");
+                oldexp = pr->deepexpand;
+                pr->deepexpand = false;
+                nn_printer_printvalue(pr, nn_value_fromobject(klass->superclass), true, false);
+                pr->deepexpand = oldexp;
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "constructor: ");
+                nn_printer_printvalue(pr, klass->constructor, true, false);
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "instanceproperties:");
+                nn_printer_printtable(pr, klass->instproperties);
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "staticproperties:");
+                nn_printer_printtable(pr, klass->staticproperties);
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "instancemethods:");
+                nn_printer_printtable(pr, klass->instmethods);
+                nn_printer_printf(pr, ",");
+            }
+            {
+                nn_printer_printf(pr, "staticmethods:");
+                nn_printer_printtable(pr, klass->staticmethods);
+            }
+        }
+        nn_printer_printf(pr, "}");
+
+        
+    }
+    nn_printer_printf(pr, ">");
+}
+
 void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
 {
     NNObject* obj;
@@ -3874,9 +4041,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             break;
         case NEON_OBJTYPE_CLASS:
             {
-                NNObjClass* klass;
-                klass = nn_value_asclass(value);
-                nn_printer_printf(pr, "<class %s at %p>", klass->name->sbuf->data, (void*)klass);
+                nn_printer_printobjclass(pr, value, fixstring, invmethod);
             }
             break;
         case NEON_OBJTYPE_FUNCCLOSURE:
@@ -5299,7 +5464,8 @@ const char* nn_astutil_toktype2str(int t)
         case NEON_ASTTOK_KWWHILE: return "NEON_ASTTOK_KWWHILE";
         case NEON_ASTTOK_KWINSTANCEOF: return "NEON_ASTTOK_KWINSTANCEOF";
         case NEON_ASTTOK_KWEXTENDS: return "NEON_ASTTOK_KWEXTENDS";
-        case NEON_ASTTOK_LITERAL: return "NEON_ASTTOK_LITERAL";
+        case NEON_ASTTOK_LITERALSTRING: return "NEON_ASTTOK_LITERALSTRING";
+        case NEON_ASTTOK_LITERALRAWSTRING: return "NEON_ASTTOK_LITERALRAWSTRING";
         case NEON_ASTTOK_LITNUMREG: return "NEON_ASTTOK_LITNUMREG";
         case NEON_ASTTOK_LITNUMBIN: return "NEON_ASTTOK_LITNUMBIN";
         case NEON_ASTTOK_LITNUMOCT: return "NEON_ASTTOK_LITNUMOCT";
@@ -5476,7 +5642,7 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
     return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
 }
 
-NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate)
+NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate, bool permitescapes)
 {
     NNAstToken tkn;
     NEON_ASTDEBUG(lex->pvm, "quote=[%c] withtemplate=%d", quote, withtemplate);
@@ -5512,7 +5678,11 @@ NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate)
     }
     /* the closing quote */
     nn_astlex_match(lex, quote);
-    return nn_astlex_createtoken(lex, NEON_ASTTOK_LITERAL);
+    if(permitescapes)
+    {
+        return nn_astlex_createtoken(lex, NEON_ASTTOK_LITERALSTRING);
+    }
+    return nn_astlex_createtoken(lex, NEON_ASTTOK_LITERALRAWSTRING);
 }
 
 NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
@@ -5738,7 +5908,7 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(lex->tplstringcount > -1)
                 {
-                    token = nn_astlex_scanstring(lex, (char)lex->tplstringbuffer[lex->tplstringcount], true);
+                    token = nn_astlex_scanstring(lex, (char)lex->tplstringbuffer[lex->tplstringcount], true, true);
                     lex->tplstringcount--;
                     return token;
                 }
@@ -5968,17 +6138,17 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             break;
         case '"':
             {
-                return nn_astlex_scanstring(lex, '"', false);
+                return nn_astlex_scanstring(lex, '"', false, true);
             }
             break;
         case '\'':
             {
-                return nn_astlex_scanstring(lex, '\'', false);
+                return nn_astlex_scanstring(lex, '\'', false, false);
             }
             break;
         case '`':
             {
-                return nn_astlex_scanstring(lex, '`', true);
+                return nn_astlex_scanstring(lex, '`', true, true);
             }
             break;
         case '?':
@@ -7714,7 +7884,7 @@ int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* r
     return count;
 }
 
-char* nn_astparser_compilestring(NNAstParser* prs, int* length)
+char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescapes)
 {
     int k;
     int i;
@@ -7735,147 +7905,150 @@ char* nn_astparser_compilestring(NNAstParser* prs, int* length)
     for(i = 0; i < reallength; i++, k++)
     {
         c = realstr[i];
-        if(c == '\\' && i < reallength - 1)
+        if(permitescapes)
         {
-            switch(realstr[i + 1])
+            if(c == '\\' && i < reallength - 1)
             {
-                case '0':
-                    {
-                        c = '\0';
-                    }
-                    break;
-                case '$':
-                    {
-                        c = '$';
-                    }
-                    break;
-                case '\'':
-                    {
-                        if(quote == '\'' || quote == '}')
+                switch(realstr[i + 1])
+                {
+                    case '0':
                         {
-                            /* } handle closing of interpolation. */
-                            c = '\'';
+                            c = '\0';
                         }
-                        else
+                        break;
+                    case '$':
                         {
-                            i--;
+                            c = '$';
                         }
-                    }
-                    break;
-                case '"':
-                    {
-                        if(quote == '"' || quote == '}')
+                        break;
+                    case '\'':
                         {
-                            c = '"';
+                            if(quote == '\'' || quote == '}')
+                            {
+                                /* } handle closing of interpolation. */
+                                c = '\'';
+                            }
+                            else
+                            {
+                                i--;
+                            }
                         }
-                        else
+                        break;
+                    case '"':
                         {
-                            i--;
+                            if(quote == '"' || quote == '}')
+                            {
+                                c = '"';
+                            }
+                            else
+                            {
+                                i--;
+                            }
                         }
-                    }
-                    break;
-                case 'a':
-                    {
-                        c = '\a';
-                    }
-                    break;
-                case 'b':
-                    {
-                        c = '\b';
-                    }
-                    break;
-                case 'f':
-                    {
-                        c = '\f';
-                    }
-                    break;
-                case 'n':
-                    {
-                        c = '\n';
-                    }
-                    break;
-                case 'r':
-                    {
-                        c = '\r';
-                    }
-                    break;
-                case 't':
-                    {
-                        c = '\t';
-                    }
-                    break;
-                case 'e':
-                    {
-                        c = 27;
-                    }
-                    break;
-                case '\\':
-                    {
-                        c = '\\';
-                    }
-                    break;
-                case 'v':
-                    {
-                        c = '\v';
-                    }
-                    break;
-                case 'x':
-                    {
-                        #if 0
-                            int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
-                            int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
-                            k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
-                            k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
-                        #endif
-                        c = nn_astparser_readhexescape(prs, realstr, i, 2) - 0;
-                        i += 2;
-                        #if 0
+                        break;
+                    case 'a':
+                        {
+                            c = '\a';
+                        }
+                        break;
+                    case 'b':
+                        {
+                            c = '\b';
+                        }
+                        break;
+                    case 'f':
+                        {
+                            c = '\f';
+                        }
+                        break;
+                    case 'n':
+                        {
+                            c = '\n';
+                        }
+                        break;
+                    case 'r':
+                        {
+                            c = '\r';
+                        }
+                        break;
+                    case 't':
+                        {
+                            c = '\t';
+                        }
+                        break;
+                    case 'e':
+                        {
+                            c = 27;
+                        }
+                        break;
+                    case '\\':
+                        {
+                            c = '\\';
+                        }
+                        break;
+                    case 'v':
+                        {
+                            c = '\v';
+                        }
+                        break;
+                    case 'x':
+                        {
+                            #if 0
+                                int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, char* realstring, int numberbytes, int realindex, int index)
+                                int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
+                                k += nn_astparser_readunicodeescape(prs, deststr, realstr, 2, i, k) - 1;
+                                k += nn_astparser_readhexescape(prs, deststr, i, 2) - 0;
+                            #endif
+                            c = nn_astparser_readhexescape(prs, realstr, i, 2) - 0;
+                            i += 2;
+                            #if 0
+                                continue;
+                            #endif
+                        }
+                        break;
+                    case 'u':
+                        {
+                            count = nn_astparser_readunicodeescape(prs, deststr, realstr, 4, i, k);
+                            if(count > 4)
+                            {
+                                k += count - 2;
+                            }
+                            else
+                            {
+                                k += count - 1;
+                            }
+                            if(count > 4)
+                            {
+                                i += 6;
+                            }
+                            else
+                            {
+                                i += 5;
+                            }
                             continue;
-                        #endif
-                    }
-                    break;
-                case 'u':
-                    {
-                        count = nn_astparser_readunicodeescape(prs, deststr, realstr, 4, i, k);
-                        if(count > 4)
-                        {
-                            k += count - 2;
                         }
-                        else
+                    case 'U':
                         {
-                            k += count - 1;
+                            count = nn_astparser_readunicodeescape(prs, deststr, realstr, 8, i, k);
+                            if(count > 4)
+                            {
+                                k += count - 2;
+                            }
+                            else
+                            {
+                                k += count - 1;
+                            }
+                            i += 9;
+                            continue;
                         }
-                        if(count > 4)
+                    default:
                         {
-                            i += 6;
+                            i--;
                         }
-                        else
-                        {
-                            i += 5;
-                        }
-                        continue;
-                    }
-                case 'U':
-                    {
-                        count = nn_astparser_readunicodeescape(prs, deststr, realstr, 8, i, k);
-                        if(count > 4)
-                        {
-                            k += count - 2;
-                        }
-                        else
-                        {
-                            k += count - 1;
-                        }
-                        i += 9;
-                        continue;
-                    }
-                default:
-                    {
-                        i--;
-                    }
-                    break;
+                        break;
+                }
+                i++;
             }
-            i++;
         }
         memcpy(deststr + k, &c, 1);
     }
@@ -7890,7 +8063,18 @@ bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
     char* str;
     (void)canassign;
     NEON_ASTDEBUG(prs->pvm, "canassign=%d", canassign);
-    str = nn_astparser_compilestring(prs, &length);
+    str = nn_astparser_compilestring(prs, &length, true);
+    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pvm, str, length)));
+    return true;
+}
+
+bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
+{
+    int length;
+    char* str;
+    (void)canassign;
+    NEON_ASTDEBUG(prs->pvm, "canassign=%d", canassign);
+    str = nn_astparser_compilestring(prs, &length, false);
     nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pvm, str, length)));
     return true;
 }
@@ -7924,7 +8108,7 @@ bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
         }
         count++;
     } while(nn_astparser_match(prs, NEON_ASTTOK_INTERPOLATION));
-    nn_astparser_consume(prs, NEON_ASTTOK_LITERAL, "unterminated string interpolation");
+    nn_astparser_consume(prs, NEON_ASTTOK_LITERALSTRING, "unterminated string interpolation");
     if(prs->prevtoken.length - 2 > 0)
     {
         nn_astparser_rulestring(prs, canassign);
@@ -8173,7 +8357,8 @@ NNAstRule* nn_astparser_getrule(NNAstTokType type)
         dorule(NEON_ASTTOK_KWTRY, NULL, NULL, NEON_ASTPREC_NONE );
         dorule(NEON_ASTTOK_KWCATCH, NULL, NULL, NEON_ASTPREC_NONE );
         dorule(NEON_ASTTOK_KWFINALLY, NULL, NULL, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITERAL, nn_astparser_rulestring, NULL, NEON_ASTPREC_NONE );
+        dorule(NEON_ASTTOK_LITERALSTRING, nn_astparser_rulestring, NULL, NEON_ASTPREC_NONE );
+        dorule(NEON_ASTTOK_LITERALRAWSTRING, nn_astparser_rulerawstring, NULL, NEON_ASTPREC_NONE );
         dorule(NEON_ASTTOK_LITNUMREG, nn_astparser_rulenumber, NULL, NEON_ASTPREC_NONE );
         dorule(NEON_ASTTOK_LITNUMBIN, nn_astparser_rulenumber, NULL, NEON_ASTPREC_NONE );
         dorule(NEON_ASTTOK_LITNUMOCT, nn_astparser_rulenumber, NULL, NEON_ASTPREC_NONE );
@@ -8996,9 +9181,9 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     {
                         nn_tableval_set(sw->table, nn_value_makebool(false), jump);
                     }
-                    else if(prs->prevtoken.type == NEON_ASTTOK_LITERAL)
+                    else if(prs->prevtoken.type == NEON_ASTTOK_LITERALSTRING)
                     {
-                        str = nn_astparser_compilestring(prs, &length);
+                        str = nn_astparser_compilestring(prs, &length, true);
                         string = nn_string_takelen(prs->pvm, str, length);
                         /* gc fix */
                         nn_vm_stackpush(prs->pvm, nn_value_fromobject(string));
@@ -9751,7 +9936,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
-    source = nn_util_readfile(state, physpath, &fsz, false, 0);
+    source = nn_util_filereadfile(state, physpath, &fsz, false, 0);
     if(source == NULL)
     {
         nn_exceptions_throw(state, "could not read import file %s", physpath);
@@ -10563,10 +10748,10 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
         thismuch = (size_t)nn_value_asnumber(args->args[1]);
     }
     filepath = nn_value_asstring(args->args[0]);
-    buf = nn_util_readfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
+    buf = nn_util_filereadfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
     if(buf == NULL)
     {
-        return nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+        return nn_exceptions_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
     }
     return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
 }
@@ -10681,6 +10866,29 @@ NNValue nn_objfnfile_readmethod(NNState* state, NNArguments* args)
         FILE_ERROR(NotFound, strerror(errno));
     }
     return nn_value_fromobject(nn_string_takelen(state, res.data, res.length));
+}
+
+
+NNValue nn_objfnfile_readline(NNState* state, NNArguments* args)
+{
+    long rdline;
+    size_t linelen;
+    char* strline;
+    NNObjFile* file;
+    NNArgCheck check;
+    NNObjString* nos;
+    nn_argcheck_init(state, &check, args);
+    NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+    file = nn_value_asfile(args->thisval);
+    linelen = 0;
+    strline = NULL;
+    rdline = nn_util_filegetlinehandle(&strline, &linelen, file->handle);
+    if(rdline == -1)
+    {
+        return nn_value_makenull();
+    }
+    nos = nn_string_takelen(state, strline, rdline);
+    return nn_value_fromobject(nos);
 }
 
 NNValue nn_objfnfile_get(NNState* state, NNArguments* args)
@@ -11801,7 +12009,6 @@ NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
     list = nn_value_asarray(args->thisval);
     callable = args->args[0];
     nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
     resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < list->varray->listcount; i++)
@@ -11824,7 +12031,6 @@ NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
             nn_array_push(resultlist, nn_value_makenull());
         }
     }
-    nn_vm_stackpop(state);
     return nn_value_fromobject(resultlist);
 }
 
@@ -12877,39 +13083,47 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     int64_t mtstart;
     int64_t mtlength;
     int64_t actualmaxcaptures;
-    int64_t res;
+    int64_t cpres;
     int16_t restokens;
     int64_t capstarts[matchMaxCaptures + 1] = {0};
     int64_t caplengths[matchMaxCaptures + 1] = {0};
     RegexToken tokens[matchMaxTokens + 1] = {};
-    const char* str;
+    RegexContext ctx; 
+    RegexContext* pctx;
+    
+    const char* strstart;
     NNObjString* rstr;
+    NNObjArray* oa;
+    NNObjDict* dm;
     restokens = matchMaxTokens;
     actualmaxcaptures = 0;
+    pctx = mrx_init(&ctx, tokens, restokens);
     if(capture)
     {
         actualmaxcaptures = matchMaxCaptures;
     }
-    prc = mrx_regex_parse(pattern->sbuf->data, tokens, &restokens, 0);
+    prc = mrx_regex_parse(pctx, pattern->sbuf->data, 0);
     if(prc == 0)
     {
-        res = mrx_regex_match(tokens, string->sbuf->data, 0, actualmaxcaptures, capstarts, caplengths);
-        if(res > 0)
+        cpres = mrx_regex_match(pctx, string->sbuf->data, 0, actualmaxcaptures, capstarts, caplengths);
+        if(cpres > 0)
         {
             if(capture)
             {
-                NNObjArray* oa;
                 oa = nn_object_makearray(state);
-                for(i=0; i<res; i++)
+                for(i=0; i<cpres; i++)
                 {
                     mtstart = capstarts[i];
                     mtlength = caplengths[i];
                     if(mtlength > 0)
                     {
-                        str = &string->sbuf->data[mtstart];
-                        fprintf(stderr, "match:capture: start=%ld length=%ld <%.*s>\n", mtstart, mtlength, mtlength, str);
-                        rstr = nn_string_copylen(state, str, mtlength);
-                        nn_array_push(oa, nn_value_fromobject(rstr));
+                        strstart = &string->sbuf->data[mtstart];
+                        rstr = nn_string_copylen(state, strstart, mtlength);
+                        dm = nn_object_makedict(state);
+                        nn_dict_addentrycstr(dm, "string", nn_value_fromobject(rstr));
+                        nn_dict_addentrycstr(dm, "start", nn_value_makenumber(mtstart));
+                        nn_dict_addentrycstr(dm, "length", nn_value_makenumber(mtlength));                        
+                        nn_array_push(oa, nn_value_fromobject(dm));
                     }
                 }
                 return nn_value_fromobject(oa);
@@ -12922,8 +13136,9 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     }
     else
     {
-        fprintf(stderr, "failed to parse regex: <%s>\n", pattern->sbuf->data);
+        nn_exceptions_throwclass(state, state->exceptions.regexerror, pctx->errorbuf);
     }
+    mrx_destroy(pctx);
     if(capture)
     {
         return nn_value_makenull();
@@ -12943,7 +13158,6 @@ NNValue nn_objfnstring_matchcapture(NNState* state, NNArguments* args)
     pattern = nn_value_asstring(args->args[0]);
     return nn_util_stringregexmatch(state, string, pattern, true);
 }
-
 
 NNValue nn_objfnstring_matchonly(NNState* state, NNArguments* args)
 {
@@ -13187,6 +13401,7 @@ NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
     NNObjString* string;
     NNObjString* repsubstr;
     NNArgCheck check;
+    (void)totallength;
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 2, 3);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
@@ -13675,7 +13890,7 @@ NNValue nn_objfnmath_min(NNState* state, NNArguments* args)
 NNValue nn_objfnprocess_exedirectory(NNState* state, NNArguments* args)
 {
     (void)args;
-    return nn_value_fromobject(state->processinfo->clidirectory);
+    return nn_value_fromobject(state->processinfo->cliexedirectory);
 }
 
 NNValue nn_objfnprocess_exit(NNState* state, NNArguments* args)
@@ -13709,6 +13924,7 @@ NNValue nn_objfnjson_stringify(NNState* state, NNArguments* args)
     NNObjString* os;
     v = args->args[0];
     nn_printer_makestackstring(state, &pr);
+    pr.deepexpand = true;
     nn_printer_printvalue(&pr, v, true, false);
     os = nn_printer_takestring(&pr);
     return nn_value_fromobject(os);
@@ -13735,16 +13951,15 @@ void nn_state_initbuiltinmethods(NNState* state)
 {
     NNObjClass* klass;
     {
-        klass = nn_util_makeclass(state, "Process", state->classprimobject);
+        klass = state->classprimprocess;
+        nn_class_setstaticproperty(klass, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->cliexedirectory));
         nn_class_setstaticproperty(klass, nn_string_intern(state, "env"), nn_value_fromobject(state->envdict));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->clidirectory));
         nn_class_setstaticproperty(klass, nn_string_intern(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
         nn_class_setstaticproperty(klass, nn_string_intern(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
         nn_class_setstaticproperty(klass, nn_string_intern(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
         nn_class_setstaticproperty(klass, nn_string_intern(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
         nn_class_defstaticnativemethod(klass, nn_string_intern(state, "kill"), nn_objfnprocess_kill);
         nn_class_defstaticnativemethod(klass, nn_string_intern(state, "exit"), nn_objfnprocess_exit);
-
     }
     {
         static ClsListMethods objectmethods[] =
@@ -13936,6 +14151,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"tell", nn_objfnfile_tell},
             {"mode", nn_objfnfile_mode},
             {"name", nn_objfnfile_name},
+            {"readLine", nn_objfnfile_readline},
             {NULL, NULL},
         };
         nn_class_defnativeconstructor(state->classprimfile, nn_objfnfile_constructor);
@@ -14241,7 +14457,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                 i++;
                 if((int)argpos > argc)
                 {
-                    nn_exceptions_throw(nfi->pvm, "too few arguments");
+                    nn_exceptions_throwclass(nfi->pvm, nfi->pvm->exceptions.argumenterror, "too few arguments");
                     ok = false;
                     cval = nn_value_makenull();
                 }
@@ -14275,7 +14491,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                         break;
                     default:
                         {
-                            nn_exceptions_throw(nfi->pvm, "unknown/invalid format flag '%%c'", nextch);
+                            nn_exceptions_throwclass(nfi->pvm, nfi->pvm->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
                         }
                         break;
                 }
@@ -14864,7 +15080,7 @@ bool nn_vm_resizestack(NNState* state, size_t needed)
     oldsz = state->vmstate.stackcapacity;
     newsz = oldsz + nforvals;
     allocsz = ((newsz + 1) * sizeof(NNValue));
-    fprintf(stderr, "*** resizing stack: needed %ld, from %ld to %ld, allocating %ld ***\n", nforvals, oldsz, newsz, allocsz);
+    fprintf(stderr, "*** resizing stack: needed %ld, from %ld to %ld, allocating %ld ***\n", (long)nforvals, (long)oldsz, (long)newsz, (long)allocsz);
     oldbuf = state->vmstate.stackvalues;
     newbuf = (NNValue*)nn_memory_realloc(oldbuf, allocsz);
     if(newbuf == NULL)
@@ -14943,6 +15159,8 @@ void nn_state_buildprocessinfo(NNState* state)
     char* pathp;
     char pathbuf[kMaxBuf];
     state->processinfo = (NNProcessInfo*)nn_memory_malloc(sizeof(NNProcessInfo));
+    state->processinfo->cliscriptfile = NULL;
+    state->processinfo->cliscriptdirectory = NULL;
     state->processinfo->cliargv = nn_object_makearray(state);
     {
         pathp = osfn_getcwd(pathbuf, kMaxBuf);
@@ -14951,7 +15169,7 @@ void nn_state_buildprocessinfo(NNState* state)
             pathp = ".";
         }
         fprintf(stderr, "pathp=<%s>\n", pathp);
-        state->processinfo->clidirectory = nn_string_copycstr(state, pathp);
+        state->processinfo->cliexedirectory = nn_string_copycstr(state, pathp);
     }
     {
         state->processinfo->cliprocessid = osfn_getpid();
@@ -14970,6 +15188,41 @@ void nn_state_buildprocessinfo(NNState* state)
             nn_state_defglobalvalue(state, "STDIN", nn_value_fromobject(state->processinfo->filestdin));
         }
     }
+}
+
+void nn_state_updateprocessinfo(NNState* state)
+{
+    NNValue val;
+    NNObjClass* klass;
+    char* prealpath;
+    char* prealdir;
+    klass = state->classprimprocess;
+    if(state->rootphysfile != NULL)
+    {
+        prealpath = osfn_realpath(state->rootphysfile, NULL);
+        prealdir = osfn_dirname(prealpath);
+        state->processinfo->cliscriptfile = nn_string_copycstr(state, prealpath);
+        state->processinfo->cliscriptdirectory = nn_string_copycstr(state, prealdir);
+        nn_memory_free(prealpath);
+        nn_memory_free(prealdir);
+        {
+            val = nn_value_makenull();
+            if(state->processinfo->cliscriptdirectory != NULL)
+            {
+                val = nn_value_fromobject(state->processinfo->cliscriptdirectory);
+            }
+            nn_class_setstaticproperty(klass, nn_string_intern(state, "scriptdirectory"), val);
+        }
+        {
+            val = nn_value_makenull();
+            if(state->processinfo->cliscriptfile != NULL)
+            {
+                val = nn_value_fromobject(state->processinfo->cliscriptfile);
+            }
+            nn_class_setstaticproperty(klass, nn_string_intern(state, "scriptfile"), val);
+        }
+    }
+
 }
 
 NNState* nn_state_make()
@@ -15057,7 +15310,7 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->classprimfile = nn_util_makeclass(state, "File", state->classprimobject);
         state->classprimrange = nn_util_makeclass(state, "Range", state->classprimobject);
         state->classprimcallable = nn_util_makeclass(state, "Function", state->classprimobject);
-        
+        state->classprimprocess = nn_util_makeclass(state, "Process", state->classprimobject);
     }
     {
         state->envdict = nn_object_makedict(state);
@@ -15072,9 +15325,10 @@ NNState* nn_state_makewithuserptr(void* userptr)
         state->exceptions.ioerror = nn_exceptions_makeclass(state, NULL, "IOError", true);
         state->exceptions.oserror = nn_exceptions_makeclass(state, NULL, "OSError", true);
         state->exceptions.argumenterror = nn_exceptions_makeclass(state, NULL, "ArgumentError", true);
+        state->exceptions.regexerror = nn_exceptions_makeclass(state, NULL, "RegexError", true);
     }
     nn_state_buildprocessinfo(state);
-    nn_state_addsearchpathobj(state, state->processinfo->clidirectory);
+    nn_state_addsearchpathobj(state, state->processinfo->cliexedirectory);
     {
         nn_state_initbuiltinfunctions(state);
         nn_state_initbuiltinmethods(state);
@@ -16159,7 +16413,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     NNValue vindex;
     NNObjRange* rng;
     vindex = nn_vmbits_stackpeek(state, 0);
-    if(NEON_UNLIKELY(!nn_value_isnumber(vindex)))
+    if(nn_util_unlikely(!nn_value_isnumber(vindex)))
     {
         if(nn_value_isrange(vindex))
         {
@@ -16173,7 +16427,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
         return nn_exceptions_throw(state, "list are numerically indexed");
     }
     index = nn_value_asnumber(vindex);
-    if(NEON_UNLIKELY(index < 0))
+    if(nn_util_unlikely(index < 0))
     {
         index = list->varray->listcount + index;
     }
@@ -16205,7 +16459,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
     willassign = nn_vmbits_readbyte(state);
     isgotten = true;
     peeked = nn_vmbits_stackpeek(state, 1);
-    if(NEON_LIKELY(nn_value_isobject(peeked)))
+    if(nn_util_likely(nn_value_isobject(peeked)))
     {
         switch(nn_value_asobject(peeked)->type)
         {
@@ -16294,7 +16548,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     int ocnt;
     int ocap;
     int vasz;
-    if(NEON_UNLIKELY(!nn_value_isnumber(index)))
+    if(nn_util_unlikely(!nn_value_isnumber(index)))
     {
         nn_vmbits_stackpopn(state, 3);
         /* pop the value, index and list out */
@@ -16341,7 +16595,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
                 }
             }
         }
-        fprintf(stderr, "setting value at position %d (array count: %ld)\n", position, list->varray->listcount);
+        fprintf(stderr, "setting value at position %ld (array count: %ld)\n", (long)position, (long)list->varray->listcount);
     }
     list->varray->listitems[position] = value;
     /* pop the value, index and list out */
@@ -16410,7 +16664,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     NNValue target;
     isset = true;
     target = nn_vmbits_stackpeek(state, 2);
-    if(NEON_LIKELY(nn_value_isobject(target)))
+    if(nn_util_likely(nn_value_isobject(target)))
     {
         value = nn_vmbits_stackpeek(state, 0);
         index = nn_vmbits_stackpeek(state, 1);
@@ -17247,7 +17501,9 @@ void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, ...)
 
 #if 1
     #if defined(__GNUC__)
-        #undef NEON_CONFIG_USECOMPUTEDGOTO
+        #if defined(NEON_CONFIG_USECOMPUTEDGOTO)
+            #undef NEON_CONFIG_USECOMPUTEDGOTO
+        #endif
         #define NEON_CONFIG_USECOMPUTEDGOTO 1
     #endif
 #endif
@@ -18351,6 +18607,7 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
     NNObjFuncClosure* closure;
     state->rootphysfile = filename;
     //rp = osfn_realpath(filename, NULL);
+    nn_state_updateprocessinfo(state);
     rp = (char*)filename;
     state->topmodule->physicalpath = nn_string_copycstr(state, rp);
     //nn_memory_free(rp);
@@ -18399,8 +18656,7 @@ char* nn_cli_getinput(const char* prompt)
         char rawline[kMaxLineSize+1] = {0};
         fprintf(stdout, "%s", prompt);
         fflush(stdout);
-        rt = fgets(rawline, kMaxLineSize, stdin);
-        len = strlen(rt);
+        rt = nn_util_filegetshandle(rawline, kMaxLineSize, stdin, &len);
         rt[len - 1] = 0;
         return rt;
     #else
@@ -18564,7 +18820,7 @@ bool nn_cli_repl(NNState* state)
         if(bracketcount == 0 && parencount == 0 && bracecount == 0 && singlequotecount == 0 && doublequotecount == 0)
         {
             memset(varnamebuf, 0, kMaxVarName);
-            sprintf(varnamebuf, "_%ld", rescnt);
+            sprintf(varnamebuf, "_%ld", (long)rescnt);
             nn_state_execsource(state, state->topmodule, source->data, "<repl>", &dest);
             dest = state->lastreplvalue;
             if(!nn_value_isnull(dest))
@@ -18590,11 +18846,11 @@ bool nn_cli_runfile(NNState* state, const char* file)
     char* source;
     const char* oldfile;
     NNStatus result;
-    source = nn_util_readfile(state, file, &fsz, false, 0);
+    source = nn_util_filereadfile(state, file, &fsz, false, 0);
     if(source == NULL)
     {
         oldfile = file;
-        source = nn_util_readfile(state, file, &fsz, false, 0);
+        source = nn_util_filereadfile(state, file, &fsz, false, 0);
         if(source == NULL)
         {
             fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));

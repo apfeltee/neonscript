@@ -408,7 +408,7 @@ class Lexer
     }
 }
 
-var inputsource = File.read("mandel2.nn", 1024*2)
+var inputsource = File.read(Process.scriptdirectory + "/mandel2.nn", 1024*2)
 println(inputsource)
 l = new Lexer(inputsource)
 l.printTokens()

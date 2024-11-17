@@ -301,8 +301,7 @@ void dyn_strutil_callboundscheckinsert(const StringBuffer* sbuf, size_t pos, con
 {
     if(pos > sbuf->length)
     {
-        fprintf(stderr, "%s:%i: - out of bounds error [index: %ld, num_of_bits: %ld]\n",
-                file, line, pos, sbuf->length);
+        fprintf(stderr, "%s:%i: - out of bounds error [index: %ld, num_of_bits: %ld]\n", file, line, (long)pos, (long)sbuf->length);
         errno = EDOM;
         dyn_strbuf_exitonerror();
     }
@@ -314,7 +313,7 @@ void dyn_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start
     if(start + len > sbuf->length)
     {
         fprintf(stderr,"%s:%i: - out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n",
-                file, line, start, len, sbuf->length, (int)STRBUF_MIN(5, sbuf->length), sbuf->data, sbuf->length > 5 ? "..." : "");
+                file, line, (long)start, (long)len, (long)sbuf->length, (int)STRBUF_MIN(5, sbuf->length), sbuf->data, sbuf->length > 5 ? "..." : "");
         errno = EDOM;
         dyn_strbuf_exitonerror();
     }
@@ -549,7 +548,7 @@ void dyn_strbuf_ensurecapacityupdateptr(StringBuffer* sbuf, size_t size, const c
             fprintf(stderr,
                     "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
                     "buffer. [requested %ld bytes; capacity: %ld bytes]\n",
-                    __FILE__, __LINE__, size, sbuf->capacity);
+                    __FILE__, __LINE__, (long)size, (long)sbuf->capacity);
             dyn_strbuf_exitonerror();
         }
         /* ptr may have pointed to sbuf, which has now moved */

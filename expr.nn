@@ -3,7 +3,7 @@
 
 function util_isspace(c)
 {
-    return ((c == ' ') || (c == '\t') || (c == '\n'));
+    return ((c == " ") || (c == "\t") || (c == "\n"));
 }
 
 function util_isnum(c)

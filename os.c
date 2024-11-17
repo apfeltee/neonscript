@@ -109,20 +109,60 @@ char* osfn_realpath(const char* path, char* respath)
 
 }
 
-char* osfn_dirname(const char* path)
+char* osfn_dirname(const char *fname)
 {
-    char* copy;
-    #if defined(OSFN_ISUNIXLIKE)
-        char* rt;
-        rt = dirname((char*)path);
-        if(rt != NULL)
+    const char *p  = fname;
+    const char *slash = NULL;
+    if(fname)
+    {
+        size_t dirlen;
+        char * dirpart;
+        if(*fname && fname[1] == ':')
         {
-            return rt;
+            slash = fname + 1;
+            p += 2;
         }
-    #else
-    #endif
-    copy = osfn_utilstrdup(path);
-    return copy;
+        /* Find the rightmost slash.  */
+        while (*p)
+        {
+            if (*p == '/' || *p == '\\')
+            {
+                slash = p;
+            }
+            p++;
+        }
+        if(slash == NULL)
+        {
+            fname = ".";
+            dirlen = 1;
+        }
+        else
+        {
+            /* Remove any trailing slashes.  */
+            while(slash > fname && (slash[-1] == '/' || slash[-1] == '\\'))
+            {
+                slash--;
+            }
+            /* How long is the directory we will return?  */
+            dirlen = slash - fname + (slash == fname || slash[-1] == ':');
+            if (*slash == ':' && dirlen == 1)
+            {
+                dirlen += 2;
+            }
+        }
+        dirpart = (char *)malloc (dirlen + 1);
+        if(dirpart != NULL)
+        {
+            strncpy (dirpart, fname, dirlen);
+            if (slash && *slash == ':' && dirlen == 3)
+            {
+                dirpart[2] = '.';	/* for "x:foo" return "x:." */
+            }
+            dirpart[dirlen] = '\0';
+        }
+        return dirpart;
+    }
+    return NULL;
 }
 
 char* osfn_fallbackbasename(const char* opath)
@@ -269,6 +309,10 @@ int osfn_getpid()
 
 int osfn_kill(int pid, int code)
 {
-    return kill(pid, code);
+    #if defined(OSFN_ISUNIXLIKE)
+        return kill(pid, code);
+    #else
+        return -1;
+    #endif
 }
 

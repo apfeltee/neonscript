@@ -1,26 +1,16 @@
 
+
+
 var fh = null
 
-
-try
-{
+    var i = 1;
     fh = File("Makefile", "rb")
-    var raw = fh.read()
     //println("raw: ", raw.toString())
-    var lines = raw.split("\n")
-    println(lines)
-    for(var i=0; i<lines.size(); i++)
+    while((line = fh.readLine()) != null)
     {
-        var line = lines[i];
-        if(line.matches(`^#`))
+        if(line.matches('^\s*#\s*\b\w+\b\s*='))
         {
-            println("[", i, "]: ", lines[i]);
+            println("[", i, "]: ", line);
         }
+        i++;
     }
-}
-//catch(e)
-catch(e)
-{
-    print("exception: ", e.message, "\n")
-}
-

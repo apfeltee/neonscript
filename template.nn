@@ -230,7 +230,7 @@ class Response
     }
 }
 
-var src = new File("src.tpl").read()
+var src = new File(Process.scriptdirectory + "/src.tpl").read()
 var tpl = new LighTemplate(src)
 var rs = new Response()
 tpl.run(rs)

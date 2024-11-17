@@ -30,6 +30,7 @@ OPTFLAGS = -O0
 
 #CC = gcc $(WFLAGS) $(EXTRAFLAGS)
 CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
+#CC = tcc $(WFLAGS) $(EXTRAFLAGS)
 
 #CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
 CFLAGS = $(INCFLAGS) $(OPTFLAGS) -g3 -ggdb3
