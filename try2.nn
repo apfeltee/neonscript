@@ -6,7 +6,7 @@ try
     }
     catch(e)
     {
-        println(`inner: ${e.message}`);
+        println(`inner: (${e.class.name})  ${e.message} at ${e.srcline}`);
     }
 }
 catch(e)

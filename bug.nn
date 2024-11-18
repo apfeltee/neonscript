@@ -1,10 +1,9 @@
 
-
-function foo(name, lastname="doe")
+try
 {
-    println("name=", name, ", lastname=", lastname)
+    throw Exception(false);
 }
-
-foo("john")
-foo("emily", "hart")
-
+catch(e)
+{
+    println("class=<", e.class, ">");
+}

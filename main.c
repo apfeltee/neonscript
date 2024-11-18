@@ -639,6 +639,9 @@ typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
 typedef struct NNBoxedString NNBoxedString;
 typedef struct NNHashPtrTable NNHashPtrTable;
+typedef struct ForLoopStmt ForLoopStmt; 
+
+
 typedef union NNUtilDblUnion NNUtilDblUnion;
 
 typedef bool(*NNValIsFuncFN)(NNValue);
@@ -703,7 +706,7 @@ struct NNPrinter
     /* was this writer instance created on stack? */
     bool fromstack;
     bool shortenvalues;
-    bool deepexpand;
+    bool jsonmode;
     size_t maxvallength;
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
@@ -1361,35 +1364,6 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
-neon::Value nn_util_stringutf8chars(neon::State* state, neon::Arguments* args, bool onlycodepoint)
-{
-    int cp;
-    const char* cstr;
-    utf8iterator_t iter;
-    neon::Array* res;
-    neon::String* os;
-    neon::String* instr;
-    (void)state;
-    instr = args->thisval.asString();
-    res = neon::Array::make(state);
-    nn_utf8iter_init(&iter, instr->data(), instr->length());
-    while (nn_utf8iter_next(&iter))
-    {
-        cp = iter.codepoint;
-        cstr = nn_utf8iter_getchar(&iter);
-        if(onlycodepoint)
-        {
-            res->push(neon::Value::makeNumber(cp));
-        }
-        else
-        {
-            os = neon::String::copy(state, cstr, iter.charsize);
-            res->push(neon::Value::fromObject(os));
-        }
-    }
-    return neon::Value::fromObject(res);
-}
 
 */
 
@@ -2894,14 +2868,14 @@ void nn_gcmem_collectgarbage(NNState* state)
     #endif
 }
 
-NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
+NEON_FORCEINLINE NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
     nn_vm_stackpopn(ch->pvm, ch->argc);
     nn_exceptions_vthrowwithclass(ch->pvm, ch->pvm->exceptions.argumenterror, srcfile, srcline, fmt, va);
     return nn_value_makebool(false);
 }
 
-NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, ...)
+NEON_INLINE NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, ...)
 {
     NNValue v;
     va_list va;
@@ -2911,7 +2885,7 @@ NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int srcline, const
     return v;
 }
 
-void nn_argcheck_init(NNState* state, NNArgCheck* ch, NNArguments* args)
+NEON_FORCEINLINE void nn_argcheck_init(NNState* state, NNArgCheck* ch, NNArguments* args)
 {
     ch->pvm = state;
     ch->name = args->name;
@@ -3432,7 +3406,7 @@ void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
     pr->shouldflush = false;
     pr->stringtaken = false;
     pr->shortenvalues = false;
-    pr->deepexpand = false;
+    pr->jsonmode = false;
     pr->maxvallength = 15;
     pr->strbuf = NULL;
     pr->handle = NULL;
@@ -3927,19 +3901,8 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
     (void)fixstring;
     (void)invmethod;
     klass = nn_value_asclass(value);
-    nn_printer_printf(pr, "<class %s at %p", klass->name->sbuf->data, (void*)klass);
-    if(pr->deepexpand)
+    if(pr->jsonmode)
     {
-        /*
-            NNValue constructor;
-            NNValue destructor;
-            NNHashValTable* instproperties;
-            NNHashValTable* staticproperties;
-            NNHashValTable* instmethods;
-            NNHashValTable* staticmethods;
-            NNObjString* name;
-            NNObjClass* superclass;
-        */
         nn_printer_printf(pr, "{");
         {
             {
@@ -3949,10 +3912,10 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
             }
             {
                 nn_printer_printf(pr, "superclass: ");
-                oldexp = pr->deepexpand;
-                pr->deepexpand = false;
+                oldexp = pr->jsonmode;
+                pr->jsonmode = false;
                 nn_printer_printvalue(pr, nn_value_fromobject(klass->superclass), true, false);
-                pr->deepexpand = oldexp;
+                pr->jsonmode = oldexp;
                 nn_printer_printf(pr, ",");
             }
             {
@@ -3981,10 +3944,11 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
             }
         }
         nn_printer_printf(pr, "}");
-
-        
     }
-    nn_printer_printf(pr, ">");
+    else
+    {
+        nn_printer_printf(pr, "<class %s at %p>", klass->name->sbuf->data, (void*)klass);
+    }
 }
 
 void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
@@ -6296,9 +6260,10 @@ void nn_astparser_advance(NNAstParser* prs)
     }
 }
 
+
 bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message)
 {
-    if(prs->currtoken.type == t)
+    if(nn_astparser_istype(prs->currtoken.type, t))
     {
         nn_astparser_advance(prs);
         return true;
@@ -6331,9 +6296,22 @@ bool nn_astparser_checknumber(NNAstParser* prs)
     return false;
 }
 
+
+bool nn_astparser_istype(NNAstTokType prev, NNAstTokType t)
+{
+    if(t == NEON_ASTTOK_IDENTNORMAL)
+    {
+        if(prev == NEON_ASTTOK_KWCLASS)
+        {
+            return true;
+        }
+    }
+    return (prev == t);
+}
+
 bool nn_astparser_check(NNAstParser* prs, NNAstTokType t)
 {
-    return prs->currtoken.type == t;
+    return nn_astparser_istype(prs->currtoken.type, t);
 }
 
 bool nn_astparser_match(NNAstParser* prs, NNAstTokType t)
@@ -8888,6 +8866,14 @@ void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
  *    i = i + 1
  * }
  */
+
+struct ForLoopStmt
+{
+    bool isforeach;
+    NNAstToken keytoken;
+    NNAstToken Valuetoken;
+};
+ 
 void nn_astparser_parseforstmt(NNAstParser* prs)
 {
     int exitjump;
@@ -12403,18 +12389,36 @@ NNValue nn_objfnstring_utf8encode(NNState* state, NNArguments* args)
 NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycodepoint)
 {
     int cp;
+    bool havemax;
+    size_t counter;
+    size_t maxamount;
     const char* cstr;
     NNObjArray* res;
     NNObjString* os;
     NNObjString* instr;
     utf8iterator_t iter;
+    havemax = false;
     instr = nn_value_asstring(args->thisval);
+    if(args->count > 0)
+    {
+        havemax = true;
+        maxamount = nn_value_asnumber(args->args[0]);
+    }
     res = nn_array_make(state);
     nn_utf8iter_init(&iter, instr->sbuf->data, instr->sbuf->length);
-    while (nn_utf8iter_next(&iter))
+    counter = 0;
+    while(nn_utf8iter_next(&iter))
     {
         cp = iter.codepoint;
         cstr = nn_utf8iter_getchar(&iter);
+        counter++;
+        if(havemax)
+        {
+            if(counter == maxamount)
+            {
+                goto finalize;
+            }
+        }
         if(onlycodepoint)
         {
             nn_array_push(res, nn_value_makenumber(cp));
@@ -12425,6 +12429,7 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
             nn_array_push(res, nn_value_fromobject(os));
         }
     }
+    finalize:
     return nn_value_fromobject(res);
 }
 
@@ -13924,7 +13929,7 @@ NNValue nn_objfnjson_stringify(NNState* state, NNArguments* args)
     NNObjString* os;
     v = args->args[0];
     nn_printer_makestackstring(state, &pr);
-    pr.deepexpand = true;
+    pr.jsonmode = true;
     nn_printer_printvalue(&pr, v, true, false);
     os = nn_printer_takestring(&pr);
     return nn_value_fromobject(os);
@@ -14049,7 +14054,6 @@ void nn_state_initbuiltinmethods(NNState* state)
         nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
         nn_class_defcallablefield(state->classprimstring, nn_string_intern(state, "length"), nn_objfnstring_length);
         installmethods(state, state->classprimstring, stringmethods);
-        
     }
     {
         static ClsListMethods arraymethods[] =
@@ -14909,6 +14913,9 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     /* set class properties */
     nn_class_defproperty(klass, nn_string_intern(state, "message"), nn_value_makenull());
     nn_class_defproperty(klass, nn_string_intern(state, "stacktrace"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "srcfile"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "srcline"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "class"), nn_value_fromobject(klass));
     nn_tableval_set(state->declaredglobals, nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
     nn_vm_stackpop(state);
@@ -14925,6 +14932,7 @@ NNObjInstance* nn_exceptions_makeinstance(NNState* state, NNObjClass* exklass, c
     instance = nn_object_makeinstance(state, exklass);
     osfile = nn_string_copycstr(state, srcfile);
     nn_vm_stackpush(state, nn_value_fromobject(instance));
+    nn_instance_defproperty(instance, nn_string_intern(state, "class"), nn_value_fromobject(exklass));
     nn_instance_defproperty(instance, nn_string_intern(state, "message"), nn_value_fromobject(message));
     nn_instance_defproperty(instance, nn_string_intern(state, "srcfile"), nn_value_fromobject(osfile));
     nn_instance_defproperty(instance, nn_string_intern(state, "srcline"), nn_value_makenumber(srcline));
