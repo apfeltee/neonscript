@@ -8,7 +8,8 @@ var fh = null
     //println("raw: ", raw.toString())
     while((line = fh.readLine()) != null)
     {
-        if(line.matches('^\s*#\s*\b\w+\b\s*='))
+        //if(line.matches('^\s*#\s*\b\w+\b\s*='))
+        if(line.matches('fsanitize'))
         {
             println("[", i, "]: ", line);
         }

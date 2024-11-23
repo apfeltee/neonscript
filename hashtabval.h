@@ -7,7 +7,7 @@ NNHashValTable* nn_tableval_make(NNState* state)
     {
         return NULL;
     }
-    table->pvm = state;
+    table->pstate = state;
     table->active = true;
     table->count = 0;
     table->capacity = 0;
@@ -32,7 +32,7 @@ NNHashValEntry* nn_tableval_findentrybyvalue(NNHashValTable* table, NNHashValEnt
     NNState* state;
     NNHashValEntry* entry;
     NNHashValEntry* tombstone;
-    state = table->pvm;
+    state = table->pstate;
     hash = nn_value_hashvalue(key);
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "looking for key ");
@@ -85,7 +85,7 @@ NNHashValEntry* nn_tableval_findentrybystr(NNHashValTable* table, NNHashValEntry
     NNHashValEntry* entry;
     NNHashValEntry* tombstone;
     NNState* state;
-    state = table->pvm;
+    state = table->pstate;
     (void)valhash;
     (void)havevalhash;
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
@@ -154,7 +154,7 @@ NNProperty* nn_tableval_getfieldbyvalue(NNHashValTable* table, NNValue key)
     NNState* state;
     NNHashValEntry* entry;
     (void)state;
-    state = table->pvm;
+    state = table->pstate;
     if(table->count == 0 || table->entries == NULL)
     {
         return NULL;
@@ -180,7 +180,7 @@ NNProperty* nn_tableval_getfieldbystr(NNHashValTable* table, NNValue valkey, con
     NNState* state;
     NNHashValEntry* entry;
     (void)state;
-    state = table->pvm;
+    state = table->pstate;
     if(table->count == 0 || table->entries == NULL)
     {
         return NULL;
@@ -245,7 +245,7 @@ void nn_tableval_adjustcapacity(NNHashValTable* table, int capacity)
     NNHashValEntry* dest;
     NNHashValEntry* entry;
     NNHashValEntry* entries;
-    state = table->pvm;
+    state = table->pstate;
     entries = (NNHashValEntry*)nn_memory_malloc(sizeof(NNHashValEntry) * capacity);
     for(i = 0; i < capacity; i++)
     {
@@ -278,7 +278,7 @@ bool nn_tableval_setwithtype(NNHashValTable* table, NNValue key, NNValue value, 
     NNState* state;
     NNHashValEntry* entry;
     (void)keyisstring;
-    state = table->pvm;
+    state = table->pstate;
     if(table->count + 1 > table->capacity * NEON_CONFIG_MAXTABLELOAD)
     {
         capacity = GROW_CAPACITY(table->capacity);
@@ -317,7 +317,7 @@ bool nn_tableval_delete(NNHashValTable* table, NNValue key)
     }
     /* place a tombstone in the entry. */
     entry->key = nn_value_makenull();
-    entry->value = nn_property_make(table->pvm, nn_value_makebool(true), NEON_PROPTYPE_VALUE);
+    entry->value = nn_property_make(table->pstate, nn_value_makebool(true), NEON_PROPTYPE_VALUE);
     return true;
 }
 
@@ -359,7 +359,7 @@ void nn_tableval_copy(NNHashValTable* from, NNHashValTable* to)
     int i;
     NNState* state;
     NNHashValEntry* entry;
-    state = from->pvm;
+    state = from->pstate;
     for(i = 0; i < (int)from->capacity; i++)
     {
         entry = &from->entries[i];
@@ -416,7 +416,7 @@ NNValue nn_tableval_findkey(NNHashValTable* table, NNValue value)
         entry = &table->entries[i];
         if(!nn_value_isnull(entry->key) && !nn_value_isnull(entry->key))
         {
-            if(nn_value_compare(table->pvm, entry->value.value, value))
+            if(nn_value_compare(table->pstate, entry->value.value, value))
             {
                 return entry->key;
             }
@@ -431,7 +431,7 @@ NNObjArray* nn_tableval_getkeys(NNHashValTable* table)
     NNState* state;
     NNObjArray* list;
     NNHashValEntry* entry;
-    state = table->pvm;
+    state = table->pstate;
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < table->capacity; i++)
     {

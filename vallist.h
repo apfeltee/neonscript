@@ -13,7 +13,7 @@ NNValArray* nn_vallist_make(NNState* state)
     NNValArray* list;
     initialsize = 32;
     list = (NNValArray*)nn_memory_malloc(sizeof(NNValArray));
-    list->pvm = state;
+    list->pstate = state;
     list->listcount = 0;
     list->listcapacity = 0;
     list->listitems = NULL;
@@ -66,7 +66,7 @@ NEON_INLINE void nn_vallist_mark(NNValArray* list)
     size_t i;
     for(i=0; i<list->listcount; i++)
     {
-        nn_gcmem_markvalue(list->pvm, list->listitems[i]);
+        nn_gcmem_markvalue(list->pstate, list->listitems[i]);
     }
 }
 
@@ -200,7 +200,7 @@ NEON_INLINE NNValArray* nn_vallist_copy(NNValArray* list)
 {
     size_t i;
     NNValArray* nlist;
-    nlist = nn_vallist_make(list->pvm);
+    nlist = nn_vallist_make(list->pstate);
     for(i=0; i<list->listcount; i++)
     {
         nn_vallist_push(nlist, list->listitems[i]);

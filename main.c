@@ -710,7 +710,7 @@ struct NNPrinter
     size_t maxvallength;
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
-    NNState* pvm;
+    NNState* pstate;
     StringBuffer* strbuf;
     FILE* handle;
 };
@@ -722,7 +722,7 @@ struct NNFormatInfo
     /* the actual format string */
 	const char  *              fmtstr;               /*     8     8 */
 	NNPrinter *                writer;               /*    16     8 */
-	NNState *                  pvm;                  /*    24     8 */
+	NNState *                  pstate;                  /*    24     8 */
 };
 
 #if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
@@ -750,7 +750,7 @@ struct NNObject
 {
     NNObjType type;
     bool mark;
-    NNState* pvm;
+    NNState* pstate;
     /*
     // when an object is marked as stale, it means that the
     // GC will never collect this object. This can be useful
@@ -778,7 +778,7 @@ struct NNProperty
 
 struct NNValArray
 {
-    NNState* pvm;
+    NNState* pstate;
     const char* listname;
     NNValue* listitems;
     size_t listcapacity;
@@ -799,7 +799,7 @@ struct NNBlob
 {
     int count;
     int capacity;
-    NNState* pvm;
+    NNState* pstate;
     NNInstruction* instrucs;
     NNValArray* constants;
     NNValArray* argdefvals;
@@ -824,7 +824,7 @@ struct NNHashValTable
     bool active;
     int count;
     int capacity;
-    NNState* pvm;
+    NNState* pstate;
     NNHashValEntry* entries;
 };
 
@@ -1164,7 +1164,7 @@ struct NNAstToken
 
 struct NNAstLexer
 {
-    NNState* pvm;
+    NNState* pstate;
     bool onstack;
     const char* start;
     const char* sourceptr;
@@ -1229,7 +1229,7 @@ struct NNAstParser
     /* the context in which the parser resides; none (outer level), inside a class, dict, array, etc */
     NNAstCompContext compcontext;
     const char* currentfile;
-    NNState* pvm;
+    NNState* pstate;
     NNAstLexer* lexer;
     NNAstToken currtoken;
     NNAstToken prevtoken;
@@ -1303,7 +1303,7 @@ struct NNRegModule
 
 struct NNArgCheck
 {
-    NNState* pvm;
+    NNState* pstate;
     const char* name;
     int argc;
     NNValue* argv;
@@ -2043,7 +2043,8 @@ char* nn_util_filegetshandle(char* s, int size, FILE *f, size_t* lendest)
     return NULL;
 }
 
-int nn_util_filegetlinehandle(char **lineptr, size_t *n, FILE* hnd)
+
+int nn_util_filegetlinehandle(char **lineptr, size_t *destlen, FILE* hnd)
 {
     enum { kInitialStrBufSize = 256 };
     static char stackbuf[kInitialStrBufSize];
@@ -2051,7 +2052,7 @@ int nn_util_filegetlinehandle(char **lineptr, size_t *n, FILE* hnd)
     size_t getlen;
     unsigned int linelen;
     getlen = 0;
-    if(lineptr == NULL || n == NULL)
+    if(lineptr == NULL || destlen == NULL)
     {
         errno = EINVAL;
         return -1;
@@ -2073,18 +2074,18 @@ int nn_util_filegetlinehandle(char **lineptr, size_t *n, FILE* hnd)
     linelen = getlen;
     if((linelen+1) < kInitialStrBufSize)
     {
-        heapbuf = realloc(*lineptr, kInitialStrBufSize);
+        heapbuf = (char*)realloc(*lineptr, kInitialStrBufSize);
         if(heapbuf == NULL)
         {
             return -1;
         }
         *lineptr = heapbuf;
-        *n = kInitialStrBufSize;
+        *destlen = kInitialStrBufSize;
     }
-    strcpy(*lineptr,stackbuf); 
+    strcpy(*lineptr,stackbuf);
+    *destlen = linelen;
     return linelen;
 }
-
 
 /* returns the number of bytes contained in a unicode character */
 int nn_util_utf8numbytes(int value)
@@ -2870,8 +2871,8 @@ void nn_gcmem_collectgarbage(NNState* state)
 
 NEON_FORCEINLINE NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
-    nn_vm_stackpopn(ch->pvm, ch->argc);
-    nn_exceptions_vthrowwithclass(ch->pvm, ch->pvm->exceptions.argumenterror, srcfile, srcline, fmt, va);
+    nn_vm_stackpopn(ch->pstate, ch->argc);
+    nn_exceptions_vthrowwithclass(ch->pstate, ch->pstate->exceptions.argumenterror, srcfile, srcline, fmt, va);
     return nn_value_makebool(false);
 }
 
@@ -2887,7 +2888,7 @@ NEON_INLINE NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int sr
 
 NEON_FORCEINLINE void nn_argcheck_init(NNState* state, NNArgCheck* ch, NNArguments* args)
 {
-    ch->pvm = state;
+    ch->pstate = state;
     ch->name = args->name;
     ch->argc = args->count;
     ch->argv = args->args;
@@ -3296,7 +3297,7 @@ int nn_dbg_printinstructionat(NNPrinter* pr, NNBlob* blob, int offset)
 
 void nn_blob_init(NNState* state, NNBlob* blob)
 {
-    blob->pvm = state;
+    blob->pstate = state;
     blob->count = 0;
     blob->capacity = 0;
     blob->instrucs = NULL;
@@ -3308,7 +3309,7 @@ void nn_blob_push(NNBlob* blob, NNInstruction ins)
 {
     NNState* state;
     int oldcapacity;
-    state = blob->pvm;
+    state = blob->pstate;
     if(blob->capacity < blob->count + 1)
     {
         oldcapacity = blob->capacity;
@@ -3399,7 +3400,7 @@ void nn_tableval_print(NNState* state, NNPrinter* pr, NNHashValTable* table, con
 
 void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
 {
-    pr->pvm = state;
+    pr->pstate = state;
     pr->fromstack = false;
     pr->wrmode = NEON_PRMODE_UNDEFINED;
     pr->shouldclose = false;
@@ -3473,7 +3474,7 @@ void nn_printer_destroy(NNPrinter* pr)
         return;
     }
     /*fprintf(stderr, "nn_printer_destroy: pr->wrmode=%d\n", pr->wrmode);*/
-    state = pr->pvm;
+    state = pr->pstate;
     if(pr->wrmode == NEON_PRMODE_STRING)
     {
         if(!pr->stringtaken)
@@ -3502,7 +3503,7 @@ NNObjString* nn_printer_takestring(NNPrinter* pr)
     uint32_t hash;
     NNState* state;
     NNObjString* os;
-    state = pr->pvm;
+    state = pr->pstate;
     hash = nn_util_hashstring(pr->strbuf->data, pr->strbuf->length);
     os = nn_string_makefromstrbuf(state, pr->strbuf, hash);
     pr->stringtaken = true;
@@ -3838,7 +3839,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
     NNState* state;
     NNObjString* os;
     NNObjArray* args;
-    state = pr->pvm;
+    state = pr->pstate;
     if(invmethod)
     {
         field = nn_tableval_getfieldbycstr(instance->klass->instmethods, "toString");
@@ -4573,32 +4574,29 @@ NNValue nn_value_copyvalue(NNState* state, NNValue value)
                 }
                 break;
             case NEON_OBJTYPE_ARRAY:
-            {
-                size_t i;
-                NNObjArray* list;
-                NNObjArray* newlist;
-                list = nn_value_asarray(value);
-                newlist = nn_object_makearray(state);
-                nn_vm_stackpush(state, nn_value_fromobject(newlist));
-                for(i = 0; i < list->varray->listcount; i++)
                 {
-                    nn_vallist_push(newlist->varray, list->varray->listitems[i]);
+                    size_t i;
+                    NNObjArray* list;
+                    NNObjArray* newlist;
+                    list = nn_value_asarray(value);
+                    newlist = nn_object_makearray(state);
+                    nn_vm_stackpush(state, nn_value_fromobject(newlist));
+                    for(i = 0; i < list->varray->listcount; i++)
+                    {
+                        nn_vallist_push(newlist->varray, list->varray->listitems[i]);
+                    }
+                    nn_vm_stackpop(state);
+                    return nn_value_fromobject(newlist);
                 }
-                nn_vm_stackpop(state);
-                return nn_value_fromobject(newlist);
-            }
-            /*
+                break;
             case NEON_OBJTYPE_DICT:
                 {
                     NNObjDict *dict;
-                    NNObjDict *newdict;
                     dict = nn_value_asdict(value);
-                    newdict = nn_object_makedict(state);
-                    // @TODO: Figure out how to handle dictionary values correctly
-                    // remember that copying keys is redundant and unnecessary
+                    return nn_value_fromobject(nn_dict_copy(dict));
+                    
                 }
                 break;
-            */
             default:
                 break;
         }
@@ -4613,7 +4611,7 @@ NNObject* nn_object_allocobject(NNState* state, size_t size, NNObjType type)
     object->type = type;
     object->mark = !state->markvalue;
     object->stale = false;
-    object->pvm = state;
+    object->pstate = state;
     object->next = state->vmstate.linkedobjects;
     state->vmstate.linkedobjects = object;
     #if defined(DEBUG_GC) && DEBUG_GC
@@ -4731,7 +4729,7 @@ NNObjFile* nn_object_makefile(NNState* state, FILE* handle, bool isstd, const ch
 void nn_file_destroy(NNObjFile* file)
 {
     NNState* state;
-    state = ((NNObject*)file)->pvm;
+    state = ((NNObject*)file)->pstate;
     nn_fileobject_close(file);
     nn_gcmem_release(state, file, sizeof(NNObjFile));
 }
@@ -4739,7 +4737,7 @@ void nn_file_destroy(NNObjFile* file)
 void nn_file_mark(NNObjFile* file)
 {
     NNState* state;
-    state = ((NNObject*)file)->pvm;
+    state = ((NNObject*)file)->pstate;
     nn_gcmem_markobject(state, (NNObject*)file->mode);
     nn_gcmem_markobject(state, (NNObject*)file->path);
 }
@@ -4749,7 +4747,7 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
     NNState* state;
     size_t filesizereal;
     struct stat stats;
-    state = ((NNObject*)file)->pvm;
+    state = ((NNObject*)file)->pstate;
     filesizereal = -1;
     dest->success = false;
     dest->length = 0;
@@ -4849,7 +4847,7 @@ NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name, NNObjClass* p
 void nn_class_destroy(NNObjClass* klass)
 {
     NNState* state;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     nn_tableval_destroy(klass->instmethods);
     nn_tableval_destroy(klass->staticmethods);
     nn_tableval_destroy(klass->instproperties);
@@ -4878,7 +4876,7 @@ bool nn_class_defcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNative
 {
     NNState* state;
     NNObjFuncNative* ofn;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->instproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
@@ -4892,7 +4890,7 @@ bool nn_class_defstaticcallablefieldptr(NNObjClass* klass, NNObjString* name, NN
 {
     NNState* state;
     NNObjFuncNative* ofn;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->staticproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
@@ -4912,7 +4910,7 @@ bool nn_class_defnativeconstructorptr(NNObjClass* klass, NNNativeFN function, vo
     const char* cname;
     NNState* state;
     NNObjFuncNative* ofn;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     cname = "constructor";
     ofn = nn_object_makefuncnative(state, function, cname, uptr);
     klass->constructor = nn_value_fromobject(ofn);
@@ -4933,7 +4931,7 @@ bool nn_class_defnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeF
 {
     NNObjFuncNative* ofn;
     NNState* state;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, ptr);
     return nn_class_defmethod(klass, name, nn_value_fromobject(ofn));
 }
@@ -4947,7 +4945,7 @@ bool nn_class_defstaticnativemethodptr(NNObjClass* klass, NNObjString* name, NNN
 {
     NNState* state;
     NNObjFuncNative* ofn;
-    state = ((NNObject*)klass)->pvm;
+    state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_set(klass->staticmethods, nn_value_fromobject(name), nn_value_fromobject(ofn));
 }
@@ -5022,7 +5020,7 @@ NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
 void nn_instance_mark(NNObjInstance* instance)
 {
     NNState* state;
-    state = ((NNObject*)instance)->pvm;
+    state = ((NNObject*)instance)->pstate;
     if(instance->active == false)
     {
         nn_state_warn(state, "trying to mark inactive instance <%p>!", instance);
@@ -5035,7 +5033,7 @@ void nn_instance_mark(NNObjInstance* instance)
 void nn_instance_destroy(NNObjInstance* instance)
 {
     NNState* state;
-    state = ((NNObject*)instance)->pvm;
+    state = ((NNObject*)instance)->pstate;
     if(!nn_value_isnull(instance->klass->destructor))
     {
         if(!nn_vm_callvaluewithobject(state, instance->klass->constructor, nn_value_fromobject(instance), 0))
@@ -5243,7 +5241,7 @@ static const char* g_strsuper = "super";
 */
 void nn_astlex_init(NNAstLexer* lex, NNState* state, const char* source)
 {
-    lex->pvm = state;
+    lex->pstate = state;
     lex->sourceptr = source;
     lex->start = source;
     lex->sourceptr = lex->start;
@@ -5609,7 +5607,7 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
 NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate, bool permitescapes)
 {
     NNAstToken tkn;
-    NEON_ASTDEBUG(lex->pvm, "quote=[%c] withtemplate=%d", quote, withtemplate);
+    NEON_ASTDEBUG(lex->pstate, "quote=[%c] withtemplate=%d", quote, withtemplate);
     while(nn_astlex_peekcurr(lex) != quote && !nn_astlex_isatend(lex))
     {
         if(withtemplate)
@@ -5651,7 +5649,7 @@ NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate, 
 
 NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
 {
-    NEON_ASTDEBUG(lex->pvm, "");
+    NEON_ASTDEBUG(lex->pstate, "");
     /* handle binary, octal and hexadecimals */
     if(nn_astlex_peekprev(lex) == '0')
     {
@@ -6138,7 +6136,7 @@ NNAstParser* nn_astparser_make(NNState* state, NNAstLexer* lexer, NNObjModule* m
     NNAstParser* parser;
     NEON_ASTDEBUG(state, "");
     parser = (NNAstParser*)nn_memory_malloc(sizeof(NNAstParser));
-    parser->pvm = state;
+    parser->pstate = state;
     parser->lexer = lexer;
     parser->currentfunccompiler = NULL;
     parser->haderror = false;
@@ -6183,9 +6181,9 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
     {
         return false;
     }
-    if((prs->pvm->conf.maxsyntaxerrors != 0) && (prs->errorcount >= prs->pvm->conf.maxsyntaxerrors))
+    if((prs->pstate->conf.maxsyntaxerrors != 0) && (prs->errorcount >= prs->pstate->conf.maxsyntaxerrors))
     {
-        fprintf(stderr, "%stoo many errors emitted%s (maximum is %d)\n", colred, colreset, prs->pvm->conf.maxsyntaxerrors);
+        fprintf(stderr, "%stoo many errors emitted%s (maximum is %d)\n", colred, colreset, prs->pstate->conf.maxsyntaxerrors);
         prs->stopprintingsyntaxerrors = true;
         return false;
     }
@@ -6765,23 +6763,23 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* compiler, NNFu
     compiler->scopedepth = 0;
     compiler->handlercount = 0;
     compiler->fromimport = false;
-    compiler->targetfunc = nn_object_makefuncscript(prs->pvm, prs->currentmodule, type);
+    compiler->targetfunc = nn_object_makefuncscript(prs->pstate, prs->currentmodule, type);
     prs->currentfunccompiler = compiler;
     if(type != NEON_FUNCTYPE_SCRIPT)
     {
-        nn_vm_stackpush(prs->pvm, nn_value_fromobject(compiler->targetfunc));
+        nn_vm_stackpush(prs->pstate, nn_value_fromobject(compiler->targetfunc));
         if(isanon)
         {
-            nn_printer_makestackstring(prs->pvm, &wtmp);
+            nn_printer_makestackstring(prs->pstate, &wtmp);
             nn_printer_printf(&wtmp, "anonymous@[%s:%d]", prs->currentfile, prs->prevtoken.line);
             fname = nn_printer_takestring(&wtmp);
         }
         else
         {
-            fname = nn_string_copylen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length);
+            fname = nn_string_copylen(prs->pstate, prs->prevtoken.start, prs->prevtoken.length);
         }
         prs->currentfunccompiler->targetfunc->name = fname;
-        nn_vm_stackpop(prs->pvm);
+        nn_vm_stackpop(prs->pstate);
     }
     /* claiming slot zero for use in class methods */
     local = &prs->currentfunccompiler->locals[0];
@@ -6816,7 +6814,7 @@ int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
         rawstr++;
         rawlen--;
     }
-    str = nn_string_copylen(prs->pvm, rawstr, rawlen);
+    str = nn_string_copylen(prs->pstate, rawstr, rawlen);
     return nn_astparser_pushconst(prs, nn_value_fromobject(str));
 }
 
@@ -6999,18 +6997,18 @@ NNObjFuncScript* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
     {
         fname = function->name->sbuf->data;
     }
-    if(!prs->haderror && prs->pvm->conf.dumpbytecode)
+    if(!prs->haderror && prs->pstate->conf.dumpbytecode)
     {
-        nn_dbg_disasmblob(prs->pvm->debugwriter, nn_astparser_currentblob(prs), fname);
+        nn_dbg_disasmblob(prs->pstate->debugwriter, nn_astparser_currentblob(prs), fname);
     }
-    NEON_ASTDEBUG(prs->pvm, "for function '%s'", fname);
+    NEON_ASTDEBUG(prs->pstate, "for function '%s'", fname);
     prs->currentfunccompiler = prs->currentfunccompiler->enclosing;
     return function;
 }
 
 void nn_astparser_scopebegin(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pvm, "current depth=%d", prs->currentfunccompiler->scopedepth);
+    NEON_ASTDEBUG(prs->pstate, "current depth=%d", prs->currentfunccompiler->scopedepth);
     prs->currentfunccompiler->scopedepth++;
 }
 
@@ -7020,7 +7018,7 @@ bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
     int locount;
     int lodepth;
     int scodepth;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     locount = prs->currentfunccompiler->localcount;
     lopos = prs->currentfunccompiler->localcount - 1;
     lodepth = prs->currentfunccompiler->locals[lopos].depth;
@@ -7034,7 +7032,7 @@ bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
 
 void nn_astparser_scopeend(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pvm, "current scope depth=%d", prs->currentfunccompiler->scopedepth);
+    NEON_ASTDEBUG(prs->pstate, "current scope depth=%d", prs->currentfunccompiler->scopedepth);
     prs->currentfunccompiler->scopedepth--;
     /*
     // remove all variables declared in scope while exiting...
@@ -7062,7 +7060,7 @@ void nn_astparser_scopeend(NNAstParser* prs)
 int nn_astparser_discardlocals(NNAstParser* prs, int depth)
 {
     int local;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     if(prs->keeplastvalue)
     {
         #if 0
@@ -7094,7 +7092,7 @@ void nn_astparser_endloop(NNAstParser* prs)
     int i;
     NNInstruction* bcode;
     NNValue* cvals;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     /*
     // find all NEON_OP_BREAK_PL placeholder and replace with the appropriate jump...
     */
@@ -7122,7 +7120,7 @@ bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassi
     NNAstRule* rule;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     op = prs->prevtoken.type;
     /* compile the right operand */
     rule = nn_astparser_getrule(op);
@@ -7201,7 +7199,7 @@ bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign
     uint8_t argcount;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     argcount = nn_astparser_parsefunccallargs(prs);
     nn_astemit_emit2byte(prs, NEON_OP_CALLFUNCTION, argcount);
     return true;
@@ -7210,7 +7208,7 @@ bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign
 bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     switch(prs->prevtoken.type)
     {
         case NEON_ASTTOK_KWNULL:
@@ -7231,7 +7229,7 @@ bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
 
 void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     prs->replcanecho = false;
     if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
     {
@@ -7259,7 +7257,7 @@ void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, u
 
 void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     if(canassign && nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
     {
         prs->replcanecho = false;
@@ -7388,7 +7386,7 @@ bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool canassign)
     uint8_t argcount;
     NNOpCode getop;
     NNOpCode setop;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_ignorewhitespace(prs);
     if(!nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected property name after '.'"))
     {
@@ -7435,7 +7433,7 @@ void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
     uint8_t setop;
     int arg;
     (void)fromclass;
-    NEON_ASTDEBUG(prs->pvm, " name=%.*s", name.length, name.start);
+    NEON_ASTDEBUG(prs->pstate, " name=%.*s", name.length, name.start);
     fromclass = prs->currentclasscompiler != NULL;
     arg = nn_astfunccompiler_resolvelocal(prs, prs->currentfunccompiler, &name);
     if(arg != -1)
@@ -7472,7 +7470,7 @@ void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
 void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
 {
     int local;
-    NEON_ASTDEBUG(prs->pvm, "name=%.*s", name.length, name.start);
+    NEON_ASTDEBUG(prs->pstate, "name=%.*s", name.length, name.start);
     if(prs->currentfunccompiler->targetfunc->name != NULL)
     {
         local = nn_astparser_addlocal(prs, name) - 1;
@@ -7489,7 +7487,7 @@ bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     /* placeholder for the list */
     nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
     count = 0;
@@ -7520,7 +7518,7 @@ bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
     bool usedexpression;
     int itemcount;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     /* placeholder for the dictionary */
     nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
     itemcount = 0;
@@ -7537,7 +7535,7 @@ bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
                 if(nn_astparser_check(prs, NEON_ASTTOK_IDENTNORMAL))
                 {
                     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "");
-                    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_copylen(prs->pvm, prs->prevtoken.start, prs->prevtoken.length)));
+                    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_copylen(prs->pstate, prs->prevtoken.start, prs->prevtoken.length)));
                 }
                 else
                 {
@@ -7581,7 +7579,7 @@ bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canas
     uint8_t getop;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     assignable = true;
     commamatch = false;
     getop = NEON_OP_INDEXGET;
@@ -7626,14 +7624,14 @@ bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canas
 
 bool nn_astparser_rulevarnormal(NNAstParser* prs, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_namedvar(prs, prs->prevtoken, canassign);
     return true;
 }
 
 bool nn_astparser_rulevarglobal(NNAstParser* prs, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_namedvar(prs, prs->prevtoken, canassign);
     return true;
 }
@@ -7641,7 +7639,7 @@ bool nn_astparser_rulevarglobal(NNAstParser* prs, bool canassign)
 bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     #if 0
     if(prs->currentclasscompiler == NULL)
     {
@@ -7669,7 +7667,7 @@ bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
     int name;
     bool invokeself;
     uint8_t argcount;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     (void)canassign;
     if(prs->currentclasscompiler == NULL)
     {
@@ -7719,7 +7717,7 @@ bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
 bool nn_astparser_rulegrouping(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_parseexpression(prs);
     while(nn_astparser_match(prs, NEON_ASTTOK_COMMA))
@@ -7757,14 +7755,14 @@ NNValue nn_astparser_compilestrnumber(NNAstTokType type, const char* source)
 
 NNValue nn_astparser_compilenumber(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     return nn_astparser_compilestrnumber(prs->prevtoken.type, prs->prevtoken.start);
 }
 
 bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astemit_emitconst(prs, nn_astparser_compilenumber(prs));
     return true;
 }
@@ -7827,7 +7825,7 @@ int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* r
     int count;
     size_t len;
     char* chr;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     value = nn_astparser_readhexescape(prs, realstring, realindex, numberbytes);
     count = nn_util_utf8numbytes(value);
     if(count == -1)
@@ -7874,7 +7872,7 @@ char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescap
     char* deststr;
     char* realstr;
     rawlen = (((size_t)prs->prevtoken.length - 2) + 1);
-    NEON_ASTDEBUG(prs->pvm, "raw length=%d", rawlen);
+    NEON_ASTDEBUG(prs->pstate, "raw length=%d", rawlen);
     deststr = (char*)nn_memory_malloc(sizeof(char) * rawlen);
     quote = prs->prevtoken.start[0];
     realstr = (char*)prs->prevtoken.start + 1;
@@ -8040,9 +8038,9 @@ bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
     int length;
     char* str;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "canassign=%d", canassign);
+    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     str = nn_astparser_compilestring(prs, &length, true);
-    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pvm, str, length)));
+    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pstate, str, length)));
     return true;
 }
 
@@ -8051,9 +8049,9 @@ bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
     int length;
     char* str;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "canassign=%d", canassign);
+    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     str = nn_astparser_compilestring(prs, &length, false);
-    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pvm, str, length)));
+    nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pstate, str, length)));
     return true;
 }
 
@@ -8062,7 +8060,7 @@ bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
     int count;
     bool doadd;
     bool stringmatched;
-    NEON_ASTDEBUG(prs->pvm, "canassign=%d", canassign);
+    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     count = 0;
     do
     {
@@ -8099,7 +8097,7 @@ bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
 {
     NNAstTokType op;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     op = prs->prevtoken.type;
     /* compile the expression */
     nn_astparser_parseprecedence(prs, NEON_ASTPREC_UNARY);
@@ -8126,7 +8124,7 @@ bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign)
     int endjump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
     nn_astparser_parseprecedence(prs, NEON_ASTPREC_AND);
@@ -8141,7 +8139,7 @@ bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool canassign)
     int elsejump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     elsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
     nn_astemit_patchjump(prs, elsejump);
@@ -8155,7 +8153,7 @@ bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, bool can
 {
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_OPINSTANCEOF);
 
@@ -8168,7 +8166,7 @@ bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool ca
     int elsejump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     thenjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
     nn_astparser_ignorewhitespace(prs);
@@ -8193,7 +8191,7 @@ bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool ca
 bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_IMPORTIMPORT);
     return true;
@@ -8201,7 +8199,7 @@ bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 
 bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
 }
@@ -8209,7 +8207,7 @@ bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
 bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'typeof'");
     nn_astparser_parseexpression(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'typeof'");
@@ -8221,7 +8219,7 @@ bool nn_astparser_rulenothingprefix(NNAstParser* prs, bool canassign)
 {
     (void)prs;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pvm, "");
+    NEON_ASTDEBUG(prs->pstate, "");
     return true;
 }
 
@@ -8387,12 +8385,12 @@ bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence
 
 bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
 {
-    if(nn_astlex_isatend(prs->lexer) && prs->pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
         return false;
     }
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astlex_isatend(prs->lexer) && prs->pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
         return false;
     }
@@ -8402,12 +8400,12 @@ bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
 
 bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence precedence)
 {
-    if(nn_astlex_isatend(prs->lexer) && prs->pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
         return false;
     }
     nn_astparser_ignorewhitespace(prs);
-    if(nn_astlex_isatend(prs->lexer) && prs->pvm->isrepl)
+    if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
         return false;
     }
@@ -8569,14 +8567,14 @@ void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* compile
         nn_astparser_scopeend(prs);
     }
     function = nn_astparser_endcompiler(prs, false);
-    nn_vm_stackpush(prs->pvm, nn_value_fromobject(function));
+    nn_vm_stackpush(prs->pstate, nn_value_fromobject(function));
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLOSURE, nn_astparser_pushconst(prs, nn_value_fromobject(function)));
     for(i = 0; i < function->upvalcount; i++)
     {
         nn_astemit_emit1byte(prs, compiler->upvalues[i].islocal ? 1 : 0);
         nn_astemit_emit1short(prs, compiler->upvalues[i].index);
     }
-    nn_vm_stackpop(prs->pvm);
+    nn_vm_stackpop(prs->pstate);
 }
 
 void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncType type, bool isanon)
@@ -8596,18 +8594,27 @@ void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncType type, bool isanon)
     prs->infunction = false;
 }
 
-void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, bool isstatic)
+void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken methodname, bool havenametoken, bool isstatic)
 {
     size_t sn;
     int constant;
     const char* sc;
     NNFuncType type;
+    NNAstToken actualmthname;
     static NNAstTokType tkns[] = { NEON_ASTTOK_IDENTNORMAL, NEON_ASTTOK_DECORATOR };
     (void)classname;
     sc = "constructor";
     sn = strlen(sc);
-    nn_astparser_consumeor(prs, "method name expected", tkns, 2);
-    constant = nn_astparser_makeidentconst(prs, &prs->prevtoken);
+    if(havenametoken)
+    {
+        actualmthname = methodname;
+    }
+    else
+    {
+        nn_astparser_consumeor(prs, "method name expected", tkns, 2);
+        actualmthname = prs->prevtoken;
+    }
+    constant = nn_astparser_makeidentconst(prs, &actualmthname);
     type = NEON_FUNCTYPE_METHOD;
     if(isstatic)
     {
@@ -8654,23 +8661,38 @@ bool nn_astparser_ruleanonclass(NNAstParser* prs, bool canassign)
     return true;
 }
 
-void nn_astparser_parsefield(NNAstParser* prs, bool isstatic)
+bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest, bool* havenamedest, bool isstatic)
 {
     int fieldconstant;
-    nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class property name expected");
-    fieldconstant = nn_astparser_makeidentconst(prs, &prs->prevtoken);
-    if(nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
+    NNAstToken fieldname;
+    *havenamedest = false;
+    if(nn_astparser_match(prs, NEON_ASTTOK_IDENTNORMAL))
     {
-        nn_astparser_parseexpression(prs);
+        fieldname = prs->prevtoken;
+        *nametokendest = fieldname;
+        if(nn_astparser_check(prs, NEON_ASTTOK_ASSIGN))
+        {
+            //nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class property name expected");
+            nn_astparser_consume(prs, NEON_ASTTOK_ASSIGN, "expected '=' after ident");
+            fieldconstant = nn_astparser_makeidentconst(prs, &fieldname);
+            //fprintf(stderr, "fieldname = <%s>\n", fieldname.start);
+            //if(nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
+            {
+                nn_astparser_parseexpression(prs);
+            }
+            //else
+            //{
+            //    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+            //}
+            nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSPROPERTYDEFINE, fieldconstant);
+            nn_astemit_emit1byte(prs, isstatic ? 1 : 0);
+            nn_astparser_consumestmtend(prs);
+            nn_astparser_ignorewhitespace(prs);
+            return true;
+        }
     }
-    else
-    {
-        nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
-    }
-    nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSPROPERTYDEFINE, fieldconstant);
-    nn_astemit_emit1byte(prs, isstatic ? 1 : 0);
-    nn_astparser_consumestmtend(prs);
-    nn_astparser_ignorewhitespace(prs);
+    *havenamedest = true;
+    return false;
 }
 
 void nn_astparser_parsefuncdecl(NNAstParser* prs)
@@ -8685,7 +8707,9 @@ void nn_astparser_parsefuncdecl(NNAstParser* prs)
 void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
 {
     bool isstatic;
+    bool havenametoken;
     int nameconst;
+    NNAstToken nametoken;
     NNAstCompContext oldctx;
     NNAstToken classname;
     NNAstClassCompiler classcompiler;
@@ -8749,16 +8773,11 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
         {
             isstatic = true;
         }
-
-        if(nn_astparser_match(prs, NEON_ASTTOK_KWVAR))
+        if(!nn_astparser_parsefield(prs, &nametoken, &havenametoken, isstatic))
         {
-            nn_astparser_parsefield(prs, isstatic);
+            nn_astparser_parsemethod(prs, classname, nametoken, havenametoken, isstatic);
         }
-        else
-        {
-            nn_astparser_parsemethod(prs, classname, isstatic);
-            nn_astparser_ignorewhitespace(prs);
-        }
+        nn_astparser_ignorewhitespace(prs);
     }
     nn_astparser_consume(prs, NEON_ASTTOK_BRACECLOSE, "expected '}' after class body");
     if(nn_astparser_match(prs, NEON_ASTTOK_SEMICOLON))
@@ -8810,7 +8829,7 @@ void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer)
 
 void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
 {
-    if(prs->pvm->isrepl && prs->currentfunccompiler->scopedepth == 0)
+    if(prs->pstate->isrepl && prs->currentfunccompiler->scopedepth == 0)
     {
         prs->replcanecho = true;
     }
@@ -8824,7 +8843,7 @@ void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
     }
     if(!isinitializer)
     {
-        if(prs->replcanecho && prs->pvm->isrepl)
+        if(prs->replcanecho && prs->pstate->isrepl)
         {
             nn_astemit_emitinstruc(prs, NEON_OP_ECHO);
             prs->replcanecho = false;
@@ -9003,8 +9022,8 @@ void nn_astparser_parseforeachstmt(NNAstParser* prs)
     NNAstToken valuetoken;
     nn_astparser_scopebegin(prs);
     /* define @iter and @itern constant */
-    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pvm, "@iter")));
-    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pvm, "@itern")));
+    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@iter")));
+    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@itern")));
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'foreach'");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected variable name after 'foreach'");
     if(!nn_astparser_check(prs, NEON_ASTTOK_COMMA))
@@ -9131,8 +9150,8 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
     /* 0: before all cases, 1: before default, 2: after default */
     swstate = 0;
     casecount = 0;
-    sw = nn_object_makeswitch(prs->pvm);
-    nn_vm_stackpush(prs->pvm, nn_value_fromobject(sw));
+    sw = nn_object_makeswitch(prs->pstate);
+    nn_vm_stackpush(prs->pstate, nn_value_fromobject(sw));
     switchcode = nn_astemit_emitswitch(prs);
     /* nn_astemit_emitbyteandshort(prs, NEON_OP_SWITCH, nn_astparser_pushconst(prs, nn_value_fromobject(sw))); */
     startoffset = nn_astparser_currentblob(prs)->count;
@@ -9170,12 +9189,12 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     else if(prs->prevtoken.type == NEON_ASTTOK_LITERALSTRING)
                     {
                         str = nn_astparser_compilestring(prs, &length, true);
-                        string = nn_string_takelen(prs->pvm, str, length);
+                        string = nn_string_takelen(prs->pstate, str, length);
                         /* gc fix */
-                        nn_vm_stackpush(prs->pvm, nn_value_fromobject(string));
+                        nn_vm_stackpush(prs->pstate, nn_value_fromobject(string));
                         nn_tableval_set(sw->table, nn_value_fromobject(string), jump);
                         /* gc fix */
-                        nn_vm_stackpop(prs->pvm);
+                        nn_vm_stackpop(prs->pstate);
                     }
                     else if(nn_astparser_checknumber(prs))
                     {
@@ -9184,7 +9203,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     else
                     {
                         /* pop the switch */
-                        nn_vm_stackpop(prs->pvm);
+                        nn_vm_stackpop(prs->pstate);
                         nn_astparser_raiseerror(prs, "only constants can be used in 'when' expressions");
                         return;
                     }
@@ -9222,7 +9241,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
     sw->exitjump = nn_astparser_currentblob(prs)->count - startoffset;
     nn_astemit_patchswitch(prs, switchcode, nn_astparser_pushconst(prs, nn_value_fromobject(sw)));
     /* pop the switch */  
-    nn_vm_stackpop(prs->pvm);
+    nn_vm_stackpop(prs->pstate);
 }
 
 void nn_astparser_parseifstmt(NNAstParser* prs)
@@ -9335,7 +9354,7 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     }
     else
     {
-        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pvm, "Exception")));
+        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "Exception")));
     }
     nn_astemit_patchjump(prs, exitjump);
     if(nn_astparser_match(prs, NEON_ASTTOK_KWFINALLY))
@@ -11307,7 +11326,7 @@ void nn_array_push(NNObjArray* list, NNValue value)
 {
     NNState* state;
     (void)state;
-    state = ((NNObject*)list)->pvm;
+    state = ((NNObject*)list)->pstate;
     /*nn_vm_stackpush(state, value);*/
     nn_vallist_push(list->varray, value);
     /*nn_vm_stackpop(state); */
@@ -11330,7 +11349,7 @@ NNObjArray* nn_array_copy(NNObjArray* list, long start, long length)
     size_t i;
     NNState* state;
     NNObjArray* newlist;
-    state = ((NNObject*)list)->pvm;
+    state = ((NNObject*)list)->pstate;
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     if(start == -1)
     {
@@ -14418,7 +14437,7 @@ NNValue nn_nativefn_instanceof(NNState* state, NNArguments* args)
 
 void nn_strformat_init(NNState* state, NNFormatInfo* nfi, NNPrinter* writer, const char* fmtstr, size_t fmtlen)
 {
-    nfi->pvm = state;
+    nfi->pstate = state;
     nfi->fmtstr = fmtstr;
     nfi->fmtlen = fmtlen;
     nfi->writer = writer;
@@ -14461,7 +14480,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                 i++;
                 if((int)argpos > argc)
                 {
-                    nn_exceptions_throwclass(nfi->pvm, nfi->pvm->exceptions.argumenterror, "too few arguments");
+                    nn_exceptions_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "too few arguments");
                     ok = false;
                     cval = nn_value_makenull();
                 }
@@ -14495,7 +14514,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                         break;
                     default:
                         {
-                            nn_exceptions_throwclass(nfi->pvm, nfi->pvm->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
+                            nn_exceptions_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
                         }
                         break;
                 }
@@ -16083,7 +16102,7 @@ void nn_dict_addentrycstr(NNObjDict* dict, const char* ckey, NNValue value)
 {
     NNObjString* os;
     NNState* state;
-    state = ((NNObject*)dict)->pvm;
+    state = ((NNObject*)dict)->pstate;
     os = nn_string_intern(state, ckey);
     nn_dict_addentry(dict, nn_value_fromobject(os), value);
 }
@@ -16091,6 +16110,32 @@ void nn_dict_addentrycstr(NNObjDict* dict, const char* ckey, NNValue value)
 NNProperty* nn_dict_getentry(NNObjDict* dict, NNValue key)
 {
     return nn_tableval_getfield(dict->htab, key);
+}
+
+
+NNObjDict* nn_dict_copy(NNObjDict* dict)
+{
+
+    size_t i;
+    size_t dsz;
+    NNValue key;
+    NNProperty* field;
+    NNObjDict *ndict;
+    NNState* state;
+    state = ((NNObject*)dict)->pstate;    
+    ndict = nn_object_makedict(state);
+    // @TODO: Figure out how to handle dictionary values correctly
+    // remember that copying keys is redundant and unnecessary
+    dsz = dict->names->listcount;
+    for(i = 0; i < dsz; i++)
+    {
+        key = dict->names->listitems[i];
+        field = nn_tableval_getfield(dict->htab, dict->names->listitems[i]);
+        nn_vallist_push(ndict->names, key);
+        nn_tableval_setwithtype(ndict->htab, key, field->value, field->type, nn_value_isstring(key));
+        
+    }
+    return ndict;
 }
 
 NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjString* str, double number)
@@ -17543,7 +17588,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     you_are_calling_exit_vm_outside_of_runvm = false;
     state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
-        static const void** dispatchtable[] =
+        static void* dispatchtable[] =
         {
             &&VM_MAKELABEL(NEON_OP_GLOBALDEFINE),
             &&VM_MAKELABEL(NEON_OP_GLOBALGET),
@@ -18927,6 +18972,10 @@ void nn_cli_parseenv(NNState* state, char** envp)
     char keybuf[kMaxKeyLen];
     NNObjString* oskey;
     NNObjString* osval;
+    if(envp == NULL)
+    {
+        return;
+    }
     for(i=0; envp[i] != NULL; i++)
     {
         raw = envp[i];
@@ -19220,4 +19269,15 @@ int main(int argc, char* argv[], char** envp)
     return 1;
 }
 
+int replmain(const char* file)
+{
+    const char* deffile;
+    deffile = "mandel1.nn";
+    if(file != NULL)
+    {
+        deffile = file;
+    }
+    char* realargv[1024] = {"a.out", (char*)deffile, NULL};
+    return main(1, realargv, NULL);
 
+}

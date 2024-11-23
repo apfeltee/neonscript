@@ -1,0 +1,24 @@
+
+
+class Foo
+{
+    static staticProperty = 'someValue';
+
+    static staticMethod()
+    {
+        return 'static method has been called.';
+    }
+
+    // todo
+    /*
+    static {
+        println('Class static initialization block called');
+    }
+    */
+}
+
+println(Foo.staticProperty);
+// Expected output: "someValue"
+println(Foo.staticMethod());
+// Expected output: "static method has been called."
+

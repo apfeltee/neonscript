@@ -332,7 +332,7 @@ function fp_debugargs(name, a, b)
     if(conf_enabledebug)
     {
         //printf("%s: a=(%s) %q | b=(%s) %q", name, typeof(a), a, typeof(b), b);
-        println("", name, ": a=(", typeof(a), ") ", JSON.stringify(a), " | b=(", typeof(b), ") ", JSON.stringify(b));
+        println(`${name}: a=(${typeof(a)}) ${JSON.stringify(a)} | b=(${typeof(b)}) ${JSON.stringify(b)}`)
     }
 }
 
@@ -571,5 +571,5 @@ function fp_rep(e)
     return fp_string(evaled);
 }
 
-println(fp_rep("(+ 5 5)"));
+println(fp_rep("(eq (+ 5 20) 25)"));
 

@@ -1,5 +1,5 @@
 class Pair {
-  var field = 10
+  field = 10
 
   method() {
 
@@ -22,8 +22,8 @@ var scone = Scone()
 scone.topping('berries', 'cream')
 
 class Person {
-  var age = 10
-  static var id = 2001
+  age = 10
+  static id = 2001
 
   constructor(name) {
     this.name = name
@@ -93,7 +93,7 @@ class Animal {
 
 class Dog extends Animal {
 
-  var myx = 50
+  myx = 50
 
   getName() {
     this.myx += 120

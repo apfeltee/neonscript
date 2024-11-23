@@ -1,8 +1,8 @@
 
 a = {"foo": "bar", "red": "color"}
 
-for(k in a) {
-    println("k=", k, ", v=", a[v])
+foreach(k, v in a) {
+    println("k=", k, ", v=", v)
 }
 
 for(i=0; i<10; i++)
