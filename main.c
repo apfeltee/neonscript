@@ -610,11 +610,6 @@ typedef struct /**/ NNObjFile NNObjFile;
 typedef struct /**/ NNObjSwitch NNObjSwitch;
 typedef struct /**/ NNObjUserdata NNObjUserdata;
 
-typedef struct /**/ NNObjFuncNative NNObjFuncNative;
-typedef struct /**/ NNObjFuncBound NNObjFuncBound;
-typedef struct /**/ NNObjFuncScript NNObjFuncScript;
-typedef struct /**/ NNObjFuncClosure NNObjFuncClosure;
-
 typedef struct /**/ NNObjFunction NNObjFunction;
 
 
@@ -941,61 +936,35 @@ struct NNObjInstance
     NNObjClass* klass;
 };
 
-struct NNObjFuncBound
-{
-    NNObject objpadding;
-    NNValue receiver;
-    NNObjFuncClosure* method;
-};
-
-struct NNObjFuncNative
-{
-    NNObject objpadding;
-    NNFuncContextType contexttype;
-    NNObjString* name;
-    NNNativeFN natfunc;
-    void* userptr;
-};
-
-
-struct NNObjFuncScript
-{
-    NNObject objpadding;
-    NNFuncContextType contexttype;
-    int arity;
-    int upvalcount;
-    bool isvariadic;
-    NNBlob blob;
-    NNObjString* name;
-    NNObjModule* module;
-
-};
-
-struct NNObjFuncClosure
-{
-    NNObject objpadding;
-    int upvalcount;
-    NNObjFuncScript* scriptfunc;
-    NNObjUpvalue** upvalues;
-};
-
 struct NNObjFunction
 {
     NNObject objpadding;
     NNFuncContextType contexttype;
+    NNObjString* name;
+    int upvalcount;
     union
     {
-        union
+        struct
         {
-            
+            NNObjFunction* scriptfunc;
+            NNObjUpvalue** upvalues;            
         };
-        union
+        struct
         {
-            
+            int arity;
+            bool isvariadic;
+            NNBlob blob;
+            NNObjModule* module;
         };
-        union
+        struct
         {
-            
+            NNNativeFN natfunc;
+            void* userptr;
+        };
+        struct
+        {
+            NNValue receiver;
+            NNObjFunction* method;
         };
     };
 };
@@ -1062,7 +1031,7 @@ struct NNCallFrame
     int gcprotcount;
     int stackslotpos;
     NNInstruction* inscode;
-    NNObjFuncClosure* closure;
+    NNObjFunction* closure;
     /* TODO: should be dynamically allocated */
     NNExceptionFrame handlers[NEON_CONFIG_MAXEXCEPTHANDLERS];
 };
@@ -1224,7 +1193,7 @@ struct NNAstFuncCompiler
     bool fromimport;
     NNAstFuncCompiler* enclosing;
     /* current function */
-    NNObjFuncScript* targetfunc;
+    NNObjFunction* targetfunc;
     NNFuncContextType contexttype;
     /* TODO: these should be dynamically allocated */
     NNAstLocal locals[NEON_CONFIG_ASTMAXLOCALS];
@@ -1704,19 +1673,19 @@ NEON_FORCEINLINE NNObjString* nn_value_asstring(NNValue v)
     return ((NNObjString*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFuncNative* nn_value_asfuncnative(NNValue v)
+NEON_FORCEINLINE NNObjFunction* nn_value_asfuncnative(NNValue v)
 {
-    return ((NNObjFuncNative*)nn_value_asobject(v));
+    return ((NNObjFunction*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFuncScript* nn_value_asfuncscript(NNValue v)
+NEON_FORCEINLINE NNObjFunction* nn_value_asfuncscript(NNValue v)
 {
-    return ((NNObjFuncScript*)nn_value_asobject(v));
+    return ((NNObjFunction*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFuncClosure* nn_value_asfuncclosure(NNValue v)
+NEON_FORCEINLINE NNObjFunction* nn_value_asfuncclosure(NNValue v)
 {
-    return ((NNObjFuncClosure*)nn_value_asobject(v));
+    return ((NNObjFunction*)nn_value_asobject(v));
 }
 
 NEON_FORCEINLINE NNObjClass* nn_value_asclass(NNValue v)
@@ -1729,9 +1698,9 @@ NEON_FORCEINLINE NNObjInstance* nn_value_asinstance(NNValue v)
     return ((NNObjInstance*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFuncBound* nn_value_asfuncbound(NNValue v)
+NEON_FORCEINLINE NNObjFunction* nn_value_asfuncbound(NNValue v)
 {
-    return ((NNObjFuncBound*)nn_value_asobject(v));
+    return ((NNObjFunction*)nn_value_asobject(v));
 }
 
 NEON_FORCEINLINE NNObjSwitch* nn_value_asswitch(NNValue v)
@@ -2596,8 +2565,8 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             break;
         case NEON_OBJTYPE_FUNCBOUND:
             {
-                NNObjFuncBound* bound;
-                bound = (NNObjFuncBound*)object;
+                NNObjFunction* bound;
+                bound = (NNObjFunction*)object;
                 nn_gcmem_markvalue(state, bound->receiver);
                 nn_gcmem_markobject(state, (NNObject*)bound->method);
             }
@@ -2621,8 +2590,8 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
         case NEON_OBJTYPE_FUNCCLOSURE:
             {
                 int i;
-                NNObjFuncClosure* closure;
-                closure = (NNObjFuncClosure*)object;
+                NNObjFunction* closure;
+                closure = (NNObjFunction*)object;
                 nn_gcmem_markobject(state, (NNObject*)closure->scriptfunc);
                 for(i = 0; i < closure->upvalcount; i++)
                 {
@@ -2632,8 +2601,8 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             break;
         case NEON_OBJTYPE_FUNCSCRIPT:
             {
-                NNObjFuncScript* function;
-                function = (NNObjFuncScript*)object;
+                NNObjFunction* function;
+                function = (NNObjFunction*)object;
                 nn_gcmem_markobject(state, (NNObject*)function->name);
                 nn_gcmem_markobject(state, (NNObject*)function->module);
                 nn_vallist_mark(function->blob.constants);
@@ -2708,7 +2677,7 @@ void nn_object_destroy(NNState* state, NNObject* object)
                 // a closure may be bound to multiple instances
                 // for this reason, we do not free closures when freeing bound methods
                 */
-                nn_gcmem_release(state, object, sizeof(NNObjFuncBound));
+                nn_gcmem_release(state, object, sizeof(NNObjFunction));
             }
             break;
         case NEON_OBJTYPE_CLASS:
@@ -2720,22 +2689,22 @@ void nn_object_destroy(NNState* state, NNObject* object)
             break;
         case NEON_OBJTYPE_FUNCCLOSURE:
             {
-                NNObjFuncClosure* closure;
-                closure = (NNObjFuncClosure*)object;
+                NNObjFunction* closure;
+                closure = (NNObjFunction*)object;
                 nn_gcmem_freearray(state, sizeof(NNObjUpvalue*), closure->upvalues, closure->upvalcount);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
                 */
-                nn_gcmem_release(state, object, sizeof(NNObjFuncClosure));
+                nn_gcmem_release(state, object, sizeof(NNObjFunction));
             }
             break;
         case NEON_OBJTYPE_FUNCSCRIPT:
             {
-                NNObjFuncScript* function;
-                function = (NNObjFuncScript*)object;
+                NNObjFunction* function;
+                function = (NNObjFunction*)object;
                 nn_funcscript_destroy(function);
-                nn_gcmem_release(state, function, sizeof(NNObjFuncScript));
+                nn_gcmem_release(state, function, sizeof(NNObjFunction));
             }
             break;
         case NEON_OBJTYPE_INSTANCE:
@@ -2747,7 +2716,7 @@ void nn_object_destroy(NNState* state, NNObject* object)
             break;
         case NEON_OBJTYPE_FUNCNATIVE:
             {
-                nn_gcmem_release(state, object, sizeof(NNObjFuncNative));
+                nn_gcmem_release(state, object, sizeof(NNObjFunction));
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
@@ -3134,7 +3103,7 @@ int nn_dbg_printclosureinstr(NNPrinter* pr, const char* name, NNBlob* blob, int 
     uint16_t index;
     uint16_t constant;
     const char* locn;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     offset++;
     constant = blob->instrucs[offset++].code << 8;
     constant |= blob->instrucs[offset++].code;
@@ -3735,7 +3704,7 @@ bool nn_printer_printf(NNPrinter* pr, const char* fmt, ...)
     return b;
 }
 
-void nn_printer_printfunction(NNPrinter* pr, NNObjFuncScript* func)
+void nn_printer_printfunction(NNPrinter* pr, NNObjFunction* func)
 {
     if(func->name == NULL)
     {
@@ -4032,7 +4001,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             break;
         case NEON_OBJTYPE_FUNCBOUND:
             {
-                NNObjFuncBound* bn;
+                NNObjFunction* bn;
                 bn = nn_value_asfuncbound(value);
                 nn_printer_printfunction(pr, bn->method->scriptfunc);
             }
@@ -4051,14 +4020,14 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             break;
         case NEON_OBJTYPE_FUNCCLOSURE:
             {
-                NNObjFuncClosure* cls;
+                NNObjFunction* cls;
                 cls = nn_value_asfuncclosure(value);
                 nn_printer_printfunction(pr, cls->scriptfunc);
             }
             break;
         case NEON_OBJTYPE_FUNCSCRIPT:
             {
-                NNObjFuncScript* fn;
+                NNObjFunction* fn;
                 fn = nn_value_asfuncscript(value);
                 nn_printer_printfunction(pr, fn);
             }
@@ -4073,7 +4042,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             break;
         case NEON_OBJTYPE_FUNCNATIVE:
             {
-                NNObjFuncNative* native;
+                NNObjFunction* native;
                 native = nn_value_asfuncnative(value);
                 nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf->data, (void*)native);
             }
@@ -4403,8 +4372,8 @@ uint32_t nn_object_hashobject(NNObject* object)
                 // internally. Since user code never sees a non-closure function, they
                 // cannot use them as map keys.
                 */
-                NNObjFuncScript* fn;
-                fn = (NNObjFuncScript*)object;
+                NNObjFunction* fn;
+                fn = (NNObjFunction*)object;
                 return nn_util_hashdouble(fn->arity) ^ nn_util_hashdouble(fn->blob.count);
             }
             break;
@@ -4860,10 +4829,10 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
     return true;
 }
 
-NNObjFuncBound* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFuncClosure* method)
+NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFunction* method)
 {
-    NNObjFuncBound* bound;
-    bound = (NNObjFuncBound*)nn_object_allocobject(state, sizeof(NNObjFuncBound), NEON_OBJTYPE_FUNCBOUND);
+    NNObjFunction* bound;
+    bound = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCBOUND);
     bound->receiver = receiver;
     bound->method = method;
     return bound;
@@ -4915,7 +4884,7 @@ bool nn_class_defproperty(NNObjClass* klass, NNObjString* cstrname, NNValue val)
 bool nn_class_defcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
     NNState* state;
-    NNObjFuncNative* ofn;
+    NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->instproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
@@ -4929,7 +4898,7 @@ bool nn_class_defcallablefield(NNObjClass* klass, NNObjString* name, NNNativeFN 
 bool nn_class_defstaticcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
     NNState* state;
-    NNObjFuncNative* ofn;
+    NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_setwithtype(klass->staticproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
@@ -4949,7 +4918,7 @@ bool nn_class_defnativeconstructorptr(NNObjClass* klass, NNNativeFN function, vo
 {
     const char* cname;
     NNState* state;
-    NNObjFuncNative* ofn;
+    NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
     cname = "constructor";
     ofn = nn_object_makefuncnative(state, function, cname, uptr);
@@ -4969,7 +4938,7 @@ bool nn_class_defmethod(NNObjClass* klass, NNObjString* name, NNValue val)
 
 bool nn_class_defnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* ptr)
 {
-    NNObjFuncNative* ofn;
+    NNObjFunction* ofn;
     NNState* state;
     state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, ptr);
@@ -4984,7 +4953,7 @@ bool nn_class_defnativemethod(NNObjClass* klass, NNObjString* name, NNNativeFN f
 bool nn_class_defstaticnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeFN function, void* uptr)
 {
     NNState* state;
-    NNObjFuncNative* ofn;
+    NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
     ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
     return nn_tableval_set(klass->staticmethods, nn_value_fromobject(name), nn_value_fromobject(ofn));
@@ -5092,10 +5061,10 @@ bool nn_instance_defproperty(NNObjInstance* instance, NNObjString* name, NNValue
     return nn_tableval_set(instance->properties, nn_value_fromobject(name), val);
 }
 
-NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncContextType type)
+NNObjFunction* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncContextType type)
 {
-    NNObjFuncScript* function;
-    function = (NNObjFuncScript*)nn_object_allocobject(state, sizeof(NNObjFuncScript), NEON_OBJTYPE_FUNCSCRIPT);
+    NNObjFunction* function;
+    function = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCSCRIPT);
     function->arity = 0;
     function->upvalcount = 0;
     function->isvariadic = false;
@@ -5107,15 +5076,15 @@ NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, N
     return function;
 }
 
-void nn_funcscript_destroy(NNObjFuncScript* function)
+void nn_funcscript_destroy(NNObjFunction* function)
 {
     nn_blob_destroy(&function->blob);
 }
 
-NNObjFuncNative* nn_object_makefuncnative(NNState* state, NNNativeFN function, const char* name, void* uptr)
+NNObjFunction* nn_object_makefuncnative(NNState* state, NNNativeFN function, const char* name, void* uptr)
 {
-    NNObjFuncNative* native;
-    native = (NNObjFuncNative*)nn_object_allocobject(state, sizeof(NNObjFuncNative), NEON_OBJTYPE_FUNCNATIVE);
+    NNObjFunction* native;
+    native = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCNATIVE);
     native->natfunc = function;
     native->name = nn_string_copycstr(state, name);
     native->contexttype = NEON_FNCONTEXTTYPE_FUNCTION;
@@ -5123,17 +5092,17 @@ NNObjFuncNative* nn_object_makefuncnative(NNState* state, NNNativeFN function, c
     return native;
 }
 
-NNObjFuncClosure* nn_object_makefuncclosure(NNState* state, NNObjFuncScript* function)
+NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function)
 {
     int i;
     NNObjUpvalue** upvals;
-    NNObjFuncClosure* closure;
+    NNObjFunction* closure;
     upvals = (NNObjUpvalue**)nn_gcmem_allocate(state, sizeof(NNObjUpvalue*), function->upvalcount);
     for(i = 0; i < function->upvalcount; i++)
     {
         upvals[i] = NULL;
     }
-    closure = (NNObjFuncClosure*)nn_object_allocobject(state, sizeof(NNObjFuncClosure), NEON_OBJTYPE_FUNCCLOSURE);
+    closure = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCCLOSURE);
     closure->scriptfunc = function;
     closure->upvalues = upvals;
     closure->upvalcount = function->upvalcount;
@@ -6521,7 +6490,7 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
 {
     int constant;
     NNOpCode code;
-    NNObjFuncScript* fn;
+    NNObjFunction* fn;
     code = (NNOpCode)bytecode[ip].code;
     switch(code)
     {
@@ -7017,10 +6986,10 @@ NNAstToken nn_astparser_synthtoken(const char* name)
     return token;
 }
 
-NNObjFuncScript* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
+NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
 {
     const char* fname;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     nn_astemit_emitreturn(prs);
     if(istoplevel)
     {
@@ -8603,7 +8572,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
 void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* fnc, bool closescope, bool isanon)
 {
     int i;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     (void)isanon;
     /* compile the body */
     nn_astparser_ignorewhitespace(prs);
@@ -9585,12 +9554,12 @@ void nn_astparser_synchronize(NNAstParser* prs)
 * $keeplast: whether to emit code that retains or discards the value of the last statement/expression.
 * SHOULD NOT BE USED FOR ORDINARY SCRIPTS as it will almost definitely result in the stack containing invalid values.
 */
-NNObjFuncScript* nn_astparser_compilesource(NNState* state, NNObjModule* module, const char* source, NNBlob* blob, bool fromimport, bool keeplast)
+NNObjFunction* nn_astparser_compilesource(NNState* state, NNObjModule* module, const char* source, NNBlob* blob, bool fromimport, bool keeplast)
 {
     NNAstFuncCompiler fnc;
     NNAstLexer* lexer;
     NNAstParser* parser;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     (void)blob;
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
     lexer = nn_astlex_make(state, source);
@@ -9780,7 +9749,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     NNObjModule* themodule;
     NNRegClass klassreg;
     NNObjString* classname;
-    NNObjFuncNative* native;
+    NNObjFunction* native;
     NNObjClass* klass;
     NNHashValTable* tabdest;
     module = init_fn(state);
@@ -9826,7 +9795,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                     {
                         func = klassreg.functions[k];
                         funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
-                        native = (NNObjFuncNative*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
+                        native = (NNObjFunction*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
                         if(func.isstatic)
                         {
                             native->contexttype = NEON_FNCONTEXTTYPE_STATIC;
@@ -9953,8 +9922,8 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     NNObjArray* args;
     NNObjString* os;
     NNObjModule* module;
-    NNObjFuncClosure* closure;
-    NNObjFuncScript* function;
+    NNObjFunction* closure;
+    NNObjFunction* function;
     (void)os;
     (void)argc;
     (void)intomodule;
@@ -14660,7 +14629,7 @@ NNValue nn_exceptions_getstacktrace(NNState* state)
     const char* fnname;
     const char* physfile;
     NNCallFrame* frame;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     NNObjString* os;
     NNObjArray* oa;
     NNPrinter pr;
@@ -14726,7 +14695,7 @@ bool nn_exceptions_propagate(NNState* state)
     const char* srcfile;
     NNValue stackitm;
     NNObjArray* oa;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     NNExceptionFrame* handler;
     NNObjString* emsg;
     NNObjInstance* exception;
@@ -14893,8 +14862,8 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     int messageconst;
     NNObjClass* klass;
     NNObjString* classname;
-    NNObjFuncScript* function;
-    NNObjFuncClosure* closure;
+    NNObjFunction* function;
+    NNObjFunction* closure;
     if(iscs)
     {
         classname = nn_string_intern(state, cstrname);
@@ -14990,7 +14959,7 @@ void nn_vm_raisefatalerror(NNState* state, const char* format, ...)
     size_t instruction;
     va_list args;
     NNCallFrame* frame;
-    NNObjFuncScript* function;
+    NNObjFunction* function;
     /* flush out anything on stdout first */
     fflush(stdout);
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
@@ -15041,7 +15010,7 @@ bool nn_state_defglobalvalue(NNState* state, const char* name, NNValue val)
 
 bool nn_state_defnativefunctionptr(NNState* state, const char* name, NNNativeFN fptr, void* uptr)
 {
-    NNObjFuncNative* func;
+    NNObjFunction* func;
     func = nn_object_makefuncnative(state, fptr, name, uptr);
     return nn_state_defglobalvalue(state, name, nn_value_fromobject(func));
 }
@@ -15153,7 +15122,7 @@ bool nn_vm_resizeframes(NNState* state, size_t needed)
     size_t allocsz;
     int oldhandlercnt;
     NNInstruction* oldip;
-    NNObjFuncClosure* oldclosure;
+    NNObjFunction* oldclosure;
     NNCallFrame* oldbuf;
     NNCallFrame* newbuf;
     (void)i;
@@ -15431,7 +15400,7 @@ bool nn_util_methodisprivate(NNObjString* name)
     return name->sbuf->length > 0 && name->sbuf->data[0] == '_';
 }
 
-bool nn_vm_callclosure(NNState* state, NNObjFuncClosure* closure, NNValue thisval, int argcount)
+bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, int argcount)
 {
     int i;
     int startva;
@@ -15482,7 +15451,7 @@ bool nn_vm_callclosure(NNState* state, NNObjFuncClosure* closure, NNValue thisva
     return true;
 }
 
-bool nn_vm_callnative(NNState* state, NNObjFuncNative* native, NNValue thisval, int argcount)
+bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, int argcount)
 {
     size_t spos;
     NNValue r;
@@ -15515,7 +15484,7 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
         {
             case NEON_OBJTYPE_FUNCBOUND:
                 {
-                    NNObjFuncBound* bound;
+                    NNObjFunction* bound;
                     bound = nn_value_asfuncbound(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
@@ -15582,7 +15551,7 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
         {
             case NEON_OBJTYPE_FUNCBOUND:
                 {
-                    NNObjFuncBound* bound;
+                    NNObjFunction* bound;
                     bound = nn_value_asfuncbound(callable);
                     actualthisval = bound->receiver;
                     if(!nn_value_isnull(thisval))
@@ -15957,7 +15926,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
 {
     NNValue val;
     NNProperty* field;
-    NNObjFuncBound* bound;
+    NNObjFunction* bound;
     field = nn_tableval_getfieldbyostr(klass->instmethods, name);
     if(field != NULL)
     {
@@ -17517,8 +17486,8 @@ NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
     size_t ssp;
     uint8_t islocal;
     NNValue* upvals;
-    NNObjFuncScript* function;
-    NNObjFuncClosure* closure;
+    NNObjFunction* function;
+    NNObjFunction* closure;
     function = nn_value_asfuncscript(nn_vmbits_readconst(state));
     closure = nn_object_makefuncclosure(state, function);
     nn_vmbits_stackpush(state, nn_value_fromobject(closure));
@@ -18225,7 +18194,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             VM_CASE(NEON_OP_UPVALUEGET)
                 {
                     int index;
-                    NNObjFuncClosure* closure;
+                    NNObjFunction* closure;
                     index = nn_vmbits_readshort(state);
                     closure = state->vmstate.currentframe->closure;
                     if(index < closure->upvalcount)
@@ -18633,7 +18602,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
 int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjArray* callarr)
 {
     int arity;
-    NNObjFuncClosure* closure;
+    NNObjFunction* closure;
     (void)state;
     arity = 0;
     if(nn_value_isfuncclosure(callable))
@@ -18701,11 +18670,11 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
     return true;
 }
 
-NNObjFuncClosure* nn_state_compilesource(NNState* state, NNObjModule* module, bool fromeval, const char* source, bool toplevel)
+NNObjFunction* nn_state_compilesource(NNState* state, NNObjModule* module, bool fromeval, const char* source, bool toplevel)
 {
     NNBlob blob;
-    NNObjFuncScript* function;
-    NNObjFuncClosure* closure;
+    NNObjFunction* function;
+    NNObjFunction* closure;
     (void)toplevel;
     nn_blob_init(state, &blob);
     function = nn_astparser_compilesource(state, module, source, &blob, false, fromeval);
@@ -18736,7 +18705,7 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
 {
     char* rp;
     NNStatus status;
-    NNObjFuncClosure* closure;
+    NNObjFunction* closure;
     state->rootphysfile = filename;
     //rp = osfn_realpath(filename, NULL);
     nn_state_updateprocessinfo(state);
@@ -18764,7 +18733,7 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
     int argc;
     NNValue callme;
     NNValue retval;
-    NNObjFuncClosure* closure;
+    NNObjFunction* closure;
     NNObjArray* args;
     (void)argc;
     closure = nn_state_compilesource(state, state->topmodule, true, source, false);
@@ -19095,12 +19064,9 @@ void nn_cli_printtypesizes()
     ptyp(NNObjString);
     ptyp(NNObjUpvalue);
     ptyp(NNObjModule);
-    ptyp(NNObjFuncScript);
-    ptyp(NNObjFuncClosure);
     ptyp(NNObjClass);
     ptyp(NNObjInstance);
-    ptyp(NNObjFuncBound);
-    ptyp(NNObjFuncNative);
+    ptyp(NNObjFunction);
     ptyp(NNObjArray);
     ptyp(NNObjRange);
     ptyp(NNObjDict);
