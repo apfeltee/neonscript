@@ -261,6 +261,7 @@ enum NNOpCode
     NEON_OP_GLOBALSET,
     NEON_OP_LOCALGET,
     NEON_OP_LOCALSET,
+    NEON_OP_FUNCARGOPTIONAL,
     NEON_OP_FUNCARGSET,
     NEON_OP_FUNCARGGET,
     NEON_OP_UPVALUEGET,
@@ -420,6 +421,7 @@ enum NNAstTokType
     NEON_ASTTOK_KWTYPEOF,
     NEON_ASTTOK_KWSWITCH,
     NEON_ASTTOK_KWVAR,
+    NEON_ASTTOK_KWCONST,
     NEON_ASTTOK_KWCASE,
     NEON_ASTTOK_KWWHILE,
     NEON_ASTTOK_KWEXTENDS,
@@ -476,15 +478,15 @@ enum NNAstPrecedence
     NEON_ASTPREC_PRIMARY
 };
 
-enum NNFuncType
+enum NNFuncContextType
 {
-    NEON_FUNCTYPE_ANONYMOUS,
-    NEON_FUNCTYPE_FUNCTION,
-    NEON_FUNCTYPE_METHOD,
-    NEON_FUNCTYPE_INITIALIZER,
-    NEON_FUNCTYPE_PRIVATE,
-    NEON_FUNCTYPE_STATIC,
-    NEON_FUNCTYPE_SCRIPT
+    NEON_FNCONTEXTTYPE_ANONYMOUS,
+    NEON_FNCONTEXTTYPE_FUNCTION,
+    NEON_FNCONTEXTTYPE_METHOD,
+    NEON_FNCONTEXTTYPE_INITIALIZER,
+    NEON_FNCONTEXTTYPE_PRIVATE,
+    NEON_FNCONTEXTTYPE_STATIC,
+    NEON_FNCONTEXTTYPE_SCRIPT
 };
 
 enum NNStatus
@@ -583,7 +585,7 @@ typedef enum /**/ NNValType NNValType;
 #endif
 
 typedef enum /**/ NNOpCode NNOpCode;
-typedef enum /**/ NNFuncType NNFuncType;
+typedef enum /**/ NNFuncContextType NNFuncContextType;
 typedef enum /**/ NNObjType NNObjType;
 typedef enum /**/ NNStatus NNStatus;
 typedef enum /**/ NNAstTokType NNAstTokType;
@@ -599,17 +601,21 @@ typedef struct /**/ NNObjString NNObjString;
 typedef struct /**/ NNObjArray NNObjArray;
 typedef struct /**/ NNObjUpvalue NNObjUpvalue;
 typedef struct /**/ NNObjClass NNObjClass;
-typedef struct /**/ NNObjFuncNative NNObjFuncNative;
+
 typedef struct /**/ NNObjModule NNObjModule;
-typedef struct /**/ NNObjFuncScript NNObjFuncScript;
-typedef struct /**/ NNObjFuncClosure NNObjFuncClosure;
 typedef struct /**/ NNObjInstance NNObjInstance;
-typedef struct /**/ NNObjFuncBound NNObjFuncBound;
 typedef struct /**/ NNObjRange NNObjRange;
 typedef struct /**/ NNObjDict NNObjDict;
 typedef struct /**/ NNObjFile NNObjFile;
 typedef struct /**/ NNObjSwitch NNObjSwitch;
 typedef struct /**/ NNObjUserdata NNObjUserdata;
+
+typedef struct /**/ NNObjFuncNative NNObjFuncNative;
+typedef struct /**/ NNObjFuncBound NNObjFuncBound;
+typedef struct /**/ NNObjFuncScript NNObjFuncScript;
+typedef struct /**/ NNObjFuncClosure NNObjFuncClosure;
+
+typedef struct /**/ NNObjFunction NNObjFunction;
 
 
 typedef struct /**/NNPropGetSet NNPropGetSet;
@@ -882,27 +888,6 @@ struct NNFuncDefaultVal
 };
 #endif
 
-struct NNObjFuncScript
-{
-    NNObject objpadding;
-    NNFuncType type;
-    int arity;
-    int upvalcount;
-    bool isvariadic;
-    NNBlob blob;
-    NNObjString* name;
-    NNObjModule* module;
-    //NNValArray* funcargdefaults;
-
-};
-
-struct NNObjFuncClosure
-{
-    NNObject objpadding;
-    int upvalcount;
-    NNObjFuncScript* scriptfunc;
-    NNObjUpvalue** upvalues;
-};
 
 /**
 * TODO: use a different table implementation to avoid allocating so many strings...
@@ -966,10 +951,53 @@ struct NNObjFuncBound
 struct NNObjFuncNative
 {
     NNObject objpadding;
-    NNFuncType type;
-    const char* name;
+    NNFuncContextType contexttype;
+    NNObjString* name;
     NNNativeFN natfunc;
     void* userptr;
+};
+
+
+struct NNObjFuncScript
+{
+    NNObject objpadding;
+    NNFuncContextType contexttype;
+    int arity;
+    int upvalcount;
+    bool isvariadic;
+    NNBlob blob;
+    NNObjString* name;
+    NNObjModule* module;
+
+};
+
+struct NNObjFuncClosure
+{
+    NNObject objpadding;
+    int upvalcount;
+    NNObjFuncScript* scriptfunc;
+    NNObjUpvalue** upvalues;
+};
+
+struct NNObjFunction
+{
+    NNObject objpadding;
+    NNFuncContextType contexttype;
+    union
+    {
+        union
+        {
+            
+        };
+        union
+        {
+            
+        };
+        union
+        {
+            
+        };
+    };
 };
 
 struct NNObjArray
@@ -1082,6 +1110,7 @@ struct NNState
         NNValue* stackvalues;
     } vmstate;
 
+
     struct
     {
         int graycount;
@@ -1173,6 +1202,7 @@ struct NNAstLexer
     int tplstringbuffer[NEON_CONFIG_ASTMAXSTRTPLDEPTH];
 };
 
+
 struct NNAstLocal
 {
     bool iscaptured;
@@ -1195,7 +1225,7 @@ struct NNAstFuncCompiler
     NNAstFuncCompiler* enclosing;
     /* current function */
     NNObjFuncScript* targetfunc;
-    NNFuncType type;
+    NNFuncContextType contexttype;
     /* TODO: these should be dynamically allocated */
     NNAstLocal locals[NEON_CONFIG_ASTMAXLOCALS];
     NNAstUpvalue upvalues[NEON_CONFIG_ASTMAXUPVALS];
@@ -1304,7 +1334,7 @@ struct NNRegModule
 struct NNArgCheck
 {
     NNState* pstate;
-    const char* name;
+    NNObjString* name;
     int argc;
     NNValue* argv;
 };
@@ -1328,7 +1358,7 @@ struct NNArguments
     * note: this is the *declarative* name; meaning, on an alias'd func, it will be
     * the name of the origin.
     */
-    const char* name;
+    NNObjString* name;
 
     /*
     * a userpointer, if declared with a userpointer. otherwise NULL.
@@ -1340,6 +1370,10 @@ struct NNArguments
     #define inline
 #endif
 #include "prot.inc"
+
+static const char* g_strthis = "this";
+static const char* g_strsuper = "super";
+
 
 /*
 via: https://github.com/adrianwk94/utf8-iterator
@@ -2372,7 +2406,9 @@ char* nn_util_strtolower(char* str, size_t length)
     return str;
 }
 
-
+#if !defined(__FUNCTION__)
+    #define __FUNCTION__ "<here>"
+#endif
 #if 0
     #define NEON_APIDEBUG(state, ...) \
         if((nn_util_unlikely((state)->conf.enableapidebug))) \
@@ -2458,6 +2494,11 @@ void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t 
     return result;
 }
 
+void* nn_gcmem_allocate(NNState* state, size_t size, size_t amount)
+{
+    return nn_gcmem_reallocate(state, NULL, 0, size * amount);
+}
+
 void nn_gcmem_release(NNState* state, void* pointer, size_t oldsize)
 {
     nn_gcmem_maybecollect(state, -oldsize, false);
@@ -2469,10 +2510,6 @@ void nn_gcmem_release(NNState* state, void* pointer, size_t oldsize)
     pointer = NULL;
 }
 
-void* nn_gcmem_allocate(NNState* state, size_t size, size_t amount)
-{
-    return nn_gcmem_reallocate(state, NULL, 0, size * amount);
-}
 
 void nn_gcmem_markobject(NNState* state, NNObject* object)
 {
@@ -2622,7 +2659,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
     }
 }
 
-void nn_gcmem_destroyobject(NNState* state, NNObject* object)
+void nn_object_destroy(NNState* state, NNObject* object)
 {
     #if defined(DEBUG_GC) && DEBUG_GC
     nn_printer_printf(state->debugwriter, "GC: freeing at <%p> of type %d\n", (void*)object, object->type);
@@ -2822,7 +2859,7 @@ void nn_gcmem_sweep(NNState* state)
             {
                 state->vmstate.linkedobjects = object;
             }
-            nn_gcmem_destroyobject(state, unreached);
+            nn_object_destroy(state, unreached);
         }
     }
 }
@@ -2835,7 +2872,7 @@ void nn_gcmem_destroylinkedobjects(NNState* state)
     while(object != NULL)
     {
         next = object->next;
-        nn_gcmem_destroyobject(state, object);
+        nn_object_destroy(state, object);
         object = next;
     }
     nn_memory_free(state->gcstate.graystack);
@@ -3013,6 +3050,7 @@ const char* nn_dbg_op2str(uint8_t instruc)
         case NEON_OP_GLOBALSET: return "NEON_OP_GLOBALSET";
         case NEON_OP_LOCALGET: return "NEON_OP_LOCALGET";
         case NEON_OP_LOCALSET: return "NEON_OP_LOCALSET";
+        case NEON_OP_FUNCARGOPTIONAL: return "NEON_OP_FUNCARGOPTIONAL";
         case NEON_OP_FUNCARGSET: return "NEON_OP_FUNCARGSET";
         case NEON_OP_FUNCARGGET: return "NEON_OP_FUNCARGGET";
         case NEON_OP_UPVALUEGET: return "NEON_OP_UPVALUEGET";
@@ -3153,6 +3191,8 @@ int nn_dbg_printinstructionat(NNPrinter* pr, NNBlob* blob, int offset)
         case NEON_OP_LOCALGET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
         case NEON_OP_LOCALSET:
+            return nn_dbg_printshortinstr(pr, opname, blob, offset);
+        case NEON_OP_FUNCARGOPTIONAL:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
         case NEON_OP_FUNCARGGET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
@@ -4035,7 +4075,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             {
                 NNObjFuncNative* native;
                 native = nn_value_asfuncnative(value);
-                nn_printer_printf(pr, "<function %s(native) at %p>", native->name, (void*)native);
+                nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf->data, (void*)native);
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
@@ -4664,7 +4704,7 @@ void nn_module_destroy(NNState* state, NNObjModule* module)
 void nn_module_setfilefield(NNState* state, NNObjModule* module)
 {
     return;
-    nn_tableval_set(module->deftable, nn_value_fromobject(nn_string_intern(state, "__file__")), nn_value_fromobject(nn_string_copyobjstr(state, module->physicalpath)));
+    nn_tableval_set(module->deftable, nn_value_fromobject(nn_string_intern(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
 }
 
 NNObjSwitch* nn_object_makeswitch(NNState* state)
@@ -5052,7 +5092,7 @@ bool nn_instance_defproperty(NNObjInstance* instance, NNObjString* name, NNValue
     return nn_tableval_set(instance->properties, nn_value_fromobject(name), val);
 }
 
-NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncType type)
+NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncContextType type)
 {
     NNObjFuncScript* function;
     function = (NNObjFuncScript*)nn_object_allocobject(state, sizeof(NNObjFuncScript), NEON_OBJTYPE_FUNCSCRIPT);
@@ -5060,7 +5100,7 @@ NNObjFuncScript* nn_object_makefuncscript(NNState* state, NNObjModule* module, N
     function->upvalcount = 0;
     function->isvariadic = false;
     function->name = NULL;
-    function->type = type;
+    function->contexttype = type;
     function->module = module;
     //function->funcargdefaults = nn_vallist_make(state);
     nn_blob_init(state, &function->blob);
@@ -5077,8 +5117,8 @@ NNObjFuncNative* nn_object_makefuncnative(NNState* state, NNNativeFN function, c
     NNObjFuncNative* native;
     native = (NNObjFuncNative*)nn_object_allocobject(state, sizeof(NNObjFuncNative), NEON_OBJTYPE_FUNCNATIVE);
     native->natfunc = function;
-    native->name = name;
-    native->type = NEON_FUNCTYPE_FUNCTION;
+    native->name = nn_string_copycstr(state, name);
+    native->contexttype = NEON_FNCONTEXTTYPE_FUNCTION;
     native->userptr = uptr;
     return native;
 }
@@ -5217,11 +5257,6 @@ NNObjString* nn_string_intern(NNState* state, const char* chars)
     return nn_string_internlen(state, chars, strlen(chars));
 }
 
-NNObjString* nn_string_copyobjstr(NNState* state, NNObjString* os)
-{
-    return nn_string_copylen(state, os->sbuf->data, os->sbuf->length);
-}
-
 NNObjUpvalue* nn_object_makeupvalue(NNState* state, NNValue* slot, int stackpos)
 {
     NNObjUpvalue* upvalue;
@@ -5232,9 +5267,6 @@ NNObjUpvalue* nn_object_makeupvalue(NNState* state, NNValue* slot, int stackpos)
     upvalue->stackpos = stackpos;
     return upvalue;
 }
-
-static const char* g_strthis = "this";
-static const char* g_strsuper = "super";
 
 /*
 * allows for the lexer to created on the stack.
@@ -5422,6 +5454,7 @@ const char* nn_astutil_toktype2str(int t)
         case NEON_ASTTOK_KWTRY: return "NEON_ASTTOK_KWTRY";
         case NEON_ASTTOK_KWSWITCH: return "NEON_ASTTOK_KWSWITCH";
         case NEON_ASTTOK_KWVAR: return "NEON_ASTTOK_KWVAR";
+        case NEON_ASTTOK_KWCONST: return "NEON_ASTTOK_KWCONST";
         case NEON_ASTTOK_KWCASE: return "NEON_ASTTOK_KWCASE";
         case NEON_ASTTOK_KWWHILE: return "NEON_ASTTOK_KWWHILE";
         case NEON_ASTTOK_KWINSTANCEOF: return "NEON_ASTTOK_KWINSTANCEOF";
@@ -5754,7 +5787,7 @@ NNAstTokType nn_astlex_getidenttype(NNAstLexer* lex)
         { "case", NEON_ASTTOK_KWCASE },
         { "var", NEON_ASTTOK_KWVAR },
         { "let", NEON_ASTTOK_KWVAR },
-        { "const", NEON_ASTTOK_KWVAR },
+        { "const", NEON_ASTTOK_KWCONST },
         { "while", NEON_ASTTOK_KWWHILE },
         { NULL, (NNAstTokType)0 }
     };
@@ -6345,7 +6378,11 @@ void nn_astparser_parsedeclaration(NNAstParser* prs)
     }
     else if(nn_astparser_match(prs, NEON_ASTTOK_KWVAR))
     {
-        nn_astparser_parsevardecl(prs, false);
+        nn_astparser_parsevardecl(prs, false, false);
+    }
+    else if(nn_astparser_match(prs, NEON_ASTTOK_KWCONST))
+    {
+        nn_astparser_parsevardecl(prs, false, true);
     }
     else if(nn_astparser_match(prs, NEON_ASTTOK_BRACEOPEN))
     {
@@ -6539,6 +6576,7 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
         case NEON_OP_GLOBALSET:
         case NEON_OP_LOCALGET:
         case NEON_OP_LOCALSET:
+        case NEON_OP_FUNCARGOPTIONAL:
         case NEON_OP_FUNCARGSET:
         case NEON_OP_FUNCARGGET:
         case NEON_OP_UPVALUEGET:
@@ -6645,7 +6683,7 @@ void nn_astemit_emitreturn(NNAstParser* prs)
     {
         nn_astemit_emitinstruc(prs, NEON_OP_EXPOPTRY);
     }
-    if(prs->currentfunccompiler->type == NEON_FUNCTYPE_INITIALIZER)
+    if(prs->currentfunccompiler->contexttype == NEON_FNCONTEXTTYPE_INITIALIZER)
     {
         nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, 0);
     }
@@ -6750,24 +6788,24 @@ void nn_astemit_patchjump(NNAstParser* prs, int offset)
     nn_astemit_patchat(prs, offset + 1, jump & 0xff);
 }
 
-void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* compiler, NNFuncType type, bool isanon)
+void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncContextType type, bool isanon)
 {
     bool candeclthis;
     NNPrinter wtmp;
     NNAstLocal* local;
     NNObjString* fname;
-    compiler->enclosing = prs->currentfunccompiler;
-    compiler->targetfunc = NULL;
-    compiler->type = type;
-    compiler->localcount = 0;
-    compiler->scopedepth = 0;
-    compiler->handlercount = 0;
-    compiler->fromimport = false;
-    compiler->targetfunc = nn_object_makefuncscript(prs->pstate, prs->currentmodule, type);
-    prs->currentfunccompiler = compiler;
-    if(type != NEON_FUNCTYPE_SCRIPT)
+    fnc->enclosing = prs->currentfunccompiler;
+    fnc->targetfunc = NULL;
+    fnc->contexttype = type;
+    fnc->localcount = 0;
+    fnc->scopedepth = 0;
+    fnc->handlercount = 0;
+    fnc->fromimport = false;
+    fnc->targetfunc = nn_object_makefuncscript(prs->pstate, prs->currentmodule, type);
+    prs->currentfunccompiler = fnc;
+    if(type != NEON_FNCONTEXTTYPE_SCRIPT)
     {
-        nn_vm_stackpush(prs->pstate, nn_value_fromobject(compiler->targetfunc));
+        nn_vm_stackpush(prs->pstate, nn_value_fromobject(fnc->targetfunc));
         if(isanon)
         {
             nn_printer_makestackstring(prs->pstate, &wtmp);
@@ -6787,10 +6825,10 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* compiler, NNFu
     local->depth = 0;
     local->iscaptured = false;
     candeclthis = (
-        (type != NEON_FUNCTYPE_FUNCTION) &&
+        (type != NEON_FNCONTEXTTYPE_FUNCTION) &&
         (prs->compcontext == NEON_COMPCONTEXT_CLASS)
     );
-    if(candeclthis || (/*(type == NEON_FUNCTYPE_ANONYMOUS) &&*/ (prs->compcontext != NEON_COMPCONTEXT_CLASS)))
+    if(candeclthis || (/*(type == NEON_FNCONTEXTTYPE_ANONYMOUS) &&*/ (prs->compcontext != NEON_COMPCONTEXT_CLASS)))
     {
         local->name.start = g_strthis;
         local->name.length = 4;
@@ -6823,14 +6861,14 @@ bool nn_astparser_identsequal(NNAstToken* a, NNAstToken* b)
     return a->length == b->length && memcmp(a->start, b->start, a->length) == 0;
 }
 
-int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* compiler, NNAstToken* name)
+int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
 {
     int i;
     NNAstLocal* local;
     (void)prs;
-    for(i = compiler->localcount - 1; i >= 0; i--)
+    for(i = fnc->localcount - 1; i >= 0; i--)
     {
-        local = &compiler->locals[i];
+        local = &fnc->locals[i];
         if(nn_astparser_identsequal(&local->name, name))
         {
             #if 0
@@ -6845,15 +6883,15 @@ int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* compile
     return -1;
 }
 
-int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* compiler, uint16_t index, bool islocal)
+int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, uint16_t index, bool islocal)
 {
     int i;
     int upcnt;
     NNAstUpvalue* upvalue;
-    upcnt = compiler->targetfunc->upvalcount;
+    upcnt = fnc->targetfunc->upvalcount;
     for(i = 0; i < upcnt; i++)
     {
-        upvalue = &compiler->upvalues[i];
+        upvalue = &fnc->upvalues[i];
         if(upvalue->index == index && upvalue->islocal == islocal)
         {
             return i;
@@ -6864,29 +6902,29 @@ int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* compiler,
         nn_astparser_raiseerror(prs, "too many closure variables in function");
         return 0;
     }
-    compiler->upvalues[upcnt].islocal = islocal;
-    compiler->upvalues[upcnt].index = index;
-    return compiler->targetfunc->upvalcount++;
+    fnc->upvalues[upcnt].islocal = islocal;
+    fnc->upvalues[upcnt].index = index;
+    return fnc->targetfunc->upvalcount++;
 }
 
-int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* compiler, NNAstToken* name)
+int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
 {
     int local;
     int upvalue;
-    if(compiler->enclosing == NULL)
+    if(fnc->enclosing == NULL)
     {
         return -1;
     }
-    local = nn_astfunccompiler_resolvelocal(prs, compiler->enclosing, name);
+    local = nn_astfunccompiler_resolvelocal(prs, fnc->enclosing, name);
     if(local != -1)
     {
-        compiler->enclosing->locals[local].iscaptured = true;
-        return nn_astfunccompiler_addupvalue(prs, compiler, (uint16_t)local, true);
+        fnc->enclosing->locals[local].iscaptured = true;
+        return nn_astfunccompiler_addupvalue(prs, fnc, (uint16_t)local, true);
     }
-    upvalue = nn_astfunccompiler_resolveupvalue(prs, compiler->enclosing, name);
+    upvalue = nn_astfunccompiler_resolveupvalue(prs, fnc->enclosing, name);
     if(upvalue != -1)
     {
-        return nn_astfunccompiler_addupvalue(prs, compiler, (uint16_t)upvalue, false);
+        return nn_astfunccompiler_addupvalue(prs, fnc, (uint16_t)upvalue, false);
     }
     return -1;
 }
@@ -8530,20 +8568,30 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
         }
         paramconst = nn_astparser_parsefuncparamvar(prs, "expected parameter name");
         paramname = prs->prevtoken;
-
         nn_astparser_definevariable(prs, paramconst);
         nn_astparser_ignorewhitespace(prs);
         #if 1
         if(nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
         {
+            fprintf(stderr, "parsing optional argument....\n");
             if(!nn_astparser_parseexpression(prs))
             {
                 nn_astparser_raiseerror(prs, "failed to parse function default paramter value");
             }
             //fprintf(stderr, "prevtoken=");
-            //defvalconst = nn_astparser_addlocal(prs, paramname);
-            //nn_astemit_emitbyteandshort(prs, NEON_OP_FUNCARGSET, paramconst);
-            //nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, paramconst);
+            #if 1
+                defvalconst = nn_astparser_addlocal(prs, paramname);
+            #else
+                defvalconst = paramconst;
+            #endif
+            #if 1
+                #if 1
+                    //nn_astemit_emitbyteandshort(prs, NEON_OP_FUNCARGSET, defvalconst);
+                    nn_astemit_emitbyteandshort(prs, NEON_OP_FUNCARGOPTIONAL, defvalconst);
+                #else
+                    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, defvalconst);
+                #endif
+            #endif
         }
         #endif
         nn_astparser_ignorewhitespace(prs);
@@ -8552,7 +8600,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
     } while(nn_astparser_match(prs, NEON_ASTTOK_COMMA));
 }
 
-void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* compiler, bool closescope, bool isanon)
+void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* fnc, bool closescope, bool isanon)
 {
     int i;
     NNObjFuncScript* function;
@@ -8571,17 +8619,17 @@ void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* compile
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLOSURE, nn_astparser_pushconst(prs, nn_value_fromobject(function)));
     for(i = 0; i < function->upvalcount; i++)
     {
-        nn_astemit_emit1byte(prs, compiler->upvalues[i].islocal ? 1 : 0);
-        nn_astemit_emit1short(prs, compiler->upvalues[i].index);
+        nn_astemit_emit1byte(prs, fnc->upvalues[i].islocal ? 1 : 0);
+        nn_astemit_emit1short(prs, fnc->upvalues[i].index);
     }
     nn_vm_stackpop(prs->pstate);
 }
 
-void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncType type, bool isanon)
+void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool isanon)
 {
-    NNAstFuncCompiler compiler;
+    NNAstFuncCompiler fnc;
     prs->infunction = true;
-    nn_astfunccompiler_init(prs, &compiler, type, isanon);
+    nn_astfunccompiler_init(prs, &fnc, type, isanon);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after function name");
@@ -8590,7 +8638,7 @@ void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncType type, bool isanon)
         nn_astparser_parsefuncparamlist(prs);
     }
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after function parameters");
-    nn_astfunccompiler_compilebody(prs, &compiler, false, isanon);
+    nn_astfunccompiler_compilebody(prs, &fnc, false, isanon);
     prs->infunction = false;
 }
 
@@ -8599,7 +8647,7 @@ void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken
     size_t sn;
     int constant;
     const char* sc;
-    NNFuncType type;
+    NNFuncContextType type;
     NNAstToken actualmthname;
     static NNAstTokType tkns[] = { NEON_ASTTOK_IDENTNORMAL, NEON_ASTTOK_DECORATOR };
     (void)classname;
@@ -8615,18 +8663,18 @@ void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken
         actualmthname = prs->prevtoken;
     }
     constant = nn_astparser_makeidentconst(prs, &actualmthname);
-    type = NEON_FUNCTYPE_METHOD;
+    type = NEON_FNCONTEXTTYPE_METHOD;
     if(isstatic)
     {
-        type = NEON_FUNCTYPE_STATIC;
+        type = NEON_FNCONTEXTTYPE_STATIC;
     }
     if((prs->prevtoken.length == (int)sn) && (memcmp(prs->prevtoken.start, sc, sn) == 0))
     {
-        type = NEON_FUNCTYPE_INITIALIZER;
+        type = NEON_FNCONTEXTTYPE_INITIALIZER;
     }
     else if((prs->prevtoken.length > 0) && (prs->prevtoken.start[0] == '_'))
     {
-        type = NEON_FUNCTYPE_PRIVATE;
+        type = NEON_FNCONTEXTTYPE_PRIVATE;
     }
     nn_astparser_parsefuncfull(prs, type, false);
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKEMETHOD, constant);
@@ -8634,9 +8682,9 @@ void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken
 
 bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
 {
-    NNAstFuncCompiler compiler;
+    NNAstFuncCompiler fnc;
     (void)canassign;
-    nn_astfunccompiler_init(prs, &compiler, NEON_FUNCTYPE_FUNCTION, true);
+    nn_astfunccompiler_init(prs, &fnc, NEON_FNCONTEXTTYPE_FUNCTION, true);
     nn_astparser_scopebegin(prs);
     /* compile parameter list */
     if(nn_astparser_check(prs, NEON_ASTTOK_IDENTNORMAL))
@@ -8649,7 +8697,7 @@ bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
         nn_astparser_parsefuncparamlist(prs);
     }
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after anonymous function parameters");
-    nn_astfunccompiler_compilebody(prs, &compiler, true, true);
+    nn_astfunccompiler_compilebody(prs, &fnc, true, true);
     return true;
 }
 
@@ -8672,18 +8720,9 @@ bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest, bool* 
         *nametokendest = fieldname;
         if(nn_astparser_check(prs, NEON_ASTTOK_ASSIGN))
         {
-            //nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class property name expected");
             nn_astparser_consume(prs, NEON_ASTTOK_ASSIGN, "expected '=' after ident");
             fieldconstant = nn_astparser_makeidentconst(prs, &fieldname);
-            //fprintf(stderr, "fieldname = <%s>\n", fieldname.start);
-            //if(nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
-            {
-                nn_astparser_parseexpression(prs);
-            }
-            //else
-            //{
-            //    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
-            //}
+            nn_astparser_parseexpression(prs);
             nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSPROPERTYDEFINE, fieldconstant);
             nn_astemit_emit1byte(prs, isstatic ? 1 : 0);
             nn_astparser_consumestmtend(prs);
@@ -8700,7 +8739,7 @@ void nn_astparser_parsefuncdecl(NNAstParser* prs)
     int global;
     global = nn_astparser_parsevariable(prs, "function name expected");
     nn_astparser_markinitialized(prs);
-    nn_astparser_parsefuncfull(prs, NEON_FUNCTYPE_FUNCTION, false);
+    nn_astparser_parsefuncfull(prs, NEON_FNCONTEXTTYPE_FUNCTION, false);
     nn_astparser_definevariable(prs, global);
 }
 
@@ -8792,7 +8831,7 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
     prs->compcontext = oldctx;
 }
 
-void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer)
+void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool isconst)
 {
     int global;
     int totalparsed;
@@ -8909,7 +8948,7 @@ void nn_astparser_parseforstmt(NNAstParser* prs)
     }
     else if(nn_astparser_match(prs, NEON_ASTTOK_KWVAR))
     {
-        nn_astparser_parsevardecl(prs, true);
+        nn_astparser_parsevardecl(prs, true, false);
     }
     else
     {
@@ -9137,16 +9176,6 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_BRACEOPEN, "expected '{' after 'switch' expression");
     nn_astparser_ignorewhitespace(prs);
-
-    /*
-                consume(Token::TOK_PARENOPEN, "expected '(' 'switch'");
-                parseExpression();
-                consume(Token::TOK_PARENCLOSE, "expected ')' 'switch' expression");
-                ignoreSpace();
-                consume(Token::TOK_BRACEOPEN, "expected '{' after 'switch' expression");
-                ignoreSpace();
-    */
-
     /* 0: before all cases, 1: before default, 2: after default */
     swstate = 0;
     casecount = 0;
@@ -9186,7 +9215,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     {
                         nn_tableval_set(sw->table, nn_value_makebool(false), jump);
                     }
-                    else if(prs->prevtoken.type == NEON_ASTTOK_LITERALSTRING)
+                    else if(prs->prevtoken.type == NEON_ASTTOK_LITERALSTRING || prs->prevtoken.type == NEON_ASTTOK_LITERALRAWSTRING)
                     {
                         str = nn_astparser_compilestring(prs, &length, true);
                         string = nn_string_takelen(prs->pstate, str, length);
@@ -9204,7 +9233,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     {
                         /* pop the switch */
                         nn_vm_stackpop(prs->pstate);
-                        nn_astparser_raiseerror(prs, "only constants can be used in 'when' expressions");
+                        nn_astparser_raiseerror(prs, "only constants can be used in 'case' expressions");
                         return;
                     }
                 } while(nn_astparser_match(prs, NEON_ASTTOK_COMMA));
@@ -9386,7 +9415,7 @@ void nn_astparser_parsereturnstmt(NNAstParser* prs)
 {
     prs->isreturning = true;
     /*
-    if(prs->currentfunccompiler->type == NEON_FUNCTYPE_SCRIPT)
+    if(prs->currentfunccompiler->type == NEON_FNCONTEXTTYPE_SCRIPT)
     {
         nn_astparser_raiseerror(prs, "cannot return from top-level code");
     }
@@ -9397,7 +9426,7 @@ void nn_astparser_parsereturnstmt(NNAstParser* prs)
     }
     else
     {
-        if(prs->currentfunccompiler->type == NEON_FUNCTYPE_INITIALIZER)
+        if(prs->currentfunccompiler->contexttype == NEON_FNCONTEXTTYPE_INITIALIZER)
         {
             nn_astparser_raiseerror(prs, "cannot return value from constructor");
         }
@@ -9558,7 +9587,7 @@ void nn_astparser_synchronize(NNAstParser* prs)
 */
 NNObjFuncScript* nn_astparser_compilesource(NNState* state, NNObjModule* module, const char* source, NNBlob* blob, bool fromimport, bool keeplast)
 {
-    NNAstFuncCompiler compiler;
+    NNAstFuncCompiler fnc;
     NNAstLexer* lexer;
     NNAstParser* parser;
     NNObjFuncScript* function;
@@ -9566,8 +9595,8 @@ NNObjFuncScript* nn_astparser_compilesource(NNState* state, NNObjModule* module,
     NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
     lexer = nn_astlex_make(state, source);
     parser = nn_astparser_make(state, lexer, module, keeplast);
-    nn_astfunccompiler_init(parser, &compiler, NEON_FUNCTYPE_SCRIPT, true);
-    compiler.fromimport = fromimport;
+    nn_astfunccompiler_init(parser, &fnc, NEON_FNCONTEXTTYPE_SCRIPT, true);
+    fnc.fromimport = fromimport;
     nn_astparser_runparser(parser);
     function = nn_astparser_endcompiler(parser, true);
     if(parser->haderror)
@@ -9583,12 +9612,12 @@ void nn_gcmem_markcompilerroots(NNState* state)
 {
     (void)state;
     /*
-    NNAstFuncCompiler* compiler;
-    compiler = state->compiler;
-    while(compiler != NULL)
+    NNAstFuncCompiler* fnc;
+    fnc = state->fnc;
+    while(fnc != NULL)
     {
-        nn_gcmem_markobject(state, (NNObject*)compiler->targetfunc);
-        compiler = compiler->enclosing;
+        nn_gcmem_markobject(state, (NNObject*)fnc->targetfunc);
+        fnc = fnc->enclosing;
     }
     */
 }
@@ -9800,11 +9829,11 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         native = (NNObjFuncNative*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
                         if(func.isstatic)
                         {
-                            native->type = NEON_FUNCTYPE_STATIC;
+                            native->contexttype = NEON_FNCONTEXTTYPE_STATIC;
                         }
                         else if(strlen(func.name) > 0 && func.name[0] == '_')
                         {
-                            native->type = NEON_FUNCTYPE_PRIVATE;
+                            native->contexttype = NEON_FNCONTEXTTYPE_PRIVATE;
                         }
                         nn_tableval_set(klass->instmethods, funcname, nn_value_fromobject(native));
                     }
@@ -9851,7 +9880,7 @@ void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* 
     {
         module->name = nn_string_copycstr(state, as);
     }
-    name = nn_value_fromobject(nn_string_copyobjstr(state, module->name));
+    name = nn_value_fromobject(nn_string_copyobject(state, module->name));
     nn_vm_stackpush(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(module));
     nn_tableval_set(state->openedmodules, name, nn_value_fromobject(module));
@@ -11259,12 +11288,7 @@ NNValue nn_objfnfile_name(NNState* state, NNArguments* args)
     }
     else if(file->istty)
     {
-        /*name = ttyname(file->number);*/
-        name = nn_util_strdup("<tty>");
-        if(name)
-        {
-            return nn_value_fromobject(nn_string_copycstr(state, name));
-        }
+        return nn_value_fromobject(nn_string_intern(state, "<tty>"));
     }
     return nn_value_makenull();
 }
@@ -12483,7 +12507,7 @@ NNValue nn_objfnstring_constructor(NNState* state, NNArguments* args)
     (void)args;
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    os = nn_string_copylen(state, "", 0);
+    os = nn_string_internlen(state, "", 0);
     return nn_value_fromobject(os);
 }
 
@@ -13111,7 +13135,7 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     int16_t restokens;
     int64_t capstarts[matchMaxCaptures + 1] = {0};
     int64_t caplengths[matchMaxCaptures + 1] = {0};
-    RegexToken tokens[matchMaxTokens + 1] = {};
+    RegexToken tokens[matchMaxTokens + 1] = {0};
     RegexContext ctx; 
     RegexContext* pctx;
     
@@ -14883,7 +14907,7 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     klass = nn_object_makeclass(state, classname, state->classprimobject);
     nn_vm_stackpop(state);
     nn_vm_stackpush(state, nn_value_fromobject(klass));
-    function = nn_object_makefuncscript(state, module, NEON_FUNCTYPE_METHOD);
+    function = nn_object_makefuncscript(state, module, NEON_FNCONTEXTTYPE_METHOD);
     function->arity = 1;
     function->isvariadic = false;
     nn_vm_stackpush(state, nn_value_fromobject(function));
@@ -15594,18 +15618,18 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
     return nn_vm_callvaluewithobject(state, callable, thisval, argcount);
 }
 
-NNFuncType nn_value_getmethodtype(NNValue method)
+NNFuncContextType nn_value_getmethodtype(NNValue method)
 {
     switch(nn_value_objtype(method))
     {
         case NEON_OBJTYPE_FUNCNATIVE:
-            return nn_value_asfuncnative(method)->type;
+            return nn_value_asfuncnative(method)->contexttype;
         case NEON_OBJTYPE_FUNCCLOSURE:
-            return nn_value_asfuncclosure(method)->scriptfunc->type;
+            return nn_value_asfuncclosure(method)->scriptfunc->contexttype;
         default:
             break;
     }
-    return NEON_FUNCTYPE_FUNCTION;
+    return NEON_FNCONTEXTTYPE_FUNCTION;
 }
 
 
@@ -15687,6 +15711,7 @@ NEON_FORCEINLINE NNValue nn_vmbits_stackpeek(NNState* state, int distance)
     NNValue v;
     v = state->vmstate.stackvalues[state->vmstate.stackidx + (-1 - distance)];
     return v;
+
 }
 
 NEON_FORCEINLINE NNValue nn_vm_stackpeek(NNState* state, int distance)
@@ -15751,7 +15776,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
     field = nn_tableval_getfieldbyostr(klass->instmethods, name);
     if(field != NULL)
     {
-        if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
+        if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
             return nn_exceptions_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf->data, klass->name->sbuf->data);
         }
@@ -15789,7 +15814,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
         field = nn_tableval_getfieldbyostr(nn_value_asclass(receiver)->instmethods, name);
         if(field != NULL)
         {
-            if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
+            if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
             {
                 return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
             }
@@ -15852,17 +15877,17 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     #if 1
                     else
                     {
-                        NNFuncType fntyp;
+                        NNFuncContextType fntyp;
                         field = nn_tableval_getfieldbyostr(klass->instmethods, name);
                         if(field != NULL)
                         {
                             fntyp = nn_value_getmethodtype(field->value);
                             fprintf(stderr, "fntyp: %d\n", fntyp);
-                            if(fntyp == NEON_FUNCTYPE_PRIVATE)
+                            if(fntyp == NEON_FNCONTEXTTYPE_PRIVATE)
                             {
                                 return nn_exceptions_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
                             }
-                            if(fntyp == NEON_FUNCTYPE_STATIC)
+                            if(fntyp == NEON_FNCONTEXTTYPE_STATIC)
                             {
                                 return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                             }
@@ -15936,7 +15961,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     field = nn_tableval_getfieldbyostr(klass->instmethods, name);
     if(field != NULL)
     {
-        if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_PRIVATE)
+        if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
             return nn_exceptions_throw(state, "cannot get private property '%s' from instance", name->sbuf->data);
         }
@@ -15997,7 +16022,7 @@ NEON_FORCEINLINE void nn_vmutil_definemethod(NNState* state, NNObjString* name)
     method = nn_vmbits_stackpeek(state, 0);
     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
     nn_tableval_set(klass->instmethods, nn_value_fromobject(name), method);
-    if(nn_value_getmethodtype(method) == NEON_FUNCTYPE_INITIALIZER)
+    if(nn_value_getmethodtype(method) == NEON_FNCONTEXTTYPE_INITIALIZER)
     {
         klass->constructor = method;
     }
@@ -16830,7 +16855,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 field = nn_tableval_getfieldbyostr(nn_value_asclass(peeked)->instmethods, name);
                 if(field != NULL)
                 {
-                    if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
+                    if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
                     {
                         if(nn_util_methodisprivate(name))
                         {
@@ -17050,7 +17075,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
         field = nn_tableval_getfieldbyostr(klass->instmethods, name);
         if(field != NULL)
         {
-            if(nn_value_getmethodtype(field->value) == NEON_FUNCTYPE_STATIC)
+            if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
             {
                 /* pop the class... */
                 nn_vmbits_stackpop(state);
@@ -17416,6 +17441,51 @@ NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
     return true;
 }
 
+/*NEON_OP_FUNCARGOPTIONAL*/
+NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
+{
+    size_t putpos;
+    uint16_t slot;
+    NNValue peeked;
+    NNValue cval;
+    slot = 0;
+    //slot = nn_vmbits_readbyte(state);
+    slot = nn_vmbits_readshort(state);
+    cval = nn_vmbits_stackpeek(state, 0);
+    //peeked = state->vmstate.stackvalues[putpos];
+    peeked = nn_vmbits_stackpeek(state, 1);
+
+    #if 1
+        putpos = (state->vmstate.stackidx + (-1 - 1)) ;
+    #else
+        #if 1
+            putpos = state->vmstate.stackidx + (slot - 0);
+        #else
+            putpos = state->vmstate.stackidx + (-1 - slot);
+        #endif
+    #endif
+
+    #if 1
+    {
+        NNPrinter* pr = state->stderrprinter;
+        nn_printer_printf(pr, "funcargoptional: slot=%d putpos=%d cval=<", slot, putpos);
+        nn_printer_printvalue(pr, cval, true, false);
+        nn_printer_printf(pr, "> peeked=<");
+        nn_printer_printvalue(pr, peeked, true, false);
+        nn_printer_printf(pr, ">\n");
+    }
+    #endif
+    if(nn_value_isnull(peeked))
+    {
+        state->vmstate.stackvalues[putpos] = cval;
+    }
+    else
+    {
+        //nn_vmbits_stackpop(state);
+    }
+    return true;
+}
+
 NEON_FORCEINLINE bool nn_vmdo_funcargget(NNState* state)
 {
     size_t ssp;
@@ -17590,80 +17660,81 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
         static void* dispatchtable[] =
         {
-            &&VM_MAKELABEL(NEON_OP_GLOBALDEFINE),
-            &&VM_MAKELABEL(NEON_OP_GLOBALGET),
-            &&VM_MAKELABEL(NEON_OP_GLOBALSET),
-            &&VM_MAKELABEL(NEON_OP_LOCALGET),
-            &&VM_MAKELABEL(NEON_OP_LOCALSET),
-            &&VM_MAKELABEL(NEON_OP_FUNCARGSET),
-            &&VM_MAKELABEL(NEON_OP_FUNCARGGET),
-            &&VM_MAKELABEL(NEON_OP_UPVALUEGET),
-            &&VM_MAKELABEL(NEON_OP_UPVALUESET),
-            &&VM_MAKELABEL(NEON_OP_UPVALUECLOSE),
-            &&VM_MAKELABEL(NEON_OP_PROPERTYGET),
-            &&VM_MAKELABEL(NEON_OP_PROPERTYGETSELF),
-            &&VM_MAKELABEL(NEON_OP_PROPERTYSET),
-            &&VM_MAKELABEL(NEON_OP_JUMPIFFALSE),
-            &&VM_MAKELABEL(NEON_OP_JUMPNOW),
-            &&VM_MAKELABEL(NEON_OP_LOOP),
-            &&VM_MAKELABEL(NEON_OP_EQUAL),
-            &&VM_MAKELABEL(NEON_OP_PRIMGREATER),
-            &&VM_MAKELABEL(NEON_OP_PRIMLESSTHAN),
-            &&VM_MAKELABEL(NEON_OP_PUSHEMPTY),
-            &&VM_MAKELABEL(NEON_OP_PUSHNULL),
-            &&VM_MAKELABEL(NEON_OP_PUSHTRUE),
-            &&VM_MAKELABEL(NEON_OP_PUSHFALSE),
-            &&VM_MAKELABEL(NEON_OP_PRIMADD),
-            &&VM_MAKELABEL(NEON_OP_PRIMSUBTRACT),
-            &&VM_MAKELABEL(NEON_OP_PRIMMULTIPLY),
-            &&VM_MAKELABEL(NEON_OP_PRIMDIVIDE),
-            &&VM_MAKELABEL(NEON_OP_PRIMFLOORDIVIDE),
-            &&VM_MAKELABEL(NEON_OP_PRIMMODULO),
-            &&VM_MAKELABEL(NEON_OP_PRIMPOW),
-            &&VM_MAKELABEL(NEON_OP_PRIMNEGATE),
-            &&VM_MAKELABEL(NEON_OP_PRIMNOT),
-            &&VM_MAKELABEL(NEON_OP_PRIMBITNOT),
-            &&VM_MAKELABEL(NEON_OP_PRIMAND),
-            &&VM_MAKELABEL(NEON_OP_PRIMOR),
-            &&VM_MAKELABEL(NEON_OP_PRIMBITXOR),
-            &&VM_MAKELABEL(NEON_OP_PRIMSHIFTLEFT),
-            &&VM_MAKELABEL(NEON_OP_PRIMSHIFTRIGHT),
-            &&VM_MAKELABEL(NEON_OP_PUSHONE),
-            &&VM_MAKELABEL(NEON_OP_PUSHCONSTANT),
-            &&VM_MAKELABEL(NEON_OP_ECHO),
-            &&VM_MAKELABEL(NEON_OP_POPONE),
-            &&VM_MAKELABEL(NEON_OP_DUPONE),
-            &&VM_MAKELABEL(NEON_OP_POPN),
-            &&VM_MAKELABEL(NEON_OP_ASSERT),
-            &&VM_MAKELABEL(NEON_OP_EXTHROW),
-            &&VM_MAKELABEL(NEON_OP_MAKECLOSURE),
-            &&VM_MAKELABEL(NEON_OP_CALLFUNCTION),
-            &&VM_MAKELABEL(NEON_OP_CALLMETHOD),
-            &&VM_MAKELABEL(NEON_OP_CLASSINVOKETHIS),
-            &&VM_MAKELABEL(NEON_OP_RETURN),
-            &&VM_MAKELABEL(NEON_OP_MAKECLASS),
-            &&VM_MAKELABEL(NEON_OP_MAKEMETHOD),
-            &&VM_MAKELABEL(NEON_OP_CLASSGETTHIS),
-            &&VM_MAKELABEL(NEON_OP_CLASSPROPERTYDEFINE),
-            &&VM_MAKELABEL(NEON_OP_CLASSINHERIT),
-            &&VM_MAKELABEL(NEON_OP_CLASSGETSUPER),
-            &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPER),
-            &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPERSELF),
-            &&VM_MAKELABEL(NEON_OP_MAKERANGE),
-            &&VM_MAKELABEL(NEON_OP_MAKEARRAY),
-            &&VM_MAKELABEL(NEON_OP_MAKEDICT),
-            &&VM_MAKELABEL(NEON_OP_INDEXGET),
-            &&VM_MAKELABEL(NEON_OP_INDEXGETRANGED),
-            &&VM_MAKELABEL(NEON_OP_INDEXSET),
-            &&VM_MAKELABEL(NEON_OP_IMPORTIMPORT),
-            &&VM_MAKELABEL(NEON_OP_EXTRY),
-            &&VM_MAKELABEL(NEON_OP_EXPOPTRY),
-            &&VM_MAKELABEL(NEON_OP_EXPUBLISHTRY),
-            &&VM_MAKELABEL(NEON_OP_STRINGIFY),
-            &&VM_MAKELABEL(NEON_OP_SWITCH),
-            &&VM_MAKELABEL(NEON_OP_TYPEOF),
-            &&VM_MAKELABEL(NEON_OP_OPINSTANCEOF),
-            &&VM_MAKELABEL(NEON_OP_HALT),
+            [NEON_OP_GLOBALDEFINE] = &&VM_MAKELABEL(NEON_OP_GLOBALDEFINE),
+            [NEON_OP_GLOBALGET] = &&VM_MAKELABEL(NEON_OP_GLOBALGET),
+            [NEON_OP_GLOBALSET] = &&VM_MAKELABEL(NEON_OP_GLOBALSET),
+            [NEON_OP_LOCALGET] = &&VM_MAKELABEL(NEON_OP_LOCALGET),
+            [NEON_OP_LOCALSET] = &&VM_MAKELABEL(NEON_OP_LOCALSET),
+            [NEON_OP_FUNCARGOPTIONAL] = &&VM_MAKELABEL(NEON_OP_FUNCARGOPTIONAL),
+            [NEON_OP_FUNCARGSET] = &&VM_MAKELABEL(NEON_OP_FUNCARGSET),
+            [NEON_OP_FUNCARGGET] = &&VM_MAKELABEL(NEON_OP_FUNCARGGET),
+            [NEON_OP_UPVALUEGET] = &&VM_MAKELABEL(NEON_OP_UPVALUEGET),
+            [NEON_OP_UPVALUESET] = &&VM_MAKELABEL(NEON_OP_UPVALUESET),
+            [NEON_OP_UPVALUECLOSE] = &&VM_MAKELABEL(NEON_OP_UPVALUECLOSE),
+            [NEON_OP_PROPERTYGET] = &&VM_MAKELABEL(NEON_OP_PROPERTYGET),
+            [NEON_OP_PROPERTYGETSELF] = &&VM_MAKELABEL(NEON_OP_PROPERTYGETSELF),
+            [NEON_OP_PROPERTYSET] = &&VM_MAKELABEL(NEON_OP_PROPERTYSET),
+            [NEON_OP_JUMPIFFALSE] = &&VM_MAKELABEL(NEON_OP_JUMPIFFALSE),
+            [NEON_OP_JUMPNOW] = &&VM_MAKELABEL(NEON_OP_JUMPNOW),
+            [NEON_OP_LOOP] = &&VM_MAKELABEL(NEON_OP_LOOP),
+            [NEON_OP_EQUAL] = &&VM_MAKELABEL(NEON_OP_EQUAL),
+            [NEON_OP_PRIMGREATER] = &&VM_MAKELABEL(NEON_OP_PRIMGREATER),
+            [NEON_OP_PRIMLESSTHAN] = &&VM_MAKELABEL(NEON_OP_PRIMLESSTHAN),
+            [NEON_OP_PUSHEMPTY] = &&VM_MAKELABEL(NEON_OP_PUSHEMPTY),
+            [NEON_OP_PUSHNULL] = &&VM_MAKELABEL(NEON_OP_PUSHNULL),
+            [NEON_OP_PUSHTRUE] = &&VM_MAKELABEL(NEON_OP_PUSHTRUE),
+            [NEON_OP_PUSHFALSE] = &&VM_MAKELABEL(NEON_OP_PUSHFALSE),
+            [NEON_OP_PRIMADD] = &&VM_MAKELABEL(NEON_OP_PRIMADD),
+            [NEON_OP_PRIMSUBTRACT] = &&VM_MAKELABEL(NEON_OP_PRIMSUBTRACT),
+            [NEON_OP_PRIMMULTIPLY] = &&VM_MAKELABEL(NEON_OP_PRIMMULTIPLY),
+            [NEON_OP_PRIMDIVIDE] = &&VM_MAKELABEL(NEON_OP_PRIMDIVIDE),
+            [NEON_OP_PRIMFLOORDIVIDE] = &&VM_MAKELABEL(NEON_OP_PRIMFLOORDIVIDE),
+            [NEON_OP_PRIMMODULO] = &&VM_MAKELABEL(NEON_OP_PRIMMODULO),
+            [NEON_OP_PRIMPOW] = &&VM_MAKELABEL(NEON_OP_PRIMPOW),
+            [NEON_OP_PRIMNEGATE] = &&VM_MAKELABEL(NEON_OP_PRIMNEGATE),
+            [NEON_OP_PRIMNOT] = &&VM_MAKELABEL(NEON_OP_PRIMNOT),
+            [NEON_OP_PRIMBITNOT] = &&VM_MAKELABEL(NEON_OP_PRIMBITNOT),
+            [NEON_OP_PRIMAND] = &&VM_MAKELABEL(NEON_OP_PRIMAND),
+            [NEON_OP_PRIMOR] = &&VM_MAKELABEL(NEON_OP_PRIMOR),
+            [NEON_OP_PRIMBITXOR] = &&VM_MAKELABEL(NEON_OP_PRIMBITXOR),
+            [NEON_OP_PRIMSHIFTLEFT] = &&VM_MAKELABEL(NEON_OP_PRIMSHIFTLEFT),
+            [NEON_OP_PRIMSHIFTRIGHT] = &&VM_MAKELABEL(NEON_OP_PRIMSHIFTRIGHT),
+            [NEON_OP_PUSHONE] = &&VM_MAKELABEL(NEON_OP_PUSHONE),
+            [NEON_OP_PUSHCONSTANT] = &&VM_MAKELABEL(NEON_OP_PUSHCONSTANT),
+            [NEON_OP_ECHO] = &&VM_MAKELABEL(NEON_OP_ECHO),
+            [NEON_OP_POPONE] = &&VM_MAKELABEL(NEON_OP_POPONE),
+            [NEON_OP_DUPONE] = &&VM_MAKELABEL(NEON_OP_DUPONE),
+            [NEON_OP_POPN] = &&VM_MAKELABEL(NEON_OP_POPN),
+            [NEON_OP_ASSERT] = &&VM_MAKELABEL(NEON_OP_ASSERT),
+            [NEON_OP_EXTHROW] = &&VM_MAKELABEL(NEON_OP_EXTHROW),
+            [NEON_OP_MAKECLOSURE] = &&VM_MAKELABEL(NEON_OP_MAKECLOSURE),
+            [NEON_OP_CALLFUNCTION] = &&VM_MAKELABEL(NEON_OP_CALLFUNCTION),
+            [NEON_OP_CALLMETHOD] = &&VM_MAKELABEL(NEON_OP_CALLMETHOD),
+            [NEON_OP_CLASSINVOKETHIS] = &&VM_MAKELABEL(NEON_OP_CLASSINVOKETHIS),
+            [NEON_OP_RETURN] = &&VM_MAKELABEL(NEON_OP_RETURN),
+            [NEON_OP_MAKECLASS] = &&VM_MAKELABEL(NEON_OP_MAKECLASS),
+            [NEON_OP_MAKEMETHOD] = &&VM_MAKELABEL(NEON_OP_MAKEMETHOD),
+            [NEON_OP_CLASSGETTHIS] = &&VM_MAKELABEL(NEON_OP_CLASSGETTHIS),
+            [NEON_OP_CLASSPROPERTYDEFINE] = &&VM_MAKELABEL(NEON_OP_CLASSPROPERTYDEFINE),
+            [NEON_OP_CLASSINHERIT] = &&VM_MAKELABEL(NEON_OP_CLASSINHERIT),
+            [NEON_OP_CLASSGETSUPER] = &&VM_MAKELABEL(NEON_OP_CLASSGETSUPER),
+            [NEON_OP_CLASSINVOKESUPER] = &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPER),
+            [NEON_OP_CLASSINVOKESUPERSELF] = &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPERSELF),
+            [NEON_OP_MAKERANGE] = &&VM_MAKELABEL(NEON_OP_MAKERANGE),
+            [NEON_OP_MAKEARRAY] = &&VM_MAKELABEL(NEON_OP_MAKEARRAY),
+            [NEON_OP_MAKEDICT] = &&VM_MAKELABEL(NEON_OP_MAKEDICT),
+            [NEON_OP_INDEXGET] = &&VM_MAKELABEL(NEON_OP_INDEXGET),
+            [NEON_OP_INDEXGETRANGED] = &&VM_MAKELABEL(NEON_OP_INDEXGETRANGED),
+            [NEON_OP_INDEXSET] = &&VM_MAKELABEL(NEON_OP_INDEXSET),
+            [NEON_OP_IMPORTIMPORT] = &&VM_MAKELABEL(NEON_OP_IMPORTIMPORT),
+            [NEON_OP_EXTRY] = &&VM_MAKELABEL(NEON_OP_EXTRY),
+            [NEON_OP_EXPOPTRY] = &&VM_MAKELABEL(NEON_OP_EXPOPTRY),
+            [NEON_OP_EXPUBLISHTRY] = &&VM_MAKELABEL(NEON_OP_EXPUBLISHTRY),
+            [NEON_OP_STRINGIFY] = &&VM_MAKELABEL(NEON_OP_STRINGIFY),
+            [NEON_OP_SWITCH] = &&VM_MAKELABEL(NEON_OP_SWITCH),
+            [NEON_OP_TYPEOF] = &&VM_MAKELABEL(NEON_OP_TYPEOF),
+            [NEON_OP_OPINSTANCEOF] = &&VM_MAKELABEL(NEON_OP_OPINSTANCEOF),
+            [NEON_OP_HALT] = &&VM_MAKELABEL(NEON_OP_HALT),
         };
     #endif
     while(true)
@@ -18097,6 +18168,14 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             VM_CASE(NEON_OP_FUNCARGGET)
                 {
                     if(!nn_vmdo_funcargget(state))
+                    {
+                        nn_vmmac_exitvm(state);
+                    }
+                }
+                VM_DISPATCH();
+            VM_CASE(NEON_OP_FUNCARGOPTIONAL)
+                {
+                    if(!nn_vmdo_funcargoptional(state))
                     {
                         nn_vmmac_exitvm(state);
                     }

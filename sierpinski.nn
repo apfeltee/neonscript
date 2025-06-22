@@ -26,7 +26,7 @@ while (y >= 0)
         print(' ');
         x += 1;
     }
-    print('\n');
+    println("");
     y -= 1;
 }
 

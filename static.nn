@@ -2,6 +2,7 @@
 
 class Foo
 {
+    dynamicvalue = 'forks'
     static staticProperty = 'someValue';
 
     static staticMethod()
@@ -22,3 +23,5 @@ println(Foo.staticProperty);
 println(Foo.staticMethod());
 // Expected output: "static method has been called."
 
+f = Foo()
+println(f.dynamicvalue)

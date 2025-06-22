@@ -1,9 +1,10 @@
 
-try
+
+function foo(first, last="doe", age=56)
 {
-    throw Exception(false);
+    println(`hello ${first} ${last}! your age is ${age}`)
 }
-catch(e)
-{
-    println("class=<", e.class, ">");
-}
+
+foo("john");
+foo("jake", "simmons", 45);
+

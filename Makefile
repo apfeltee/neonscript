@@ -14,22 +14,34 @@ unflags = \
 	-Wunused-parameter \
 	-Wunused-result \
 	-Wunused-value \
-	-Wunused-variable
+	-Wunused-variable \
+	-Wvla
 
+unflagsverbose = \
+	-Wjump-misses-init
 
-WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith $(unflags)
+allunflags = $(unflags) $(unflagsverbose)
+#allunflags = $(unflags) 
+
+WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self -Wmaybe-uninitialized $(allunflags)
 #WFLAGS = -Wall -Wextra -Wshadow
 #WFLAGS += -ansi -pedantic
 #WFLAGS = -w
 
 
 OPTFLAGS = -O0
-#OPTFLAGS = -O5 -funroll-loops -march=native -flto -ffast-math 
+#OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
 
-#EXTRAFLAGS = -fsanitize=address -fsanitize=undefined -fstack-protector-all -ftrapv
+EXTRAFLAGS =
+#EXTRAFLAGS += -fsanitize=memory
+#EXTRAFLAGS += -ansi -pedantic
+#EXTRAFLAGS += -fsanitize=memory -fstack-protector-all -ftrapv
+#EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
 
-#CC = gcc $(WFLAGS) $(EXTRAFLAGS)
-CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
+#CC = clang++ -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
+#CC = g++ $(WFLAGS) $(EXTRAFLAGS)
+CC = gcc $(WFLAGS) $(EXTRAFLAGS)
+#CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
 #CC = tcc $(WFLAGS) $(EXTRAFLAGS)
 
 #CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops

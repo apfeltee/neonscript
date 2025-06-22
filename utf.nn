@@ -27,10 +27,11 @@ all good.
 
 function testutf(s)
 {
+    var i
     var cps = s.utf8Codepoints();
     var clen = cps.length
-    print(`len=${s.length}: ${cps}: ${s}:`, "\n   ")
-    for(i=0; i<clen; i++)
+    print("len=", s.length, ": ", cps, ": ", s, ":", "\n   ")
+    for(i=0; i<clen; i+=1)
     {
         var cc = cps[i]
         var enc = String.utf8Encode(cc)
