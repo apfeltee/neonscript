@@ -72,7 +72,7 @@ all: $(protofile) $(target)
 ifeq (1, $(havecproto))
 $(protofile): $(srcfiles_all) $(headerfiles_all)
 	echo > $(protofile)
-	cproto -si $(srcfiles_all) $(headerfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' | grep -vP __inline > $(protofile)_tmp
+	cproto $(srcfiles_all) $(headerfiles_all) 2>/dev/null | perl -pe 's/\b_Bool\b/bool/g' | grep -vP __inline > $(protofile)_tmp
 	mv $(protofile)_tmp $(protofile)
 else
 $(protofile): $(srcfiles_all)

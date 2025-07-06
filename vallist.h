@@ -7,12 +7,12 @@
     #define MC_UTIL_INCCAPACITY(capacity) ((capacity) + 2)
 #endif
 
-NNValArray* nn_vallist_make(NNState* state)
+NEON_INLINE void nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first);
+
+void nn_valarray_init(NNState* state, NNValArray* list)
 {
     size_t initialsize;
-    NNValArray* list;
     initialsize = 32;
-    list = (NNValArray*)nn_memory_malloc(sizeof(NNValArray));
     list->pstate = state;
     list->listcount = 0;
     list->listcapacity = 0;
@@ -20,12 +20,19 @@ NNValArray* nn_vallist_make(NNState* state)
     list->listname = NULL;
     if(initialsize > 0)
     {
-        nn_vallist_ensurecapacity(list, initialsize, nn_value_makenull(), true);
+        nn_valarray_ensurecapacity(list, initialsize, nn_value_makenull(), true);
     }
+}
+
+NNValArray* nn_valarray_make(NNState* state)
+{
+    NNValArray* list;
+    list = (NNValArray*)nn_memory_malloc(sizeof(NNValArray));
+    nn_valarray_init(state, list);
     return list;
 }
 
-void nn_vallist_destroy(NNValArray* list)
+void nn_valarray_destroy(NNValArray* list, bool actuallydelete)
 {
     #if 0
     if(list->listname != NULL)
@@ -36,32 +43,50 @@ void nn_vallist_destroy(NNValArray* list)
     if(list != NULL)
     {
         nn_memory_free(list->listitems);
-        nn_memory_free(list);
+        if(actuallydelete)
+        {
+            nn_memory_free(list);
+        }
         list = NULL;
     }
 }
 
-NEON_INLINE size_t nn_vallist_count(NNValArray* list)
+NEON_INLINE void nn_valarray_setcount(NNValArray* list, size_t cnt)
+{
+    list->listcount = cnt;
+}
+
+NEON_INLINE void nn_valarray_increaseby(NNValArray* list, size_t cnt)
+{
+    list->listcount += cnt;
+}
+    
+NEON_INLINE void nn_valarray_decreaseby(NNValArray* list, size_t cnt)
+{
+    list->listcount -= cnt;
+}
+
+NEON_INLINE size_t nn_valarray_count(NNValArray* list)
 {
     return list->listcount;
 }
 
-NEON_INLINE NNValue* nn_vallist_data(NNValArray* list)
+NEON_INLINE NNValue* nn_valarray_data(NNValArray* list)
 {
     return list->listitems;
 }
 
-NEON_INLINE NNValue nn_vallist_get(NNValArray* list, size_t idx)
+NEON_INLINE NNValue nn_valarray_get(NNValArray* list, size_t idx)
 {
     return list->listitems[idx];
 }
 
-NEON_INLINE NNValue* nn_vallist_getp(NNValArray* list, size_t idx)
+NEON_INLINE NNValue* nn_valarray_getp(NNValArray* list, size_t idx)
 {
     return &list->listitems[idx];
 }
 
-NEON_INLINE void nn_vallist_mark(NNValArray* list)
+NEON_INLINE void nn_valarray_mark(NNValArray* list)
 {
     size_t i;
     for(i=0; i<list->listcount; i++)
@@ -70,7 +95,7 @@ NEON_INLINE void nn_vallist_mark(NNValArray* list)
     }
 }
 
-NEON_INLINE bool nn_vallist_push(NNValArray* list, NNValue value)
+NEON_INLINE bool nn_valarray_push(NNValArray* list, NNValue value)
 {
     size_t oldcap;
     if(list->listcapacity < list->listcount + 1)
@@ -91,23 +116,17 @@ NEON_INLINE bool nn_vallist_push(NNValArray* list, NNValue value)
     return true;
 }
 
-NEON_INLINE bool nn_vallist_insert(NNValArray* list, NNValue val, size_t idx)
-{
-    return nn_vallist_set(list, idx, val);
-}
-
-
-NEON_INLINE bool nn_vallist_set(NNValArray* list, size_t idx, NNValue val)
+NEON_INLINE bool nn_valarray_set(NNValArray* list, size_t idx, NNValue val)
 {
     size_t need;
     need = idx + 8;
     if(list->listcount == 0)
     {
-        return nn_vallist_push(list, val);
+        return nn_valarray_push(list, val);
     }
     if(((idx == 0) || (list->listcapacity == 0)) || (idx >= list->listcapacity))
     {
-        nn_vallist_ensurecapacity(list, need, nn_value_makenull(), false);
+        nn_valarray_ensurecapacity(list, need, nn_value_makenull(), false);
     }
     list->listitems[idx] = val;
     if(idx > list->listcount)
@@ -118,7 +137,13 @@ NEON_INLINE bool nn_vallist_set(NNValArray* list, size_t idx, NNValue val)
 }
 
 
-NEON_INLINE bool nn_vallist_pop(NNValArray* list, NNValue* dest)
+NEON_INLINE bool nn_valarray_insert(NNValArray* list, NNValue val, size_t idx)
+{
+    return nn_valarray_set(list, idx, val);
+}
+
+
+NEON_INLINE bool nn_valarray_pop(NNValArray* list, NNValue* dest)
 {
     if(list->listcount > 0)
     {
@@ -129,7 +154,7 @@ NEON_INLINE bool nn_vallist_pop(NNValArray* list, NNValue* dest)
     return false;
 }
 
-NEON_INLINE bool nn_vallist_removeatintern(NNValArray* list, unsigned int ix)
+NEON_INLINE bool nn_valarray_removeatintern(NNValArray* list, unsigned int ix)
 {
     size_t tomovebytes;
     void* src;
@@ -147,7 +172,7 @@ NEON_INLINE bool nn_vallist_removeatintern(NNValArray* list, unsigned int ix)
     return true;
 }
 
-NEON_INLINE bool nn_vallist_removeat(NNValArray* list, unsigned int ix)
+NEON_INLINE bool nn_valarray_removeat(NNValArray* list, unsigned int ix)
 {
     if(ix >= list->listcount)
     {
@@ -160,10 +185,10 @@ NEON_INLINE bool nn_vallist_removeat(NNValArray* list, unsigned int ix)
         list->listcount--;
         return true;
     }
-    return nn_vallist_removeatintern(list, ix);
+    return nn_valarray_removeatintern(list, ix);
 }
 
-NEON_INLINE void nn_vallist_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first)
+NEON_INLINE void nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first)
 {
     size_t i;
     size_t ncap;
@@ -196,19 +221,19 @@ NEON_INLINE void nn_vallist_ensurecapacity(NNValArray* list, size_t needsize, NN
     }
 }
 
-NEON_INLINE NNValArray* nn_vallist_copy(NNValArray* list)
+NEON_INLINE NNValArray* nn_valarray_copy(NNValArray* list)
 {
     size_t i;
     NNValArray* nlist;
-    nlist = nn_vallist_make(list->pstate);
+    nlist = nn_valarray_make(list->pstate);
     for(i=0; i<list->listcount; i++)
     {
-        nn_vallist_push(nlist, list->listitems[i]);
+        nn_valarray_push(nlist, list->listitems[i]);
     }
     return nlist;
 }
 
-NEON_INLINE void nn_vallist_setempty(NNValArray* list)
+NEON_INLINE void nn_valarray_setempty(NNValArray* list)
 {
     if((list->listcapacity > 0) && (list->listitems != NULL))
     {
