@@ -9,7 +9,7 @@
 
 NEON_INLINE void nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first);
 
-void nn_valarray_init(NNState* state, NNValArray* list)
+NEON_INLINE void nn_valarray_init(NNState* state, NNValArray* list)
 {
     size_t initialsize;
     initialsize = 32;
@@ -68,21 +68,31 @@ NEON_INLINE void nn_valarray_decreaseby(NNValArray* list, size_t cnt)
 
 NEON_INLINE size_t nn_valarray_count(NNValArray* list)
 {
+    NN_NULLPTRCHECK_RETURNIF(list, 0);
     return list->listcount;
+}
+
+NEON_INLINE size_t nn_valarray_capacity(NNValArray* list)
+{
+    NN_NULLPTRCHECK_RETURNIF(list, 0);
+    return list->listcapacity;
 }
 
 NEON_INLINE NNValue* nn_valarray_data(NNValArray* list)
 {
+    NN_NULLPTRCHECK_RETURNIF(list, NULL);
     return list->listitems;
 }
 
 NEON_INLINE NNValue nn_valarray_get(NNValArray* list, size_t idx)
 {
+    NN_NULLPTRCHECK_RETURNIF(list, nn_value_makenull());
     return list->listitems[idx];
 }
 
 NEON_INLINE NNValue* nn_valarray_getp(NNValArray* list, size_t idx)
 {
+    NN_NULLPTRCHECK_RETURNIF(list, NULL);
     return &list->listitems[idx];
 }
 

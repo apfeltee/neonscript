@@ -1,52 +1,52 @@
 
-var leftedge   = -420;
-var rightedge  =  300;
-var topedge    =  300;
-var bottomedge = -300;
-var xstep      =    7;
-var ystep      =   15;
-var maxiter    =  500;
-var y0 = topedge;
+var leftedge   = -420
+var rightedge  =  300
+var topedge    =  300
+var bottomedge = -300
+var xstep      =    7
+var ystep      =   15
+var maxiter    =  500
+var y0 = topedge
 while(y0 > bottomedge)
 {
-    var x0 = leftedge;
+    var x0 = leftedge
     while(x0 < rightedge)
     {
-        var y = 0;
-        var x = 0;
-        var tch = 32;
-        var i = 0;
+        var y = 0
+        var x = 0
+        var tch = 32
+        var i = 0
         while (i < maxiter)
         {
-            var xx = (x * x) / 200;
-            var yy = (y * y) / 200;
+            var xx = (x * x) / 200
+            var yy = (y * y) / 200
             if ((xx + yy) > 800)
             {
-                tch = 48 + i;
+                tch = 48 + i
                 if(i > 9)
                 {
-                    tch = 64;
+                    tch = 64
                 }
-                i = maxiter;
+                i = maxiter
             }
-            y = (((x * y) / 100) + y0);
-            x = ((xx - yy) + x0);
-            i = i + 1;
+            y = (((x * y) / 100) + y0)
+            x = ((xx - yy) + x0)
+            i = i + 1
         }
-        var sch;
+        var sch
         var cb = ((tch % (64 / 2)) >> 1)
         switch(cb)
         {
-            case 0: sch = '+'; break;
-            case 8: sch = '-'; break;
-            case 9: sch = '*'; break;
-            case 10: sch = '.'; break;
-            case 11: sch = '#'; break;
-            case 12: sch = '%'; break;
+            case 0: sch = '+' break
+            case 8: sch = '-' break
+            case 9: sch = '*' break
+            case 10: sch = '.' break
+            case 11: sch = '#' break
+            case 12: sch = '%' break
         }
-        print(sch);
-        x0 = x0 + xstep;
+        print(sch)
+        x0 = x0 + xstep
     }
-    print("\n");
-    y0 = y0 - ystep;
+    print("\n")
+    y0 = y0 - ystep
 }

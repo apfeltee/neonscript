@@ -44,31 +44,27 @@
     #include <io.h>
 #endif
 
+/**
+* if enabled, uses NaN tagging for values.
+*/
+#define NEON_CONFIG_USENANTAGGING 1
+
+/**
+* if enabled, most API calls will check for null pointers, and either
+* return immediately or return an appropiate default value if a nullpointer is encountered.
+* this will make the API much less likely to crash out in a segmentation fault,
+* **BUT** the added branching will likely reduce performance.
+*/
+#define NEON_CONFIG_USENULLPTRCHECKS 0
+
 #if !defined(NEON_PLAT_ISWASM) && !defined(NEON_PLAT_ISWINDOWS)
-    #define NEON_CONFIG_USELINENOISE
+    #define NEON_CONFIG_USELINENOISE 1
 #endif
 
-#if defined(NEON_CONFIG_USELINENOISE)
+#if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
     #include "linenoise.h"
 #endif
 
-#if defined(__STRICT_ANSI__)
-    #define va_copy(...)
-#endif
-
-/*
-* needed because clang + wasi (wasi headers, specifically) don't seem to define these.
-* note: keep these below stdlib.h, so as to check whether __BEGIN_DECLS is defined.
-*/
-#if defined(__wasi__) && !defined(__BEGIN_DECLS)
-    #define __BEGIN_DECLS
-    #define __END_DECLS
-    #define __THROWNL
-    #define __THROW
-    #define __nonnull(...)
-#endif
-
-#define NEON_CONFIG_USENANTAGGING 1
 
 #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
     #if defined(_MSC_VER)
@@ -97,6 +93,20 @@
     #define NEON_VALUE_NULL ((NNValue) (uint64_t) (NEON_NANBOX_QNAN | NEON_NANBOX_TAGNULL))
 #endif
 
+#if defined(NEON_CONFIG_USENULLPTRCHECKS) && (NEON_CONFIG_USENULLPTRCHECKS == 1)
+    #define NN_NULLPTRCHECK_RETURNIF(var, defval) \
+        { \
+            if((var) == NULL) \
+            { \
+                return (defval); \
+            } \
+        }
+    
+#else
+    #define NN_NULLPTRCHECK_RETURNIF(var, defval)
+    
+#endif
+
 #if defined(__GNUC__) || defined(__clang__)
     #define nn_util_likely(x)   (__builtin_expect(!!(x), 1))
     #define nn_util_unlikely(x) (__builtin_expect(!!(x), 0))
@@ -104,6 +114,24 @@
     #define nn_util_likely(x)   (x)
     #define nn_util_unlikely(x) (x)
 #endif
+
+
+#if defined(__STRICT_ANSI__)
+    #define va_copy(...)
+#endif
+
+/*
+* needed because clang + wasi (wasi headers, specifically) don't seem to define these.
+* note: keep these below stdlib.h, so as to check whether __BEGIN_DECLS is defined.
+*/
+#if defined(__wasi__) && !defined(__BEGIN_DECLS)
+    #define __BEGIN_DECLS
+    #define __END_DECLS
+    #define __THROWNL
+    #define __THROW
+    #define __nonnull(...)
+#endif
+
 
 #if defined(__STRICT_ANSI__)
     #define NEON_INLINE static
@@ -8761,6 +8789,7 @@ void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool iscons
 {
     int global;
     int totalparsed;
+    (void)isconst;
     totalparsed = 0;
     do
     {
@@ -8780,7 +8809,6 @@ void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool iscons
         nn_astparser_definevariable(prs, global);
         totalparsed++;
     } while(nn_astparser_match(prs, NEON_ASTTOK_COMMA));
-
     if(!isinitializer)
     {
         nn_astparser_consumestmtend(prs);
@@ -10704,7 +10732,8 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
     buf = nn_util_filereadfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
     if(buf == NULL)
     {
-        return nn_exceptions_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
+        nn_exceptions_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
+        return nn_value_makenull();
     }
     return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
 }
@@ -10738,7 +10767,8 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
     fh = fopen(filepath->sbuf->data, mode);
     if(fh == NULL)
     {
-        return nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+        nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+        return nn_value_makenull();
     }
     rt = fwrite(data->sbuf->data, sizeof(char), data->sbuf->length, fh);
     fclose(fh);
@@ -13052,12 +13082,14 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     int64_t actualmaxcaptures;
     int64_t cpres;
     int16_t restokens;
-    int64_t capstarts[matchMaxCaptures + 1] = {0};
-    int64_t caplengths[matchMaxCaptures + 1] = {0};
-    RegexToken tokens[matchMaxTokens + 1] = {0};
+    int64_t capstarts[matchMaxCaptures + 1];
+    int64_t caplengths[matchMaxCaptures + 1];
+    RegexToken tokens[matchMaxTokens + 1];
     RegexContext ctx; 
     RegexContext* pctx;
-    
+    memset(tokens, 0, (matchMaxTokens+1) * sizeof(RegexToken));
+    memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
+    memset(capstarts, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
     const char* strstart;
     NNObjString* rstr;
     NNObjArray* oa;
@@ -15127,7 +15159,7 @@ void nn_state_buildprocessinfo(NNState* state)
         pathp = osfn_getcwd(pathbuf, kMaxBuf);
         if(pathp == NULL)
         {
-            pathp = ".";
+            pathp = (char*)".";
         }
         fprintf(stderr, "pathp=<%s>\n", pathp);
         state->processinfo->cliexedirectory = nn_string_copycstr(state, pathp);
@@ -16535,7 +16567,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
         /* pop the value, index and list out */
         return nn_exceptions_throw(state, "list are numerically indexed");
     }
-    ocap = list->varray.listcapacity;
+    ocap = nn_valarray_capacity(&list->varray);
     ocnt = nn_valarray_count(&list->varray);
     rawpos = nn_value_asnumber(index);
     position = rawpos;
@@ -17371,7 +17403,7 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
     #if 1
     {
         NNPrinter* pr = state->stderrprinter;
-        nn_printer_printf(pr, "funcargoptional: slot=%d putpos=%d cval=<", slot, putpos);
+        nn_printer_printf(pr, "funcargoptional: slot=%d putpos=%ld cval=<", slot, putpos);
         nn_printer_printvalue(pr, cval, true, false);
         nn_printer_printf(pr, "> peeked=<");
         nn_printer_printvalue(pr, peeked, true, false);
@@ -17498,7 +17530,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, n
     if((!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright))
     || (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft)))
     {
-        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand %s for %s and %s", opname, nn_value_typename(binvalleft), nn_value_typename(binvalright));
+        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", opname, nn_value_typename(binvalleft), nn_value_typename(binvalright));
         return false;
     }
     binvalright = nn_vmbits_stackpop(state);
@@ -18684,7 +18716,9 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
 
 char* nn_cli_getinput(const char* prompt)
 {
-    #if !defined(NEON_CONFIG_USELINENOISE)
+    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
+        return linenoise(prompt);
+    #else
         enum { kMaxLineSize = 1024 };
         size_t len;
         char* rt;
@@ -18694,26 +18728,24 @@ char* nn_cli_getinput(const char* prompt)
         rt = nn_util_filegetshandle(rawline, kMaxLineSize, stdin, &len);
         rt[len - 1] = 0;
         return rt;
-    #else
-        return linenoise(prompt);
     #endif
 }
 
 void nn_cli_addhistoryline(const char* line)
 {
-    #if !defined(NEON_CONFIG_USELINENOISE)
-        (void)line;
-    #else
+    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
         linenoiseHistoryAdd(line);
+    #else
+        (void)line;
     #endif
 }
 
 void nn_cli_freeline(char* line)
 {
-    #if !defined(NEON_CONFIG_USELINENOISE)
-        (void)line;
-    #else
+    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
         linenoiseFree(line);
+    #else
+        (void)line;
     #endif
 }
 
@@ -18748,9 +18780,11 @@ bool nn_cli_repl(NNState* state)
     singlequotecount = 0;
     doublequotecount = 0;
     #if !defined(NEON_PLAT_ISWINDOWS)
-        /* linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen, linenoiseUtf8NextCharLen, linenoiseUtf8ReadCode); */
-        linenoiseSetMultiLine(0);
-        linenoiseHistoryAdd(".exit");
+        #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
+            /* linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen, linenoiseUtf8NextCharLen, linenoiseUtf8ReadCode); */
+            linenoiseSetMultiLine(0);
+            linenoiseHistoryAdd(".exit");
+        #endif
     #endif
     while(true)
     {
@@ -19260,6 +19294,6 @@ int replmain(const char* file)
     {
         deffile = file;
     }
-    char* realargv[1024] = {"a.out", (char*)deffile, NULL};
+    char* realargv[1024] = {(char*)"a.out", (char*)deffile, NULL};
     return main(1, realargv, NULL);
 }

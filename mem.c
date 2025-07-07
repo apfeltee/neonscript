@@ -55,9 +55,9 @@ void* nn_memory_malloc(size_t sz)
     return p;
 }
 
-size_t getsize(void * p)
+size_t nn_memory_getsize(void * p)
 {
-    size_t* in = p;
+    size_t* in = (size_t*)p;
     if (in)
     {
         --in;
@@ -65,13 +65,14 @@ size_t getsize(void * p)
     }
     return -1;
 }
+
 void* nn_memory_realloc(void* p, size_t nsz)
 {
     void* retp;
     #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
         //retp = REALLOC(p, 0, nsz);
         int msize;
-        msize = getsize(p);
+        msize = nn_memory_getsize(p);
         printf("msize=%d\n", msize);
         if ((int)nsz <= msize)
         {

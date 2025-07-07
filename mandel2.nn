@@ -12,19 +12,19 @@ function do_sub(x, y)
 
 function do_mul(x, y)
 {
-    var t = x * y;
-    return (t + 8192 / 2) / 8192;
+    var t = x * y
+    return (t + 8192 / 2) / 8192
 }
 
 function do_div(x, y)
 {
-    var t = x * 8192;
-    return (t + y / 2) / y;
+    var t = x * 8192
+    return (t + y / 2) / y
 }
 
 function of_int(x)
 {
-    return x * 8192;
+    return x * 8192
 }
 
 function doiter(n, a, b, xn, yn)
@@ -56,15 +56,15 @@ function run()
     var ymin = of_int(-1)
     var ymax = of_int(1)
     var deltay = do_div(do_sub(ymax, ymin), of_int(steps))
-    var i = 0;
+    var i = 0
     while(i < steps)
     {
         var y = do_add(ymin, do_mul(of_int(i), deltay))
-        var j = 0;
+        var j = 0
         while(j < 2 * steps)
         {
             var x = do_add(xmin, do_mul(of_int(j), deltax))
-            var ins = inside(x, y);
+            var ins = inside(x, y)
             if(ins == true)
             {
                 print("#")

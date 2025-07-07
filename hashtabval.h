@@ -454,7 +454,7 @@ void nn_valtable_mark(NNState* state, NNHashValTable* table)
         entry = &table->entries[i];
         if(entry != NULL)
         {
-            if(entry->key != NEON_VALUE_NULL)
+            if(!nn_value_isnull(entry->key))
             {
                 nn_gcmem_markvalue(state, entry->key);
                 nn_gcmem_markvalue(state, entry->value.value);
