@@ -2356,7 +2356,7 @@ char* nn_util_strtolower(char* str, size_t length)
     return str;
 }
 
-#if !defined(__FUNCTION__)
+#if defined(__STRICT_ANSI__)
     #define __FUNCTION__ "<here>"
 #endif
 #if 0
@@ -2379,23 +2379,6 @@ char* nn_util_strtolower(char* str, size_t length)
         }
 #endif
 
-/*
-NEON_FORCEINLINE void nn_state_apidebugv(NNState* state, const char* funcname, const char* format, va_list va)
-{
-    (void)state;
-    fprintf(stderr, "API CALL: to '%s': ", funcname);
-    vfprintf(stderr, format, va);
-    fprintf(stderr, "\n");
-}
-
-NEON_FORCEINLINE void nn_state_apidebug(NNState* state, const char* funcname, const char* format, ...)
-{
-    va_list va;
-    va_start(va, format);
-    nn_state_apidebugv(state, funcname, format, va);
-    va_end(va);
-}
-*/
 
 NEON_FORCEINLINE void nn_state_astdebugv(NNState* state, const char* funcname, const char* format, va_list va)
 {
