@@ -94,17 +94,23 @@
 #endif
 
 #if defined(NEON_CONFIG_USENULLPTRCHECKS) && (NEON_CONFIG_USENULLPTRCHECKS == 1)
-    #define NN_NULLPTRCHECK_RETURNIF(var, defval) \
+    #define NN_NULLPTRCHECK_RETURNVALUE(var, defval) \
         { \
             if((var) == NULL) \
             { \
                 return (defval); \
             } \
         }
-    
+    #define NN_NULLPTRCHECK_RETURN(var) \
+        { \
+            if((var) == NULL) \
+            { \
+                return; \
+            } \
+        }
 #else
-    #define NN_NULLPTRCHECK_RETURNIF(var, defval)
-    
+    #define NN_NULLPTRCHECK_RETURNVALUE(var, defval)
+    #define NN_NULLPTRCHECK_RETURN(var)
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -227,17 +233,17 @@
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
 
-#define nn_exceptions_throwclass(state, exklass, ...) \
-    nn_exceptions_throwwithclass(state, exklass, __FILE__, __LINE__, __VA_ARGS__)
+#define nn_except_throwclass(state, exklass, ...) \
+    nn_except_throwwithclass(state, exklass, __FILE__, __LINE__, __VA_ARGS__)
 
-#define nn_exceptions_throw(state, ...) \
-    nn_exceptions_throwclass(state, state->exceptions.stdexception, __VA_ARGS__)
+#define nn_except_throw(state, ...) \
+    nn_except_throwclass(state, state->exceptions.stdexception, __VA_ARGS__)
 
 
 #define NEON_RETURNERROR(...) \
     { \
         nn_vm_stackpopn(state, args->count); \
-        nn_exceptions_throw(state, ##__VA_ARGS__); \
+        nn_except_throw(state, ##__VA_ARGS__); \
     } \
     return nn_value_makebool(false);
 
@@ -961,28 +967,29 @@ struct NNObjFunction
     int upvalcount;
     union
     {
+        // closure
         struct
         {
             NNObjFunction* scriptfunc;
             NNObjUpvalue** upvalues;            
-        };
+        } fnclosure;
         struct
         {
             int arity;
             bool isvariadic;
             NNBlob blob;
             NNObjModule* module;
-        };
+        } fnscriptfunc;
         struct
         {
             NNNativeFN natfunc;
             void* userptr;
-        };
+        } fnnativefunc;
         struct
         {
             NNValue receiver;
             NNObjFunction* method;
-        };
+        } fnmethod;
     };
 };
 
@@ -1690,17 +1697,8 @@ NEON_FORCEINLINE NNObjString* nn_value_asstring(NNValue v)
     return ((NNObjString*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFunction* nn_value_asfuncnative(NNValue v)
-{
-    return ((NNObjFunction*)nn_value_asobject(v));
-}
 
-NEON_FORCEINLINE NNObjFunction* nn_value_asfuncscript(NNValue v)
-{
-    return ((NNObjFunction*)nn_value_asobject(v));
-}
-
-NEON_FORCEINLINE NNObjFunction* nn_value_asfuncclosure(NNValue v)
+NEON_FORCEINLINE NNObjFunction* nn_value_asfunction(NNValue v)
 {
     return ((NNObjFunction*)nn_value_asobject(v));
 }
@@ -1715,10 +1713,6 @@ NEON_FORCEINLINE NNObjInstance* nn_value_asinstance(NNValue v)
     return ((NNObjInstance*)nn_value_asobject(v));
 }
 
-NEON_FORCEINLINE NNObjFunction* nn_value_asfuncbound(NNValue v)
-{
-    return ((NNObjFunction*)nn_value_asobject(v));
-}
 
 NEON_FORCEINLINE NNObjSwitch* nn_value_asswitch(NNValue v)
 {
@@ -2561,8 +2555,8 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             {
                 NNObjFunction* bound;
                 bound = (NNObjFunction*)object;
-                nn_gcmem_markvalue(state, bound->receiver);
-                nn_gcmem_markobject(state, (NNObject*)bound->method);
+                nn_gcmem_markvalue(state, bound->fnmethod.receiver);
+                nn_gcmem_markobject(state, (NNObject*)bound->fnmethod.method);
             }
             break;
         case NEON_OBJTYPE_CLASS:
@@ -2586,10 +2580,10 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
                 int i;
                 NNObjFunction* closure;
                 closure = (NNObjFunction*)object;
-                nn_gcmem_markobject(state, (NNObject*)closure->scriptfunc);
+                nn_gcmem_markobject(state, (NNObject*)closure->fnclosure.scriptfunc);
                 for(i = 0; i < closure->upvalcount; i++)
                 {
-                    nn_gcmem_markobject(state, (NNObject*)closure->upvalues[i]);
+                    nn_gcmem_markobject(state, (NNObject*)closure->fnclosure.upvalues[i]);
                 }
             }
             break;
@@ -2598,8 +2592,8 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
                 NNObjFunction* function;
                 function = (NNObjFunction*)object;
                 nn_gcmem_markobject(state, (NNObject*)function->name);
-                nn_gcmem_markobject(state, (NNObject*)function->module);
-                nn_valarray_mark(&function->blob.constants);
+                nn_gcmem_markobject(state, (NNObject*)function->fnscriptfunc.module);
+                nn_valarray_mark(&function->fnscriptfunc.blob.constants);
             }
             break;
         case NEON_OBJTYPE_INSTANCE:
@@ -2685,7 +2679,7 @@ void nn_object_destroy(NNState* state, NNObject* object)
             {
                 NNObjFunction* closure;
                 closure = (NNObjFunction*)object;
-                nn_gcmem_freearray(state, sizeof(NNObjUpvalue*), closure->upvalues, closure->upvalcount);
+                nn_gcmem_freearray(state, sizeof(NNObjUpvalue*), closure->fnclosure.upvalues, closure->upvalcount);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
@@ -2872,7 +2866,7 @@ void nn_gcmem_collectgarbage(NNState* state)
 NEON_FORCEINLINE NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
     nn_vm_stackpopn(ch->pstate, ch->argc);
-    nn_exceptions_vthrowwithclass(ch->pstate, ch->pstate->exceptions.argumenterror, srcfile, srcline, fmt, va);
+    nn_except_vthrowwithclass(ch->pstate, ch->pstate->exceptions.argumenterror, srcfile, srcline, fmt, va);
     return nn_value_makebool(false);
 }
 
@@ -3104,7 +3098,7 @@ int nn_dbg_printclosureinstr(NNPrinter* pr, const char* name, NNBlob* blob, int 
     nn_printer_printf(pr, "%-16s %8d ", name, constant);
     nn_printer_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
     nn_printer_printf(pr, "\n");
-    function = nn_value_asfuncscript(nn_valarray_get(&blob->constants, constant));
+    function = nn_value_asfunction(nn_valarray_get(&blob->constants, constant));
     for(j = 0; j < function->upvalcount; j++)
     {
         islocal = blob->instrucs[offset++].code;
@@ -3700,13 +3694,13 @@ void nn_printer_printfunction(NNPrinter* pr, NNObjFunction* func)
     }
     else
     {
-        if(func->isvariadic)
+        if(func->fnscriptfunc.isvariadic)
         {
-            nn_printer_printf(pr, "<function %s(%d...) at %p>", func->name->sbuf->data, func->arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d...) at %p>", func->name->sbuf->data, func->fnscriptfunc.arity, (void*)func);
         }
         else
         {
-            nn_printer_printf(pr, "<function %s(%d) at %p>", func->name->sbuf->data, func->arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d) at %p>", func->name->sbuf->data, func->fnscriptfunc.arity, (void*)func);
         }
     }
 }
@@ -3990,8 +3984,8 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
         case NEON_OBJTYPE_FUNCBOUND:
             {
                 NNObjFunction* bn;
-                bn = nn_value_asfuncbound(value);
-                nn_printer_printfunction(pr, bn->method->scriptfunc);
+                bn = nn_value_asfunction(value);
+                nn_printer_printfunction(pr, bn->fnmethod.method->fnclosure.scriptfunc);
             }
             break;
         case NEON_OBJTYPE_MODULE:
@@ -4009,14 +4003,14 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
         case NEON_OBJTYPE_FUNCCLOSURE:
             {
                 NNObjFunction* cls;
-                cls = nn_value_asfuncclosure(value);
-                nn_printer_printfunction(pr, cls->scriptfunc);
+                cls = nn_value_asfunction(value);
+                nn_printer_printfunction(pr, cls->fnclosure.scriptfunc);
             }
             break;
         case NEON_OBJTYPE_FUNCSCRIPT:
             {
                 NNObjFunction* fn;
-                fn = nn_value_asfuncscript(value);
+                fn = nn_value_asfunction(value);
                 nn_printer_printfunction(pr, fn);
             }
             break;
@@ -4031,7 +4025,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
         case NEON_OBJTYPE_FUNCNATIVE:
             {
                 NNObjFunction* native;
-                native = nn_value_asfuncnative(value);
+                native = nn_value_asfunction(value);
                 nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf->data, (void*)native);
             }
             break;
@@ -4362,7 +4356,7 @@ uint32_t nn_object_hashobject(NNObject* object)
                 */
                 NNObjFunction* fn;
                 fn = (NNObjFunction*)object;
-                return nn_util_hashdouble(fn->arity) ^ nn_util_hashdouble(fn->blob.count);
+                return nn_util_hashdouble(fn->fnscriptfunc.arity) ^ nn_util_hashdouble(fn->fnscriptfunc.blob.count);
             }
             break;
         case NEON_OBJTYPE_STRING:
@@ -4456,7 +4450,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isfuncscript(a) && nn_value_isfuncscript(b))
         {
-            if(nn_value_asfuncscript(a)->arity >= nn_value_asfuncscript(b)->arity)
+            if(nn_value_asfunction(a)->fnscriptfunc.arity >= nn_value_asfunction(b)->fnscriptfunc.arity)
             {
                 return a;
             }
@@ -4464,7 +4458,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isfuncclosure(a) && nn_value_isfuncclosure(b))
         {
-            if(nn_value_asfuncclosure(a)->scriptfunc->arity >= nn_value_asfuncclosure(b)->scriptfunc->arity)
+            if(nn_value_asfunction(a)->fnclosure.scriptfunc->fnscriptfunc.arity >= nn_value_asfunction(b)->fnclosure.scriptfunc->fnscriptfunc.arity)
             {
                 return a;
             }
@@ -4821,8 +4815,8 @@ NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFu
 {
     NNObjFunction* bound;
     bound = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCBOUND);
-    bound->receiver = receiver;
-    bound->method = method;
+    bound->fnmethod.receiver = receiver;
+    bound->fnmethod.method = method;
     return bound;
 }
 
@@ -4858,10 +4852,22 @@ void nn_class_destroy(NNObjClass* klass)
 
 bool nn_class_inheritfrom(NNObjClass* subclass, NNObjClass* superclass)
 {
-    nn_valtable_addall(&superclass->instproperties, &subclass->instproperties);
-    nn_valtable_addall(&superclass->instmethods, &subclass->instmethods);
+    int failcnt;
+    failcnt = 0;
+    if(!nn_valtable_addall(&superclass->instproperties, &subclass->instproperties, true))
+    {
+        failcnt++;
+    }
+    if(!nn_valtable_addall(&superclass->instmethods, &subclass->instmethods, true))
+    {
+        failcnt++;
+    }
     subclass->superclass = superclass;
-    return true;
+    if(failcnt == 0)
+    {
+        return true;
+    }
+    return false;
 }
 
 bool nn_class_defproperty(NNObjClass* klass, NNObjString* cstrname, NNValue val)
@@ -5052,30 +5058,30 @@ NNObjFunction* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNF
 {
     NNObjFunction* function;
     function = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCSCRIPT);
-    function->arity = 0;
+    function->fnscriptfunc.arity = 0;
     function->upvalcount = 0;
-    function->isvariadic = false;
+    function->fnscriptfunc.isvariadic = false;
     function->name = NULL;
     function->contexttype = type;
-    function->module = module;
+    function->fnscriptfunc.module = module;
     //nn_valarray_init(state, &function->funcargdefaults);
-    nn_blob_init(state, &function->blob);
+    nn_blob_init(state, &function->fnscriptfunc.blob);
     return function;
 }
 
 void nn_funcscript_destroy(NNObjFunction* function)
 {
-    nn_blob_destroy(&function->blob);
+    nn_blob_destroy(&function->fnscriptfunc.blob);
 }
 
 NNObjFunction* nn_object_makefuncnative(NNState* state, NNNativeFN function, const char* name, void* uptr)
 {
     NNObjFunction* native;
     native = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCNATIVE);
-    native->natfunc = function;
+    native->fnnativefunc.natfunc = function;
     native->name = nn_string_copycstr(state, name);
     native->contexttype = NEON_FNCONTEXTTYPE_FUNCTION;
-    native->userptr = uptr;
+    native->fnnativefunc.userptr = uptr;
     return native;
 }
 
@@ -5094,8 +5100,8 @@ NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function
         }
     }
     closure = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCCLOSURE);
-    closure->scriptfunc = function;
-    closure->upvalues = upvals;
+    closure->fnclosure.scriptfunc = function;
+    closure->fnclosure.upvalues = upvals;
     closure->upvalcount = function->upvalcount;
     return closure;
 }
@@ -5903,6 +5909,11 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
+                    /* pseudo-handle '!==' */
+                    if(nn_astlex_match(lex, '='))
+                    {
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_NOTEQUAL);
+                    }
                     return nn_astlex_createtoken(lex, NEON_ASTTOK_NOTEQUAL);
                 }
                 return nn_astlex_createtoken(lex, NEON_ASTTOK_EXCLMARK);
@@ -5987,6 +5998,11 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
             {
                 if(nn_astlex_match(lex, '='))
                 {
+                    /* pseudo-handle === */
+                    if(nn_astlex_match(lex, '='))
+                    {
+                        return nn_astlex_createtoken(lex, NEON_ASTTOK_EQUAL);
+                    }
                     return nn_astlex_createtoken(lex, NEON_ASTTOK_EQUAL);
                 }
                 return nn_astlex_createtoken(lex, NEON_ASTTOK_ASSIGN);
@@ -6160,7 +6176,7 @@ void nn_astparser_destroy(NNAstParser* parser)
 
 NNBlob* nn_astparser_currentblob(NNAstParser* prs)
 {
-    return &prs->currentfunccompiler->targetfunc->blob;
+    return &prs->currentfunccompiler->targetfunc->fnscriptfunc.blob;
 }
 
 bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args)
@@ -6570,7 +6586,7 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
         case NEON_OP_MAKECLOSURE:
             {
                 constant = (bytecode[ip + 1].code << 8) | bytecode[ip + 2].code;
-                fn = nn_value_asfuncscript(constants[constant]);
+                fn = nn_value_asfunction(constants[constant]);
                 /* There is two byte for the constant, then three for each up value. */
                 return 2 + (fn->upvalcount * 3);
             }
@@ -7095,18 +7111,18 @@ void nn_astparser_endloop(NNAstParser* prs)
     // find all NEON_OP_BREAK_PL placeholder and replace with the appropriate jump...
     */
     i = prs->innermostloopstart;
-    while(i < prs->currentfunccompiler->targetfunc->blob.count)
+    while(i < prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.count)
     {
-        if(prs->currentfunccompiler->targetfunc->blob.instrucs[i].code == NEON_OP_BREAK_PL)
+        if(prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code == NEON_OP_BREAK_PL)
         {
-            prs->currentfunccompiler->targetfunc->blob.instrucs[i].code = NEON_OP_JUMPNOW;
+            prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code = NEON_OP_JUMPNOW;
             nn_astemit_patchjump(prs, i + 1);
             i += 3;
         }
         else
         {
-            bcode = prs->currentfunccompiler->targetfunc->blob.instrucs;
-            cvals = prs->currentfunccompiler->targetfunc->blob.constants.listitems;
+            bcode = prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs;
+            cvals = prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.constants.listitems;
             i += 1 + nn_astparser_getcodeargscount(bcode, cvals, i);
         }
     }
@@ -8348,10 +8364,16 @@ NNAstRule* nn_astparser_getrule(NNAstTokType type)
 bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence/*, NNAstExpression* dest*/)
 {
     bool canassign;
+    NNAstRule* rule;
     NNAstToken previous;
     NNAstParseInfixFN infixrule;
     NNAstParsePrefixFN prefixrule;
-    prefixrule = nn_astparser_getrule(prs->prevtoken.type)->prefix;
+    rule = nn_astparser_getrule(prs->prevtoken.type);
+    if(rule == NULL)
+    {
+        return false;
+    }
+    prefixrule = rule->prefix;
     if(prefixrule == NULL)
     {
         nn_astparser_raiseerror(prs, "expected expression");
@@ -8359,13 +8381,25 @@ bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence
     }
     canassign = precedence <= NEON_ASTPREC_ASSIGNMENT;
     prefixrule(prs, canassign);
-    while(precedence <= nn_astparser_getrule(prs->currtoken.type)->precedence)
+    while(true)
     {
-        previous = prs->prevtoken;
-        nn_astparser_ignorewhitespace(prs);
-        nn_astparser_advance(prs);
-        infixrule = nn_astparser_getrule(prs->prevtoken.type)->infix;
-        infixrule(prs, previous, canassign);
+        rule = nn_astparser_getrule(prs->currtoken.type);
+        if(rule == NULL)
+        {
+            return false;
+        }
+        if(precedence <= rule->precedence)
+        {
+            previous = prs->prevtoken;
+            nn_astparser_ignorewhitespace(prs);
+            nn_astparser_advance(prs);
+            infixrule = nn_astparser_getrule(prs->prevtoken.type)->infix;
+            infixrule(prs, previous, canassign);
+        }
+        else
+        {
+            break;
+        }
     }
     if(canassign && nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
     {
@@ -8510,10 +8544,10 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
     do
     {
         nn_astparser_ignorewhitespace(prs);
-        prs->currentfunccompiler->targetfunc->arity++;
+        prs->currentfunccompiler->targetfunc->fnscriptfunc.arity++;
         if(nn_astparser_match(prs, NEON_ASTTOK_TRIPLEDOT))
         {
-            prs->currentfunccompiler->targetfunc->isvariadic = true;
+            prs->currentfunccompiler->targetfunc->fnscriptfunc.isvariadic = true;
             nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected identifier after '...'");
             vargname = prs->prevtoken;
             nn_astparser_addlocal(prs, vargname);
@@ -9624,7 +9658,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNArguments* args)
     }
     else
     {
-        nn_exceptions_throw(state, "cannot open directory '%s'", dirn);
+        nn_except_throw(state, "cannot open directory '%s'", dirn);
     }
     return nn_value_makenull();
 }
@@ -9913,14 +9947,14 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     physpath = nn_import_resolvepath(state, modulename->sbuf->data, intomodule->physicalpath->sbuf->data, NULL, false);
     if(physpath == NULL)
     {
-        nn_exceptions_throw(state, "module not found: '%s'\n", modulename->sbuf->data);
+        nn_except_throw(state, "module not found: '%s'\n", modulename->sbuf->data);
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
     source = nn_util_filereadfile(state, physpath, &fsz, false, 0);
     if(source == NULL)
     {
-        nn_exceptions_throw(state, "could not read import file %s", physpath);
+        nn_except_throw(state, "could not read import file %s", physpath);
         return NULL;
     }
     nn_blob_init(state, &blob);
@@ -9935,7 +9969,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), args, &retv))
     {
         nn_blob_destroy(&blob);
-        nn_exceptions_throw(state, "failed to call compiled import closure");
+        nn_except_throw(state, "failed to call compiled import closure");
         return NULL;
     }
     nn_blob_destroy(&blob);
@@ -10116,7 +10150,11 @@ NNValue nn_objfndict_clone(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(args->thisval);
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
-    nn_valtable_addall(&dict->htab, &newdict->htab);
+    if(!nn_valtable_addall(&dict->htab, &newdict->htab, true))
+    {
+        nn_except_throwclass(state, state->exceptions.argumenterror, "failed to copy table");
+        return nn_value_makenull();
+    }
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
         nn_valarray_push(&newdict->names, nn_valarray_get(&dict->names, i));
@@ -10177,7 +10215,7 @@ NNValue nn_objfndict_extend(NNState* state, NNArguments* args)
             nn_valarray_push(&dict->names, nn_valarray_get(&dictcpy->names, i));
         }
     }
-    nn_valtable_addall(&dictcpy->htab, &dict->htab);
+    nn_valtable_addall(&dictcpy->htab, &dict->htab, true);
     return nn_value_makenull();
 }
 
@@ -10732,7 +10770,7 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
     buf = nn_util_filereadfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
     if(buf == NULL)
     {
-        nn_exceptions_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
+        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
         return nn_value_makenull();
     }
     return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
@@ -10767,7 +10805,7 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
     fh = fopen(filepath->sbuf->data, mode);
     if(fh == NULL)
     {
-        nn_exceptions_throwclass(state, state->exceptions.ioerror, strerror(errno));
+        nn_except_throwclass(state, state->exceptions.ioerror, strerror(errno));
         return nn_value_makenull();
     }
     rt = fwrite(data->sbuf->data, sizeof(char), data->sbuf->length, fh);
@@ -12194,6 +12232,57 @@ NNValue nn_objfnarray_reduce(NNState* state, NNArguments* args)
     return accumulator;
 }
 
+NNValue nn_objfnarray_slice(NNState* state, NNArguments* args)
+{
+    int64_t i;
+    int64_t until;
+    int64_t start;
+    int64_t end;
+    int64_t ibegin;
+    int64_t iend;
+    int64_t salen;
+    bool backwards;
+    NNObjArray* selfarr;
+    NNObjArray* narr;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, args);
+    NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
+    selfarr = nn_value_asarray(args->thisval);
+    salen = nn_valarray_count(&selfarr->varray);
+    end = salen;
+    start = nn_value_asnumber(args->args[0]);
+    backwards = false;
+    if(start < 0)
+    {
+        backwards = true;
+    }
+    if(args->count > 1)
+    {
+        end = nn_value_asnumber(args->args[1]);
+    }
+    narr = nn_object_makearray(state);
+    i = 0;
+    if(backwards)
+    {
+        i = (end - start);
+        until = 0;
+        ibegin = ((salen + start)-0);
+        iend = end+0;
+    }
+    else
+    {
+        until = end;
+        ibegin = start;
+        iend = until;
+    }
+    for(i=ibegin; i!=iend; i++)
+    {
+        nn_array_push(narr, nn_valarray_get(&selfarr->varray, i));        
+    }
+    return nn_value_fromobject(narr);
+}
+
 NNValue nn_objfnrange_lower(NNState* state, NNArguments* args)
 {
     NNArgCheck check;
@@ -13135,7 +13224,7 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     }
     else
     {
-        nn_exceptions_throwclass(state, state->exceptions.regexerror, pctx->errorbuf);
+        nn_except_throwclass(state, state->exceptions.regexerror, pctx->errorbuf);
     }
     mrx_destroy(pctx);
     if(capture)
@@ -14087,6 +14176,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"some", nn_objfnarray_some},
             {"every", nn_objfnarray_every},
             {"reduce", nn_objfnarray_reduce},
+            {"slice", nn_objfnarray_slice},
             {"@iter", nn_objfnarray_iter},
             {"@itern", nn_objfnarray_itern},
             {NULL, NULL}
@@ -14446,7 +14536,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                 i++;
                 if((int)argpos > argc)
                 {
-                    nn_exceptions_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "too few arguments");
+                    nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "too few arguments");
                     ok = false;
                     cval = nn_value_makenull();
                 }
@@ -14480,7 +14570,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                         break;
                     default:
                         {
-                            nn_exceptions_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
+                            nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
                         }
                         break;
                 }
@@ -14594,7 +14684,7 @@ void nn_state_warn(NNState* state, const char* fmt, ...)
     va_end(va);
 }
 
-NNValue nn_exceptions_getstacktrace(NNState* state)
+NNValue nn_except_getstacktrace(NNState* state)
 {
     int line;
     size_t i;
@@ -14612,16 +14702,16 @@ NNValue nn_exceptions_getstacktrace(NNState* state)
         {
             nn_printer_makestackstring(state, &pr);
             frame = &state->vmstate.framevalues[i];
-            function = frame->closure->scriptfunc;
+            function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
-            instruction = frame->inscode - function->blob.instrucs - 1;
-            line = function->blob.instrucs[instruction].srcline;
+            instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
+            line = function->fnscriptfunc.blob.instrucs[instruction].srcline;
             physfile = "(unknown)";
-            if(function->module->physicalpath != NULL)
+            if(function->fnscriptfunc.module->physicalpath != NULL)
             {
-                if(function->module->physicalpath->sbuf != NULL)
+                if(function->fnscriptfunc.module->physicalpath->sbuf != NULL)
                 {
-                    physfile = function->module->physicalpath->sbuf->data;
+                    physfile = function->fnscriptfunc.module->physicalpath->sbuf->data;
                 }
             }
             fnname = "<script>";
@@ -14646,7 +14736,7 @@ NNValue nn_exceptions_getstacktrace(NNState* state)
     return nn_value_fromobject(nn_string_copylen(state, "", 0));
 }
 
-bool nn_exceptions_propagate(NNState* state)
+bool nn_except_propagate(NNState* state)
 {
     int i;
     int cnt;
@@ -14680,17 +14770,17 @@ bool nn_exceptions_propagate(NNState* state)
         for(i = state->vmstate.currentframe->handlercount; i > 0; i--)
         {
             handler = &state->vmstate.currentframe->handlers[i - 1];
-            function = state->vmstate.currentframe->closure->scriptfunc;
+            function = state->vmstate.currentframe->closure->fnclosure.scriptfunc;
             if(handler->address != 0 && nn_util_isinstanceof(exception->klass, handler->klass))
             {
-                state->vmstate.currentframe->inscode = &function->blob.instrucs[handler->address];
+                state->vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->address];
                 return true;
             }
             else if(handler->finallyaddress != 0)
             {
                 /* continue propagating once the 'finally' block completes */
                 nn_vm_stackpush(state, nn_value_makebool(true));
-                state->vmstate.currentframe->inscode = &function->blob.instrucs[handler->finallyaddress];
+                state->vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->finallyaddress];
                 return true;
             }
         }
@@ -14759,7 +14849,7 @@ bool nn_exceptions_propagate(NNState* state)
     return false;
 }
 
-bool nn_exceptions_pushhandler(NNState* state, NNObjClass* type, int address, int finallyaddress)
+bool nn_except_pushhandler(NNState* state, NNObjClass* type, int address, int finallyaddress)
 {
     NNCallFrame* frame;
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
@@ -14776,34 +14866,34 @@ bool nn_exceptions_pushhandler(NNState* state, NNObjClass* type, int address, in
 }
 
 
-bool nn_exceptions_vthrowactual(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, va_list va)
+bool nn_except_vthrowactual(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, va_list va)
 {
     bool b;
-    b = nn_exceptions_vthrowwithclass(state, klass, srcfile, srcline, format, va);
+    b = nn_except_vthrowwithclass(state, klass, srcfile, srcline, format, va);
     return b;
 }
 
-bool nn_exceptions_throwactual(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, ...)
+bool nn_except_throwactual(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, ...)
 {
     bool b;
     va_list va;
     va_start(va, format);
-    b = nn_exceptions_vthrowactual(state, klass, srcfile, srcline, format, va);
+    b = nn_except_vthrowactual(state, klass, srcfile, srcline, format, va);
     va_end(va);
     return b;
 }
 
-bool nn_exceptions_throwwithclass(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, ...)
+bool nn_except_throwwithclass(NNState* state, NNObjClass* klass, const char* srcfile, int srcline, const char* format, ...)
 {
     bool b;
     va_list args;
     va_start(args, format);
-    b = nn_exceptions_vthrowwithclass(state, klass, srcfile, srcline, format, args);
+    b = nn_except_vthrowwithclass(state, klass, srcfile, srcline, format, args);
     va_end(args);
     return b;
 }
 
-bool nn_exceptions_vthrowwithclass(NNState* state, NNObjClass* exklass, const char* srcfile, int srcline, const char* format, va_list args)
+bool nn_except_vthrowwithclass(NNState* state, NNObjClass* exklass, const char* srcfile, int srcline, const char* format, va_list args)
 {
     enum { kMaxBufSize = 1024};
     int length;
@@ -14812,13 +14902,13 @@ bool nn_exceptions_vthrowwithclass(NNState* state, NNObjClass* exklass, const ch
     NNObjInstance* instance;
     message = (char*)nn_memory_malloc(kMaxBufSize+1);
     length = vsnprintf(message, kMaxBufSize, format, args);
-    instance = nn_exceptions_makeinstance(state, exklass, srcfile, srcline, nn_string_takelen(state, message, length));
+    instance = nn_except_makeinstance(state, exklass, srcfile, srcline, nn_string_takelen(state, message, length));
     nn_vm_stackpush(state, nn_value_fromobject(instance));
-    stacktrace = nn_exceptions_getstacktrace(state);
+    stacktrace = nn_except_getstacktrace(state);
     nn_vm_stackpush(state, stacktrace);
     nn_instance_defproperty(instance, nn_string_intern(state, "stacktrace"), stacktrace);
     nn_vm_stackpop(state);
-    return nn_exceptions_propagate(state);
+    return nn_except_propagate(state);
 }
 
 NEON_FORCEINLINE NNInstruction nn_util_makeinst(bool isop, uint8_t code, int srcline)
@@ -14830,7 +14920,7 @@ NEON_FORCEINLINE NNInstruction nn_util_makeinst(bool isop, uint8_t code, int src
     return inst;
 }
 
-NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const char* cstrname, bool iscs)
+NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char* cstrname, bool iscs)
 {
     int messageconst;
     NNObjClass* klass;
@@ -14850,44 +14940,44 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     nn_vm_stackpop(state);
     nn_vm_stackpush(state, nn_value_fromobject(klass));
     function = nn_object_makefuncscript(state, module, NEON_FNCONTEXTTYPE_METHOD);
-    function->arity = 1;
-    function->isvariadic = false;
+    function->fnscriptfunc.arity = 1;
+    function->fnscriptfunc.isvariadic = false;
     nn_vm_stackpush(state, nn_value_fromobject(function));
     {
         /* g_loc 0 */
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, 0 & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 0 & 0xff, 0));
     }
     {
         /* g_loc 1 */
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, (1 >> 8) & 0xff, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, 1 & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (1 >> 8) & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 1 & 0xff, 0));
     }
     {
-        messageconst = nn_blob_pushconst(&function->blob, nn_value_fromobject(nn_string_intern(state, "message")));
+        messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_intern(state, "message")));
         /* s_prop 0 */
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_PROPERTYSET, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(false, messageconst & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_PROPERTYSET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, messageconst & 0xff, 0));
     }
     {
         /* pop */
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
     }
     {
         /* g_loc 0 */
         /*
-        //  nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
-        //  nn_blob_push(&function->blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
-        //  nn_blob_push(&function->blob, nn_util_makeinst(false, 0 & 0xff, 0));
+        //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
+        //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 0 & 0xff, 0));
         */
     }
     {
         /* ret */
-        nn_blob_push(&function->blob, nn_util_makeinst(true, NEON_OP_RETURN, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_RETURN, 0));
     }
     closure = nn_object_makefuncclosure(state, function);
     nn_vm_stackpop(state);
@@ -14910,7 +15000,7 @@ NNObjClass* nn_exceptions_makeclass(NNState* state, NNObjModule* module, const c
     return klass;
 }
 
-NNObjInstance* nn_exceptions_makeinstance(NNState* state, NNObjClass* exklass, const char* srcfile, int srcline, NNObjString* message)
+NNObjInstance* nn_except_makeinstance(NNState* state, NNObjClass* exklass, const char* srcfile, int srcline, NNObjString* message)
 {
     NNObjInstance* instance;
     NNObjString* osfile;
@@ -14936,14 +15026,14 @@ void nn_vm_raisefatalerror(NNState* state, const char* format, ...)
     /* flush out anything on stdout first */
     fflush(stdout);
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
-    function = frame->closure->scriptfunc;
-    instruction = frame->inscode - function->blob.instrucs - 1;
-    line = function->blob.instrucs[instruction].srcline;
+    function = frame->closure->fnclosure.scriptfunc;
+    instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
+    line = function->fnscriptfunc.blob.instrucs[instruction].srcline;
     fprintf(stderr, "RuntimeError: ");
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    fprintf(stderr, " -> %s:%d ", function->module->physicalpath->sbuf->data, line);
+    fprintf(stderr, " -> %s:%d ", function->fnscriptfunc.module->physicalpath->sbuf->data, line);
     fputs("\n", stderr);
     if(state->vmstate.framecount > 1)
     {
@@ -14951,10 +15041,10 @@ void nn_vm_raisefatalerror(NNState* state, const char* format, ...)
         for(i = state->vmstate.framecount - 1; i >= 0; i--)
         {
             frame = &state->vmstate.framevalues[i];
-            function = frame->closure->scriptfunc;
+            function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
-            instruction = frame->inscode - function->blob.instrucs - 1;
-            fprintf(stderr, "    %s:%d -> ", function->module->physicalpath->sbuf->data, function->blob.instrucs[instruction].srcline);
+            instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
+            fprintf(stderr, "    %s:%d -> ", function->fnscriptfunc.module->physicalpath->sbuf->data, function->fnscriptfunc.blob.instrucs[instruction].srcline);
             if(function->name == NULL)
             {
                 fprintf(stderr, "<script>");
@@ -15031,23 +15121,50 @@ void nn_vm_initvmstate(NNState* state)
 
 bool nn_vm_checkmayberesize(NNState* state)
 {
+    NNObjFunction* closure;
+    closure = NULL;
+    if(state->vmstate.currentframe != NULL)
+    {
+        closure = state->vmstate.currentframe->closure;
+    }
     if((state->vmstate.stackidx+1) >= state->vmstate.stackcapacity)
     {
-        if(!nn_vm_resizestack(state, state->vmstate.stackidx + 1))
+        if(!nn_vm_resizestack(state, closure, state->vmstate.stackidx + 1))
         {
-            return nn_exceptions_throw(state, "failed to resize stack due to overflow");
+            return nn_except_throw(state, "failed to resize stack due to overflow");
         }
         return true;
     }
     if(state->vmstate.framecount >= state->vmstate.framecapacity)
     {
-        if(!nn_vm_resizeframes(state, state->vmstate.framecapacity + 1))
+        if(!nn_vm_resizeframes(state, closure, state->vmstate.framecapacity + 1))
         {
-            return nn_exceptions_throw(state, "failed to resize frames due to overflow");
+            return nn_except_throw(state, "failed to resize frames due to overflow");
         }
         return true;
     }
     return false;
+}
+
+void nn_vm_resizeinfo(NNState* state, const char* context, NNObjFunction* closure, size_t needed)
+{
+    const char* name;
+    (void)state;
+    name = "unknown";
+    if(closure->fnclosure.scriptfunc != NULL)
+    {
+        if(closure->fnclosure.scriptfunc->name != NULL)
+        {
+            if(closure->fnclosure.scriptfunc->name->sbuf != NULL)
+            {
+                if(closure->fnclosure.scriptfunc->name->sbuf->data != NULL)
+                {
+                    name = closure->fnclosure.scriptfunc->name->sbuf->data; 
+                }
+            }
+        }
+    }
+    fprintf(stderr, "resizing %s for closure %s\n", context, name);
 }
 
 /*
@@ -15061,7 +15178,7 @@ bool nn_vm_checkmayberesize(NNState* state)
 * i.e., [NNValue x 32] -> [NNValue x <newsize>], without
 * copying anything beyond primitive values.
 */
-bool nn_vm_resizestack(NNState* state, size_t needed)
+bool nn_vm_resizestack(NNState* state, NNObjFunction* closure, size_t needed)
 {
     size_t oldsz;
     size_t newsz;
@@ -15073,7 +15190,14 @@ bool nn_vm_resizestack(NNState* state, size_t needed)
     oldsz = state->vmstate.stackcapacity;
     newsz = oldsz + nforvals;
     allocsz = ((newsz + 1) * sizeof(NNValue));
-    fprintf(stderr, "*** resizing stack: needed %ld, from %ld to %ld, allocating %ld ***\n", (long)nforvals, (long)oldsz, (long)newsz, (long)allocsz);
+    if(nn_util_unlikely(state->conf.enableapidebug))
+    {
+        if(closure != NULL)
+        {
+            nn_vm_resizeinfo(state, "stack", closure, needed);
+        }
+        fprintf(stderr, "*** resizing stack: needed %ld, from %ld to %ld, allocating %ld ***\n", (long)nforvals, (long)oldsz, (long)newsz, (long)allocsz);
+    }
     oldbuf = state->vmstate.stackvalues;
     newbuf = (NNValue*)nn_memory_realloc(oldbuf, allocsz);
     if(newbuf == NULL)
@@ -15086,7 +15210,7 @@ bool nn_vm_resizestack(NNState* state, size_t needed)
     return true;
 }
 
-bool nn_vm_resizeframes(NNState* state, size_t needed)
+bool nn_vm_resizeframes(NNState* state, NNObjFunction* closure, size_t needed)
 {
     /* return false; */
     size_t i;
@@ -15099,7 +15223,14 @@ bool nn_vm_resizeframes(NNState* state, size_t needed)
     NNCallFrame* oldbuf;
     NNCallFrame* newbuf;
     (void)i;
-    fprintf(stderr, "*** resizing frames ***\n");
+    if(nn_util_unlikely(state->conf.enableapidebug))
+    {
+        if(closure != NULL)
+        {
+            nn_vm_resizeinfo(state, "frames", closure, needed);
+        }
+        fprintf(stderr, "*** resizing frames ***\n");
+    }
     oldclosure = state->vmstate.currentframe->closure;
     oldip = state->vmstate.currentframe->inscode;
     oldhandlercnt = state->vmstate.currentframe->handlercount;
@@ -15305,14 +15436,14 @@ void nn_state_makewithuserptr(NNState* pstate, void* userptr)
     {
         if(pstate->exceptions.stdexception == NULL)
         {
-            pstate->exceptions.stdexception = nn_exceptions_makeclass(pstate, NULL, "Exception", true);
+            pstate->exceptions.stdexception = nn_except_makeclass(pstate, NULL, "Exception", true);
         }
-        pstate->exceptions.asserterror = nn_exceptions_makeclass(pstate, NULL, "AssertError", true);
-        pstate->exceptions.syntaxerror = nn_exceptions_makeclass(pstate, NULL, "SyntaxError", true);
-        pstate->exceptions.ioerror = nn_exceptions_makeclass(pstate, NULL, "IOError", true);
-        pstate->exceptions.oserror = nn_exceptions_makeclass(pstate, NULL, "OSError", true);
-        pstate->exceptions.argumenterror = nn_exceptions_makeclass(pstate, NULL, "ArgumentError", true);
-        pstate->exceptions.regexerror = nn_exceptions_makeclass(pstate, NULL, "RegexError", true);
+        pstate->exceptions.asserterror = nn_except_makeclass(pstate, NULL, "AssertError", true);
+        pstate->exceptions.syntaxerror = nn_except_makeclass(pstate, NULL, "SyntaxError", true);
+        pstate->exceptions.ioerror = nn_except_makeclass(pstate, NULL, "IOError", true);
+        pstate->exceptions.oserror = nn_except_makeclass(pstate, NULL, "OSError", true);
+        pstate->exceptions.argumenterror = nn_except_makeclass(pstate, NULL, "ArgumentError", true);
+        pstate->exceptions.regexerror = nn_except_makeclass(pstate, NULL, "RegexError", true);
     }
     nn_state_buildprocessinfo(pstate);
     nn_state_addsearchpathobj(pstate, pstate->processinfo->cliexedirectory);
@@ -15375,14 +15506,14 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
     (void)thisval;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
     /* fill empty parameters if not variadic */
-    for(; !closure->scriptfunc->isvariadic && argcount < closure->scriptfunc->arity; argcount++)
+    for(; !closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && argcount < closure->fnclosure.scriptfunc->fnscriptfunc.arity; argcount++)
     {
         nn_vm_stackpush(state, nn_value_makenull());
     }
     /* handle variadic arguments... */
-    if(closure->scriptfunc->isvariadic && argcount >= closure->scriptfunc->arity - 1)
+    if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && argcount >= closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1)
     {
-        startva = argcount - closure->scriptfunc->arity;
+        startva = argcount - closure->fnclosure.scriptfunc->fnscriptfunc.arity;
         argslist = nn_object_makearray(state);
         nn_vm_stackpush(state, nn_value_fromobject(argslist));
         for(i = startva; i >= 0; i--)
@@ -15394,16 +15525,16 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
         nn_vm_stackpopn(state, startva + 2);
         nn_vm_stackpush(state, nn_value_fromobject(argslist));
     }
-    if(argcount != closure->scriptfunc->arity)
+    if(argcount != closure->fnclosure.scriptfunc->fnscriptfunc.arity)
     {
         nn_vm_stackpopn(state, argcount);
-        if(closure->scriptfunc->isvariadic)
+        if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic)
         {
-            return nn_exceptions_throw(state, "expected at least %d arguments but got %d", closure->scriptfunc->arity - 1, argcount);
+            return nn_except_throw(state, "expected at least %d arguments but got %d", closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1, argcount);
         }
         else
         {
-            return nn_exceptions_throw(state, "expected %d arguments but got %d", closure->scriptfunc->arity, argcount);
+            return nn_except_throw(state, "expected %d arguments but got %d", closure->fnclosure.scriptfunc->fnscriptfunc.arity, argcount);
         }
     }
     if(nn_vm_checkmayberesize(state))
@@ -15412,7 +15543,7 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
     }
     frame = &state->vmstate.framevalues[state->vmstate.framecount++];
     frame->closure = closure;
-    frame->inscode = closure->scriptfunc->blob.instrucs;
+    frame->inscode = closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs;
     frame->stackslotpos = state->vmstate.stackidx + (-argcount - 1);
     return true;
 }
@@ -15429,9 +15560,9 @@ bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, in
     fnargs.count = argcount;
     fnargs.args = vargs;
     fnargs.thisval = thisval;
-    fnargs.userptr = native->userptr;
+    fnargs.userptr = native->fnnativefunc.userptr;
     fnargs.name = native->name;
-    r = native->natfunc(state, &fnargs);
+    r = native->fnnativefunc.natfunc(state, &fnargs);
     {
         state->vmstate.stackvalues[spos - 1] = r;
         state->vmstate.stackidx -= argcount;
@@ -15451,10 +15582,10 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
             case NEON_OBJTYPE_FUNCBOUND:
                 {
                     NNObjFunction* bound;
-                    bound = nn_value_asfuncbound(callable);
+                    bound = nn_value_asfunction(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
-                    return nn_vm_callclosure(state, bound->method, thisval, argcount);
+                    return nn_vm_callclosure(state, bound->fnmethod.method, thisval, argcount);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -15473,7 +15604,7 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     }
                     else if(argcount != 0)
                     {
-                        return nn_exceptions_throw(state, "%s constructor expects 0 arguments, %d given", klass->name->sbuf->data, argcount);
+                        return nn_except_throw(state, "%s constructor expects 0 arguments, %d given", klass->name->sbuf->data, argcount);
                     }
                     return true;
                 }
@@ -15488,24 +15619,24 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     {
                         return nn_vm_callvalue(state, field->value, thisval, argcount);
                     }
-                    return nn_exceptions_throw(state, "module %s does not export a default function", module->name);
+                    return nn_except_throw(state, "module %s does not export a default function", module->name);
                 }
                 break;
             case NEON_OBJTYPE_FUNCCLOSURE:
                 {
-                    return nn_vm_callclosure(state, nn_value_asfuncclosure(callable), thisval, argcount);
+                    return nn_vm_callclosure(state, nn_value_asfunction(callable), thisval, argcount);
                 }
                 break;
             case NEON_OBJTYPE_FUNCNATIVE:
                 {
-                    return nn_vm_callnative(state, nn_value_asfuncnative(callable), thisval, argcount);
+                    return nn_vm_callnative(state, nn_value_asfunction(callable), thisval, argcount);
                 }
                 break;
             default:
                 break;
         }
     }
-    return nn_exceptions_throw(state, "object of type %s is not callable", nn_value_typename(callable));
+    return nn_except_throw(state, "object of type %s is not callable", nn_value_typename(callable));
 }
 
 bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argcount)
@@ -15518,8 +15649,8 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
             case NEON_OBJTYPE_FUNCBOUND:
                 {
                     NNObjFunction* bound;
-                    bound = nn_value_asfuncbound(callable);
-                    actualthisval = bound->receiver;
+                    bound = nn_value_asfunction(callable);
+                    actualthisval = bound->fnmethod.receiver;
                     if(!nn_value_isnull(thisval))
                     {
                         actualthisval = thisval;
@@ -15558,9 +15689,9 @@ NNFuncContextType nn_value_getmethodtype(NNValue method)
     switch(nn_value_objtype(method))
     {
         case NEON_OBJTYPE_FUNCNATIVE:
-            return nn_value_asfuncnative(method)->contexttype;
+            return nn_value_asfunction(method)->contexttype;
         case NEON_OBJTYPE_FUNCCLOSURE:
-            return nn_value_asfuncclosure(method)->scriptfunc->contexttype;
+            return nn_value_asfunction(method)->fnclosure.scriptfunc->contexttype;
         default:
             break;
     }
@@ -15661,7 +15792,7 @@ NNValue nn_vm_stackpeek(NNState* state, int distance)
     }        
 
 #define nn_vmmac_tryraise(state, rtval, ...) \
-    if(!nn_exceptions_throw(state, ##__VA_ARGS__)) \
+    if(!nn_except_throw(state, ##__VA_ARGS__)) \
     { \
         return rtval; \
     }
@@ -15696,7 +15827,7 @@ NEON_FORCEINLINE NNValue nn_vmbits_readconst(NNState* state)
 {
     uint16_t idx;
     idx = nn_vmbits_readshort(state);
-    return nn_valarray_get(&state->vmstate.currentframe->closure->scriptfunc->blob.constants, idx);
+    return nn_valarray_get(&state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.constants, idx);
 }
 
 NEON_FORCEINLINE NNObjString* nn_vmbits_readstring(NNState* state)
@@ -15713,11 +15844,11 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
     {
         if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
-            return nn_exceptions_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf->data, klass->name->sbuf->data);
+            return nn_except_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf->data, klass->name->sbuf->data);
         }
         return nn_vm_callvaluewithobject(state, field->value, nn_value_fromobject(klass), argcount);
     }
-    return nn_exceptions_throw(state, "undefined method '%s' in %s", name->sbuf->data, klass->name->sbuf->data);
+    return nn_except_throw(state, "undefined method '%s' in %s", name->sbuf->data, klass->name->sbuf->data);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* name, int argcount)
@@ -15753,10 +15884,10 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
             {
                 return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
             }
-            return nn_exceptions_throw(state, "cannot call non-static method %s() on non instance", name->sbuf->data);
+            return nn_except_throw(state, "cannot call non-static method %s() on non instance", name->sbuf->data);
         }
     }
-    return nn_exceptions_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf->data, nn_value_typename(receiver));
+    return nn_except_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf->data, nn_value_typename(receiver));
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* name, int argcount)
@@ -15783,11 +15914,11 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            return nn_exceptions_throw(state, "cannot call private module method '%s'", name->sbuf->data);
+                            return nn_except_throw(state, "cannot call private module method '%s'", name->sbuf->data);
                         }
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
-                    return nn_exceptions_throw(state, "module %s does not define class or method %s()", module->name, name->sbuf->data);
+                    return nn_except_throw(state, "module %s does not define class or method %s()", module->name, name->sbuf->data);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -15820,7 +15951,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             fprintf(stderr, "fntyp: %d\n", fntyp);
                             if(fntyp == NEON_FNCONTEXTTYPE_PRIVATE)
                             {
-                                return nn_exceptions_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
+                                return nn_except_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
                             }
                             if(fntyp == NEON_FNCONTEXTTYPE_STATIC)
                             {
@@ -15829,7 +15960,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         }
                     }
                     #endif
-                    return nn_exceptions_throw(state, "unknown method %s() in class %s", name->sbuf->data, klass->name->sbuf->data);
+                    return nn_except_throw(state, "unknown method %s() in class %s", name->sbuf->data, klass->name->sbuf->data);
                 }
             case NEON_OBJTYPE_INSTANCE:
                 {
@@ -15852,7 +15983,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     field = nn_class_getmethodfield(state->classprimdict, name);
                     if(field != NULL)
                     {
-                        return nn_vm_callnative(state, nn_value_asfuncnative(field->value), receiver, argcount);
+                        return nn_vm_callnative(state, nn_value_asfunction(field->value), receiver, argcount);
                     }
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
@@ -15866,7 +15997,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             }
                         }
                     }
-                    return nn_exceptions_throw(state, "'dict' has no method %s()", name->sbuf->data);
+                    return nn_except_throw(state, "'dict' has no method %s()", name->sbuf->data);
                 }
                 default:
                     {
@@ -15878,14 +16009,14 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     if(klass == NULL)
     {
         /* @TODO: have methods for non objects as well. */
-        return nn_exceptions_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->sbuf->data);
+        return nn_except_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->sbuf->data);
     }
     field = nn_class_getmethodfield(klass, name);
     if(field != NULL)
     {
         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
     }
-    return nn_exceptions_throw(state, "'%s' has no method %s()", klass->name->sbuf->data, name->sbuf->data);
+    return nn_except_throw(state, "'%s' has no method %s()", klass->name->sbuf->data, name->sbuf->data);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NNObjString* name)
@@ -15898,15 +16029,15 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     {
         if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
-            return nn_exceptions_throw(state, "cannot get private property '%s' from instance", name->sbuf->data);
+            return nn_except_throw(state, "cannot get private property '%s' from instance", name->sbuf->data);
         }
         val = nn_vmbits_stackpeek(state, 0);
-        bound = nn_object_makefuncbound(state, val, nn_value_asfuncclosure(field->value));
+        bound = nn_object_makefuncbound(state, val, nn_value_asfunction(field->value));
         nn_vmbits_stackpop(state);
         nn_vmbits_stackpush(state, nn_value_fromobject(bound));
         return true;
     }
-    return nn_exceptions_throw(state, "undefined property '%s'", name->sbuf->data);
+    return nn_except_throw(state, "undefined property '%s'", name->sbuf->data);
 }
 
 NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNState* state, NNValue* local, int stackpos)
@@ -16167,7 +16298,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
     if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
     {
         nn_vmbits_stackpopn(state, 2);
-        return nn_exceptions_throw(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
+        return nn_except_throw(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
     }
     idxlower = 0;
     if(nn_value_isnumber(vallower))
@@ -16232,7 +16363,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
     if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
     {
         nn_vmbits_stackpopn(state, 2);
-        return nn_exceptions_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
+        return nn_except_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
     }
     length = string->sbuf->length;
     idxlower = 0;
@@ -16319,7 +16450,7 @@ NEON_FORCEINLINE bool nn_vmdo_getrangedindex(NNState* state)
     }
     if(!isgotten)
     {
-        return nn_exceptions_throw(state, "cannot range index object of type %s", nn_value_typename(vfrom));
+        return nn_except_throw(state, "cannot range index object of type %s", nn_value_typename(vfrom));
     }
     return true;
 }
@@ -16361,7 +16492,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(NNState* state, NNObjModule* mo
         return true;
     }
     nn_vmbits_stackpop(state);
-    return nn_exceptions_throw(state, "%s is undefined in module %s", nn_value_tostring(state, vindex)->sbuf->data, module->name);
+    return nn_except_throw(state, "%s is undefined in module %s", nn_value_tostring(state, vindex)->sbuf->data, module->name);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* string, bool willassign)
@@ -16386,7 +16517,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
             return nn_vmutil_dogetrangedindexofstring(state, string, willassign);
         }
         nn_vmbits_stackpopn(state, 1);
-        return nn_exceptions_throw(state, "strings are numerically indexed");
+        return nn_except_throw(state, "strings are numerically indexed");
     }
     index = nn_value_asnumber(vindex);
     maxlength = string->sbuf->length;
@@ -16412,7 +16543,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
     }
     nn_vmbits_stackpopn(state, 1);
     #if 0
-        return nn_exceptions_throw(state, "string index %d out of range of %d", realindex, maxlength);
+        return nn_except_throw(state, "string index %d out of range of %d", realindex, maxlength);
     #else
         nn_vmbits_stackpush(state, nn_value_makenull());
         return true;
@@ -16437,7 +16568,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
             return nn_vmutil_dogetrangedindexofarray(state, list, willassign);
         }
         nn_vmbits_stackpop(state);
-        return nn_exceptions_throw(state, "list are numerically indexed");
+        return nn_except_throw(state, "list are numerically indexed");
     }
     index = nn_value_asnumber(vindex);
     if(nn_util_unlikely(index < 0))
@@ -16521,7 +16652,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
     }
     if(!isgotten)
     {
-        nn_exceptions_throw(state, "cannot index object of type %s", nn_value_typename(peeked));
+        nn_except_throw(state, "cannot index object of type %s", nn_value_typename(peeked));
     }
     return true;
 }
@@ -16565,7 +16696,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     {
         nn_vmbits_stackpopn(state, 3);
         /* pop the value, index and list out */
-        return nn_exceptions_throw(state, "list are numerically indexed");
+        return nn_except_throw(state, "list are numerically indexed");
     }
     ocap = nn_valarray_capacity(&list->varray);
     ocnt = nn_valarray_count(&list->varray);
@@ -16622,7 +16753,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     /*
     // pop the value, index and list out
     //nn_vmbits_stackpopn(state, 3);
-    //return nn_exceptions_throw(state, "lists index %d out of range", rawpos);
+    //return nn_except_throw(state, "lists index %d out of range", rawpos);
     //nn_vmbits_stackpush(state, nn_value_makenull());
     //return true;
     */
@@ -16638,7 +16769,7 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     {
         nn_vmbits_stackpopn(state, 3);
         /* pop the value, index and list out */
-        return nn_exceptions_throw(state, "strings are numerically indexed");
+        return nn_except_throw(state, "strings are numerically indexed");
     }
     iv = nn_value_asnumber(value);
     rawpos = nn_value_asnumber(index);
@@ -16722,7 +16853,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     }
     if(!isset)
     {
-        return nn_exceptions_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vmbits_stackpeek(state, 3)));
+        return nn_except_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vmbits_stackpeek(state, 3)));
     }
     return true;
 }
@@ -16776,12 +16907,12 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     if(nn_util_methodisprivate(name))
                     {
-                        nn_exceptions_throw(state, "cannot get private module property '%s'", name->sbuf->data);
+                        nn_except_throw(state, "cannot get private module property '%s'", name->sbuf->data);
                         return NULL;
                     }
                     return field;
                 }
-                nn_exceptions_throw(state, "%s module does not define '%s'", module->name, name->sbuf->data);
+                nn_except_throw(state, "%s module does not define '%s'", module->name, name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16794,7 +16925,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            nn_exceptions_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
+                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
                                 nn_value_asclass(peeked)->name->sbuf->data);
                             return NULL;
                         }
@@ -16808,14 +16939,14 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            nn_exceptions_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
+                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
                                 nn_value_asclass(peeked)->name->sbuf->data);
                             return NULL;
                         }
                         return field;
                     }
                 }
-                nn_exceptions_throw(state, "class %s does not have a static property or method named '%s'",
+                nn_except_throw(state, "class %s does not have a static property or method named '%s'",
                     nn_value_asclass(peeked)->name->sbuf->data, name->sbuf->data);
                 return NULL;
             }
@@ -16829,21 +16960,21 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     if(nn_util_methodisprivate(name))
                     {
-                        nn_exceptions_throw(state, "cannot call private property '%s' from instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
+                        nn_except_throw(state, "cannot call private property '%s' from instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
                         return NULL;
                     }
                     return field;
                 }
                 if(nn_util_methodisprivate(name))
                 {
-                    nn_exceptions_throw(state, "cannot bind private property '%s' to instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
+                    nn_except_throw(state, "cannot bind private property '%s' to instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
                     return NULL;
                 }
                 if(nn_vmutil_bindmethod(state, instance->klass, name))
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "instance of class %s does not have a property or method named '%s'",
+                nn_except_throw(state, "instance of class %s does not have a property or method named '%s'",
                     nn_value_asinstance(peeked)->klass->name->sbuf->data, name->sbuf->data);
                 return NULL;
             }
@@ -16855,7 +16986,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "class String has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class String has no named property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16866,7 +16997,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "class Array has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Array has no named property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16877,7 +17008,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "class Range has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Range has no named property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16892,7 +17023,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "unknown key or class Dict property '%s'", name->sbuf->data);
+                nn_except_throw(state, "unknown key or class Dict property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16903,7 +17034,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_exceptions_throw(state, "class File has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class File has no named property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
@@ -16925,13 +17056,13 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                         return field;
                     }
                 }
-                nn_exceptions_throw(state, "class Function has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Function has no named property '%s'", name->sbuf->data);
                 return NULL;
             }
             break;
         default:
             {
-                nn_exceptions_throw(state, "object of type %s does not carry properties", nn_value_typename(peeked));
+                nn_except_throw(state, "object of type %s does not carry properties", nn_value_typename(peeked));
                 return NULL;
             }
             break;
@@ -16969,7 +17100,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
     }
     else
     {
-        nn_exceptions_throw(state, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf->data,
+        nn_except_throw(state, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf->data,
             nn_value_typename(peeked));
     }
     return false;
@@ -17099,7 +17230,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
             /* still no class found? then it cannot carry properties */
             if(klass == NULL)
             {
-                nn_exceptions_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
+                nn_except_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
                 return false;
             }
         }
@@ -17303,7 +17434,7 @@ NEON_FORCEINLINE bool nn_vmdo_globaldefine(NNState* state)
     NNHashValTable* tab;
     name = nn_vmbits_readstring(state);
     val = nn_vmbits_stackpeek(state, 0);
-    tab = &state->vmstate.currentframe->closure->scriptfunc->module->deftable;
+    tab = &state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
     nn_valtable_set(tab, nn_value_fromobject(name), val);
     nn_vmbits_stackpop(state);
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
@@ -17318,7 +17449,7 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
     NNHashValTable* tab;
     NNProperty* field;
     name = nn_vmbits_readstring(state);
-    tab = &state->vmstate.currentframe->closure->scriptfunc->module->deftable;
+    tab = &state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
     field = nn_valtable_getfieldbyostr(tab, name);
     if(field == NULL)
     {
@@ -17326,7 +17457,7 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
         if(field == NULL)
         {
             //nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf->data);
-            nn_exceptions_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", name->sbuf->data);
+            nn_except_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", name->sbuf->data);
             return false;
         }
     }
@@ -17339,7 +17470,7 @@ NEON_FORCEINLINE bool nn_vmdo_globalset(NNState* state)
     NNObjString* name;
     NNHashValTable* table;
     name = nn_vmbits_readstring(state);
-    table = &state->vmstate.currentframe->closure->scriptfunc->module->deftable;
+    table = &state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
     if(nn_valtable_set(table, nn_value_fromobject(name), nn_vmbits_stackpeek(state, 0)))
     {
         if(state->conf.enablestrictmode)
@@ -17454,7 +17585,7 @@ NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
     NNValue* upvals;
     NNObjFunction* function;
     NNObjFunction* closure;
-    function = nn_value_asfuncscript(nn_vmbits_readconst(state));
+    function = nn_value_asfunction(nn_vmbits_readconst(state));
     closure = nn_object_makefuncclosure(state, function);
     nn_vmbits_stackpush(state, nn_value_fromobject(closure));
     for(i = 0; i < (size_t)closure->upvalcount; i++)
@@ -17465,11 +17596,11 @@ NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
         {
             ssp = state->vmstate.currentframe->stackslotpos;
             upvals = &state->vmstate.stackvalues[ssp + index];
-            closure->upvalues[i] = nn_vmutil_upvaluescapture(state, upvals, index);
+            closure->fnclosure.upvalues[i] = nn_vmutil_upvaluescapture(state, upvals, index);
         }
         else
         {
-            closure->upvalues[i] = state->vmstate.currentframe->closure->upvalues[index];
+            closure->fnclosure.upvalues[i] = state->vmstate.currentframe->closure->fnclosure.upvalues[index];
         }
     }
     return true;
@@ -17689,8 +17820,8 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
         }
         if(nn_util_unlikely(state->conf.shoulddumpstack))
         {
-            ofs = (int)(state->vmstate.currentframe->inscode - state->vmstate.currentframe->closure->scriptfunc->blob.instrucs);
-            nn_dbg_printinstructionat(state->debugwriter, &state->vmstate.currentframe->closure->scriptfunc->blob, ofs);
+            ofs = (int)(state->vmstate.currentframe->inscode - state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs);
+            nn_dbg_printinstructionat(state->debugwriter, &state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob, ofs);
             fprintf(stderr, "stack (before)=[\n");
             iterpos = 0;
             dbgslot = state->vmstate.stackvalues;
@@ -18165,7 +18296,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     closure = state->vmstate.currentframe->closure;
                     if(index < closure->upvalcount)
                     {
-                        nn_vmbits_stackpush(state, closure->upvalues[index]->location);
+                        nn_vmbits_stackpush(state, closure->fnclosure.upvalues[index]->location);
                     }
                     else
                     {
@@ -18177,7 +18308,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 {
                     int index;
                     index = nn_vmbits_readshort(state);
-                    state->vmstate.currentframe->closure->upvalues[index]->location = nn_vmbits_stackpeek(state, 0);
+                    state->vmstate.currentframe->closure->fnclosure.upvalues[index]->location = nn_vmbits_stackpeek(state, 0);
                 }
                 VM_DISPATCH();
             VM_CASE(NEON_OP_CALLFUNCTION)
@@ -18236,7 +18367,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNProperty* field;
                     haveval = false;
                     name = nn_vmbits_readstring(state);
-                    field = nn_valtable_getfieldbyostr(&state->vmstate.currentframe->closure->scriptfunc->module->deftable, name);
+                    field = nn_valtable_getfieldbyostr(&state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable, name);
                     if(field != NULL)
                     {
                         if(nn_value_isclass(field->value))
@@ -18435,11 +18566,11 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     {
                         if(!nn_value_isnull(message))
                         {
-                            nn_exceptions_throwclass(state, state->exceptions.asserterror, nn_value_tostring(state, message)->sbuf->data);
+                            nn_except_throwclass(state, state->exceptions.asserterror, nn_value_tostring(state, message)->sbuf->data);
                         }
                         else
                         {
-                            nn_exceptions_throwclass(state, state->exceptions.asserterror, "assertion failed");
+                            nn_except_throwclass(state, state->exceptions.asserterror, "assertion failed");
                         }
                     }
                 }
@@ -18460,10 +18591,10 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "instance of Exception expected");
                         VM_DISPATCH();
                     }
-                    stacktrace = nn_exceptions_getstacktrace(state);
+                    stacktrace = nn_except_getstacktrace(state);
                     instance = nn_value_asinstance(peeked);
                     nn_instance_defproperty(instance, nn_string_intern(state, "stacktrace"), stacktrace);
-                    if(nn_exceptions_propagate(state))
+                    if(nn_except_propagate(state))
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                         VM_DISPATCH();
@@ -18497,7 +18628,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         if(!haveclass)
                         {
                             /*
-                            if(!nn_valtable_get(&state->vmstate.currentframe->closure->scriptfunc->module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
+                            if(!nn_valtable_get(&state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
                             {
                                 nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->sbuf->data);
                                 VM_DISPATCH();
@@ -18505,11 +18636,11 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             */
                             exclass = state->exceptions.stdexception;
                         }
-                        nn_exceptions_pushhandler(state, exclass, addr, finaddr);
+                        nn_except_pushhandler(state, exclass, addr, finaddr);
                     }
                     else
                     {
-                        nn_exceptions_pushhandler(state, NULL, addr, finaddr);
+                        nn_except_pushhandler(state, NULL, addr, finaddr);
                     }
                 }
                 VM_DISPATCH();
@@ -18521,7 +18652,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             VM_CASE(NEON_OP_EXPUBLISHTRY)
                 {
                     state->vmstate.currentframe->handlercount--;
-                    if(nn_exceptions_propagate(state))
+                    if(nn_except_propagate(state))
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
                         VM_DISPATCH();
@@ -18573,17 +18704,17 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjA
     arity = 0;
     if(nn_value_isfuncclosure(callable))
     {
-        closure = nn_value_asfuncclosure(callable);
-        arity = closure->scriptfunc->arity;
+        closure = nn_value_asfunction(callable);
+        arity = closure->fnclosure.scriptfunc->fnscriptfunc.arity;
     }
     else if(nn_value_isfuncscript(callable))
     {
-        arity = nn_value_asfuncscript(callable)->arity;
+        arity = nn_value_asfunction(callable)->fnscriptfunc.arity;
     }
     else if(nn_value_isfuncnative(callable))
     {
         #if 0
-            arity = nn_value_asfuncnative(callable);
+            arity = nn_value_asfunction(callable);
         #endif
     }
     if(arity > 0)
@@ -18709,7 +18840,7 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
     ok = nn_nestcall_callfunction(state, callme, nn_value_makenull(), args, &retval);
     if(!ok)
     {
-        nn_exceptions_throw(state, "eval() failed");
+        nn_except_throw(state, "eval() failed");
     }
     return retval;
 }

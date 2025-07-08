@@ -313,18 +313,35 @@ bool nn_valtable_delete(NNHashValTable* table, NNValue key)
     return true;
 }
 
-void nn_valtable_addall(NNHashValTable* from, NNHashValTable* to)
+bool nn_valtable_addall(NNHashValTable* from, NNHashValTable* to, bool keepgoing)
 {
     int i;
+    int failcnt;
     NNHashValEntry* entry;
+    failcnt = 0;
     for(i = 0; i < from->capacity; i++)
     {
         entry = &from->entries[i];
         if(!nn_value_isnull(entry->key))
         {
-            nn_valtable_setwithtype(to, entry->key, entry->value.value, entry->value.type, false);
+            if(!nn_valtable_setwithtype(to, entry->key, entry->value.value, entry->value.type, false))
+            {
+                if(keepgoing)
+                {
+                    failcnt++;
+                }
+                else
+                {
+                    return false;
+                }
+            }
         }
     }
+    if(failcnt == 0)
+    {
+        return true;
+    }
+    return false;
 }
 
 void nn_valtable_importall(NNHashValTable* from, NNHashValTable* to)
@@ -346,11 +363,13 @@ void nn_valtable_importall(NNHashValTable* from, NNHashValTable* to)
     }
 }
 
-void nn_valtable_copy(NNHashValTable* from, NNHashValTable* to)
+bool nn_valtable_copy(NNHashValTable* from, NNHashValTable* to)
 {
     int i;
     NNState* state;
     NNHashValEntry* entry;
+    NN_NULLPTRCHECK_RETURNVALUE(from, false);
+    NN_NULLPTRCHECK_RETURNVALUE(to, false);
     state = from->pstate;
     for(i = 0; i < (int)from->capacity; i++)
     {
@@ -360,6 +379,7 @@ void nn_valtable_copy(NNHashValTable* from, NNHashValTable* to)
             nn_valtable_setwithtype(to, entry->key, nn_value_copyvalue(state, entry->value.value), entry->value.type, false);
         }
     }
+    return true;
 }
 
 NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, size_t length, uint32_t hash)
@@ -369,6 +389,7 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
     const char* sdata;
     NNHashValEntry* entry;
     NNObjString* string;
+    NN_NULLPTRCHECK_RETURNVALUE(table, NULL);
     if(table->count == 0)
     {
         return NULL;
@@ -397,12 +418,14 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
         }
         index = (index + 1) & (table->capacity - 1);
     }
+    return NULL;
 }
 
 NNValue nn_valtable_findkey(NNHashValTable* table, NNValue value)
 {
     int i;
     NNHashValEntry* entry;
+    NN_NULLPTRCHECK_RETURNVALUE(table, nn_value_makenull());
     for(i = 0; i < (int)table->capacity; i++)
     {
         entry = &table->entries[i];
@@ -423,6 +446,7 @@ NNObjArray* nn_valtable_getkeys(NNHashValTable* table)
     NNState* state;
     NNObjArray* list;
     NNHashValEntry* entry;
+    NN_NULLPTRCHECK_RETURNVALUE(table, NULL);
     state = table->pstate;
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < table->capacity; i++)
@@ -440,6 +464,7 @@ void nn_valtable_mark(NNState* state, NNHashValTable* table)
 {
     int i;
     NNHashValEntry* entry;
+    NN_NULLPTRCHECK_RETURN(table);
     if(table == NULL)
     {
         return;

@@ -1,0 +1,25 @@
+
+class Foo
+{
+    shit = 42;
+    current = 0;
+    line = 0;
+    /*
+    * @type {Token[]}
+    */
+    tokens = [];
+
+    /*
+    * @param {string} source
+    */
+
+
+    constructor(first, ...args)
+    {
+        println("this.shit = ", this.shit)
+        println("first = ", first)
+        println("args = ", args)
+    }
+}
+
+f = new Foo(44,55,66)

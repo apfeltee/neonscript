@@ -1,0 +1,33 @@
+
+var fruits;
+var citrus;
+var tropical;
+var lasttwo;
+
+fruits = ["Banana", "Orange", "Lemon", "Apple", "Mango"];
+
+
+citrus = fruits.slice(1, 3);
+println("expect: ['Orange','Lemon'] of ", fruits)
+println("citrus: ", JSON.stringify(citrus));
+println()   
+
+
+fruits = ["Apple", "Banana", "Orange", "Mango", "Pineapple"];
+
+tropical = fruits.slice(2);
+println("expect: ['Orange', 'Mango', 'Pineapple'] of ", fruits)
+println("tropical: ", JSON.stringify(tropical));
+println()
+
+fruits = ["Apple", "Banana", "Orange", "Mango", "Pineapple"];
+
+lasttwo = fruits.slice(-2);
+println("expect: ['Mango', 'Pineapple'] of ", fruits)
+println("lasttwo = ", JSON.stringify(lasttwo));
+println()
+
+
+
+
+
