@@ -120,6 +120,7 @@
 #endif
 
 #include "linenoise.h"
+#include "mem.h"
 
 #define LINENOISE_DEFAULT_HISTORY_MAX_LEN 100
 #define LINENOISE_MAX_LINE 4096
@@ -538,9 +539,9 @@ void lino_freecompletions(linenoiseCompletions* lc)
 {
     size_t i;
     for(i = 0; i < lc->len; i++)
-        free(lc->cvec[i]);
+        nn_memory_free(lc->cvec[i]);
     if(lc->cvec != NULL)
-        free(lc->cvec);
+        nn_memory_free(lc->cvec);
 }
 
 /* This is an helper function for linenoiseEdit() and is called when the
@@ -651,16 +652,16 @@ void linenoiseAddCompletion(linenoiseCompletions* lc, const char* str)
     char *copy;
     char** cvec;
     len = strlen(str);
-    copy = (char*)malloc(len + 1);
+    copy = (char*)nn_memory_malloc(len + 1);
     if(copy == NULL)
     {
         return;
     }
     memcpy(copy, str, len + 1);
-    cvec = (char**)realloc(lc->cvec, sizeof(char*) * (lc->len + 1));
+    cvec = (char**)nn_memory_realloc(lc->cvec, sizeof(char*) * (lc->len + 1));
     if(cvec == NULL)
     {
-        free(copy);
+        nn_memory_free(copy);
         return;
     }
     lc->cvec = cvec;
@@ -683,7 +684,7 @@ void lino_appendbuf_init(LNAppendBuffer* ab)
 void lino_appendbuf_append(LNAppendBuffer* ab, const char* s, int len)
 {
     char* newbuf;
-    newbuf = (char*)realloc(ab->b, ab->len + len);
+    newbuf = (char*)nn_memory_realloc(ab->b, ab->len + len);
     if(newbuf == NULL)
     {
         return;
@@ -695,7 +696,7 @@ void lino_appendbuf_append(LNAppendBuffer* ab, const char* s, int len)
 
 void lino_appendbuf_destroy(LNAppendBuffer* ab)
 {
-    free(ab->b);
+    nn_memory_free(ab->b);
 }
 
 /* Helper of lino_util_refreshsingleline() and lino_util_refreshmultiline() to show hints
@@ -1055,7 +1056,7 @@ void linenoiseEditHistoryNext(linenoiseState* l, int dir)
     {
         /* Update the current history entry before to
      * overwrite it with the next one. */
-        free(history[history_len - 1 - l->history_index]);
+        nn_memory_free(history[history_len - 1 - l->history_index]);
         history[history_len - 1 - l->history_index] = strdup(l->buf);
         /* Show the new entry */
         l->history_index += (dir == LINENOISE_HISTORY_PREV) ? 1 : -1;
@@ -1187,7 +1188,7 @@ int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, const c
             case LINENOISE_KEY_LINEFEED:
             case LINENOISE_KEY_ENTER: /* enter */
                 history_len--;
-                free(history[history_len]);
+                nn_memory_free(history[history_len]);
                 if(mlmode)
                     linenoiseEditMoveEnd(&l);
                 if(hintsCallback)
@@ -1211,7 +1212,7 @@ int linenoiseEdit(int stdin_fd, int stdout_fd, char* buf, size_t buflen, const c
                 break;
             case LINENOISE_KEY_CTRLD: /* ctrl-d, act as end-of-file. */
                 history_len--;
-                free(history[history_len]);
+                nn_memory_free(history[history_len]);
                 return -1;
             case LINENOISE_KEY_CTRLT: /* ctrl-t, swaps current character with previous. */
                 if(l.pos > 0 && l.pos < l.len)
@@ -1407,11 +1408,11 @@ char* linenoiseNoTTY(void)
                 maxlen = 16;
             maxlen *= 2;
             char* oldval = line;
-            line = (char*)realloc(line, maxlen);
+            line = (char*)nn_memory_realloc(line, maxlen);
             if(line == NULL)
             {
                 if(oldval)
-                    free(oldval);
+                    nn_memory_free(oldval);
                 return NULL;
             }
         }
@@ -1420,7 +1421,7 @@ char* linenoiseNoTTY(void)
         {
             if(c == EOF && len == 0)
             {
-                free(line);
+                nn_memory_free(line);
                 return NULL;
             }
             else
@@ -1483,7 +1484,7 @@ char* linenoise(const char* prompt)
  * allocator. */
 void linenoiseFree(void* ptr)
 {
-    free(ptr);
+    nn_memory_free(ptr);
 }
 
 /* ================================ History ================================= */
@@ -1497,8 +1498,8 @@ void lino_freehistory(void)
         int j;
 
         for(j = 0; j < history_len; j++)
-            free(history[j]);
-        free(history);
+            nn_memory_free(history[j]);
+        nn_memory_free(history);
     }
 }
 
@@ -1526,7 +1527,7 @@ int linenoiseHistoryAdd(const char* line)
     /* Initialization on first call. */
     if(history == NULL)
     {
-        history = (char**)malloc(sizeof(char*) * history_max_len);
+        history = (char**)nn_memory_malloc(sizeof(char*) * history_max_len);
         if(history == NULL)
             return 0;
         memset(history, 0, (sizeof(char*) * history_max_len));
@@ -1543,7 +1544,7 @@ int linenoiseHistoryAdd(const char* line)
         return 0;
     if(history_len == history_max_len)
     {
-        free(history[0]);
+        nn_memory_free(history[0]);
         memmove(history, history + 1, sizeof(char*) * (history_max_len - 1));
         history_len--;
     }
@@ -1566,7 +1567,7 @@ int linenoiseHistorySetMaxLen(int len)
     {
         int tocopy = history_len;
 
-        newbuf = (char**)malloc(sizeof(char*) * len);
+        newbuf = (char**)nn_memory_malloc(sizeof(char*) * len);
         if(newbuf == NULL)
             return 0;
 
@@ -1576,12 +1577,12 @@ int linenoiseHistorySetMaxLen(int len)
             int j;
 
             for(j = 0; j < tocopy - len; j++)
-                free(history[j]);
+                nn_memory_free(history[j]);
             tocopy = len;
         }
         memset(newbuf, 0, sizeof(char*) * len);
         memcpy(newbuf, history + (history_len - tocopy), sizeof(char*) * tocopy);
-        free(history);
+        nn_memory_free(history);
         history = newbuf;
     }
     history_max_len = len;

@@ -35,7 +35,7 @@ OPTFLAGS = -O0
 EXTRAFLAGS =
 #EXTRAFLAGS += -fsanitize=memory
 #EXTRAFLAGS += -ansi -pedantic
-#EXTRAFLAGS += -fsanitize=memory -fstack-protector-all -ftrapv
+#EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
 #EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
 
 #CC = clang++ -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)

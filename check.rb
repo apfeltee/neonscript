@@ -63,7 +63,14 @@ begin
     end
     print("----------------------------\n")
     printf(">>>>>> RUNNING: %p (%p)\n", file, fullcmd)
-    if ! system(*fullcmd) then
+    ok = false
+    begin
+      ok = system(*fullcmd)
+    rescue Interrupt
+      $stderr.printf("*** interrupted %p\n", file)
+      exit(1)
+    end
+    if !ok then
       $stderr.printf("**failed** in %p\n", file)
       failfiles.push(file)
     else

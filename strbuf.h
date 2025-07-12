@@ -57,6 +57,7 @@ void dyn_strutil_callboundscheckreadrange(const StringBuffer *sbuf, size_t start
 StringBuffer *dyn_strbuf_makefromptr(StringBuffer *sbuf, size_t len);
 StringBuffer *dyn_strbuf_makebasicempty(size_t len, bool isintern);
 bool dyn_strbuf_destroy(StringBuffer *sb);
+bool dyn_strbuf_destroyfromstack(StringBuffer* sb);
 bool dyn_strbuf_destroyfromptr(StringBuffer *sb);
 StringBuffer *dyn_strbuf_makefromstring(const char *str, size_t slen, bool isintern);
 StringBuffer *dyn_strbuf_makeclone(const StringBuffer *sbuf);

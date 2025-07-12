@@ -118,9 +118,9 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
         if(nn_value_isstring(entry->key))
         {
             entoskey = nn_value_asstring(entry->key);
-            if(entoskey->sbuf->length == klen)
+            if(entoskey->sbuf.length == klen)
             {
-                if(memcmp(kstr, entoskey->sbuf->data, klen) == 0)
+                if(memcmp(kstr, entoskey->sbuf.data, klen) == 0)
                 {
                     return entry;
                 }
@@ -195,7 +195,7 @@ NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, con
 
 NNProperty* nn_valtable_getfieldbyostr(NNHashValTable* table, NNObjString* str)
 {
-    return nn_valtable_getfieldbystr(table, nn_value_makenull(), str->sbuf->data, str->sbuf->length, str->hash);
+    return nn_valtable_getfieldbystr(table, nn_value_makenull(), str->sbuf.data, str->sbuf.length, str->hash);
 }
 
 NNProperty* nn_valtable_getfieldbycstr(NNHashValTable* table, const char* kstr)
@@ -213,7 +213,7 @@ NNProperty* nn_valtable_getfield(NNHashValTable* table, NNValue key)
     if(nn_value_isstring(key))
     {
         oskey = nn_value_asstring(key);
-        return nn_valtable_getfieldbystr(table, key, oskey->sbuf->data, oskey->sbuf->length, oskey->hash);
+        return nn_valtable_getfieldbystr(table, key, oskey->sbuf.data, oskey->sbuf.length, oskey->hash);
     }
     return nn_valtable_getfieldbyvalue(table, key);
 }
@@ -354,7 +354,7 @@ void nn_valtable_importall(NNHashValTable* from, NNHashValTable* to)
         if(!nn_value_isnull(entry->key) && !nn_value_ismodule(entry->value.value))
         {
             /* Don't import private values */
-            if(nn_value_isstring(entry->key) && nn_value_asstring(entry->key)->sbuf->data[0] == '_')
+            if(nn_value_isstring(entry->key) && nn_value_asstring(entry->key)->sbuf.data[0] == '_')
             {
                 continue;
             }
@@ -409,8 +409,8 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
             }
         }
         string = nn_value_asstring(entry->key);
-        slen = string->sbuf->length;
-        sdata = string->sbuf->data;
+        slen = string->sbuf.length;
+        sdata = string->sbuf.data;
         if((slen == length) && (string->hash == hash) && memcmp(sdata, chars, length) == 0)
         {
             /* we found it */

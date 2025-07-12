@@ -1,13 +1,14 @@
 
 #include <stdlib.h>
 #include <limits.h>
+#include "mem.h"
 #include "os.h"
 
 
 char* osfn_utilstrndup(const char* src, size_t len)
 {
     char* buf;
-    buf = (char*)malloc(len+1);
+    buf = (char*)nn_memory_malloc(len+1);
     if(buf == NULL)
     {
         return NULL;
@@ -99,7 +100,9 @@ char* osfn_realpath(const char* path, char* respath)
         rt = realpath(path, respath);
         if(rt != NULL)
         {
-            return rt;
+            copy = osfn_utilstrdup(rt);
+            free(rt);
+            return copy;
         }
     #else
     #endif
@@ -150,7 +153,7 @@ char* osfn_dirname(const char *fname)
                 dirlen += 2;
             }
         }
-        dirpart = (char *)malloc (dirlen + 1);
+        dirpart = (char *)nn_memory_malloc(dirlen + 1);
         if(dirpart != NULL)
         {
             strncpy (dirpart, fname, dirlen);

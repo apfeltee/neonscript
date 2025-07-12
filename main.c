@@ -228,7 +228,7 @@
     ((capacity) < 4 ? 4 : (capacity)*2)
 
 #define nn_gcmem_growarray(state, typsz, pointer, oldcount, newcount) \
-    nn_gcmem_reallocate(state, pointer, (typsz) * (oldcount), (typsz) * (newcount))
+    nn_gcmem_reallocate(state, pointer, (typsz) * (oldcount), (typsz) * (newcount), false)
 
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
@@ -874,7 +874,7 @@ struct NNObjString
 {
     NNObject objpadding;
     uint32_t hash;
-    StringBuffer* sbuf;
+    StringBuffer sbuf;
 };
 
 struct NNObjUpvalue
@@ -1085,7 +1085,6 @@ struct NNState
         bool enablestrictmode;
         bool showfullstack;
         bool enableapidebug;
-        bool enableastdebug;
         int maxsyntaxerrors;
     } conf;
 
@@ -2058,7 +2057,7 @@ int nn_util_filegetlinehandle(char **lineptr, size_t *destlen, FILE* hnd)
     linelen = getlen;
     if((linelen+1) < kInitialStrBufSize)
     {
-        heapbuf = (char*)realloc(*lineptr, kInitialStrBufSize);
+        heapbuf = (char*)nn_memory_realloc(*lineptr, kInitialStrBufSize);
         if(heapbuf == NULL)
         {
             return -1;
@@ -2369,33 +2368,6 @@ char* nn_util_strtolower(char* str, size_t length)
     #define NEON_APIDEBUG(state, ...)
 #endif
 
-#if defined(__STRICT_ANSI__)
-    #define NEON_ASTDEBUG(state, ...)
-#else
-    #define NEON_ASTDEBUG(state, ...) \
-        if((nn_util_unlikely((state)->conf.enableastdebug))) \
-        { \
-            nn_state_astdebug(state, __FUNCTION__, __VA_ARGS__); \
-        }
-#endif
-
-
-NEON_FORCEINLINE void nn_state_astdebugv(NNState* state, const char* funcname, const char* format, va_list va)
-{
-    (void)state;
-    fprintf(stderr, "AST CALL: to '%s': ", funcname);
-    vfprintf(stderr, format, va);
-    fprintf(stderr, "\n");
-}
-
-NEON_INLINE void nn_state_astdebug(NNState* state, const char* funcname, const char* format, ...)
-{
-    va_list va;
-    va_start(va, format);
-    nn_state_astdebugv(state, funcname, format, va);
-    va_end(va);
-}
-
 void nn_gcmem_maybecollect(NNState* state, int addsize, bool wasnew)
 {
     state->gcstate.bytesallocated += addsize;
@@ -2411,10 +2383,13 @@ void nn_gcmem_maybecollect(NNState* state, int addsize, bool wasnew)
     }
 }
 
-void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t newsize)
+void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t newsize, bool retain)
 {
     void* result;
-    nn_gcmem_maybecollect(state, newsize - oldsize, newsize > oldsize);
+    if(!retain)
+    {
+        nn_gcmem_maybecollect(state, newsize - oldsize, newsize > oldsize);
+    }
     if(pointer == NULL)
     {
         result = nn_memory_malloc(newsize);
@@ -2434,9 +2409,9 @@ void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t 
     return result;
 }
 
-void* nn_gcmem_allocate(NNState* state, size_t size, size_t amount)
+void* nn_gcmem_allocate(NNState* state, size_t size, size_t amount, bool retain)
 {
-    return nn_gcmem_reallocate(state, NULL, 0, size * amount);
+    return nn_gcmem_reallocate(state, NULL, 0, size * amount, retain);
 }
 
 void nn_gcmem_release(NNState* state, void* pointer, size_t oldsize)
@@ -2449,7 +2424,6 @@ void nn_gcmem_release(NNState* state, void* pointer, size_t oldsize)
     nn_memory_free(pointer);
     pointer = NULL;
 }
-
 
 void nn_gcmem_markobject(NNState* state, NNObject* object)
 {
@@ -2729,7 +2703,6 @@ void nn_object_destroy(NNState* state, NNObject* object)
         default:
             break;
     }
-    
 }
 
 void nn_gcmem_markroots(NNState* state)
@@ -3679,11 +3652,11 @@ void nn_printer_printfunction(NNPrinter* pr, NNObjFunction* func)
     {
         if(func->fnscriptfunc.isvariadic)
         {
-            nn_printer_printf(pr, "<function %s(%d...) at %p>", func->name->sbuf->data, func->fnscriptfunc.arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d...) at %p>", func->name->sbuf.data, func->fnscriptfunc.arity, (void*)func);
         }
         else
         {
-            nn_printer_printf(pr, "<function %s(%d) at %p>", func->name->sbuf->data, func->fnscriptfunc.arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d) at %p>", func->name->sbuf.data, func->fnscriptfunc.arity, (void*)func);
         }
     }
 }
@@ -3798,7 +3771,7 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
 
 void nn_printer_printfile(NNPrinter* pr, NNObjFile* file)
 {
-    nn_printer_printf(pr, "<file at %s in mode %s>", file->path->sbuf->data, file->mode->sbuf->data);
+    nn_printer_printf(pr, "<file at %s in mode %s>", file->path->sbuf.data, file->mode->sbuf.data);
 }
 
 void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invmethod)
@@ -3830,7 +3803,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
                 nn_printer_makestackstring(state, &subw);
                 nn_printer_printvalue(&subw, resv, false, false);
                 os = nn_printer_takestring(&subw);
-                nn_printer_writestringl(pr, os->sbuf->data, os->sbuf->length);
+                nn_printer_writestringl(pr, os->sbuf.data, os->sbuf.length);
                 #if 0
                     nn_vm_stackpop(state);
                 #endif
@@ -3839,7 +3812,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
         }
     }
     #endif
-    nn_printer_printf(pr, "<instance of %s at %p>", instance->klass->name->sbuf->data, (void*)instance);
+    nn_printer_printf(pr, "<instance of %s at %p>", instance->klass->name->sbuf.data, (void*)instance);
 }
 
 //void nn_printer_printvalue(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
@@ -3922,7 +3895,7 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
     }
     else
     {
-        nn_printer_printf(pr, "<class %s at %p>", klass->name->sbuf->data, (void*)klass);
+        nn_printer_printf(pr, "<class %s at %p>", klass->name->sbuf.data, (void*)klass);
     }
 }
 
@@ -3975,7 +3948,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             {
                 NNObjModule* mod;
                 mod = nn_value_asmodule(value);
-                nn_printer_printf(pr, "<module '%s' at '%s'>", mod->name->sbuf->data, mod->physicalpath->sbuf->data);
+                nn_printer_printf(pr, "<module '%s' at '%s'>", mod->name->sbuf.data, mod->physicalpath->sbuf.data);
             }
             break;
         case NEON_OBJTYPE_CLASS:
@@ -4009,7 +3982,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             {
                 NNObjFunction* native;
                 native = nn_value_asfunction(value);
-                nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf->data, (void*)native);
+                nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf.data, (void*)native);
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
@@ -4023,11 +3996,11 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
                 string = nn_value_asstring(value);
                 if(fixstring)
                 {
-                    nn_printer_writequotedstring(pr, string->sbuf->data, string->sbuf->length, true);
+                    nn_printer_writequotedstring(pr, string->sbuf.data, string->sbuf.length, true);
                 }
                 else
                 {
-                    nn_printer_writestringl(pr, string->sbuf->data, string->sbuf->length);
+                    nn_printer_writestringl(pr, string->sbuf.data, string->sbuf.length);
                 }
             }
             break;
@@ -4091,7 +4064,7 @@ const char* nn_value_objecttypename(NNObject* object)
         case NEON_OBJTYPE_FUNCBOUND:
             return "function";
         case NEON_OBJTYPE_INSTANCE:
-            return ((NNObjInstance*)object)->klass->name->sbuf->data;
+            return ((NNObjInstance*)object)->klass->name->sbuf.data;
         case NEON_OBJTYPE_STRING:
             return "string";
         case NEON_OBJTYPE_USERDATA:
@@ -4208,9 +4181,9 @@ bool nn_value_compobject(NNState* state, NNValue a, NNValue b)
         {
             stra = (NNObjString*)oa;
             strb = (NNObjString*)ob;
-            if(stra->sbuf->length == strb->sbuf->length)
+            if(stra->sbuf.length == strb->sbuf.length)
             {
-                if(memcmp(stra->sbuf->data, strb->sbuf->data, stra->sbuf->length) == 0)
+                if(memcmp(stra->sbuf.data, strb->sbuf.data, stra->sbuf.length) == 0)
                 {
                     return true;
                 }
@@ -4425,7 +4398,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         {
             osa = nn_value_asstring(a);
             osb = nn_value_asstring(b);
-            if(strncmp(osa->sbuf->data, osb->sbuf->data, osa->sbuf->length) >= 0)
+            if(strncmp(osa->sbuf.data, osb->sbuf.data, osa->sbuf.length) >= 0)
             {
                 return a;
             }
@@ -4481,7 +4454,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isfile(a) && nn_value_isfile(b))
         {
-            if(strcmp(nn_value_asfile(a)->path->sbuf->data, nn_value_asfile(b)->path->sbuf->data) >= 0)
+            if(strcmp(nn_value_asfile(a)->path->sbuf.data, nn_value_asfile(b)->path->sbuf.data) >= 0)
             {
                 return a;
             }
@@ -4578,10 +4551,10 @@ NNValue nn_value_copyvalue(NNState* state, NNValue value)
     return value;
 }
 
-NNObject* nn_object_allocobject(NNState* state, size_t size, NNObjType type)
+NNObject* nn_object_allocobject(NNState* state, size_t size, NNObjType type, bool retain)
 {
     NNObject* object;
-    object = (NNObject*)nn_gcmem_allocate(state, size, 1);
+    object = (NNObject*)nn_gcmem_allocate(state, size, 1, retain);
     object->type = type;
     object->mark = !state->markvalue;
     object->stale = false;
@@ -4597,17 +4570,17 @@ NNObject* nn_object_allocobject(NNState* state, size_t size, NNObjType type)
 NNObjUserdata* nn_object_makeuserdata(NNState* state, void* pointer, const char* name)
 {
     NNObjUserdata* ptr;
-    ptr = (NNObjUserdata*)nn_object_allocobject(state, sizeof(NNObjUserdata), NEON_OBJTYPE_USERDATA);
+    ptr = (NNObjUserdata*)nn_object_allocobject(state, sizeof(NNObjUserdata), NEON_OBJTYPE_USERDATA, false);
     ptr->pointer = pointer;
     ptr->name = nn_util_strdup(name);
     ptr->ondestroyfn = NULL;
     return ptr;
 }
 
-NNObjModule* nn_module_make(NNState* state, const char* name, const char* file, bool imported)
+NNObjModule* nn_module_make(NNState* state, const char* name, const char* file, bool imported, bool retain)
 {
     NNObjModule* module;
-    module = (NNObjModule*)nn_object_allocobject(state, sizeof(NNObjModule), NEON_OBJTYPE_MODULE);
+    module = (NNObjModule*)nn_object_allocobject(state, sizeof(NNObjModule), NEON_OBJTYPE_MODULE, retain);
     nn_valtable_init(state, &module->deftable);
     module->name = nn_string_copycstr(state, name);
     module->physicalpath = nn_string_copycstr(state, file);
@@ -4644,7 +4617,7 @@ void nn_module_setfilefield(NNState* state, NNObjModule* module)
 NNObjSwitch* nn_object_makeswitch(NNState* state)
 {
     NNObjSwitch* sw;
-    sw = (NNObjSwitch*)nn_object_allocobject(state, sizeof(NNObjSwitch), NEON_OBJTYPE_SWITCH);
+    sw = (NNObjSwitch*)nn_object_allocobject(state, sizeof(NNObjSwitch), NEON_OBJTYPE_SWITCH, false);
     nn_valtable_init(state, &sw->table);
     sw->defaultjump = -1;
     sw->exitjump = -1;
@@ -4659,7 +4632,7 @@ NNObjArray* nn_object_makearray(NNState* state)
 NNObjRange* nn_object_makerange(NNState* state, int lower, int upper)
 {
     NNObjRange* range;
-    range = (NNObjRange*)nn_object_allocobject(state, sizeof(NNObjRange), NEON_OBJTYPE_RANGE);
+    range = (NNObjRange*)nn_object_allocobject(state, sizeof(NNObjRange), NEON_OBJTYPE_RANGE, false);
     range->lower = lower;
     range->upper = upper;
     if(upper > lower)
@@ -4676,7 +4649,7 @@ NNObjRange* nn_object_makerange(NNState* state, int lower, int upper)
 NNObjDict* nn_object_makedict(NNState* state)
 {
     NNObjDict* dict;
-    dict = (NNObjDict*)nn_object_allocobject(state, sizeof(NNObjDict), NEON_OBJTYPE_DICT);
+    dict = (NNObjDict*)nn_object_allocobject(state, sizeof(NNObjDict), NEON_OBJTYPE_DICT, false);
     nn_valarray_init(state, &dict->names);
     nn_valtable_init(state, &dict->htab);
     return dict;
@@ -4685,7 +4658,7 @@ NNObjDict* nn_object_makedict(NNState* state)
 NNObjFile* nn_object_makefile(NNState* state, FILE* handle, bool isstd, const char* path, const char* mode)
 {
     NNObjFile* file;
-    file = (NNObjFile*)nn_object_allocobject(state, sizeof(NNObjFile), NEON_OBJTYPE_FILE);
+    file = (NNObjFile*)nn_object_allocobject(state, sizeof(NNObjFile), NEON_OBJTYPE_FILE, false);
     file->isopen = false;
     file->mode = nn_string_copycstr(state, mode);
     file->path = nn_string_copycstr(state, path);
@@ -4728,13 +4701,13 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
     dest->data = NULL;
     if(!file->isstd)
     {
-        if(!nn_util_fsfileexists(state, file->path->sbuf->data))
+        if(!nn_util_fsfileexists(state, file->path->sbuf.data))
         {
             return false;
         }
         /* file is in write only mode */
         /*
-        else if(strstr(file->mode->sbuf->data, "w") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
+        else if(strstr(file->mode->sbuf.data, "w") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot read file in write mode");
         }
@@ -4748,7 +4721,7 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
         {
             return false;
         }
-        if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
+        if(osfn_lstat(file->path->sbuf.data, &stats) == 0)
         {
             filesizereal = (size_t)stats.st_size;
         }
@@ -4797,7 +4770,7 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
 NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFunction* method)
 {
     NNObjFunction* bound;
-    bound = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCBOUND);
+    bound = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCBOUND, false);
     bound->fnmethod.receiver = receiver;
     bound->fnmethod.method = method;
     return bound;
@@ -4806,7 +4779,7 @@ NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFu
 NNObjClass* nn_object_makeclass(NNState* state, NNObjString* name, NNObjClass* parent)
 {
     NNObjClass* klass;
-    klass = (NNObjClass*)nn_object_allocobject(state, sizeof(NNObjClass), NEON_OBJTYPE_CLASS);
+    klass = (NNObjClass*)nn_object_allocobject(state, sizeof(NNObjClass), NEON_OBJTYPE_CLASS, false);
     klass->name = name;
     nn_valtable_init(state, &klass->instproperties);
     nn_valtable_init(state, &klass->staticproperties);
@@ -4863,7 +4836,7 @@ bool nn_class_defcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNative
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
+    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
     return nn_valtable_setwithtype(&klass->instproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
@@ -4877,7 +4850,7 @@ bool nn_class_defstaticcallablefieldptr(NNObjClass* klass, NNObjString* name, NN
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
+    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
     return nn_valtable_setwithtype(&klass->staticproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
@@ -4918,7 +4891,7 @@ bool nn_class_defnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeF
     NNObjFunction* ofn;
     NNState* state;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf->data, ptr);
+    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, ptr);
     return nn_class_defmethod(klass, name, nn_value_fromobject(ofn));
 }
 
@@ -4932,7 +4905,7 @@ bool nn_class_defstaticnativemethodptr(NNObjClass* klass, NNObjString* name, NNN
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf->data, uptr);
+    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
     return nn_valtable_set(&klass->staticmethods, nn_value_fromobject(name), nn_value_fromobject(ofn));
 }
 
@@ -4988,7 +4961,7 @@ NNProperty* nn_class_getstaticmethodfield(NNObjClass* klass, NNObjString* name)
 NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
 {
     NNObjInstance* instance;
-    instance = (NNObjInstance*)nn_object_allocobject(state, sizeof(NNObjInstance), NEON_OBJTYPE_INSTANCE);
+    instance = (NNObjInstance*)nn_object_allocobject(state, sizeof(NNObjInstance), NEON_OBJTYPE_INSTANCE, false);
     /* gc fix */
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     instance->active = true;
@@ -5040,7 +5013,7 @@ bool nn_instance_defproperty(NNObjInstance* instance, NNObjString* name, NNValue
 NNObjFunction* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncContextType type)
 {
     NNObjFunction* function;
-    function = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCSCRIPT);
+    function = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCSCRIPT, false);
     function->fnscriptfunc.arity = 0;
     function->upvalcount = 0;
     function->fnscriptfunc.isvariadic = false;
@@ -5060,7 +5033,7 @@ void nn_funcscript_destroy(NNObjFunction* function)
 NNObjFunction* nn_object_makefuncnative(NNState* state, NNNativeFN function, const char* name, void* uptr)
 {
     NNObjFunction* native;
-    native = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCNATIVE);
+    native = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCNATIVE, false);
     native->fnnativefunc.natfunc = function;
     native->name = nn_string_copycstr(state, name);
     native->contexttype = NEON_FNCONTEXTTYPE_FUNCTION;
@@ -5076,13 +5049,13 @@ NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function
     upvals = NULL;
     if(function->upvalcount > 0)
     {
-        upvals = (NNObjUpvalue**)nn_gcmem_allocate(state, sizeof(NNObjUpvalue*), function->upvalcount + 1);
+        upvals = (NNObjUpvalue**)nn_gcmem_allocate(state, sizeof(NNObjUpvalue*), function->upvalcount + 1, false);
         for(i = 0; i < function->upvalcount; i++)
         {
             upvals[i] = NULL;
         }
     }
-    closure = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCCLOSURE);
+    closure = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCCLOSURE, false);
     closure->fnclosure.scriptfunc = function;
     closure->fnclosure.upvalues = upvals;
     closure->upvalcount = function->upvalcount;
@@ -5092,8 +5065,8 @@ NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function
 NNObjString* nn_string_makefromstrbuf(NNState* state, StringBuffer* sbuf, uint32_t hash)
 {
     NNObjString* rs;
-    rs = (NNObjString*)nn_object_allocobject(state, sizeof(NNObjString), NEON_OBJTYPE_STRING);
-    rs->sbuf = sbuf;
+    rs = (NNObjString*)nn_object_allocobject(state, sizeof(NNObjString), NEON_OBJTYPE_STRING, false);
+    rs->sbuf = *sbuf;
     rs->hash = hash;
     nn_vm_stackpush(state, nn_value_fromobject(rs));
     nn_valtable_set(&state->allocatedstrings, nn_value_fromobject(rs), nn_value_makenull());
@@ -5103,28 +5076,28 @@ NNObjString* nn_string_makefromstrbuf(NNState* state, StringBuffer* sbuf, uint32
 
 NNObjString* nn_string_allocstring(NNState* state, const char* estr, size_t elen, uint32_t hash, bool istaking, bool iscs)
 {
-    StringBuffer* sbuf;
+    StringBuffer sbuf;
     (void)istaking;
-    sbuf = dyn_strbuf_makebasicempty(elen, iscs);
+    dyn_strbuf_makebasicemptystack(&sbuf, elen, iscs);
     if(iscs)
     {
-        sbuf->data = (char*)estr;
+        sbuf.data = (char*)estr;
     }
     else
     {
-        dyn_strbuf_appendstrn(sbuf, estr, elen);
+        dyn_strbuf_appendstrn(&sbuf, estr, elen);
     }
-    return nn_string_makefromstrbuf(state, sbuf, hash);
+    return nn_string_makefromstrbuf(state, &sbuf, hash);
 }
 
 size_t nn_string_getlength(NNObjString* os)
 {
-    return os->sbuf->length;
+    return os->sbuf.length;
 }
 
 const char* nn_string_getdata(NNObjString* os)
 {
-    return os->sbuf->data;
+    return os->sbuf.data;
 }
 
 const char* nn_string_getcstr(NNObjString* os)
@@ -5134,7 +5107,7 @@ const char* nn_string_getcstr(NNObjString* os)
 
 void nn_string_destroy(NNState* state, NNObjString* str)
 {
-    dyn_strbuf_destroy(str->sbuf);
+    dyn_strbuf_destroyfromstack(&str->sbuf);
     nn_gcmem_release(state, str, sizeof(NNObjString));
 }
 
@@ -5179,11 +5152,11 @@ NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 
 NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
 {
-    if(origos->sbuf->isintern)
+    if(origos->sbuf.isintern)
     {
-        return nn_string_internlen(state, origos->sbuf->data, origos->sbuf->length);
+        return nn_string_internlen(state, origos->sbuf.data, origos->sbuf.length);
     }
-    return nn_string_copylen(state, origos->sbuf->data, origos->sbuf->length);
+    return nn_string_copylen(state, origos->sbuf.data, origos->sbuf.length);
 }
 
 
@@ -5209,7 +5182,7 @@ NNObjString* nn_string_intern(NNState* state, const char* chars)
 NNObjUpvalue* nn_object_makeupvalue(NNState* state, NNValue* slot, int stackpos)
 {
     NNObjUpvalue* upvalue;
-    upvalue = (NNObjUpvalue*)nn_object_allocobject(state, sizeof(NNObjUpvalue), NEON_OBJTYPE_UPVALUE);
+    upvalue = (NNObjUpvalue*)nn_object_allocobject(state, sizeof(NNObjUpvalue), NEON_OBJTYPE_UPVALUE, false);
     upvalue->closed = nn_value_makenull();
     upvalue->location = *slot;
     upvalue->next = NULL;
@@ -5234,7 +5207,6 @@ void nn_astlex_init(NNAstLexer* lex, NNState* state, const char* source)
 NNAstLexer* nn_astlex_make(NNState* state, const char* source)
 {
     NNAstLexer* lex;
-    NEON_ASTDEBUG(state, "");
     lex = (NNAstLexer*)nn_memory_malloc(sizeof(NNAstLexer));
     nn_astlex_init(lex, state, source);
     lex->onstack = false;
@@ -5243,7 +5215,6 @@ NNAstLexer* nn_astlex_make(NNState* state, const char* source)
 
 void nn_astlex_destroy(NNState* state, NNAstLexer* lex)
 {
-    NEON_ASTDEBUG(state, "");
     if(!lex->onstack)
     {
         nn_memory_free(lex);
@@ -5589,7 +5560,6 @@ NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
 NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate, bool permitescapes)
 {
     NNAstToken tkn;
-    NEON_ASTDEBUG(lex->pstate, "quote=[%c] withtemplate=%d", quote, withtemplate);
     while(nn_astlex_peekcurr(lex) != quote && !nn_astlex_isatend(lex))
     {
         if(withtemplate)
@@ -5631,7 +5601,6 @@ NNAstToken nn_astlex_scanstring(NNAstLexer* lex, char quote, bool withtemplate, 
 
 NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
 {
-    NEON_ASTDEBUG(lex->pstate, "");
     /* handle binary, octal and hexadecimals */
     if(nn_astlex_peekprev(lex) == '0')
     {
@@ -6123,10 +6092,9 @@ NNAstToken nn_astlex_scantoken(NNAstLexer* lex)
     return nn_astlex_errortoken(lex, "unexpected character %c", c);
 }
 
-NNAstParser* nn_astparser_make(NNState* state, NNAstLexer* lexer, NNObjModule* module, bool keeplast)
+NNAstParser* nn_astparser_makeparser(NNState* state, NNAstLexer* lexer, NNObjModule* module, bool keeplast)
 {
     NNAstParser* parser;
-    NEON_ASTDEBUG(state, "");
     parser = (NNAstParser*)nn_memory_malloc(sizeof(NNAstParser));
     parser->pstate = state;
     parser->lexer = lexer;
@@ -6148,7 +6116,7 @@ NNAstParser* nn_astparser_make(NNState* state, NNAstLexer* lexer, NNObjModule* m
     parser->lastwasstatement = false;
     parser->infunction = false;
     parser->inswitch = false;
-    parser->currentfile = parser->currentmodule->physicalpath->sbuf->data;
+    parser->currentfile = parser->currentmodule->physicalpath->sbuf.data;
     return parser;
 }
 
@@ -6189,7 +6157,7 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
     }
     prs->panicmode = true;
     fprintf(stderr, "(%d) %sSyntaxError%s",  prs->errorcount, colred, colreset);
-    fprintf(stderr, " in [%s:%d]: ", prs->currentmodule->physicalpath->sbuf->data, t->line);
+    fprintf(stderr, " in [%s:%d]: ", prs->currentmodule->physicalpath->sbuf.data, t->line);
     vfprintf(stderr, message, args);
     fprintf(stderr, " ");
     if(t->type == NEON_ASTTOK_EOF)
@@ -6667,11 +6635,6 @@ int nn_astparser_pushconst(NNAstParser* prs, NNValue value)
 {
     int constant;
     constant = nn_blob_pushconst(nn_astparser_currentblob(prs), value);
-    if(constant >= UINT16_MAX)
-    {
-        nn_astparser_raiseerror(prs, "too many constants in current scope");
-        return 0;
-    }
     return constant;
 }
 
@@ -6988,24 +6951,22 @@ NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
     fname = NULL;
     if(function->name == NULL)
     {
-        fname = prs->currentmodule->physicalpath->sbuf->data;
+        fname = prs->currentmodule->physicalpath->sbuf.data;
     }
     else
     {
-        fname = function->name->sbuf->data;
+        fname = function->name->sbuf.data;
     }
     if(!prs->haderror && prs->pstate->conf.dumpbytecode)
     {
         nn_dbg_disasmblob(prs->pstate->debugwriter, nn_astparser_currentblob(prs), fname);
     }
-    NEON_ASTDEBUG(prs->pstate, "for function '%s'", fname);
     prs->currentfunccompiler = prs->currentfunccompiler->enclosing;
     return function;
 }
 
 void nn_astparser_scopebegin(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pstate, "current depth=%d", prs->currentfunccompiler->scopedepth);
     prs->currentfunccompiler->scopedepth++;
 }
 
@@ -7015,7 +6976,6 @@ bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
     int locount;
     int lodepth;
     int scodepth;
-    NEON_ASTDEBUG(prs->pstate, "");
     locount = prs->currentfunccompiler->localcount;
     lopos = prs->currentfunccompiler->localcount - 1;
     lodepth = prs->currentfunccompiler->locals[lopos].depth;
@@ -7029,7 +6989,6 @@ bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
 
 void nn_astparser_scopeend(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pstate, "current scope depth=%d", prs->currentfunccompiler->scopedepth);
     prs->currentfunccompiler->scopedepth--;
     /*
     // remove all variables declared in scope while exiting...
@@ -7057,7 +7016,6 @@ void nn_astparser_scopeend(NNAstParser* prs)
 int nn_astparser_discardlocals(NNAstParser* prs, int depth)
 {
     int local;
-    NEON_ASTDEBUG(prs->pstate, "");
     if(prs->keeplastvalue)
     {
         #if 0
@@ -7089,7 +7047,6 @@ void nn_astparser_endloop(NNAstParser* prs)
     int i;
     NNInstruction* bcode;
     NNValue* cvals;
-    NEON_ASTDEBUG(prs->pstate, "");
     /*
     // find all NEON_OP_BREAK_PL placeholder and replace with the appropriate jump...
     */
@@ -7117,7 +7074,6 @@ bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassi
     NNAstRule* rule;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     op = prs->prevtoken.type;
     /* compile the right operand */
     rule = nn_astparser_getrule(op);
@@ -7196,7 +7152,6 @@ bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign
     uint8_t argcount;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     argcount = nn_astparser_parsefunccallargs(prs);
     nn_astemit_emit2byte(prs, NEON_OP_CALLFUNCTION, argcount);
     return true;
@@ -7205,7 +7160,6 @@ bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign
 bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     switch(prs->prevtoken.type)
     {
         case NEON_ASTTOK_KWNULL:
@@ -7226,7 +7180,6 @@ bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
 
 void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
 {
-    NEON_ASTDEBUG(prs->pstate, "");
     prs->replcanecho = false;
     if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
     {
@@ -7254,7 +7207,6 @@ void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, u
 
 void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pstate, "");
     if(canassign && nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
     {
         prs->replcanecho = false;
@@ -7383,7 +7335,6 @@ bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool canassign)
     uint8_t argcount;
     NNOpCode getop;
     NNOpCode setop;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_ignorewhitespace(prs);
     if(!nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected property name after '.'"))
     {
@@ -7430,7 +7381,6 @@ void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
     uint8_t setop;
     int arg;
     (void)fromclass;
-    NEON_ASTDEBUG(prs->pstate, " name=%.*s", name.length, name.start);
     fromclass = prs->currentclasscompiler != NULL;
     arg = nn_astfunccompiler_resolvelocal(prs, prs->currentfunccompiler, &name);
     if(arg != -1)
@@ -7467,7 +7417,6 @@ void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
 void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
 {
     int local;
-    NEON_ASTDEBUG(prs->pstate, "name=%.*s", name.length, name.start);
     if(prs->currentfunccompiler->targetfunc->name != NULL)
     {
         local = nn_astparser_addlocal(prs, name) - 1;
@@ -7484,7 +7433,6 @@ bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     /* placeholder for the list */
     nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
     count = 0;
@@ -7515,7 +7463,6 @@ bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
     bool usedexpression;
     int itemcount;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     /* placeholder for the dictionary */
     nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
     itemcount = 0;
@@ -7576,7 +7523,6 @@ bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canas
     uint8_t getop;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     assignable = true;
     commamatch = false;
     getop = NEON_OP_INDEXGET;
@@ -7621,7 +7567,6 @@ bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canas
 
 bool nn_astparser_rulevarnormal(NNAstParser* prs, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_namedvar(prs, prs->prevtoken, canassign);
     return true;
 }
@@ -7630,7 +7575,6 @@ bool nn_astparser_rulevarnormal(NNAstParser* prs, bool canassign)
 bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     #if 0
     if(prs->currentclasscompiler == NULL)
     {
@@ -7658,7 +7602,6 @@ bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
     int name;
     bool invokeself;
     uint8_t argcount;
-    NEON_ASTDEBUG(prs->pstate, "");
     (void)canassign;
     if(prs->currentclasscompiler == NULL)
     {
@@ -7708,7 +7651,6 @@ bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
 bool nn_astparser_rulegrouping(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_parseexpression(prs);
     while(nn_astparser_match(prs, NEON_ASTTOK_COMMA))
@@ -7746,14 +7688,12 @@ NNValue nn_astparser_compilestrnumber(NNAstTokType type, const char* source)
 
 NNValue nn_astparser_compilenumber(NNAstParser* prs)
 {
-    NEON_ASTDEBUG(prs->pstate, "");
     return nn_astparser_compilestrnumber(prs->prevtoken.type, prs->prevtoken.start);
 }
 
 bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astemit_emitconst(prs, nn_astparser_compilenumber(prs));
     return true;
 }
@@ -7816,7 +7756,6 @@ int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* r
     int count;
     size_t len;
     char* chr;
-    NEON_ASTDEBUG(prs->pstate, "");
     value = nn_astparser_readhexescape(prs, realstring, realindex, numberbytes);
     count = nn_util_utf8numbytes(value);
     if(count == -1)
@@ -7863,7 +7802,6 @@ char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescap
     char* deststr;
     char* realstr;
     rawlen = (((size_t)prs->prevtoken.length - 2) + 1);
-    NEON_ASTDEBUG(prs->pstate, "raw length=%d", rawlen);
     deststr = (char*)nn_memory_malloc(sizeof(char) * rawlen);
     quote = prs->prevtoken.start[0];
     realstr = (char*)prs->prevtoken.start + 1;
@@ -8029,7 +7967,6 @@ bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
     int length;
     char* str;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     str = nn_astparser_compilestring(prs, &length, true);
     nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pstate, str, length)));
     return true;
@@ -8040,7 +7977,6 @@ bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
     int length;
     char* str;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     str = nn_astparser_compilestring(prs, &length, false);
     nn_astemit_emitconst(prs, nn_value_fromobject(nn_string_takelen(prs->pstate, str, length)));
     return true;
@@ -8051,7 +7987,6 @@ bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
     int count;
     bool doadd;
     bool stringmatched;
-    NEON_ASTDEBUG(prs->pstate, "canassign=%d", canassign);
     count = 0;
     do
     {
@@ -8088,7 +8023,6 @@ bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
 {
     NNAstTokType op;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     op = prs->prevtoken.type;
     /* compile the expression */
     nn_astparser_parseprecedence(prs, NEON_ASTPREC_UNARY);
@@ -8115,7 +8049,6 @@ bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign)
     int endjump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
     nn_astparser_parseprecedence(prs, NEON_ASTPREC_AND);
@@ -8130,7 +8063,6 @@ bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool canassign)
     int elsejump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     elsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
     nn_astemit_patchjump(prs, elsejump);
@@ -8144,7 +8076,6 @@ bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, bool can
 {
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_OPINSTANCEOF);
 
@@ -8157,7 +8088,6 @@ bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool ca
     int elsejump;
     (void)previous;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     thenjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
     nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
     nn_astparser_ignorewhitespace(prs);
@@ -8182,7 +8112,6 @@ bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool ca
 bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_IMPORTIMPORT);
     return true;
@@ -8190,7 +8119,6 @@ bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 
 bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
 {
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
 }
@@ -8198,7 +8126,6 @@ bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
 bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'typeof'");
     nn_astparser_parseexpression(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'typeof'");
@@ -8210,7 +8137,6 @@ bool nn_astparser_rulenothingprefix(NNAstParser* prs, bool canassign)
 {
     (void)prs;
     (void)canassign;
-    NEON_ASTDEBUG(prs->pstate, "");
     return true;
 }
 
@@ -9556,9 +9482,8 @@ NNObjFunction* nn_astparser_compilesource(NNState* state, NNObjModule* module, c
     NNAstParser* parser;
     NNObjFunction* function;
     (void)blob;
-    NEON_ASTDEBUG(state, "module=%p source=[...] blob=[...] fromimport=%d keeplast=%d", module, fromimport, keeplast);
     lexer = nn_astlex_make(state, source);
-    parser = nn_astparser_make(state, lexer, module, keeplast);
+    parser = nn_astparser_makeparser(state, lexer, module, keeplast);
     nn_astfunccompiler_init(parser, &fnc, NEON_FNCONTEXTTYPE_SCRIPT, true);
     fnc.fromimport = fromimport;
     nn_astparser_runparser(parser);
@@ -9627,7 +9552,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     os = nn_value_asstring(args->args[0]);
-    dirn = os->sbuf->data;
+    dirn = os->sbuf.data;
     if(fslib_diropen(&rd, dirn))
     {
         res = nn_array_make(state);
@@ -9681,7 +9606,7 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     insrc = nn_value_asstring(args->args[0]);
-    scn = nn_astlex_make(state, insrc->sbuf->data);
+    scn = nn_astlex_make(state, insrc->sbuf.data);
     arr = nn_array_make(state);
     while(!nn_astlex_isatend(scn))
     {
@@ -9750,7 +9675,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     module = init_fn(state);
     if(module != NULL)
     {
-        themodule = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make(state, (char*)module->name, source, false));
+        themodule = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make(state, (char*)module->name, source, false, true));
         themodule->preloader = (void*)module->preloader;
         themodule->unloader = (void*)module->unloader;
         if(module->fields != NULL)
@@ -9826,7 +9751,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
         {
             themodule->handle = dlw;
         }
-        nn_import_addnativemodule(state, themodule, themodule->name->sbuf->data);
+        nn_import_addnativemodule(state, themodule, themodule->name->sbuf.data);
         nn_gcmem_clearprotect(state);
         return true;
     }
@@ -9927,10 +9852,10 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     {
         return nn_value_asmodule(field->value);
     }
-    physpath = nn_import_resolvepath(state, modulename->sbuf->data, intomodule->physicalpath->sbuf->data, NULL, false);
+    physpath = nn_import_resolvepath(state, modulename->sbuf.data, intomodule->physicalpath->sbuf.data, NULL, false);
     if(physpath == NULL)
     {
-        nn_except_throw(state, "module not found: '%s'\n", modulename->sbuf->data);
+        nn_except_throw(state, "module not found: '%s'\n", modulename->sbuf.data);
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
@@ -9941,7 +9866,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
         return NULL;
     }
     nn_blob_init(state, &blob);
-    module = nn_module_make(state, modulename->sbuf->data, physpath, true);
+    module = nn_module_make(state, modulename->sbuf.data, physpath, true, true);
     nn_memory_free(physpath);
     function = nn_astparser_compilesource(state, module, source, &blob, true, false);
     nn_memory_free(source);
@@ -9984,13 +9909,13 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
         pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));
         if(pathbuf == NULL)
         {
-            pathbuf = dyn_strbuf_makebasicempty(pitem->sbuf->length + mlen + 5, false);
+            pathbuf = dyn_strbuf_makebasicempty(pitem->sbuf.length + mlen + 5, false);
         }
         else
         {
             dyn_strbuf_reset(pathbuf);
         }
-        dyn_strbuf_appendstrn(pathbuf, pitem->sbuf->data, pitem->sbuf->length);
+        dyn_strbuf_appendstrn(pathbuf, pitem->sbuf.data, pitem->sbuf.length);
         if(dyn_strbuf_containschar(pathbuf, '@'))
         {
             dyn_strbuf_charreplace(pathbuf, '@', modulename, mlen);
@@ -10086,7 +10011,7 @@ NNValue nn_objfndict_add(NNState* state, NNArguments* args)
     dict = nn_value_asdict(args->thisval);
     if(nn_valtable_get(&dict->htab, args->args[0], &tempvalue))
     {
-        NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, args->args[0])->sbuf->data);
+        NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, args->args[0])->sbuf.data);
     }
     nn_dict_addentry(dict, args->args[0], args->args[1]);
     return nn_value_makenull();
@@ -10613,7 +10538,7 @@ NNValue nn_objfndict_reduce(NNState* state, NNArguments* args)
 
 
 #define FILE_ERROR(type, message) \
-    NEON_RETURNERROR(#type " -> %s", message, file->path->sbuf->data);
+    NEON_RETURNERROR(#type " -> %s", message, file->path->sbuf.data);
 
 #define RETURN_STATUS(status) \
     if((status) == 0) \
@@ -10653,7 +10578,7 @@ bool nn_fileobject_open(NNObjFile* file)
     }
     if(file->handle == NULL && !file->isstd)
     {
-        file->handle = fopen(file->path->sbuf->data, file->mode->sbuf->data);
+        file->handle = fopen(file->path->sbuf.data, file->mode->sbuf.data);
         if(file->handle != NULL)
         {
             file->isopen = true;
@@ -10684,7 +10609,7 @@ NNValue nn_objfnfile_constructor(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     opath = nn_value_asstring(args->args[0]);
-    if(opath->sbuf->length == 0)
+    if(opath->sbuf.length == 0)
     {
         NEON_RETURNERROR("file path cannot be empty");
     }
@@ -10692,9 +10617,9 @@ NNValue nn_objfnfile_constructor(NNState* state, NNArguments* args)
     if(args->count == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        mode = nn_value_asstring(args->args[1])->sbuf->data;
+        mode = nn_value_asstring(args->args[1])->sbuf.data;
     }
-    path = opath->sbuf->data;
+    path = opath->sbuf.data;
     file = (NNObjFile*)nn_gcmem_protect(state, (NNObject*)nn_object_makefile(state, NULL, false, path, mode));
     nn_fileobject_open(file);
     return nn_value_fromobject(file);
@@ -10708,7 +10633,7 @@ NNValue nn_objfnfile_exists(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(args->args[0]);
-    return nn_value_makebool(nn_util_fsfileexists(state, file->sbuf->data));
+    return nn_value_makebool(nn_util_fsfileexists(state, file->sbuf.data));
 }
 
 NNValue nn_objfnfile_isfile(NNState* state, NNArguments* args)
@@ -10719,7 +10644,7 @@ NNValue nn_objfnfile_isfile(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(args->args[0]);
-    return nn_value_makebool(nn_util_fsfileisfile(state, file->sbuf->data));
+    return nn_value_makebool(nn_util_fsfileisfile(state, file->sbuf.data));
 }
 
 NNValue nn_objfnfile_isdirectory(NNState* state, NNArguments* args)
@@ -10730,7 +10655,7 @@ NNValue nn_objfnfile_isdirectory(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(args->args[0]);
-    return nn_value_makebool(nn_util_fsfileisdirectory(state, file->sbuf->data));
+    return nn_value_makebool(nn_util_fsfileisdirectory(state, file->sbuf.data));
 }
 
 
@@ -10750,10 +10675,10 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
         thismuch = (size_t)nn_value_asnumber(args->args[1]);
     }
     filepath = nn_value_asstring(args->args[0]);
-    buf = nn_util_filereadfile(state, filepath->sbuf->data, &actualsz, true, thismuch);
+    buf = nn_util_filereadfile(state, filepath->sbuf.data, &actualsz, true, thismuch);
     if(buf == NULL)
     {
-        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf->data, strerror(errno));
+        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf.data, strerror(errno));
         return nn_value_makenull();
     }
     return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
@@ -10785,13 +10710,13 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
     }
     filepath = nn_value_asstring(args->args[0]);
     data = nn_value_asstring(args->args[1]);
-    fh = fopen(filepath->sbuf->data, mode);
+    fh = fopen(filepath->sbuf.data, mode);
     if(fh == NULL)
     {
         nn_except_throwclass(state, state->exceptions.ioerror, strerror(errno));
         return nn_value_makenull();
     }
-    rt = fwrite(data->sbuf->data, sizeof(char), data->sbuf->length, fh);
+    rt = fwrite(data->sbuf.data, sizeof(char), data->sbuf.length, fh);
     fclose(fh);
     return nn_value_makenumber(rt);
 }
@@ -10808,7 +10733,7 @@ NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     file = nn_value_asstring(args->args[0]);
-    if(osfn_lstat(file->sbuf->data, &st) == 0)
+    if(osfn_lstat(file->sbuf.data, &st) == 0)
     {
         nn_util_statfilldictphysfile(dict, &st);
         return nn_value_fromobject(dict);
@@ -10931,11 +10856,11 @@ NNValue nn_objfnfile_gets(NNState* state, NNArguments* args)
     file = nn_value_asfile(args->thisval);
     if(!file->isstd)
     {
-        if(!nn_util_fsfileexists(state, file->path->sbuf->data))
+        if(!nn_util_fsfileexists(state, file->path->sbuf.data))
         {
             FILE_ERROR(NotFound, "no such file or directory");
         }
-        else if(strstr(file->mode->sbuf->data, "w") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
+        else if(strstr(file->mode->sbuf.data, "w") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot read file in write mode");
         }
@@ -11001,11 +10926,11 @@ NNValue nn_objfnfile_write(NNState* state, NNArguments* args)
     file = nn_value_asfile(args->thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->args[0]);
-    data = (unsigned char*)string->sbuf->data;
-    length = string->sbuf->length;
+    data = (unsigned char*)string->sbuf.data;
+    length = string->sbuf.length;
     if(!file->isstd)
     {
-        if(strstr(file->mode->sbuf->data, "r") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
+        if(strstr(file->mode->sbuf.data, "r") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot write into non-writable file");
         }
@@ -11051,11 +10976,11 @@ NNValue nn_objfnfile_puts(NNState* state, NNArguments* args)
     file = nn_value_asfile(args->thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->args[0]);
-    data = (unsigned char*)string->sbuf->data;
-    length = string->sbuf->length;
+    data = (unsigned char*)string->sbuf.data;
+    length = string->sbuf.length;
     if(!file->isstd)
     {
-        if(strstr(file->mode->sbuf->data, "r") != NULL && strstr(file->mode->sbuf->data, "+") == NULL)
+        if(strstr(file->mode->sbuf.data, "r") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot write into non-writable file");
         }
@@ -11192,9 +11117,9 @@ NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
     dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     if(!file->isstd)
     {
-        if(nn_util_fsfileexists(state, file->path->sbuf->data))
+        if(nn_util_fsfileexists(state, file->path->sbuf.data))
         {
-            if(osfn_lstat(file->path->sbuf->data, &stats) == 0)
+            if(osfn_lstat(file->path->sbuf.data, &stats) == 0)
             {
                 nn_util_statfilldictphysfile(dict, &stats);
             }
@@ -11253,7 +11178,7 @@ NNValue nn_objfnfile_name(NNState* state, NNArguments* args)
     file = nn_value_asfile(args->thisval);
     if(!file->isstd)
     {
-        name = nn_util_fsgetbasename(state, file->path->sbuf->data);
+        name = nn_util_fsgetbasename(state, file->path->sbuf.data);
         return nn_value_fromobject(nn_string_copycstr(state, name));
     }
     else if(file->istty)
@@ -11299,7 +11224,7 @@ NNObjArray* nn_array_makefilled(NNState* state, size_t cnt, NNValue filler)
 {
     size_t i;
     NNObjArray* list;
-    list = (NNObjArray*)nn_object_allocobject(state, sizeof(NNObjArray), NEON_OBJTYPE_ARRAY);
+    list = (NNObjArray*)nn_object_allocobject(state, sizeof(NNObjArray), NEON_OBJTYPE_ARRAY, false);
     nn_valarray_init(state, &list->varray);
     if(cnt > 0)
     {
@@ -11826,7 +11751,7 @@ NNValue nn_objfnarray_zip(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     list = nn_value_asarray(args->thisval);
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    arglist = (NNObjArray**)nn_gcmem_allocate(state, sizeof(NNObjArray*), args->count);
+    arglist = (NNObjArray**)nn_gcmem_allocate(state, sizeof(NNObjArray*), args->count, false);
     for(i = 0; i < args->count; i++)
     {
         NEON_ARGS_CHECKTYPE(&check, i, nn_value_isarray);
@@ -12430,7 +12355,7 @@ NNValue nn_objfnstring_utf8decode(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     instr = nn_value_asstring(args->args[0]);
-    res = nn_util_utf8decode((const uint8_t*)instr->sbuf->data, instr->sbuf->length);
+    res = nn_util_utf8decode((const uint8_t*)instr->sbuf.data, instr->sbuf.length);
     return nn_value_makenumber(res);
 }
 
@@ -12469,7 +12394,7 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
         maxamount = nn_value_asnumber(args->args[0]);
     }
     res = nn_array_make(state);
-    nn_utf8iter_init(&iter, instr->sbuf->data, instr->sbuf->length);
+    nn_utf8iter_init(&iter, instr->sbuf.data, instr->sbuf.length);
     counter = 0;
     while(nn_utf8iter_next(&iter))
     {
@@ -12539,7 +12464,7 @@ NNValue nn_objfnstring_length(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    return nn_value_makenumber(selfstr->sbuf->length);
+    return nn_value_makenumber(selfstr->sbuf.length);
 }
 
 NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
@@ -12550,7 +12475,7 @@ NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
         return nn_value_fromobject(nn_string_copylen(state, "", 0));
     }
     str = nn_string_copylen(state, "", 0);
-    dyn_strbuf_appendstrn(str->sbuf, buf, len);
+    dyn_strbuf_appendstrn(&str->sbuf, buf, len);
     return nn_value_fromobject(str);
 }
 
@@ -12562,7 +12487,7 @@ NNObjString* nn_string_substring(NNState* state, NNObjString* selfstr, size_t st
     size_t maxlen;
     char* raw;
     (void)likejs;
-    maxlen = selfstr->sbuf->length;
+    maxlen = selfstr->sbuf.length;
     len = maxlen;
     if(end > maxlen)
     {
@@ -12586,7 +12511,7 @@ NNObjString* nn_string_substring(NNState* state, NNObjString* selfstr, size_t st
     asz = ((end + 1) * sizeof(char));
     raw = (char*)nn_memory_malloc(sizeof(char) * asz);
     memset(raw, 0, asz);
-    memcpy(raw, selfstr->sbuf->data + start, len);
+    memcpy(raw, selfstr->sbuf.data + start, len);
     return nn_string_takelen(state, raw, len);
 }
 
@@ -12601,7 +12526,7 @@ NNValue nn_objfnstring_substring(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     selfstr = nn_value_asstring(args->thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    maxlen = selfstr->sbuf->length;
+    maxlen = selfstr->sbuf.length;
     end = maxlen;
     start = nn_value_asnumber(args->args[0]);
     if(args->count > 1)
@@ -12625,14 +12550,14 @@ NNValue nn_objfnstring_charcodeat(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     selfstr = nn_value_asstring(args->thisval);
     idx = nn_value_asnumber(args->args[0]);
-    selflen = (int)selfstr->sbuf->length;
+    selflen = (int)selfstr->sbuf.length;
     if((idx < 0) || (idx >= selflen))
     {
         ch = -1;
     }
     else
     {
-        ch = selfstr->sbuf->data[idx];
+        ch = selfstr->sbuf.data[idx];
     }
     return nn_value_makenumber(ch);
 }
@@ -12649,14 +12574,14 @@ NNValue nn_objfnstring_charat(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     selfstr = nn_value_asstring(args->thisval);
     idx = nn_value_asnumber(args->args[0]);
-    selflen = (int)selfstr->sbuf->length;
+    selflen = (int)selfstr->sbuf.length;
     if((idx < 0) || (idx >= selflen))
     {
         return nn_value_fromobject(nn_string_copylen(state, "", 0));
     }
     else
     {
-        ch = selfstr->sbuf->data[idx];
+        ch = selfstr->sbuf.data[idx];
     }
     return nn_value_fromobject(nn_string_copylen(state, &ch, 1));
 }
@@ -12670,8 +12595,8 @@ NNValue nn_objfnstring_upper(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     str = nn_value_asstring(args->thisval);
-    slen = str->sbuf->length;
-    string = nn_util_strtoupper(str->sbuf->data, slen);
+    slen = str->sbuf.length;
+    string = nn_util_strtoupper(str->sbuf.data, slen);
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
@@ -12684,8 +12609,8 @@ NNValue nn_objfnstring_lower(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     str = nn_value_asstring(args->thisval);
-    slen = str->sbuf->length;
-    string = nn_util_strtolower(str->sbuf->data, slen);
+    slen = str->sbuf.length;
+    string = nn_util_strtolower(str->sbuf.data, slen);
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
@@ -12697,14 +12622,14 @@ NNValue nn_objfnstring_isalpha(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!isalpha((unsigned char)selfstr->sbuf->data[i]))
+        if(!isalpha((unsigned char)selfstr->sbuf.data[i]))
         {
             return nn_value_makebool(false);
         }
     }
-    return nn_value_makebool(selfstr->sbuf->length != 0);
+    return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
 NNValue nn_objfnstring_isalnum(NNState* state, NNArguments* args)
@@ -12715,14 +12640,14 @@ NNValue nn_objfnstring_isalnum(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!isalnum((unsigned char)selfstr->sbuf->data[i]))
+        if(!isalnum((unsigned char)selfstr->sbuf.data[i]))
         {
             return nn_value_makebool(false);
         }
     }
-    return nn_value_makebool(selfstr->sbuf->length != 0);
+    return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
 NNValue nn_objfnstring_isfloat(NNState* state, NNArguments* args)
@@ -12736,11 +12661,11 @@ NNValue nn_objfnstring_isfloat(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
     errno = 0;
-    if(selfstr->sbuf->length ==0)
+    if(selfstr->sbuf.length ==0)
     {
         return nn_value_makebool(false);
     }
-    f = strtod(selfstr->sbuf->data, &p);
+    f = strtod(selfstr->sbuf.data, &p);
     if(errno)
     {
         return nn_value_makebool(false);
@@ -12763,14 +12688,14 @@ NNValue nn_objfnstring_isnumber(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!isdigit((unsigned char)selfstr->sbuf->data[i]))
+        if(!isdigit((unsigned char)selfstr->sbuf.data[i]))
         {
             return nn_value_makebool(false);
         }
     }
-    return nn_value_makebool(selfstr->sbuf->length != 0);
+    return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
 NNValue nn_objfnstring_islower(NNState* state, NNArguments* args)
@@ -12783,13 +12708,13 @@ NNValue nn_objfnstring_islower(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
     alphafound = false;
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!alphafound && !isdigit(selfstr->sbuf->data[0]))
+        if(!alphafound && !isdigit(selfstr->sbuf.data[0]))
         {
             alphafound = true;
         }
-        if(isupper(selfstr->sbuf->data[0]))
+        if(isupper(selfstr->sbuf.data[0]))
         {
             return nn_value_makebool(false);
         }
@@ -12807,13 +12732,13 @@ NNValue nn_objfnstring_isupper(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
     alphafound = false;
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!alphafound && !isdigit(selfstr->sbuf->data[0]))
+        if(!alphafound && !isdigit(selfstr->sbuf.data[0]))
         {
             alphafound = true;
         }
-        if(islower(selfstr->sbuf->data[0]))
+        if(islower(selfstr->sbuf.data[0]))
         {
             return nn_value_makebool(false);
         }
@@ -12829,14 +12754,14 @@ NNValue nn_objfnstring_isspace(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    for(i = 0; i < selfstr->sbuf->length; i++)
+    for(i = 0; i < selfstr->sbuf.length; i++)
     {
-        if(!isspace((unsigned char)selfstr->sbuf->data[i]))
+        if(!isspace((unsigned char)selfstr->sbuf.data[i]))
         {
             return nn_value_makebool(false);
         }
     }
-    return nn_value_makebool(selfstr->sbuf->length != 0);
+    return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
 NNValue nn_objfnstring_trim(NNState* state, NNArguments* args)
@@ -12851,10 +12776,10 @@ NNValue nn_objfnstring_trim(NNState* state, NNArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf->data[0];
+        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
     }
     selfstr = nn_value_asstring(args->thisval);
-    string = selfstr->sbuf->data;
+    string = selfstr->sbuf.data;
     end = NULL;
     /* Trim leading space*/
     if(trimmer == '\0')
@@ -12908,10 +12833,10 @@ NNValue nn_objfnstring_ltrim(NNState* state, NNArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf->data[0];
+        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
     }
     selfstr = nn_value_asstring(args->thisval);
-    string = selfstr->sbuf->data;
+    string = selfstr->sbuf.data;
     end = NULL;
     /* Trim leading space */
     if(trimmer == '\0')
@@ -12950,10 +12875,10 @@ NNValue nn_objfnstring_rtrim(NNState* state, NNArguments* args)
     trimmer = '\0';
     if(args->count == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf->data[0];
+        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
     }
     selfstr = nn_value_asstring(args->thisval);
-    string = selfstr->sbuf->data;
+    string = selfstr->sbuf.data;
     end = NULL;
     /* All spaces? */
     if(*string == 0)
@@ -13035,7 +12960,7 @@ NNValue nn_objfnarray_join(NNState* state, NNArguments* args)
         nn_printer_printvalue(&pr, list[i], false, true);
         if((joinee != NULL) && ((i+1) < count))
         {
-            nn_printer_writestringl(&pr, joinee->sbuf->data, joinee->sbuf->length);
+            nn_printer_writestringl(&pr, joinee->sbuf.data, joinee->sbuf.length);
         }
     }
     return nn_value_fromobject(nn_printer_takestring(&pr));
@@ -13060,10 +12985,10 @@ NNValue nn_objfnstring_indexof(NNState* state, NNArguments* args)
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
         startindex = nn_value_asnumber(args->args[1]);
     }
-    if(string->sbuf->length > 0 && needle->sbuf->length > 0)
+    if(string->sbuf.length > 0 && needle->sbuf.length > 0)
     {
-        haystack = string->sbuf->data;
-        result = strstr(haystack + startindex, needle->sbuf->data);
+        haystack = string->sbuf.data;
+        result = strstr(haystack + startindex, needle->sbuf.data);
         if(result != NULL)
         {
             return nn_value_makenumber((int)(result - haystack));
@@ -13082,11 +13007,11 @@ NNValue nn_objfnstring_startswith(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->thisval);
     substr = nn_value_asstring(args->args[0]);
-    if(string->sbuf->length == 0 || substr->sbuf->length == 0 || substr->sbuf->length > string->sbuf->length)
+    if(string->sbuf.length == 0 || substr->sbuf.length == 0 || substr->sbuf.length > string->sbuf.length)
     {
         return nn_value_makebool(false);
     }
-    return nn_value_makebool(memcmp(substr->sbuf->data, string->sbuf->data, substr->sbuf->length) == 0);
+    return nn_value_makebool(memcmp(substr->sbuf.data, string->sbuf.data, substr->sbuf.length) == 0);
 }
 
 NNValue nn_objfnstring_endswith(NNState* state, NNArguments* args)
@@ -13100,12 +13025,12 @@ NNValue nn_objfnstring_endswith(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->thisval);
     substr = nn_value_asstring(args->args[0]);
-    if(string->sbuf->length == 0 || substr->sbuf->length == 0 || substr->sbuf->length > string->sbuf->length)
+    if(string->sbuf.length == 0 || substr->sbuf.length == 0 || substr->sbuf.length > string->sbuf.length)
     {
         return nn_value_makebool(false);
     }
-    difference = string->sbuf->length - substr->sbuf->length;
-    return nn_value_makebool(memcmp(substr->sbuf->data, string->sbuf->data + difference, substr->sbuf->length) == 0);
+    difference = string->sbuf.length - substr->sbuf.length;
+    return nn_value_makebool(memcmp(substr->sbuf.data, string->sbuf.data + difference, substr->sbuf.length) == 0);
 }
 
 
@@ -13173,10 +13098,10 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     {
         actualmaxcaptures = matchMaxCaptures;
     }
-    prc = mrx_regex_parse(pctx, pattern->sbuf->data, 0);
+    prc = mrx_regex_parse(pctx, pattern->sbuf.data, 0);
     if(prc == 0)
     {
-        cpres = mrx_regex_match(pctx, string->sbuf->data, 0, actualmaxcaptures, capstarts, caplengths);
+        cpres = mrx_regex_match(pctx, string->sbuf.data, 0, actualmaxcaptures, capstarts, caplengths);
         if(cpres > 0)
         {
             if(capture)
@@ -13188,7 +13113,7 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
                     mtlength = caplengths[i];
                     if(mtlength > 0)
                     {
-                        strstart = &string->sbuf->data[mtstart];
+                        strstart = &string->sbuf.data[mtstart];
                         rstr = nn_string_copylen(state, strstart, mtlength);
                         dm = nn_object_makedict(state);
                         nn_dict_addentrycstr(dm, "string", nn_value_fromobject(rstr));
@@ -13255,13 +13180,13 @@ NNValue nn_objfnstring_count(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->thisval);
     substr = nn_value_asstring(args->args[0]);
-    if(substr->sbuf->length == 0 || string->sbuf->length == 0)
+    if(substr->sbuf.length == 0 || string->sbuf.length == 0)
     {
         return nn_value_makenumber(0);
     }
     count = 0;
-    tmp = string->sbuf->data;
-    while((tmp = nn_util_utf8strstr(tmp, substr->sbuf->data)))
+    tmp = string->sbuf.data;
+    while((tmp = nn_util_utf8strstr(tmp, substr->sbuf.data)))
     {
         count++;
         tmp++;
@@ -13276,7 +13201,7 @@ NNValue nn_objfnstring_tonumber(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     selfstr = nn_value_asstring(args->thisval);
-    return nn_value_makenumber(strtod(selfstr->sbuf->data, NULL));
+    return nn_value_makenumber(strtod(selfstr->sbuf.data, NULL));
 }
 
 NNValue nn_objfnstring_isascii(NNState* state, NNArguments* args)
@@ -13306,14 +13231,14 @@ NNValue nn_objfnstring_tolist(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 0);
     string = nn_value_asstring(args->thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    length = string->sbuf->length;
+    length = string->sbuf.length;
     if(length > 0)
     {
         for(i = 0; i < length; i++)
         {
             start = i;
             end = i + 1;
-            nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + start, (int)(end - start))));
+            nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + start, (int)(end - start))));
         }
     }
     return nn_value_fromobject(list);
@@ -13342,28 +13267,28 @@ NNValue nn_objfnstring_lpad(NNState* state, NNArguments* args)
     if(args->count == 2)
     {
         ofillstr = nn_value_asstring(args->args[1]);
-        fillchar = ofillstr->sbuf->data[0];
+        fillchar = ofillstr->sbuf.data[0];
     }
-    if(width <= string->sbuf->length)
+    if(width <= string->sbuf.length)
     {
         return args->thisval;
     }
-    fillsize = width - string->sbuf->length;
+    fillsize = width - string->sbuf.length;
     fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
-    finalsize = string->sbuf->length + fillsize;
-    finalutf8size = string->sbuf->length + fillsize;
+    finalsize = string->sbuf.length + fillsize;
+    finalutf8size = string->sbuf.length + fillsize;
     for(i = 0; i < fillsize; i++)
     {
         fill[i] = fillchar;
     }
     str = (char*)nn_memory_malloc(sizeof(char) * ((size_t)finalsize + 1));
     memcpy(str, fill, fillsize);
-    memcpy(str + fillsize, string->sbuf->data, string->sbuf->length);
+    memcpy(str + fillsize, string->sbuf.data, string->sbuf.length);
     str[finalsize] = '\0';
     nn_memory_free(fill);
     result = nn_string_takelen(state, str, finalsize);
-    result->sbuf->length = finalutf8size;
-    result->sbuf->length = finalsize;
+    result->sbuf.length = finalutf8size;
+    result->sbuf.length = finalsize;
     return nn_value_fromobject(result);
 }
 
@@ -13390,28 +13315,28 @@ NNValue nn_objfnstring_rpad(NNState* state, NNArguments* args)
     if(args->count == 2)
     {
         ofillstr = nn_value_asstring(args->args[1]);
-        fillchar = ofillstr->sbuf->data[0];
+        fillchar = ofillstr->sbuf.data[0];
     }
-    if(width <= string->sbuf->length)
+    if(width <= string->sbuf.length)
     {
         return args->thisval;
     }
-    fillsize = width - string->sbuf->length;
+    fillsize = width - string->sbuf.length;
     fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
-    finalsize = string->sbuf->length + fillsize;
-    finalutf8size = string->sbuf->length + fillsize;
+    finalsize = string->sbuf.length + fillsize;
+    finalutf8size = string->sbuf.length + fillsize;
     for(i = 0; i < fillsize; i++)
     {
         fill[i] = fillchar;
     }
     str = (char*)nn_memory_malloc(sizeof(char) * ((size_t)finalsize + 1));
-    memcpy(str, string->sbuf->data, string->sbuf->length);
-    memcpy(str + string->sbuf->length, fill, fillsize);
+    memcpy(str, string->sbuf.data, string->sbuf.length);
+    memcpy(str + string->sbuf.length, fill, fillsize);
     str[finalsize] = '\0';
     nn_memory_free(fill);
     result = nn_string_takelen(state, str, finalsize);
-    result->sbuf->length = finalutf8size;
-    result->sbuf->length = finalsize;
+    result->sbuf.length = finalutf8size;
+    result->sbuf.length = finalsize;
     return nn_value_fromobject(result);
 }
 
@@ -13431,33 +13356,33 @@ NNValue nn_objfnstring_split(NNState* state, NNArguments* args)
     string = nn_value_asstring(args->thisval);
     delimeter = nn_value_asstring(args->args[0]);
     /* empty string matches empty string to empty list */
-    if(((string->sbuf->length == 0) && (delimeter->sbuf->length == 0)) || (string->sbuf->length == 0) || (delimeter->sbuf->length == 0))
+    if(((string->sbuf.length == 0) && (delimeter->sbuf.length == 0)) || (string->sbuf.length == 0) || (delimeter->sbuf.length == 0))
     {
         return nn_value_fromobject(nn_object_makearray(state));
     }
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    if(delimeter->sbuf->length > 0)
+    if(delimeter->sbuf.length > 0)
     {
         start = 0;
-        for(i = 0; i <= string->sbuf->length; i++)
+        for(i = 0; i <= string->sbuf.length; i++)
         {
             /* match found. */
-            if(memcmp(string->sbuf->data + i, delimeter->sbuf->data, delimeter->sbuf->length) == 0 || i == string->sbuf->length)
+            if(memcmp(string->sbuf.data + i, delimeter->sbuf.data, delimeter->sbuf.length) == 0 || i == string->sbuf.length)
             {
-                nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + start, i - start)));
-                i += delimeter->sbuf->length - 1;
+                nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + start, i - start)));
+                i += delimeter->sbuf.length - 1;
                 start = i + 1;
             }
         }
     }
     else
     {
-        length = string->sbuf->length;
+        length = string->sbuf.length;
         for(i = 0; i < length; i++)
         {
             start = i;
             end = i + 1;
-            nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + start, (int)(end - start))));
+            nn_array_push(list, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + start, (int)(end - start))));
         }
     }
     return nn_value_fromobject(list);
@@ -13480,26 +13405,26 @@ NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
     string = nn_value_asstring(args->thisval);
     substr = nn_value_asstring(args->args[0]);
     repsubstr = nn_value_asstring(args->args[1]);
-    if((string->sbuf->length == 0 && substr->sbuf->length == 0) || string->sbuf->length == 0 || substr->sbuf->length == 0)
+    if((string->sbuf.length == 0 && substr->sbuf.length == 0) || string->sbuf.length == 0 || substr->sbuf.length == 0)
     {
-        return nn_value_fromobject(nn_string_copylen(state, string->sbuf->data, string->sbuf->length));
+        return nn_value_fromobject(nn_string_copylen(state, string->sbuf.data, string->sbuf.length));
     }
     result = dyn_strbuf_makebasicempty(0, false);
     totallength = 0;
-    for(i = 0; i < string->sbuf->length; i++)
+    for(i = 0; i < string->sbuf.length; i++)
     {
-        if(memcmp(string->sbuf->data + i, substr->sbuf->data, substr->sbuf->length) == 0)
+        if(memcmp(string->sbuf.data + i, substr->sbuf.data, substr->sbuf.length) == 0)
         {
-            if(substr->sbuf->length > 0)
+            if(substr->sbuf.length > 0)
             {
-                dyn_strbuf_appendstrn(result, repsubstr->sbuf->data, repsubstr->sbuf->length);
+                dyn_strbuf_appendstrn(result, repsubstr->sbuf.data, repsubstr->sbuf.length);
             }
-            i += substr->sbuf->length - 1;
-            totallength += repsubstr->sbuf->length;
+            i += substr->sbuf.length - 1;
+            totallength += repsubstr->sbuf.length;
         }
         else
         {
-            dyn_strbuf_appendchar(result, string->sbuf->data[i]);
+            dyn_strbuf_appendchar(result, string->sbuf.data[i]);
             totallength++;
         }
     }
@@ -13517,11 +13442,11 @@ NNValue nn_objfnstring_iter(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     string = nn_value_asstring(args->thisval);
-    length = string->sbuf->length;
+    length = string->sbuf.length;
     index = nn_value_asnumber(args->args[0]);
     if(((int)index > -1) && (index < length))
     {
-        result = nn_string_copylen(state, &string->sbuf->data[index], 1);
+        result = nn_string_copylen(state, &string->sbuf.data[index], 1);
         return nn_value_fromobject(result);
     }
     return nn_value_makenull();
@@ -13536,7 +13461,7 @@ NNValue nn_objfnstring_itern(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     string = nn_value_asstring(args->thisval);
-    length = string->sbuf->length;
+    length = string->sbuf.length;
     if(nn_value_isnull(args->args[0]))
     {
         if(length == 0)
@@ -13574,11 +13499,11 @@ NNValue nn_objfnstring_each(NNState* state, NNArguments* args)
     nestargs = nn_object_makearray(state);
     nn_vm_stackpush(state, nn_value_fromobject(nestargs));
     arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
-    for(i = 0; i < string->sbuf->length; i++)
+    for(i = 0; i < string->sbuf.length; i++)
     {
         if(arity > 0)
         {
-            nn_valarray_set(&nestargs->varray, 0, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + i, 1)));
+            nn_valarray_set(&nestargs->varray, 0, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + i, 1)));
             if(arity > 1)
             {
                 nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
@@ -13905,7 +13830,7 @@ NNValue nn_objfnnumber_constructor(NNState* state, NNArguments* args)
     NNAstToken tok;
     NNAstLexer lex;
     os = nn_value_asstring(val);
-    nn_astlex_init(&lex, state, os->sbuf->data);
+    nn_astlex_init(&lex, state, os->sbuf.data);
     tok = nn_astlex_scannumber(&lex);
     rtval = nn_astparser_compilestrnumber(tok.type, tok.start);
     return rtval;
@@ -14336,12 +14261,12 @@ NNValue nn_nativefn_ord(NNState* state, NNArguments* args)
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(args->args[0]);
-    length = string->sbuf->length;
+    length = string->sbuf.length;
     if(length > 1)
     {
         NEON_RETURNERROR("ord() expects character as argument, string given");
     }
-    ord = (int)string->sbuf->data[0];
+    ord = (int)string->sbuf.data[0];
     if(ord < 0)
     {
         ord += 256;
@@ -14443,8 +14368,8 @@ NNValue nn_nativefn_eval(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     os = nn_value_asstring(args->args[0]);
-    /*fprintf(stderr, "eval:src=%s\n", os->sbuf->data);*/
-    result = nn_state_evalsource(state, os->sbuf->data);
+    /*fprintf(stderr, "eval:src=%s\n", os->sbuf.data);*/
+    result = nn_state_evalsource(state, os->sbuf.data);
     return result;
 }
 
@@ -14457,8 +14382,8 @@ NNValue nn_nativefn_loadfile(NNState* state, NNArguments* args)
     nn_argcheck_init(state, &check, args);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     os = nn_value_asstring(args->args[0]);
-    fprintf(stderr, "eval:src=%s\n", os->sbuf->data);
-    result = nn_state_evalsource(state, os->sbuf->data);
+    fprintf(stderr, "eval:src=%s\n", os->sbuf.data);
+    result = nn_state_evalsource(state, os->sbuf.data);
     return result;
 }
 */
@@ -14692,15 +14617,12 @@ NNValue nn_except_getstacktrace(NNState* state)
             physfile = "(unknown)";
             if(function->fnscriptfunc.module->physicalpath != NULL)
             {
-                if(function->fnscriptfunc.module->physicalpath->sbuf != NULL)
-                {
-                    physfile = function->fnscriptfunc.module->physicalpath->sbuf->data;
-                }
+                physfile = function->fnscriptfunc.module->physicalpath->sbuf.data;
             }
             fnname = "<script>";
             if(function->name != NULL)
             {
-                fnname = function->name->sbuf->data;
+                fnname = function->name->sbuf.data;
             }
             nn_printer_printf(&pr, "from %s() in %s:%d", fnname, physfile, line);
             os = nn_printer_takestring(&pr);
@@ -14773,7 +14695,7 @@ bool nn_except_propagate(NNState* state)
     colreset = nn_util_color(NEON_COLOR_RESET);
     colyellow = nn_util_color(NEON_COLOR_YELLOW);
     /* at this point, the exception is unhandled; so, print it out. */
-    fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->sbuf->data, colreset);
+    fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->sbuf.data, colreset);
     srcfile = "none";
     srcline = 0;
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcline");
@@ -14784,7 +14706,7 @@ bool nn_except_propagate(NNState* state)
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcfile");
     if(field != NULL)
     {
-        srcfile = nn_value_asstring(field->value)->sbuf->data;
+        srcfile = nn_value_asstring(field->value)->sbuf.data;
     }
     fprintf(stderr, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
     
@@ -14792,9 +14714,9 @@ bool nn_except_propagate(NNState* state)
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
-        if(emsg->sbuf->length > 0)
+        if(emsg->sbuf.length > 0)
         {
-            fprintf(stderr, ": %s", emsg->sbuf->data);
+            fprintf(stderr, ": %s", emsg->sbuf.data);
         }
         else
         {
@@ -15016,7 +14938,7 @@ void nn_vm_raisefatalerror(NNState* state, const char* format, ...)
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    fprintf(stderr, " -> %s:%d ", function->fnscriptfunc.module->physicalpath->sbuf->data, line);
+    fprintf(stderr, " -> %s:%d ", function->fnscriptfunc.module->physicalpath->sbuf.data, line);
     fputs("\n", stderr);
     if(state->vmstate.framecount > 1)
     {
@@ -15027,14 +14949,14 @@ void nn_vm_raisefatalerror(NNState* state, const char* format, ...)
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-            fprintf(stderr, "    %s:%d -> ", function->fnscriptfunc.module->physicalpath->sbuf->data, function->fnscriptfunc.blob.instrucs[instruction].srcline);
+            fprintf(stderr, "    %s:%d -> ", function->fnscriptfunc.module->physicalpath->sbuf.data, function->fnscriptfunc.blob.instrucs[instruction].srcline);
             if(function->name == NULL)
             {
                 fprintf(stderr, "<script>");
             }
             else
             {
-                fprintf(stderr, "%s()", function->name->sbuf->data);
+                fprintf(stderr, "%s()", function->name->sbuf.data);
             }
             fprintf(stderr, "\n");
         }
@@ -15138,12 +15060,9 @@ void nn_vm_resizeinfo(NNState* state, const char* context, NNObjFunction* closur
     {
         if(closure->fnclosure.scriptfunc->name != NULL)
         {
-            if(closure->fnclosure.scriptfunc->name->sbuf != NULL)
+            if(closure->fnclosure.scriptfunc->name->sbuf.data != NULL)
             {
-                if(closure->fnclosure.scriptfunc->name->sbuf->data != NULL)
-                {
-                    name = closure->fnclosure.scriptfunc->name->sbuf->data; 
-                }
+                name = closure->fnclosure.scriptfunc->name->sbuf.data; 
             }
         }
     }
@@ -15365,7 +15284,6 @@ void nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->conf.exitafterbytecode = false;
         pstate->conf.showfullstack = false;
         pstate->conf.enableapidebug = false;
-        pstate->conf.enableastdebug = false;
         pstate->conf.maxsyntaxerrors = NEON_CONFIG_MAXSYNTAXERRORS;
     }
     {
@@ -15391,7 +15309,7 @@ void nn_state_makewithuserptr(NNState* pstate, void* userptr)
         nn_valtable_init(pstate, &pstate->declaredglobals);
     }
     {
-        pstate->topmodule = nn_module_make(pstate, "", "<state>", false);
+        pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
         pstate->constructorname = nn_string_intern(pstate, "constructor");
     }
     {
@@ -15477,7 +15395,7 @@ void nn_state_destroy(NNState* state)
 
 bool nn_util_methodisprivate(NNObjString* name)
 {
-    return name->sbuf->length > 0 && name->sbuf->data[0] == '_';
+    return name->sbuf.length > 0 && name->sbuf.data[0] == '_';
 }
 
 bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, int argcount)
@@ -15587,7 +15505,7 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     }
                     else if(argcount != 0)
                     {
-                        return nn_except_throw(state, "%s constructor expects 0 arguments, %d given", klass->name->sbuf->data, argcount);
+                        return nn_except_throw(state, "%s constructor expects 0 arguments, %d given", klass->name->sbuf.data, argcount);
                     }
                     return true;
                 }
@@ -15827,11 +15745,11 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
     {
         if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
-            return nn_except_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf->data, klass->name->sbuf->data);
+            return nn_except_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf.data, klass->name->sbuf.data);
         }
         return nn_vm_callvaluewithobject(state, field->value, nn_value_fromobject(klass), argcount);
     }
-    return nn_except_throw(state, "undefined method '%s' in %s", name->sbuf->data, klass->name->sbuf->data);
+    return nn_except_throw(state, "undefined method '%s' in %s", name->sbuf.data, klass->name->sbuf.data);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* name, int argcount)
@@ -15867,10 +15785,10 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
             {
                 return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
             }
-            return nn_except_throw(state, "cannot call non-static method %s() on non instance", name->sbuf->data);
+            return nn_except_throw(state, "cannot call non-static method %s() on non instance", name->sbuf.data);
         }
     }
-    return nn_except_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf->data, nn_value_typename(receiver));
+    return nn_except_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf.data, nn_value_typename(receiver));
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* name, int argcount)
@@ -15897,11 +15815,11 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            return nn_except_throw(state, "cannot call private module method '%s'", name->sbuf->data);
+                            return nn_except_throw(state, "cannot call private module method '%s'", name->sbuf.data);
                         }
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
-                    return nn_except_throw(state, "module %s does not define class or method %s()", module->name, name->sbuf->data);
+                    return nn_except_throw(state, "module %s does not define class or method %s()", module->name, name->sbuf.data);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -15934,7 +15852,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             fprintf(stderr, "fntyp: %d\n", fntyp);
                             if(fntyp == NEON_FNCONTEXTTYPE_PRIVATE)
                             {
-                                return nn_except_throw(state, "cannot call private method %s() on %s", name->sbuf->data, klass->name->sbuf->data);
+                                return nn_except_throw(state, "cannot call private method %s() on %s", name->sbuf.data, klass->name->sbuf.data);
                             }
                             if(fntyp == NEON_FNCONTEXTTYPE_STATIC)
                             {
@@ -15943,7 +15861,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         }
                     }
                     #endif
-                    return nn_except_throw(state, "unknown method %s() in class %s", name->sbuf->data, klass->name->sbuf->data);
+                    return nn_except_throw(state, "unknown method %s() in class %s", name->sbuf.data, klass->name->sbuf.data);
                 }
             case NEON_OBJTYPE_INSTANCE:
                 {
@@ -15980,7 +15898,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             }
                         }
                     }
-                    return nn_except_throw(state, "'dict' has no method %s()", name->sbuf->data);
+                    return nn_except_throw(state, "'dict' has no method %s()", name->sbuf.data);
                 }
                 default:
                     {
@@ -15992,14 +15910,14 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     if(klass == NULL)
     {
         /* @TODO: have methods for non objects as well. */
-        return nn_except_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->sbuf->data);
+        return nn_except_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->sbuf.data);
     }
     field = nn_class_getmethodfield(klass, name);
     if(field != NULL)
     {
         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
     }
-    return nn_except_throw(state, "'%s' has no method %s()", klass->name->sbuf->data, name->sbuf->data);
+    return nn_except_throw(state, "'%s' has no method %s()", klass->name->sbuf.data, name->sbuf.data);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NNObjString* name)
@@ -16012,7 +15930,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     {
         if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
-            return nn_except_throw(state, "cannot get private property '%s' from instance", name->sbuf->data);
+            return nn_except_throw(state, "cannot get private property '%s' from instance", name->sbuf.data);
         }
         val = nn_vmbits_stackpeek(state, 0);
         bound = nn_object_makefuncbound(state, val, nn_value_asfunction(field->value));
@@ -16020,7 +15938,7 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
         nn_vmbits_stackpush(state, nn_value_fromobject(bound));
         return true;
     }
-    return nn_except_throw(state, "undefined property '%s'", name->sbuf->data);
+    return nn_except_throw(state, "undefined property '%s'", name->sbuf.data);
 }
 
 NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNState* state, NNValue* local, int stackpos)
@@ -16113,7 +16031,7 @@ bool nn_value_isfalse(NNValue value)
     /* Non-empty strings are true, empty strings are false.*/
     if(nn_value_isstring(value))
     {
-        return nn_value_asstring(value)->sbuf->length < 1;
+        return nn_value_asstring(value)->sbuf.length < 1;
     }
     /* Non-empty lists are true, empty lists are false.*/
     if(nn_value_isarray(value))
@@ -16143,10 +16061,10 @@ bool nn_util_isinstanceof(NNObjClass* klass1, NNObjClass* expected)
     const char* ename;
     while(klass1 != NULL)
     {
-        elen = expected->name->sbuf->length;
-        klen = klass1->name->sbuf->length;
-        ename = expected->name->sbuf->data;
-        kname = klass1->name->sbuf->data;
+        elen = expected->name->sbuf.length;
+        klen = klass1->name->sbuf.length;
+        ename = expected->name->sbuf.data;
+        kname = klass1->name->sbuf.data;
         if(elen == klen && memcmp(kname, ename, klen) == 0)
         {
             return true;
@@ -16231,7 +16149,7 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
     nn_printer_makestackstring(state, &pr);
     for(i = 0; i < times; i++)
     {
-        nn_printer_writestringl(&pr, str->sbuf->data, str->sbuf->length);
+        nn_printer_writestringl(&pr, str->sbuf.data, str->sbuf.length);
     }
     return nn_printer_takestring(&pr);
 }
@@ -16348,7 +16266,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
         nn_vmbits_stackpopn(state, 2);
         return nn_except_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
     }
-    length = string->sbuf->length;
+    length = string->sbuf.length;
     idxlower = 0;
     if(nn_value_isnumber(vallower))
     {
@@ -16388,7 +16306,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
         /* +1 for the string itself */
         nn_vmbits_stackpopn(state, 3);
     }
-    nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + start, end - start)));
+    nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + start, end - start)));
     return true;
 }
 
@@ -16475,7 +16393,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(NNState* state, NNObjModule* mo
         return true;
     }
     nn_vmbits_stackpop(state);
-    return nn_except_throw(state, "%s is undefined in module %s", nn_value_tostring(state, vindex)->sbuf->data, module->name);
+    return nn_except_throw(state, "%s is undefined in module %s", nn_value_tostring(state, vindex)->sbuf.data, module->name);
 }
 
 NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* string, bool willassign)
@@ -16503,7 +16421,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
         return nn_except_throw(state, "strings are numerically indexed");
     }
     index = nn_value_asnumber(vindex);
-    maxlength = string->sbuf->length;
+    maxlength = string->sbuf.length;
     realindex = index;
     if(index < 0)
     {
@@ -16521,7 +16439,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
             */
             nn_vmbits_stackpopn(state, 2);
         }
-        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, string->sbuf->data + start, end - start)));
+        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + start, end - start)));
         return true;
     }
     nn_vmbits_stackpopn(state, 1);
@@ -16756,7 +16674,7 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     }
     iv = nn_value_asnumber(value);
     rawpos = nn_value_asnumber(index);
-    oslen = os->sbuf->length;
+    oslen = os->sbuf.length;
     position = rawpos;
     if(rawpos < 0)
     {
@@ -16764,7 +16682,7 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     }
     if(position < oslen && position > -oslen)
     {
-        os->sbuf->data[position] = iv;
+        os->sbuf.data[position] = iv;
         /* pop the value, index and list out */
         nn_vmbits_stackpopn(state, 3);
         /*
@@ -16776,7 +16694,7 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     }
     else
     {
-        dyn_strbuf_appendchar(os->sbuf, iv);
+        dyn_strbuf_appendchar(&os->sbuf, iv);
         nn_vmbits_stackpopn(state, 3);
         nn_vmbits_stackpush(state, value);
     }
@@ -16890,12 +16808,12 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     if(nn_util_methodisprivate(name))
                     {
-                        nn_except_throw(state, "cannot get private module property '%s'", name->sbuf->data);
+                        nn_except_throw(state, "cannot get private module property '%s'", name->sbuf.data);
                         return NULL;
                     }
                     return field;
                 }
-                nn_except_throw(state, "%s module does not define '%s'", module->name, name->sbuf->data);
+                nn_except_throw(state, "%s module does not define '%s'", module->name, name->sbuf.data);
                 return NULL;
             }
             break;
@@ -16908,8 +16826,8 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
-                                nn_value_asclass(peeked)->name->sbuf->data);
+                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf.data,
+                                nn_value_asclass(peeked)->name->sbuf.data);
                             return NULL;
                         }
                         return field;
@@ -16922,15 +16840,15 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     {
                         if(nn_util_methodisprivate(name))
                         {
-                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf->data,
-                                nn_value_asclass(peeked)->name->sbuf->data);
+                            nn_except_throw(state, "cannot call private property '%s' of class %s", name->sbuf.data,
+                                nn_value_asclass(peeked)->name->sbuf.data);
                             return NULL;
                         }
                         return field;
                     }
                 }
                 nn_except_throw(state, "class %s does not have a static property or method named '%s'",
-                    nn_value_asclass(peeked)->name->sbuf->data, name->sbuf->data);
+                    nn_value_asclass(peeked)->name->sbuf.data, name->sbuf.data);
                 return NULL;
             }
             break;
@@ -16943,14 +16861,14 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     if(nn_util_methodisprivate(name))
                     {
-                        nn_except_throw(state, "cannot call private property '%s' from instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
+                        nn_except_throw(state, "cannot call private property '%s' from instance of %s", name->sbuf.data, instance->klass->name->sbuf.data);
                         return NULL;
                     }
                     return field;
                 }
                 if(nn_util_methodisprivate(name))
                 {
-                    nn_except_throw(state, "cannot bind private property '%s' to instance of %s", name->sbuf->data, instance->klass->name->sbuf->data);
+                    nn_except_throw(state, "cannot bind private property '%s' to instance of %s", name->sbuf.data, instance->klass->name->sbuf.data);
                     return NULL;
                 }
                 if(nn_vmutil_bindmethod(state, instance->klass, name))
@@ -16958,7 +16876,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     return field;
                 }
                 nn_except_throw(state, "instance of class %s does not have a property or method named '%s'",
-                    nn_value_asinstance(peeked)->klass->name->sbuf->data, name->sbuf->data);
+                    nn_value_asinstance(peeked)->klass->name->sbuf.data, name->sbuf.data);
                 return NULL;
             }
             break;
@@ -16969,7 +16887,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_except_throw(state, "class String has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class String has no named property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -16980,7 +16898,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_except_throw(state, "class Array has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Array has no named property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -16991,7 +16909,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_except_throw(state, "class Range has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Range has no named property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -17006,7 +16924,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_except_throw(state, "unknown key or class Dict property '%s'", name->sbuf->data);
+                nn_except_throw(state, "unknown key or class Dict property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -17017,7 +16935,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                 {
                     return field;
                 }
-                nn_except_throw(state, "class File has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class File has no named property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -17039,7 +16957,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                         return field;
                     }
                 }
-                nn_except_throw(state, "class Function has no named property '%s'", name->sbuf->data);
+                nn_except_throw(state, "class Function has no named property '%s'", name->sbuf.data);
                 return NULL;
             }
             break;
@@ -17083,7 +17001,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
     }
     else
     {
-        nn_except_throw(state, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf->data,
+        nn_except_throw(state, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf.data,
             nn_value_typename(peeked));
     }
     return false;
@@ -17115,7 +17033,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
             return true;
         }
         nn_vmmac_tryraise(state, false, "instance of class %s does not have a property or method named '%s'",
-            nn_value_asinstance(peeked)->klass->name->sbuf->data, name->sbuf->data);
+            nn_value_asinstance(peeked)->klass->name->sbuf.data, name->sbuf.data);
         return false;
     }
     else if(nn_value_isclass(peeked))
@@ -17143,7 +17061,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
                 return true;
             }
         }
-        nn_vmmac_tryraise(state, false, "class %s does not have a static property or method named '%s'", klass->name->sbuf->data, name->sbuf->data);
+        nn_vmmac_tryraise(state, false, "class %s does not have a static property or method named '%s'", klass->name->sbuf.data, name->sbuf.data);
         return false;
     }
     else if(nn_value_ismodule(peeked))
@@ -17157,10 +17075,10 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
             nn_vmbits_stackpush(state, field->value);
             return true;
         }
-        nn_vmmac_tryraise(state, false, "module %s does not define '%s'", module->name, name->sbuf->data);
+        nn_vmmac_tryraise(state, false, "module %s does not define '%s'", module->name, name->sbuf.data);
         return false;
     }
-    nn_vmmac_tryraise(state, false, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf->data,
+    nn_vmmac_tryraise(state, false, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf.data,
         nn_value_typename(peeked));
     return false;
 }
@@ -17439,8 +17357,8 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
         field = nn_valtable_getfieldbyostr(&state->declaredglobals, name);
         if(field == NULL)
         {
-            //nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf->data);
-            nn_except_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", name->sbuf->data);
+            //nn_vmmac_tryraise(state, false, "global name '%s' is not defined", name->sbuf.data);
+            nn_except_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", name->sbuf.data);
             return false;
         }
     }
@@ -17452,14 +17370,16 @@ NEON_FORCEINLINE bool nn_vmdo_globalset(NNState* state)
 {
     NNObjString* name;
     NNHashValTable* table;
+    NNObjModule* module;
     name = nn_vmbits_readstring(state);
-    table = &state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
+    module = state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module;
+    table = &module->deftable;
     if(nn_valtable_set(table, nn_value_fromobject(name), nn_vmbits_stackpeek(state, 0)))
     {
         if(state->conf.enablestrictmode)
         {
             nn_valtable_delete(table, nn_value_fromobject(name));
-            nn_vmmac_tryraise(state, false, "global name '%s' was not declared", name->sbuf->data);
+            nn_vmmac_tryraise(state, false, "global name '%s' was not declared", name->sbuf.data);
             return false;
         }
     }
@@ -18115,7 +18035,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     if(!nn_value_isstring(peeked) && !nn_value_isnull(peeked))
                     {
                         value = nn_value_tostring(state, nn_vmbits_stackpop(state));
-                        if(value->sbuf->length != 0)
+                        if(value->sbuf.length != 0)
                         {
                             nn_vmbits_stackpush(state, nn_value_fromobject(value));
                         }
@@ -18416,7 +18336,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 0));
                     if(!nn_vmutil_bindmethod(state, klass->superclass, name))
                     {
-                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "class %s does not define a function %s", klass->name->sbuf->data, name->sbuf->data);
+                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "class %s does not define a function %s", klass->name->sbuf.data, name->sbuf.data);
                     }
                 }
                 VM_DISPATCH();
@@ -18514,7 +18434,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjString* name;
                     NNObjModule* mod;
                     name = nn_value_asstring(nn_vmbits_stackpeek(state, 0));
-                    fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->sbuf->data);
+                    fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->sbuf.data);
                     mod = nn_import_loadmodulescript(state, state->topmodule, name);
                     fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", (void*)mod);
                     if(mod == NULL)
@@ -18549,7 +18469,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     {
                         if(!nn_value_isnull(message))
                         {
-                            nn_except_throwclass(state, state->exceptions.asserterror, nn_value_tostring(state, message)->sbuf->data);
+                            nn_except_throwclass(state, state->exceptions.asserterror, nn_value_tostring(state, message)->sbuf.data);
                         }
                         else
                         {
@@ -18613,7 +18533,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             /*
                             if(!nn_valtable_get(&state->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable, nn_value_fromobject(type), &value) || !nn_value_isclass(value))
                             {
-                                nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->sbuf->data);
+                                nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->sbuf.data);
                                 VM_DISPATCH();
                             }
                             */
@@ -19275,7 +19195,6 @@ int main(int argc, char* argv[], char** envp)
         {"quit", 'q', OPTPARSE_NONE, "initiate, then immediately destroy the interpreter state"},
         {"types", 't', OPTPARSE_NONE, "print sizeof() of types"},
         {"apidebug", 'a', OPTPARSE_NONE, "print calls to API (very verbose, very slow)"},
-        {"astdebug", 'A', OPTPARSE_NONE, "print calls to the parser (very verbose, very slow)"},
         {"gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC"},
         {0, 0, (optargtype_t)0, NULL}
     };
@@ -19328,10 +19247,6 @@ int main(int argc, char* argv[], char** envp)
         {
             state->conf.enableapidebug = true;
         }
-        else if(co == 'A')
-        {
-            state->conf.enableastdebug = true;
-        }
         else if(co == 's')
         {
             state->conf.enablestrictmode = true;            
@@ -19382,7 +19297,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0))->sbuf->data;
+        filename = nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0))->sbuf.data;
         fprintf(stderr, "nargv[0]=%s\n", filename);
         ok = nn_cli_runfile(state,  filename);
     }

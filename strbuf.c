@@ -398,6 +398,15 @@ StringBuffer* dyn_strbuf_makebasicempty(size_t len, bool isintern)
     return sbuf;
 }
 
+bool dyn_strbuf_destroyfromstack(StringBuffer* sb)
+{
+    if(!sb->isintern)
+    {
+        nn_memory_free(sb->data);
+    }
+    return true;
+}
+
 bool dyn_strbuf_destroy(StringBuffer* sb)
 {
     if(!sb->isintern)

@@ -4,10 +4,11 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#define NEON_CONF_USEMEMPOOL 0
+#include "talloc.h"
+
+#define NEON_CONF_USEMEMPOOL 1
 
 #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-    #include "zmpool.h"
 #endif
 
 void nn_memory_init();
