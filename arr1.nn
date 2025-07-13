@@ -1,6 +1,6 @@
 
 var a = ["red", "green", "blue"];
-println("a:count=", a.size());
+println("a:count=", a.length);
 println("a      =", a);
 a.push("yellow", "purple", 42, 889);
 println("a now  =", a);

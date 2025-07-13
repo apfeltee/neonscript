@@ -26,7 +26,14 @@
 // 4 MB
 //#define TALLOC_BLOCK_SIZE ((1024 * 1024) * 4)
 //#define TALLOC_BLOCK_SIZE ((1024 * 1024) * 1)
-#define TALLOC_BLOCK_SIZE ((1024 * 1024) / 2)
+//#define TALLOC_BLOCK_SIZE ((1024 * 1024) / 2)
+//#define TALLOC_BLOCK_SIZE ((1024 * 64))
+/*
+* *** IMPORTANT ***
+* as far as i can tell, this is the MINIMUM size to prevent memory errors like invalid read/writes, and such.
+* feel free to experiment with this value, but going below seems to only cause trouble.
+*/
+#define TALLOC_BLOCK_SIZE ((1024 * 256))
 
 /**
  * @def Every allocation with pool allocator is rounded up to next multiply of
@@ -34,7 +41,7 @@
  */
 //#define TALLOC_POOL_GROUP_MULT (32)
 //#define TALLOC_POOL_GROUP_MULT (TALLOC_BLOCK_SIZE / 128)
-#define TALLOC_POOL_GROUP_MULT (2)
+#define TALLOC_POOL_GROUP_MULT (32)
 
 /**
  * @def Count of cells allocated on heap in every pool. When count of
@@ -42,7 +49,7 @@
  * allocated on heap.
  */
 //#define TALLOC_INIT_POOL_SIZE (128 * 2)
-#define TALLOC_INIT_POOL_SIZE (16 * 1)
+#define TALLOC_INIT_POOL_SIZE (128)
 
 /**
  * @def Objects with size under this value will be allocated in pools, larger
@@ -98,14 +105,8 @@
 #define NEXT_MULT_OF(n, mult) ((n) + (mult) - 1 - ((n) - 1) % (mult))
 
 
-
-typedef struct talfreemeta_t talfreemeta_t;
-typedef struct talallocmeta_t talallocmeta_t;
-typedef struct talpoolmeta_t talpoolmeta_t;
-typedef struct talfreecellmeta_t talfreecellmeta_t;
-typedef struct talalloccellmeta_t talalloccellmeta_t;
 typedef struct talcategory_t talcategory_t;
-typedef struct taluniversalmeta_t taluniversalmeta_t;
+typedef struct talmetamemory_t talmetamemory_t;
 typedef struct talvector_t talvector_t;
 typedef struct talstate_t talstate_t;
 typedef void (*talonerrorfunc_t)(const char*);
@@ -114,13 +115,6 @@ typedef void (*talonerrorfunc_t)(const char*);
 talstate_t* tal_state_init();
 void tal_state_destroy(talstate_t* state);
 
-void tal_vector_init(talvector_t* vec);
-
-void tal_vector_free(talvector_t* vec);
-
-void tal_vector_push_back(talvector_t* vec, void* data);
-
-void* tal_vector_at(talvector_t* vec, int64_t index);
 
 /**
  * Check if pointer is properly aligned for specified alignment.
@@ -152,28 +146,6 @@ void tal_util_alignptrup(talstate_t* state, void** p, size_t alignment, ptrdiff_
  */
 void tal_util_alignptrwithheader(talstate_t* state, void** p, size_t alignment, int64_t header_size, ptrdiff_t* adjustment);
 
-void* tal_pool_malloc(talstate_t* state, int64_t count);
-
-void tal_pool_free(talstate_t* state, void* ptr);
-
-int64_t tal_pool_cell_size(talstate_t* state, int64_t size);
-
-void tal_pool_optimize(talstate_t* state);
-
-void* tal_heap_malloc(talstate_t* state, int64_t count);
-
-void tal_heap_free(talstate_t* state, void* ptr);
-
-void tal_heap_expand(talstate_t* state, int64_t size);
-
-int64_t tal_heap_allocated(talstate_t* state);
-
-int64_t tal_heap_used(talstate_t* state);
-
-void tal_heap_print_blocks(talstate_t* state, FILE* file);
-
-void tal_heap_forcereset(talstate_t* state);
-
 /**
  * @brief Memory allocation.
  * Allocates memory of requested size. Automatic pooling is allowed for objects
@@ -195,6 +167,7 @@ void* tal_state_malloc(talstate_t* state, int64_t count);
  * @param size New requested size of block.
  * @return Pointer to allocated memory block.
  */
+void* tal_state_reallocwithold(talstate_t* state, void* from, int64_t size, int64_t oldsize);
 void* tal_state_realloc(talstate_t* state, void* ptr, int64_t size);
 
 /**
@@ -203,7 +176,7 @@ void* tal_state_realloc(talstate_t* state, void* ptr, int64_t size);
  * @param elsize Element size.
  * @return Pointer to allocated memory block.
  */
-void* tal_state_calloc(talstate_t* state, const int64_t nelem, const int64_t elsize);
+void* tal_state_calloc(talstate_t* state, int64_t nelem, int64_t elsize);
 
 /**
  * @brief Free allocated memory.
@@ -260,37 +233,13 @@ void tal_state_seterrfunc(talstate_t* state, talonerrorfunc_t func);
 void tal_state_forcereset(talstate_t* state);
 
 
-/* ../pool.c */
-void tal_pool_newcategory(talstate_t* state, talcategory_t* category, int64_t size);
-talfreecellmeta_t* tal_pool_allocate(talstate_t* state, talcategory_t* category, int64_t size);
-void tal_pool_deallocate(talstate_t* state, talcategory_t* category, talfreecellmeta_t* free_cell);
-void* tal_pool_malloc(talstate_t* state, int64_t count);
-void tal_pool_free(talstate_t* state, void* ptr);
-int64_t tal_pool_cellsize(talstate_t* state, int64_t size);
-void tal_pool_optimize(talstate_t* state);
 
-/* ../heap.c */
-talfreemeta_t* tal_heap_rrotate(talstate_t* state, talfreemeta_t* pivot);
-talfreemeta_t* tal_heap_lrotate(talstate_t* state, talfreemeta_t* pivot);
-talfreemeta_t* tal_heap_minnode(talstate_t* state, talfreemeta_t* node);
-talfreemeta_t* tal_heap_removenode(talstate_t* state, talfreemeta_t* root, talfreemeta_t* key);
-talfreemeta_t* tal_heap_insertnode(talstate_t* state, talfreemeta_t* node, talfreemeta_t* new_node);
-talfreemeta_t* tal_heap_findfreenode(talstate_t* state, talfreemeta_t* node, int64_t size);
-void tal_heap_insertblock(talstate_t* state, talfreemeta_t* prev, talfreemeta_t* next, talfreemeta_t* block);
-void tal_heap_removeblock(talstate_t* state, talfreemeta_t* block);
-talfreemeta_t* tal_heap_newspace(talstate_t* state, int64_t size);
-talfreemeta_t* tal_heap_canmergenext(talstate_t* state, talfreemeta_t* block);
-talfreemeta_t* tal_heap_canmergeprev(talstate_t* state, talfreemeta_t* block);
-void* tal_heap_allocate(talstate_t* state, talfreemeta_t* block, int64_t size);
-void tal_heap_deallocate(talstate_t* state, talfreemeta_t* block);
-
-void tal_heap_insertblocksorted(talstate_t* state, talfreemeta_t* block);
-void* tal_heap_malloc(talstate_t* state, int64_t count);
-void tal_heap_free(talstate_t* state, void* ptr);
-void tal_heap_expand(talstate_t* state, int64_t count);
-void tal_heap_printblocks(talstate_t* state, FILE* file);
-int64_t tal_heap_allocated(talstate_t* state);
-int64_t tal_heap_used(talstate_t* state);
+int64_t tal_pool_cellsize(talstate_t *state, int64_t size);
+void tal_vector_double_if_needed(talvector_t *vec);
+void tal_vector_init(talvector_t *vec);
+void tal_vector_free(talvector_t *vec);
+void tal_vector_push_back(talvector_t *vec, void *data);
+void *tal_vector_at(talvector_t *vec, int64_t index);
 
 
 #endif /* end of include guard: TALLOC_H_QYTR1XNS */

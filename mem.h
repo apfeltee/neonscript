@@ -15,6 +15,7 @@ void nn_memory_init();
 void nn_memory_finish();
 void* nn_memory_malloc(size_t sz);
 void* nn_memory_realloc(void* p, size_t nsz);
+void* nn_memory_reallocwithold(void* p, size_t nsz, size_t oldsz);
 void* nn_memory_calloc(size_t count, size_t typsize);
 void nn_memory_free(void* ptr);
 

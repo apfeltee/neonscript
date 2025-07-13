@@ -3457,6 +3457,16 @@ NNObjString* nn_printer_takestring(NNPrinter* pr)
     return os;
 }
 
+NNObjString* nn_printer_copystring(NNPrinter* pr)
+{
+    uint32_t hash;
+    NNState* state;
+    NNObjString* os;
+    state = pr->pstate;
+    os = nn_string_takelen(state, pr->strbuf->data, pr->strbuf->length);
+    return os;
+}
+
 bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
 {
     if(pr->wrmode == NEON_PRMODE_FILE)
@@ -9901,20 +9911,13 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
     (void)isrelative;
     (void)stroot;
     (void)stmod;
-    pathbuf = NULL;
     mlen = strlen(modulename);
     splen = nn_valarray_count(&state->importpath);
+    pathbuf = dyn_strbuf_makebasicempty(0, false);
     for(i=0; i<splen; i++)
     {
         pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));
-        if(pathbuf == NULL)
-        {
-            pathbuf = dyn_strbuf_makebasicempty(pitem->sbuf.length + mlen + 5, false);
-        }
-        else
-        {
-            dyn_strbuf_reset(pathbuf);
-        }
+        dyn_strbuf_reset(pathbuf);
         dyn_strbuf_appendstrn(pathbuf, pitem->sbuf.data, pitem->sbuf.length);
         if(dyn_strbuf_containschar(pathbuf, '@'))
         {
@@ -9949,28 +9952,35 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
                 return NULL;
             }
             #endif
-            #if 0
+            #if 1   
                 path1 = osfn_realpath(cstrpath, NULL);
                 path2 = osfn_realpath(currentfile, NULL);
             #else
                 path1 = strdup(cstrpath);
                 path2 = strdup(currentfile);
             #endif
-            
             if(path1 != NULL && path2 != NULL)
             {
                 if(memcmp(path1, path2, (int)strlen(path2)) == 0)
                 {
                     nn_memory_free(path1);
                     nn_memory_free(path2);
+                    path1 = NULL;
+                    path2 = NULL;
                     fprintf(stderr, "resolvepath: refusing to import itself\n");
                     return NULL;
                 }
-                nn_memory_free(path2);
+                if(path2 != NULL)
+                {
+                    nn_memory_free(path2);
+                }
                 dyn_strbuf_destroy(pathbuf);
                 pathbuf = NULL;
                 retme = nn_util_strdup(path1);
-                nn_memory_free(path1);
+                if(path1 != NULL)
+                {
+                    nn_memory_free(path1);
+                }
                 return retme;
             }
         }
@@ -9979,10 +9989,7 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
             fprintf(stderr, "does not exist\n");
         }
     }
-    if(pathbuf != NULL)
-    {
-        dyn_strbuf_destroy(pathbuf);
-    }
+    dyn_strbuf_destroy(pathbuf);
     return NULL;
 }
 
@@ -15251,10 +15258,19 @@ void nn_state_updateprocessinfo(NNState* state)
 
 }
 
-void nn_state_make(NNState* pstate)
+void nn_state_makestack(NNState* pstate)
 {
     return nn_state_makewithuserptr(pstate, NULL);
 }
+
+NNState* nn_state_makealloc()
+{
+    NNState* state;
+    state = (NNState*)nn_memory_malloc(sizeof(NNState));
+    nn_state_makewithuserptr(state, NULL);
+    return state;
+}
+
 
 void nn_state_makewithuserptr(NNState* pstate, void* userptr)
 {
@@ -15364,7 +15380,7 @@ void nn_state_makewithuserptr(NNState* pstate, void* userptr)
 #else
     #define destrdebug(...)
 #endif
-void nn_state_destroy(NNState* state)
+void nn_state_destroy(NNState* state, bool onstack)
 {
     destrdebug("destroying importpath...");
     nn_valarray_destroy(&state->importpath, false);
@@ -15389,7 +15405,10 @@ void nn_state_destroy(NNState* state)
     nn_memory_free(state->vmstate.stackvalues);
     nn_memory_free(state->processinfo);
     destrdebug("destroying state...");
-    //nn_memory_free(state);
+    if(!onstack)
+    {
+        nn_memory_free(state);
+    }
     destrdebug("done destroying!");
 }
 
@@ -19181,7 +19200,6 @@ int main(int argc, char* argv[], char** envp)
     const char* filename;
     char* nargv[128];
     optcontext_t options;
-    NNState stackstate;
     NNState* state;
     nn_memory_init();
     static optlongflags_t longopts[] =
@@ -19208,8 +19226,7 @@ int main(int argc, char* argv[], char** envp)
     quitafterinit = false;
     source = NULL;
     nextgcstart = NEON_CONFIG_DEFAULTGCSTART;
-    nn_state_make(&stackstate);
-    state = &stackstate;    
+    state = nn_state_makealloc();
     nargc = 0;
     optprs_init(&options, argc, argv);
     options.permute = 0;
@@ -19306,7 +19323,7 @@ int main(int argc, char* argv[], char** envp)
         ok = nn_cli_repl(state);
     }
     cleanup:
-    nn_state_destroy(state);
+    nn_state_destroy(state, false);
     nn_memory_finish();
     if(ok)
     {

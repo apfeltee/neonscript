@@ -1,19 +1,6 @@
 
 "use strict";
 
-function ojoin(arr)
-{
-    var l = arr.length;
-    var s = "";
-    for(var i=0; i<l; i++)
-    {
-        s += arr[i].toString();
-        if((i+1) < l)
-        {
-        }
-    }
-    return s;
-}
 
 class LighTemplate
 {
@@ -47,7 +34,7 @@ class LighTemplate
     */
     onCodeblock(itm)
     {
-        this.parsedbuf.push(ojoin(itm), "\n");
+        this.parsedbuf.push(itm.join(""), "\n");
     };
 
     /**
@@ -55,7 +42,7 @@ class LighTemplate
     */
     onCodeline(itm)
     {
-        this.parsedbuf.push("response.write(", ojoin(itm), ");\n");
+        this.parsedbuf.push("response.write(", itm.join(""), ");\n");
     }
 
     /**
@@ -64,7 +51,7 @@ class LighTemplate
     */
     onData(itm)
     {
-        this.parsedbuf.push("response.write(", ojoin(itm).dump(), ");\n");
+        this.parsedbuf.push("response.write(", itm.join("").dump(), ");\n");
     }
 
     /**
@@ -211,7 +198,7 @@ class LighTemplate
             }
         }
         this.onEnd();
-        var body = ojoin(this.parsedbuf);
+        var body = this.parsedbuf.join("");
         var full = "return (function(response){\n" + body + "\n})";
         return full;
     }
