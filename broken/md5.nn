@@ -163,7 +163,6 @@ function md5blk(s) {
 
 
 function md51(s) {
-    var txt = '';
     var n = s.length;
     var state = [1732584193, -271733879, -1732584194, 271733878];
     var i;
@@ -194,12 +193,12 @@ function md51(s) {
 var hex_chr = '0123456789abcdef'.split('');
 
 function rhex(n) {
-    var s = '';
+    var buf = [];
     var j = 0;
     for (; j < 4; j++) {
-        s += hex_chr[(n >> (j * 8 + 4)) & 0x0F] + hex_chr[(n >> (j * 8)) & 0x0F];
+        buf.push(hex_chr[(n >> (j * 8 + 4)) & 0x0F] + hex_chr[(n >> (j * 8)) & 0x0F]);
     }
-    return s;
+    return buf.join("");
 }
 
 function hex(x) {

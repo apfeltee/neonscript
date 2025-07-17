@@ -17,11 +17,11 @@ talstate_t* g_memstate;
 void nn_memory_init()
 {
     #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-    fprintf(stderr, "TALLOC_SMALL_TO = %ld\n", TALLOC_SMALL_TO);
-    fprintf(stderr, "TALLOC_POOL_GROUP_MULT = %ld\n", TALLOC_POOL_GROUP_MULT);
-    if(TALLOC_SMALL_TO <= TALLOC_POOL_GROUP_MULT)
+    fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC = %ld\n", TALLOC_CONFIG_SMALLALLOC);
+    fprintf(stderr, "TALLOC_CONFIG_POOLGROUPMULT = %ld\n", TALLOC_CONFIG_POOLGROUPMULT);
+    if(TALLOC_CONFIG_SMALLALLOC <= TALLOC_CONFIG_POOLGROUPMULT)
     {
-        fprintf(stderr, "TALLOC_SMALL_TO (%ld) must be larger than TALLOC_POOL_GROUP_MULT (%ld)\n", TALLOC_SMALL_TO, TALLOC_POOL_GROUP_MULT);
+        fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC (%ld) must be larger than TALLOC_CONFIG_POOLGROUPMULT (%ld)\n", TALLOC_CONFIG_SMALLALLOC, TALLOC_CONFIG_POOLGROUPMULT);
         abort();
     }
     g_memstate = tal_state_init();
@@ -92,10 +92,6 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 
 void nn_memory_free(void* ptr)
 {
-    if(ptr == NULL)
-    {
-        return;
-    }
     #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
         tal_state_free(g_memstate, ptr);
     #else

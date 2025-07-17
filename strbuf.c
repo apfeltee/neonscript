@@ -323,19 +323,6 @@ void dyn_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start
 // Constructors / Destructors
 */
 
-void dyn_strbuf_convertfromintern(StringBuffer* sbuf)
-{
-    char* abuf;
-    if(sbuf->isintern)
-    {
-        fprintf(stderr, "converting stringbuffer from const to dynamic!!\n");
-        assert(false);
-        abuf = (char*)nn_memory_malloc(sizeof(char) * (sbuf->capacity));
-        memcpy(abuf, sbuf->data, sbuf->length);
-        /* if sbuf->data is NOT stack memory, it'll be orphaned here!!!!! */
-        sbuf->data = abuf;
-    }
-}
 
 /*
 // Place a string buffer into existing memory. Example:
@@ -347,7 +334,8 @@ void dyn_strbuf_convertfromintern(StringBuffer* sbuf)
 StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
 {
     sbuf->length = 0;
-    sbuf->capacity = ROUNDUP2POW(len + 1);
+    //sbuf->capacity = ROUNDUP2POW(len + 1);
+    sbuf->capacity = len + 1;
     sbuf->data = (char*)nn_memory_malloc(sbuf->capacity);
     if(!sbuf->data)
     {
@@ -357,16 +345,11 @@ StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
     return sbuf;
 }
 
-bool dyn_strbuf_initbasicempty(StringBuffer* sbuf, size_t len, bool isintern, bool onstack)
+bool dyn_strbuf_initbasicempty(StringBuffer* sbuf, size_t len, bool onstack)
 {
     sbuf->length = len;
     sbuf->capacity = 0;
     sbuf->data = NULL;
-    sbuf->isintern = isintern;
-    if(isintern)
-    {
-        return true;
-    }
     if(!dyn_strbuf_makefromptr(sbuf, len))
     {
         if(!onstack)
@@ -378,12 +361,12 @@ bool dyn_strbuf_initbasicempty(StringBuffer* sbuf, size_t len, bool isintern, bo
     return true;
 }
 
-bool dyn_strbuf_makebasicemptystack(StringBuffer* sbuf, size_t len, bool isintern)
+bool dyn_strbuf_makebasicemptystack(StringBuffer* sbuf, size_t len)
 {
-    return dyn_strbuf_initbasicempty(sbuf, len, isintern, true);
+    return dyn_strbuf_initbasicempty(sbuf, len, true);
 }
 
-StringBuffer* dyn_strbuf_makebasicempty(size_t len, bool isintern)
+StringBuffer* dyn_strbuf_makebasicempty(size_t len)
 {
     StringBuffer* sbuf;
     sbuf = (StringBuffer*)nn_memory_calloc(1, sizeof(StringBuffer));
@@ -391,7 +374,7 @@ StringBuffer* dyn_strbuf_makebasicempty(size_t len, bool isintern)
     {
         return NULL;
     }
-    if(!dyn_strbuf_initbasicempty(sbuf, len, isintern, false))
+    if(!dyn_strbuf_initbasicempty(sbuf, len, false))
     {
         return NULL;
     }
@@ -400,29 +383,20 @@ StringBuffer* dyn_strbuf_makebasicempty(size_t len, bool isintern)
 
 bool dyn_strbuf_destroyfromstack(StringBuffer* sb)
 {
-    if(!sb->isintern)
-    {
-        nn_memory_free(sb->data);
-    }
+    nn_memory_free(sb->data);
     return true;
 }
 
 bool dyn_strbuf_destroy(StringBuffer* sb)
 {
-    if(!sb->isintern)
-    {
-        nn_memory_free(sb->data);
-    }
+    nn_memory_free(sb->data);
     nn_memory_free(sb);
     return true;
 }
 
 bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 {
-    if(!sb->isintern)
-    {
-        nn_memory_free(sb->data);
-    }
+    nn_memory_free(sb->data);
     memset(sb, 0, sizeof(*sb));
     return true;
 }
@@ -430,24 +404,17 @@ bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 /*
 // Copy a string or existing string buffer
 */
-StringBuffer* dyn_strbuf_makefromstring(const char* str, size_t slen, bool isintern)
+StringBuffer* dyn_strbuf_makefromstring(const char* str, size_t slen)
 {
     StringBuffer* sbuf;
-    sbuf = dyn_strbuf_makebasicempty(slen + 1, isintern);
+    sbuf = dyn_strbuf_makebasicempty(slen + 1);
     if(!sbuf)
     {
         return NULL;
     }
     sbuf->length = slen;
-    if(isintern)
-    {
-        sbuf->data = (char*)str;
-    }
-    else
-    {
-        memcpy(sbuf->data, str, slen);
-        sbuf->data[sbuf->length] = '\0';
-    }
+    memcpy(sbuf->data, str, slen);
+    sbuf->data[sbuf->length] = '\0';
     return sbuf;
 }
 
@@ -455,21 +422,14 @@ StringBuffer* dyn_strbuf_makeclone(const StringBuffer* sbuf)
 {
     /* One byte for the string end / null char \0 */
     StringBuffer* cpy;
-    cpy = dyn_strbuf_makebasicempty(sbuf->length + 1, sbuf->isintern);
+    cpy = dyn_strbuf_makebasicempty(sbuf->length + 1);
     if(!cpy)
     {
         return NULL;
     }
     cpy->length = sbuf->length;
-    if(cpy->isintern)
-    {
-        cpy->data = sbuf->data;
-    }
-    else
-    {
-        memcpy(cpy->data, sbuf->data, sbuf->length);
-        cpy->data[cpy->length] = '\0';
-    }
+    memcpy(cpy->data, sbuf->data, sbuf->length);
+    cpy->data[cpy->length] = '\0';
     return cpy;
 }
 
@@ -539,7 +499,6 @@ bool dyn_strbuf_resize(StringBuffer* sbuf, size_t newlen)
 /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
 void dyn_strbuf_ensurecapacity(StringBuffer* sb, size_t len)
 {
-    dyn_strbuf_convertfromintern(sb);
     dyn_strutil_cbufcapacity(&sb->data, &sb->capacity, len);
 }
 
@@ -834,9 +793,12 @@ bool dyn_strbuf_appendchar(StringBuffer* sb, int c)
 */
 bool dyn_strbuf_appendstrn(StringBuffer* sb, const char* str, size_t len)
 {
-    dyn_strbuf_ensurecapacityupdateptr(sb, sb->length + len, &str);
-    memcpy(sb->data + sb->length, str, len);
-    sb->data[sb->length = sb->length + len] = '\0';
+    if(len > 0)
+    {
+        dyn_strbuf_ensurecapacityupdateptr(sb, sb->length + len, &str);
+        memcpy(sb->data + sb->length, str, len);
+        sb->data[sb->length = sb->length + len] = '\0';
+    }
     return true;
 }
 

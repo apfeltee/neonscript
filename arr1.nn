@@ -6,4 +6,4 @@ a.push("yellow", "purple", 42, 889);
 println("a now  =", a);
 println("a[1]   =", a[1]);
 a[5]++
-println("a inc  =", a);
+println("a inc  =", a.join("/"));

@@ -112,7 +112,7 @@ class Lexer
     {
         if(line > 0 && pos > 0)
         {
-            println(message + " in line " + line + ", pos " + pos + "\n")
+            printf("%s in line %d, pos %d\n", message, line, pos)
         }
         else
         {
@@ -204,7 +204,7 @@ class Lexer
     }
     string_lit(start, line, pos)
     {
-        var value = ""
+        var value = []
         while(this.getNextChar() != start)
         {
             if(this.currchar == null)
@@ -215,44 +215,43 @@ class Lexer
             {
                 this.error(line, pos, "EOL while scanning string literal")
             }
-            value += this.currchar
+            value.push(this.currchar)
         }
         this.getNextChar()
-        return this.maketoken(TokenType.String, value, line, pos)
+        return this.maketoken(TokenType.String, value.join(""), line, pos)
     }
     identifier_or_integer(line, pos)
     {
         var is_number = true
-        var text = ""
-
+        var text = []
         while(test_isident(this.currchar) || this.currchar == "_")
         {
-            text += this.currchar
+            text.push(this.currchar)
             if(!test_isdigit(this.currchar))
             {
                 is_number = false
             }
             this.getNextChar()
         }
-        if(text == "")
+        if(text.length == 0)
         {
             this.error(line, pos, "identifer_or_integer unrecognized character: follow: unrecognized character: (" + this.currchar.charCodeAt(0) + ") '" + this.currchar + "'")
         }
-
-        if(test_isdigit(text.charAt(0)))
+        var stext = text.join("")
+        if(test_isdigit(text[0]))
         {
             if(!is_number)
             {
-                this.error(line, pos, "invalid number: " + text)
+                this.error(line, pos, "invalid number: " + stext)
             }
-            return this.maketoken(TokenType.Integer, text, line, pos)
+            return this.maketoken(TokenType.Integer, stext, line, pos)
         }
-        if(this.keywords[text] != null)
+        if(this.keywords[stext] != null)
         {
-            var tmp = this.keywords[text];
+            var tmp = this.keywords[stext];
             return this.maketoken(tmp, "", line, pos)
         }
-        return this.maketoken(TokenType.Identifier, text, line, pos)
+        return this.maketoken(TokenType.Identifier, stext, line, pos)
     }
     getToken()
     {
@@ -408,7 +407,7 @@ class Lexer
     }
 }
 
-var inputsource = File.read(Process.scriptdirectory + "/mandel2.nn", 1024*2)
+var inputsource = File.read([Process.scriptdirectory, "/mandel2.nn"].join(), 1024*2)
 println(inputsource)
 l = new Lexer(inputsource)
 l.printTokens()

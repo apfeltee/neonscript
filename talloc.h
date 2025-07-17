@@ -24,59 +24,52 @@
  * value for your use.
  */
 // 4 MB
-//#define TALLOC_BLOCK_SIZE ((1024 * 1024) * 4)
-//#define TALLOC_BLOCK_SIZE ((1024 * 1024) * 1)
-//#define TALLOC_BLOCK_SIZE ((1024 * 1024) / 2)
-//#define TALLOC_BLOCK_SIZE ((1024 * 64))
+//#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 1024) * 4)
+//#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 1024) * 1)
+//#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 1024) / 2)
+//#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 64))
 /*
 * *** IMPORTANT ***
 * as far as i can tell, this is the MINIMUM size to prevent memory errors like invalid read/writes, and such.
 * feel free to experiment with this value, but going below seems to only cause trouble.
 */
-#define TALLOC_BLOCK_SIZE ((1024 * 256))
+//#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 256))
+#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 64))
 
 /**
  * @def Every allocation with pool allocator is rounded up to next multiply of
  * this value. Objects of same size are in same pool.
  */
-//#define TALLOC_POOL_GROUP_MULT (32)
-//#define TALLOC_POOL_GROUP_MULT (TALLOC_BLOCK_SIZE / 128)
-#define TALLOC_POOL_GROUP_MULT (32)
+//#define TALLOC_CONFIG_POOLGROUPMULT (32)
+//#define TALLOC_CONFIG_POOLGROUPMULT (TALLOC_CONFIG_BLOCKSIZE / 128)
+#define TALLOC_CONFIG_POOLGROUPMULT (32)
 
 /**
  * @def Count of cells allocated on heap in every pool. When count of
  * per-pool allocations reach this value, new pool block of this size will be
  * allocated on heap.
  */
-//#define TALLOC_INIT_POOL_SIZE (128 * 2)
-#define TALLOC_INIT_POOL_SIZE (128)
+//#define TALLOC_CONFIG_INITPOOLSIZE (128 * 2)
+//#define TALLOC_CONFIG_INITPOOLSIZE (128 / 16)
+#define TALLOC_CONFIG_INITPOOLSIZE (8)
 
 /**
  * @def Objects with size under this value will be allocated in pools, larger
  * objects will be allocated directly on heap.
  */
 // 2KB
-//#define TALLOC_SMALL_TO (2048
-//#define TALLOC_SMALL_TO (TALLOC_BLOCK_SIZE / 64)
-#define TALLOC_SMALL_TO (2048)
+//#define TALLOC_CONFIG_SMALLALLOC (2048
+//#define TALLOC_CONFIG_SMALLALLOC (TALLOC_CONFIG_BLOCKSIZE / 64)
+#define TALLOC_CONFIG_SMALLALLOC (2048)
 
-
-#define CATEGORY_COUNT (TALLOC_SMALL_TO / TALLOC_POOL_GROUP_MULT)
-#define SIZE_TO_CATEGORY(s) (((s) / TALLOC_POOL_GROUP_MULT) - 0)
-
-
-/**
- * @def Enable or disable pooling of small objects.
- */
-#define TALLOC_USE_POOLS 1
 
 /**
  * @def Every allocation of talloc is aligned using this alignment
  */
 #ifdef _MSC_VER
-    #define TALLOC_ALIGNMENT 16
+    #define TALLOC_CONFIG_ALIGNMENT 16
 #else
-    #define TALLOC_ALIGNMENT alignof(max_align_t)
+    #define TALLOC_CONFIG_ALIGNMENT alignof(max_align_t)
 #endif
 
 
@@ -84,11 +77,6 @@
  * @def Enable or disable force freeing of system memory and reset of allocator.
  */
 #define TALLOC_FORCE_RESET 1
-
-/**
- * @brief Enable checking of freeing unallocated memory.
- */
-#define TALLOC_MEM_CHECKING 1
 
 /**
  * @brief Enable error notification system.
@@ -101,8 +89,6 @@
 #define TALLOC_VERSION_MAJOR 1
 #define TALLOC_VERSION_MINOR 4
 #define TALLOC_VERSION_PATCH 0
-
-#define NEXT_MULT_OF(n, mult) ((n) + (mult) - 1 - ((n) - 1) % (mult))
 
 
 typedef struct talcategory_t talcategory_t;
@@ -122,7 +108,7 @@ void tal_state_destroy(talstate_t* state);
  * @param alignment Alignment.
  * @return True if pointer is aligned.
  */
-bool tal_util_isaligned(talstate_t* state, const void* p, size_t alignment);
+bool tal_util_isaligned(const void* p, size_t alignment);
 
 /**
  * Will align given address up to next aligned address based on alignment.
@@ -134,7 +120,7 @@ bool tal_util_isaligned(talstate_t* state, const void* p, size_t alignment);
  * @param alignment Alignment must be power of two.
  * @param adjustment [out] The amount of bytes used for alignment.
  */
-void tal_util_alignptrup(talstate_t* state, void** p, size_t alignment, ptrdiff_t* adjustment);
+void tal_util_alignptrup(void** p, size_t alignment, ptrdiff_t* adjustment);
 
 /**
  * Alignment of address with extra space for allocation header.
@@ -144,12 +130,12 @@ void tal_util_alignptrup(talstate_t* state, void** p, size_t alignment, ptrdiff_
  * @param header_size Size of header structure.
  * @param adjustment [out] The amount of bytes used for alignment.
  */
-void tal_util_alignptrwithheader(talstate_t* state, void** p, size_t alignment, int64_t header_size, ptrdiff_t* adjustment);
+void tal_util_alignptrwithheader(void** p, size_t alignment, int64_t header_size, ptrdiff_t* adjustment);
 
 /**
  * @brief Memory allocation.
  * Allocates memory of requested size. Automatic pooling is allowed for objects
- * with size up to TALLOC_SMALL_TO (check the config.h).
+ * with size up to TALLOC_CONFIG_SMALLALLOC (check the config.h).
  * Large objects are allocated directly on heap.
  *
  * @param count Byte count.
@@ -192,7 +178,7 @@ void tal_state_free(talstate_t* state, void* ptr);
  * @brief Preallocate memory block.
  * Allocates new block of system memory using default malloc. Use this method
  * in cases when allocated space is known to be not enough. Minimum reserve
- * size is TALLOC_BLOCK_SIZE.
+ * size is TALLOC_CONFIG_BLOCKSIZE.
  *
  * @param count Bytes to be preallocated.
  */
@@ -230,9 +216,6 @@ void tal_state_seterrfunc(talstate_t* state, talonerrorfunc_t func);
  * Call this method only in special cases when memory allocated by the talloc
  * will never be used anymore.
  */
-void tal_state_forcereset(talstate_t* state);
-
-
 
 int64_t tal_pool_cellsize(talstate_t *state, int64_t size);
 void tal_vector_double_if_needed(talvector_t *vec);

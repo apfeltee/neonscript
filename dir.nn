@@ -4,26 +4,32 @@ const os = import "os";
 
 function scan(dir)
 {
-    var items = os.readdir(dir);
-    for(var i=0; i<items.length; i++)
+    os.readdir(dir, function(item)
     {
-        var item = items[i];
-        if((item == '.') || (item == '..'))
+        if((item == ".") || (item == ".."))
         {
-            continue;
-        }
-        //var fp = File.join(dir, item);
-        var fp = dir + '/' + item;
-        var isdir = File.isDirectory(fp);
-        if(isdir)
-        {
-            scan(fp);
         }
         else
         {
-            println(fp);
+            //var fp = File.join(dir, item);
+            var fp = [dir, "/", item].join("");
+            var isdir = File.isDirectory(fp);
+            if(isdir)
+            {
+                println(fp);
+                scan(fp);
+            }
+            else
+            {
+                println(fp);
+            }
         }
-    }
+    })
 }
 
-scan("mods");
+var dir = "mods";
+if(ARGV.length > 1)
+{
+    dir = ARGV[1];
+}
+scan(dir);

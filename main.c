@@ -242,7 +242,7 @@
 
 #define NEON_RETURNERROR(...) \
     { \
-        nn_vm_stackpopn(state, args->count); \
+        nn_vm_stackpopn(state, argc); \
         nn_except_throw(state, ##__VA_ARGS__); \
     } \
     return nn_value_makebool(false);
@@ -659,7 +659,6 @@ typedef struct /**/ NNRegModule NNRegModule;
 typedef struct /**/ NNState NNState;
 typedef struct /**/ NNPrinter NNPrinter;
 typedef struct /**/ NNArgCheck NNArgCheck;
-typedef struct /**/ NNArguments NNArguments;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
 typedef struct NNBoxedString NNBoxedString;
@@ -669,7 +668,7 @@ typedef struct NNHashPtrTable NNHashPtrTable;
 typedef union NNUtilDblUnion NNUtilDblUnion;
 
 typedef bool(*NNValIsFuncFN)(NNValue);
-typedef NNValue (*NNNativeFN)(NNState*, NNArguments*);
+typedef NNValue (*NNNativeFN)(NNState*, NNValue, NNValue*, size_t);
 typedef void (*NNPtrFreeFN)(void*);
 typedef bool (*NNAstParsePrefixFN)(NNAstParser*, bool);
 typedef bool (*NNAstParseInfixFN)(NNAstParser*, NNAstToken, bool);
@@ -735,7 +734,7 @@ struct NNPrinter
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
     NNState* pstate;
-    StringBuffer* strbuf;
+    StringBuffer strbuf;
     FILE* handle;
 };
 
@@ -1331,33 +1330,6 @@ struct NNArgCheck
     NNValue* argv;
 };
 
-struct NNArguments
-{
-    /* number of arguments */
-    size_t count;
-
-    /* the actual arguments */
-    NNValue* args;
-
-    /*
-    * if called within something with an instance, this is where its reference will be.
-    * otherwise, empty.
-    */
-    NNValue thisval;
-
-    /*
-    * the name of the function being called.
-    * note: this is the *declarative* name; meaning, on an alias'd func, it will be
-    * the name of the origin.
-    */
-    NNObjString* name;
-
-    /*
-    * a userpointer, if declared with a userpointer. otherwise NULL.
-    */
-    void* userptr;
-};
-
 #if defined(__STRICT_ANSI__)
     #define inline
 #endif
@@ -1817,14 +1789,14 @@ NEON_FORCEINLINE NNValue nn_value_fromobject_actual(NNObject* obj)
     #endif
 }
 
-NEON_FORCEINLINE NNValue nn_value_internstrlen(NNState* state, const char* str, size_t len)
+NEON_FORCEINLINE NNValue nn_value_copystrlen(NNState* state, const char* str, size_t len)
 {
-    return nn_value_fromobject(nn_string_internlen(state, str, len));
+    return nn_value_fromobject(nn_string_copylen(state, str, len));
 }
 
-NEON_FORCEINLINE NNValue nn_value_internstr(NNState* state, const char* str)
+NEON_FORCEINLINE NNValue nn_value_copystr(NNState* state, const char* str)
 {
-    return nn_value_internstrlen(state, str, strlen(str));
+    return nn_value_copystrlen(state, str, strlen(str));
 }
 
 #include "vallist.h"
@@ -2836,12 +2808,11 @@ NEON_INLINE NNValue nn_argcheck_fail(NNArgCheck* ch, const char* srcfile, int sr
     return v;
 }
 
-NEON_FORCEINLINE void nn_argcheck_init(NNState* state, NNArgCheck* ch, NNArguments* args)
+NEON_FORCEINLINE void nn_argcheck_init(NNState* state, NNArgCheck* ch, NNValue* argv, size_t argc)
 {
     ch->pstate = state;
-    ch->name = args->name;
-    ch->argc = args->count;
-    ch->argv = args->args;
+    ch->argc = argc;
+    ch->argv = argv;
 }
 
 void nn_dbg_disasmblob(NNPrinter* pr, NNBlob* blob, const char* name)
@@ -3356,7 +3327,6 @@ void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
     pr->shortenvalues = false;
     pr->jsonmode = false;
     pr->maxvallength = 15;
-    pr->strbuf = NULL;
     pr->handle = NULL;
     pr->wrmode = mode;
 }
@@ -3388,7 +3358,7 @@ NNPrinter* nn_printer_makestring(NNState* state)
 {
     NNPrinter* pr;
     pr = nn_printer_makeundefined(state, NEON_PRMODE_STRING);
-    pr->strbuf = dyn_strbuf_makebasicempty(0, false);
+    dyn_strbuf_makebasicemptystack(&pr->strbuf, 0);
     return pr;
 }
 
@@ -3405,7 +3375,7 @@ void nn_printer_makestackstring(NNState* state, NNPrinter* pr)
     nn_printer_initvars(state, pr, NEON_PRMODE_STRING);
     pr->fromstack = true;
     pr->wrmode = NEON_PRMODE_STRING;
-    pr->strbuf = dyn_strbuf_makebasicempty(0, false);
+    dyn_strbuf_makebasicemptystack(&pr->strbuf, 0);
 }
 
 void nn_printer_destroy(NNPrinter* pr)
@@ -3426,7 +3396,7 @@ void nn_printer_destroy(NNPrinter* pr)
     {
         if(!pr->stringtaken)
         {
-            dyn_strbuf_destroy(pr->strbuf);
+            dyn_strbuf_destroy(&pr->strbuf);
         }
     }
     else if(pr->wrmode == NEON_PRMODE_FILE)
@@ -3447,43 +3417,46 @@ void nn_printer_destroy(NNPrinter* pr)
 
 NNObjString* nn_printer_takestring(NNPrinter* pr)
 {
-    uint32_t hash;
+    //uint32_t hash;
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    hash = nn_util_hashstring(pr->strbuf->data, pr->strbuf->length);
-    os = nn_string_makefromstrbuf(state, pr->strbuf, hash);
+    //hash = nn_util_hashstring(pr->strbuf->data, pr->strbuf->length);
+    //os = nn_string_makefromstrbuf(state, pr->strbuf, hash);
+    os = nn_string_takelen(state, pr->strbuf.data, pr->strbuf.length);
     pr->stringtaken = true;
     return os;
 }
 
 NNObjString* nn_printer_copystring(NNPrinter* pr)
 {
-    uint32_t hash;
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_takelen(state, pr->strbuf->data, pr->strbuf->length);
+    os = nn_string_copylen(state, pr->strbuf.data, pr->strbuf.length);
     return os;
 }
 
 bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
 {
-    if(pr->wrmode == NEON_PRMODE_FILE)
+    if(elen > 0)
     {
-        fwrite(estr, sizeof(char), elen, pr->handle);
-        if(pr->shouldflush)
+        if(pr->wrmode == NEON_PRMODE_FILE)
         {
-            fflush(pr->handle);
+            fwrite(estr, sizeof(char), elen, pr->handle);
+            if(pr->shouldflush)
+            {
+                fflush(pr->handle);
+            }
         }
-    }
-    else if(pr->wrmode == NEON_PRMODE_STRING)
-    {
-        dyn_strbuf_appendstrn(pr->strbuf, estr, elen);
-    }
-    else
-    {
-        return false;
+        else if(pr->wrmode == NEON_PRMODE_STRING)
+        {
+            dyn_strbuf_appendstrn(&pr->strbuf, estr, elen);
+        }
+        else
+        {
+            return false;
+        }
     }
     return true;
 }
@@ -3618,7 +3591,7 @@ bool nn_printer_vwritefmttostring(NNPrinter* pr, const char* fmt, va_list va)
         nn_printer_writestringl(pr, buf, wsz);
         nn_memory_free(buf);
     #else
-        dyn_strbuf_appendformatv(pr->strbuf, fmt, va);
+        dyn_strbuf_appendformatv(&pr->strbuf, fmt, va);
     #endif
     return true;
 }
@@ -3804,11 +3777,11 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
         {
             args = nn_object_makearray(state);
             thisval = nn_value_fromobject(instance);
-            arity = nn_nestcall_prepare(state, field->value, thisval, args);
+            arity = nn_nestcall_prepare(state, field->value, thisval, NULL, 0);
             fprintf(stderr, "arity = %d\n", arity);
             nn_vm_stackpop(state);
             nn_vm_stackpush(state, thisval);
-            if(nn_nestcall_callfunction(state, field->value, thisval, args, &resv))
+            if(nn_nestcall_callfunction(state, field->value, thisval, NULL, 0, &resv))
             {
                 nn_printer_makestackstring(state, &subw);
                 nn_printer_printvalue(&subw, resv, false, false);
@@ -4049,6 +4022,7 @@ NNObjString* nn_value_tostring(NNState* state, NNValue value)
     nn_printer_makestackstring(state, &pr);
     nn_printer_printvalue(&pr, value, false, true);
     s = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     return s;
 }
 
@@ -4621,7 +4595,7 @@ void nn_module_destroy(NNState* state, NNObjModule* module)
 void nn_module_setfilefield(NNState* state, NNObjModule* module)
 {
     return;
-    nn_valtable_set(&module->deftable, nn_value_fromobject(nn_string_intern(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
+    nn_valtable_set(&module->deftable, nn_value_fromobject(nn_string_copycstr(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
 }
 
 NNObjSwitch* nn_object_makeswitch(NNState* state)
@@ -5084,22 +5058,6 @@ NNObjString* nn_string_makefromstrbuf(NNState* state, StringBuffer* sbuf, uint32
     return rs;
 }
 
-NNObjString* nn_string_allocstring(NNState* state, const char* estr, size_t elen, uint32_t hash, bool istaking, bool iscs)
-{
-    StringBuffer sbuf;
-    (void)istaking;
-    dyn_strbuf_makebasicemptystack(&sbuf, elen, iscs);
-    if(iscs)
-    {
-        sbuf.data = (char*)estr;
-    }
-    else
-    {
-        dyn_strbuf_appendstrn(&sbuf, estr, elen);
-    }
-    return nn_string_makefromstrbuf(state, &sbuf, hash);
-}
-
 size_t nn_string_getlength(NNObjString* os)
 {
     return os->sbuf.length;
@@ -5125,14 +5083,18 @@ NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
 {
     uint32_t hash;
     NNObjString* rs;
+    StringBuffer sbuf;
     hash = nn_util_hashstring(chars, length);
     rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hash);
-    if(rs == NULL)
+    if(rs != NULL)
     {
-        rs = nn_string_allocstring(state, chars, length, hash, true, false);
+        nn_memory_free(chars);
+        return rs;
     }
-    nn_memory_free(chars);
-    return rs;
+    memset(&sbuf, 0, sizeof(StringBuffer));
+    sbuf.data = chars;
+    sbuf.length = length;
+    return nn_string_makefromstrbuf(state, &sbuf, hash);
 }
 
 NNObjString* nn_string_takecstr(NNState* state, char* chars)
@@ -5143,6 +5105,7 @@ NNObjString* nn_string_takecstr(NNState* state, char* chars)
 NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
 {
     uint32_t hash;
+    StringBuffer sbuf;
     NNObjString* rs;
     hash = nn_util_hashstring(chars, length);
     rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hash);
@@ -5150,10 +5113,12 @@ NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
     {
         return rs;
     }
-    rs = nn_string_allocstring(state, chars, length, hash, false, false);
+    memset(&sbuf, 0, sizeof(StringBuffer));
+    dyn_strbuf_makebasicemptystack(&sbuf, length);
+    dyn_strbuf_appendstrn(&sbuf, chars, length);
+    rs = nn_string_makefromstrbuf(state, &sbuf, hash);
     return rs;
 }
-
 
 NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 {
@@ -5162,31 +5127,7 @@ NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 
 NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
 {
-    if(origos->sbuf.isintern)
-    {
-        return nn_string_internlen(state, origos->sbuf.data, origos->sbuf.length);
-    }
     return nn_string_copylen(state, origos->sbuf.data, origos->sbuf.length);
-}
-
-
-NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
-{
-    uint32_t hash;
-    NNObjString* rs;
-    hash = nn_util_hashstring(chars, length);
-    rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hash);
-    if(rs != NULL)
-    {
-        return rs;
-    }
-    rs = nn_string_allocstring(state, chars, length, hash, false, true);
-    return rs;
-}
-
-NNObjString* nn_string_intern(NNState* state, const char* chars)
-{
-    return nn_string_internlen(state, chars, strlen(chars));
 }
 
 NNObjUpvalue* nn_object_makeupvalue(NNState* state, NNValue* slot, int stackpos)
@@ -5225,6 +5166,7 @@ NNAstLexer* nn_astlex_make(NNState* state, const char* source)
 
 void nn_astlex_destroy(NNState* state, NNAstLexer* lex)
 {
+    (void)state;
     if(!lex->onstack)
     {
         nn_memory_free(lex);
@@ -6743,6 +6685,7 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncCon
             nn_printer_makestackstring(prs->pstate, &wtmp);
             nn_printer_printf(&wtmp, "anonymous@[%s:%d]", prs->currentfile, prs->prevtoken.line);
             fname = nn_printer_takestring(&wtmp);
+            nn_printer_destroy(&wtmp);
         }
         else
         {
@@ -8961,8 +8904,8 @@ void nn_astparser_parseforeachstmt(NNAstParser* prs)
     NNAstToken valuetoken;
     nn_astparser_scopebegin(prs);
     /* define @iter and @itern constant */
-    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@iter")));
-    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@itern")));
+    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "@iter")));
+    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "@itern")));
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'foreach'");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected variable name after 'foreach'");
     if(!nn_astparser_check(prs, NEON_ASTTOK_COMMA))
@@ -9283,7 +9226,7 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     }
     else
     {
-        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "Exception")));
+        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "Exception")));
     }
     nn_astemit_patchjump(prs, exitjump);
     if(nn_astparser_match(prs, NEON_ASTTOK_KWFINALLY))
@@ -9550,29 +9493,34 @@ void nn_modfn_os_preloader(NNState* state)
     (void)state;
 }
 
-NNValue nn_modfn_os_readdir(NNState* state, NNArguments* args)
+NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* dirn;
     FSDirReader rd;
     FSDirItem itm;
+    NNValue res;
+    NNValue itemval;
+    NNValue callable;
     NNObjString* os;
-    NNObjString* aval;
-    NNObjArray* res;
+    NNObjString* itemstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[2];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    os = nn_value_asstring(args->args[0]);
+    os = nn_value_asstring(argv[0]);
+    callable = argv[1];
     dirn = os->sbuf.data;
     if(fslib_diropen(&rd, dirn))
     {
-        res = nn_array_make(state);
         while(fslib_dirread(&rd, &itm))
         {
-            aval = nn_string_copycstr(state, itm.name);
-            nn_array_push(res, nn_value_fromobject(aval));
+            itemstr = nn_string_copycstr(state, itm.name);
+            itemval = nn_value_fromobject(itemstr);
+            nestargs[0] = itemval;
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, 1, &res);
         }
         fslib_dirclose(&rd);
-        return nn_value_fromobject(res);
+        return nn_value_makenull();
     }
     else
     {
@@ -9604,7 +9552,7 @@ NNRegModule* nn_natmodule_load_os(NNState* state)
     return &module;
 }
 
-NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
+NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* cstr;
     NNObjString* insrc;
@@ -9613,9 +9561,10 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
     NNObjDict* itm;
     NNAstToken token;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    insrc = nn_value_asstring(args->args[0]);
+    insrc = nn_value_asstring(argv[0]);
     scn = nn_astlex_make(state, insrc->sbuf.data);
     arr = nn_array_make(state);
     while(!nn_astlex_isatend(scn))
@@ -9625,8 +9574,8 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNArguments* args)
         nn_dict_addentrycstr(itm, "line", nn_value_makenumber(token.line));
         cstr = nn_astutil_toktype2str(token.type);
         /* 12 == "NEON_ASTTOK_".length */
-        nn_dict_addentrycstr(itm, "type", nn_value_fromobject(nn_string_intern(state, cstr + 12)));
-        nn_dict_addentrycstr(itm, "source", nn_value_fromobject(nn_string_internlen(state, token.start, token.length)));
+        nn_dict_addentrycstr(itm, "type", nn_value_fromobject(nn_string_copycstr(state, cstr + 12)));
+        nn_dict_addentrycstr(itm, "source", nn_value_fromobject(nn_string_copylen(state, token.start, token.length)));
         nn_array_push(arr, nn_value_fromobject(itm));
     }
     nn_astlex_destroy(state, scn);
@@ -9849,7 +9798,6 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     NNValue retv;
     NNValue callable;
     NNProperty* field;
-    NNObjArray* args;
     NNObjString* os;
     NNObjModule* module;
     NNObjFunction* closure;
@@ -9882,9 +9830,8 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     nn_memory_free(source);
     closure = nn_object_makefuncclosure(state, function);
     callable = nn_value_fromobject(closure);
-    args = nn_object_makearray(state);
-    argc = nn_nestcall_prepare(state, callable, nn_value_makenull(), args);
-    if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), args, &retv))
+    nn_nestcall_prepare(state, callable, nn_value_makenull(), NULL, 0);     
+    if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), NULL, 0, &retv))
     {
         nn_blob_destroy(&blob);
         nn_except_throw(state, "failed to call compiled import closure");
@@ -9913,7 +9860,7 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
     (void)stmod;
     mlen = strlen(modulename);
     splen = nn_valarray_count(&state->importpath);
-    pathbuf = dyn_strbuf_makebasicempty(0, false);
+    pathbuf = dyn_strbuf_makebasicempty(0);
     for(i=0; i<splen; i++)
     {
         pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));
@@ -10000,70 +9947,70 @@ char* nn_util_fsgetbasename(NNState* state, char* path)
 }
 
 
-NNValue nn_objfndict_length(NNState* state, NNArguments* args)
+NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_valarray_count(&nn_value_asdict(args->thisval)->names));
+    return nn_value_makenumber(nn_valarray_count(&nn_value_asdict(thisval)->names));
 }
 
-NNValue nn_objfndict_add(NNState* state, NNArguments* args)
+NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue tempvalue;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
-    dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(&dict->htab, args->args[0], &tempvalue))
+    dict = nn_value_asdict(thisval);
+    if(nn_valtable_get(&dict->htab, argv[0], &tempvalue))
     {
-        NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, args->args[0])->sbuf.data);
+        NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, argv[0])->sbuf.data);
     }
-    nn_dict_addentry(dict, args->args[0], args->args[1]);
+    nn_dict_addentry(dict, argv[0], argv[1]);
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_set(NNState* state, NNArguments* args)
+NNValue nn_objfndict_set(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
-    dict = nn_value_asdict(args->thisval);
-    if(!nn_valtable_get(&dict->htab, args->args[0], &value))
+    dict = nn_value_asdict(thisval);
+    if(!nn_valtable_get(&dict->htab, argv[0], &value))
     {
-        nn_dict_addentry(dict, args->args[0], args->args[1]);
+        nn_dict_addentry(dict, argv[0], argv[1]);
     }
     else
     {
-        nn_dict_setentry(dict, args->args[0], args->args[1]);
+        nn_dict_setentry(dict, argv[0], argv[1]);
     }
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_clear(NNState* state, NNArguments* args)
+NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     nn_valarray_destroy(&dict->names, false);
     nn_valtable_destroy(&dict->htab);
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_clone(NNState* state, NNArguments* args)
+NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNObjDict* newdict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     if(!nn_valtable_addall(&dict->htab, &newdict->htab, true))
     {
@@ -10077,16 +10024,16 @@ NNValue nn_objfndict_clone(NNState* state, NNArguments* args)
     return nn_value_fromobject(newdict);
 }
 
-NNValue nn_objfndict_compact(NNState* state, NNArguments* args)
+NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNObjDict* newdict;
     NNValue tmpvalue;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     tmpvalue = nn_value_makenull();
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
@@ -10100,29 +10047,29 @@ NNValue nn_objfndict_compact(NNState* state, NNArguments* args)
     return nn_value_fromobject(newdict);
 }
 
-NNValue nn_objfndict_contains(NNState* state, NNArguments* args)
+NNValue nn_objfndict_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(args->thisval);
-    return nn_value_makebool(nn_valtable_get(&dict->htab, args->args[0], &value));
+    dict = nn_value_asdict(thisval);
+    return nn_value_makebool(nn_valtable_get(&dict->htab, argv[0], &value));
 }
 
-NNValue nn_objfndict_extend(NNState* state, NNArguments* args)
+NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNValue tmp;
     NNObjDict* dict;
     NNObjDict* dictcpy;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isdict);
-    dict = nn_value_asdict(args->thisval);
-    dictcpy = nn_value_asdict(args->args[0]);
+    dict = nn_value_asdict(thisval);
+    dictcpy = nn_value_asdict(argv[0]);
     for(i = 0; i < nn_valarray_count(&dictcpy->names); i++)
     {
         if(!nn_valtable_get(&dict->htab, nn_valarray_get(&dictcpy->names, i), &tmp))
@@ -10134,38 +10081,38 @@ NNValue nn_objfndict_extend(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_get(NNState* state, NNArguments* args)
+NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjDict* dict;
     NNProperty* field;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-    dict = nn_value_asdict(args->thisval);
-    field = nn_dict_getentry(dict, args->args[0]);
+    dict = nn_value_asdict(thisval);
+    field = nn_dict_getentry(dict, argv[0]);
     if(field == NULL)
     {
-        if(args->count == 1)
+        if(argc == 1)
         {
             return nn_value_makenull();
         }
         else
         {
-            return args->args[1];
+            return argv[1];
         }
     }
     return field->value;
 }
 
-NNValue nn_objfndict_keys(NNState* state, NNArguments* args)
+NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
@@ -10174,16 +10121,16 @@ NNValue nn_objfndict_keys(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_values(NNState* state, NNArguments* args)
+NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNObjArray* list;
     NNProperty* field;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
@@ -10193,23 +10140,23 @@ NNValue nn_objfndict_values(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_remove(NNState* state, NNArguments* args)
+NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     int index;
     NNValue value;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(&dict->htab, args->args[0], &value))
+    dict = nn_value_asdict(thisval);
+    if(nn_valtable_get(&dict->htab, argv[0], &value))
     {
-        nn_valtable_delete(&dict->htab, args->args[0]);
+        nn_valtable_delete(&dict->htab, argv[0]);
         index = -1;
         for(i = 0; i < nn_valarray_count(&dict->names); i++)
         {
-            if(nn_value_compare(state, nn_valarray_get(&dict->names, i), args->args[0]))
+            if(nn_value_compare(state, nn_valarray_get(&dict->names, i), argv[0]))
             {
                 index = i;
                 break;
@@ -10225,23 +10172,23 @@ NNValue nn_objfndict_remove(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_isempty(NNState* state, NNArguments* args)
+NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makebool(nn_valarray_count(&nn_value_asdict(args->thisval)->names) == 0);
+    return nn_value_makebool(nn_valarray_count(&nn_value_asdict(thisval)->names) == 0);
 }
 
-NNValue nn_objfndict_findkey(NNState* state, NNArguments* args)
+NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    return nn_valtable_findkey(&nn_value_asdict(args->thisval)->htab, args->args[0]);
+    return nn_valtable_findkey(&nn_value_asdict(thisval)->htab, argv[0]);
 }
 
-NNValue nn_objfndict_tolist(NNState* state, NNArguments* args)
+NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -10249,9 +10196,9 @@ NNValue nn_objfndict_tolist(NNState* state, NNArguments* args)
     NNObjArray* namelist;
     NNObjArray* valuelist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(args->thisval);
+    dict = nn_value_asdict(thisval);
     namelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     valuelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
@@ -10274,30 +10221,30 @@ NNValue nn_objfndict_tolist(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_iter(NNState* state, NNArguments* args)
+NNValue nn_objfndict_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check,  args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(args->thisval);
-    if(nn_valtable_get(&dict->htab, args->args[0], &result))
+    dict = nn_value_asdict(thisval);
+    if(nn_valtable_get(&dict->htab, argv[0], &result))
     {
         return result;
     }
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_itern(NNState* state, NNArguments* args)
+NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    dict = nn_value_asdict(thisval);
+    if(nn_value_isnull(argv[0]))
     {
         if(nn_valarray_count(&dict->names) == 0)
         {
@@ -10307,7 +10254,7 @@ NNValue nn_objfndict_itern(NNState* state, NNArguments* args)
     }
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
-        if(nn_value_compare(state, args->args[0], nn_valarray_get(&dict->names, i)) && (i + 1) < nn_valarray_count(&dict->names))
+        if(nn_value_compare(state, argv[0], nn_valarray_get(&dict->names, i)) && (i + 1) < nn_valarray_count(&dict->names))
         {
             return nn_valarray_get(&dict->names, i + 1);
         }
@@ -10315,230 +10262,232 @@ NNValue nn_objfndict_itern(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_each(NNState* state, NNArguments* args)
+NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     int arity;
     NNValue value;
     NNValue callable;
     NNValue unused;
     NNObjDict* dict;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    dict = nn_value_asdict(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
+        passi = 0;
         if(arity > 0)
         {
             nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
-            nn_valarray_set(&nestargs->varray, 0, value);
+            passi++;
+            nestargs[0] = value;
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_valarray_get(&dict->names, i));
+                passi++;
+                nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
     }
-    /* pop the argument list */
-    nn_vm_stackpop(state);
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_filter(NNState* state, NNArguments* args)
+NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     int arity;
     NNValue value;
     NNValue callable;
     NNValue result;
     NNObjDict* dict;
-    NNObjArray* nestargs;
     NNObjDict* resultdict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    dict = nn_value_asdict(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     resultdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     value = nn_value_makenull();
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
+        passi = 0;
         nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
         if(arity > 0)
         {
-            nn_valarray_set(&nestargs->varray, 0, value);
+            passi++;
+            nestargs[0] = value;
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_valarray_get(&dict->names, i));
+                passi++;
+                nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
         if(!nn_value_isfalse(result))
         {
             nn_dict_addentry(resultdict, nn_valarray_get(&dict->names, i), value);
         }
     }
     /* pop the call list */
-    nn_vm_stackpop(state);
     return nn_value_fromobject(resultdict);
 }
 
-NNValue nn_objfndict_some(NNState* state, NNArguments* args)
+NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     int arity;
     NNValue result;
     NNValue value;
     NNValue callable;
     NNObjDict* dict;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    dict = nn_value_asdict(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
+        passi = 0;
         if(arity > 0)
         {
             nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
-            nn_valarray_set(&nestargs->varray, 0, value);
+            passi++;
+            nestargs[0] = value;
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_valarray_get(&dict->names, i));
+                passi++;
+                nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
         if(!nn_value_isfalse(result))
         {
             /* pop the call list */
-            nn_vm_stackpop(state);
             return nn_value_makebool(true);
         }
     }
     /* pop the call list */
-    nn_vm_stackpop(state);
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfndict_every(NNState* state, NNArguments* args)
+NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     int arity;
     NNValue value;
     NNValue callable;  
     NNValue result;
     NNObjDict* dict;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    dict = nn_value_asdict(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
     for(i = 0; i < nn_valarray_count(&dict->names); i++)
     {
+        passi = 0;
         if(arity > 0)
         {
             nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
-            nn_valarray_set(&nestargs->varray, 0, value);
+            passi++;
+            nestargs[0] = value;
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_valarray_get(&dict->names, i));
+                passi++;
+                nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
         if(nn_value_isfalse(result))
         {
             /* pop the call list */
-            nn_vm_stackpop(state);
             return nn_value_makebool(false);
         }
     }
-    /* pop the call list */
-    nn_vm_stackpop(state);
     return nn_value_makebool(true);
 }
 
-NNValue nn_objfndict_reduce(NNState* state, NNArguments* args)
+NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     int arity;
     int startindex;
     NNValue value;
     NNValue callable;
     NNValue accumulator;
     NNObjDict* dict;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[5];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(args->thisval);
-    callable = args->args[0];
+    dict = nn_value_asdict(thisval);
+    callable = argv[0];
     startindex = 0;
     accumulator = nn_value_makenull();
-    if(args->count == 2)
+    if(argc == 2)
     {
-        accumulator = args->args[1];
+        accumulator = argv[1];
     }
     if(nn_value_isnull(accumulator) && nn_valarray_count(&dict->names) > 0)
     {
         nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, 0), &accumulator);
         startindex = 1;
     }
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 4);
     value = nn_value_makenull();
     for(i = startindex; i < nn_valarray_count(&dict->names); i++)
     {
+        passi = 0;
         /* only call map for non-empty values in a list. */
         if(!nn_value_isnull(nn_valarray_get(&dict->names, i)) && !nn_value_isnull(nn_valarray_get(&dict->names, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, accumulator);
+                passi++;
+                nestargs[0] = accumulator;
                 if(arity > 1)
                 {
                     nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
-                    nn_valarray_set(&nestargs->varray, 1, value);
+                    passi++;
+                    nestargs[1] = value;
                     if(arity > 2)
                     {
-                        nn_valarray_set(&nestargs->varray, 2, nn_valarray_get(&dict->names, i));
+                        passi++;
+                        nestargs[2] = nn_valarray_get(&dict->names, i);
                         if(arity > 4)
                         {
-                            nn_valarray_set(&nestargs->varray, 3, args->thisval);
+                            passi++;
+                            nestargs[3] = thisval;
                         }
                     }
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &accumulator);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator);
         }
     }
-    /* pop the call list */
-    nn_vm_stackpop(state);
     return accumulator;
 }
 
@@ -10603,7 +10552,7 @@ bool nn_fileobject_open(NNObjFile* file)
     return false;
 }
 
-NNValue nn_objfnfile_constructor(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     FILE* hnd;
     const char* path;
@@ -10611,20 +10560,21 @@ NNValue nn_objfnfile_constructor(NNState* state, NNArguments* args)
     NNObjString* opath;
     NNObjFile* file;
     (void)hnd;
+    (void)thisval;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    opath = nn_value_asstring(args->args[0]);
+    opath = nn_value_asstring(argv[0]);
     if(opath->sbuf.length == 0)
     {
         NEON_RETURNERROR("file path cannot be empty");
     }
     mode = "r";
-    if(args->count == 2)
+    if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        mode = nn_value_asstring(args->args[1])->sbuf.data;
+        mode = nn_value_asstring(argv[1])->sbuf.data;
     }
     path = opath->sbuf.data;
     file = (NNObjFile*)nn_gcmem_protect(state, (NNObject*)nn_object_makefile(state, NULL, false, path, mode));
@@ -10632,56 +10582,60 @@ NNValue nn_objfnfile_constructor(NNState* state, NNArguments* args)
     return nn_value_fromobject(file);
 }
 
-NNValue nn_objfnfile_exists(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = nn_value_asstring(argv[0]);
     return nn_value_makebool(nn_util_fsfileexists(state, file->sbuf.data));
 }
 
-NNValue nn_objfnfile_isfile(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = nn_value_asstring(argv[0]);
     return nn_value_makebool(nn_util_fsfileisfile(state, file->sbuf.data));
 }
 
-NNValue nn_objfnfile_isdirectory(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(args->args[0]);
+    file = nn_value_asstring(argv[0]);
     return nn_value_makebool(nn_util_fsfileisdirectory(state, file->sbuf.data));
 }
 
 
-NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* buf;
     size_t thismuch;
     size_t actualsz;
     NNObjString* filepath;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     thismuch = -1;
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    if(args->count > 1)
+    if(argc > 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        thismuch = (size_t)nn_value_asnumber(args->args[1]);
+        thismuch = (size_t)nn_value_asnumber(argv[1]);
     }
-    filepath = nn_value_asstring(args->args[0]);
+    filepath = nn_value_asstring(argv[0]);
     buf = nn_util_filereadfile(state, filepath->sbuf.data, &actualsz, true, thismuch);
     if(buf == NULL)
     {
@@ -10692,7 +10646,7 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     bool appending;
     size_t rt;
@@ -10701,22 +10655,23 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
     NNObjString* filepath;
     NNObjString* data;
     NNArgCheck check;
+    (void)thisval;
     appending = false;
     mode = "wb";
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-    if(args->count > 2)
+    if(argc > 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 2, nn_value_isbool);
-        appending = nn_value_asbool(args->args[2]);
+        appending = nn_value_asbool(argv[2]);
     }
     if(appending)
     {
         mode = "ab";
     }
-    filepath = nn_value_asstring(args->args[0]);
-    data = nn_value_asstring(args->args[1]);
+    filepath = nn_value_asstring(argv[0]);
+    data = nn_value_asstring(argv[1]);
     fh = fopen(filepath->sbuf.data, mode);
     if(fh == NULL)
     {
@@ -10729,17 +10684,18 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_statstatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
     NNObjDict* dict;
     struct stat st;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
-    file = nn_value_asstring(args->args[0]);
+    file = nn_value_asstring(argv[0]);
     if(osfn_lstat(file->sbuf.data, &st) == 0)
     {
         nn_util_statfilldictphysfile(dict, &st);
@@ -10748,55 +10704,59 @@ NNValue nn_objfnfile_statstatic(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_close(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_close(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    nn_fileobject_close(nn_value_asfile(args->thisval));
+    nn_fileobject_close(nn_value_asfile(thisval));
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_open(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_open(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    nn_fileobject_open(nn_value_asfile(args->thisval));
+    nn_fileobject_open(nn_value_asfile(thisval));
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_isopen(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_isopen(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     (void)state;
-    file = nn_value_asfile(args->thisval);
+    (void)argv;
+    (void)argc;
+    file = nn_value_asfile(thisval);
     return nn_value_makebool(file->isstd || file->isopen);
 }
 
-NNValue nn_objfnfile_isclosed(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_isclosed(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     (void)state;
-    file = nn_value_asfile(args->thisval);
+    (void)argv;
+    (void)argc;
+    file = nn_value_asfile(thisval);
     return nn_value_makebool(!file->isstd && !file->isopen);
 }
 
-NNValue nn_objfnfile_readmethod(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_readmethod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t readhowmuch;
     NNIOResult res;
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     readhowmuch = -1;
-    if(args->count == 1)
+    if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        readhowmuch = (size_t)nn_value_asnumber(args->args[0]);
+        readhowmuch = (size_t)nn_value_asnumber(argv[0]);
     }
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     if(!nn_file_read(file, readhowmuch, &res))
     {
         FILE_ERROR(NotFound, strerror(errno));
@@ -10805,7 +10765,7 @@ NNValue nn_objfnfile_readmethod(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnfile_readline(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_readline(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long rdline;
     size_t linelen;
@@ -10813,9 +10773,9 @@ NNValue nn_objfnfile_readline(NNState* state, NNArguments* args)
     NNObjFile* file;
     NNArgCheck check;
     NNObjString* nos;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     linelen = 0;
     strline = NULL;
     rdline = nn_util_filegetlinehandle(&strline, &linelen, file->handle);
@@ -10827,14 +10787,14 @@ NNValue nn_objfnfile_readline(NNState* state, NNArguments* args)
     return nn_value_fromobject(nos);
 }
 
-NNValue nn_objfnfile_get(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ch;
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     ch = fgetc(file->handle);
     if(ch == EOF)
     {
@@ -10843,7 +10803,7 @@ NNValue nn_objfnfile_get(NNState* state, NNArguments* args)
     return nn_value_makenumber(ch);
 }
 
-NNValue nn_objfnfile_gets(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long end;
     long length;
@@ -10852,15 +10812,15 @@ NNValue nn_objfnfile_gets(NNState* state, NNArguments* args)
     char* buffer;
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     length = -1;
-    if(args->count == 1)
+    if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        length = (size_t)nn_value_asnumber(args->args[0]);
+        length = (size_t)nn_value_asnumber(argv[0]);
     }
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     if(!file->isstd)
     {
         if(!nn_util_fsfileexists(state, file->path->sbuf.data))
@@ -10920,7 +10880,7 @@ NNValue nn_objfnfile_gets(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_string_takelen(state, buffer, bytesread));
 }
 
-NNValue nn_objfnfile_write(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t count;
     int length;
@@ -10928,11 +10888,11 @@ NNValue nn_objfnfile_write(NNState* state, NNArguments* args)
     NNObjFile* file;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(argv[0]);
     data = (unsigned char*)string->sbuf.data;
     length = string->sbuf.length;
     if(!file->isstd)
@@ -10970,7 +10930,7 @@ NNValue nn_objfnfile_write(NNState* state, NNArguments* args)
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnfile_puts(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t count;
     int length;
@@ -10978,11 +10938,11 @@ NNValue nn_objfnfile_puts(NNState* state, NNArguments* args)
     NNObjFile* file;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(argv[0]);
     data = (unsigned char*)string->sbuf.data;
     length = string->sbuf.length;
     if(!file->isstd)
@@ -11019,51 +10979,51 @@ NNValue nn_objfnfile_puts(NNState* state, NNArguments* args)
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnfile_printf(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNFormatInfo nfi;
     NNPrinter pr;
     NNObjString* ofmt;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
-    file = nn_value_asfile(args->thisval);
+    nn_argcheck_init(state, &check, argv, argc);
+    file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = nn_value_asstring(argv[0]);
     nn_printer_makestackio(state, &pr, file->handle, false);
     nn_strformat_init(state, &nfi, &pr, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
-    if(!nn_strformat_format(&nfi, args->count, 1, args->args))
+    if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
     }
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_number(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_number(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_value_asfile(args->thisval)->number);
+    return nn_value_makenumber(nn_value_asfile(thisval)->number);
 }
 
-NNValue nn_objfnfile_istty(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_istty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     return nn_value_makebool(file->istty);
 }
 
-NNValue nn_objfnfile_flush(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_flush(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     if(!file->isopen)
     {
         FILE_ERROR(Unsupported, "I/O operation on closed file");
@@ -11112,15 +11072,15 @@ void nn_util_statfilldictphysfile(NNObjDict* dict, struct stat* st)
     nn_dict_addentrycstr(dict, "blksize", nn_value_makenumber(0));
 }
 
-NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_statmethod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     struct stat stats;
     NNObjFile* file;
     NNObjDict* dict;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     if(!file->isstd)
     {
@@ -11154,35 +11114,35 @@ NNValue nn_objfnfile_statmethod(NNState* state, NNArguments* args)
     return nn_value_fromobject(dict);
 }
 
-NNValue nn_objfnfile_path(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_path(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     DENY_STD();
     return nn_value_fromobject(file->path);
 }
 
-NNValue nn_objfnfile_mode(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_mode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     return nn_value_fromobject(file->mode);
 }
 
-NNValue nn_objfnfile_name(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_name(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* name;
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     if(!file->isstd)
     {
         name = nn_util_fsgetbasename(state, file->path->sbuf.data);
@@ -11190,35 +11150,35 @@ NNValue nn_objfnfile_name(NNState* state, NNArguments* args)
     }
     else if(file->istty)
     {
-        return nn_value_fromobject(nn_string_intern(state, "<tty>"));
+        return nn_value_fromobject(nn_string_copycstr(state, "<tty>"));
     }
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_seek(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_seek(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long position;
     int seektype;
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     DENY_STD();
-    position = (long)nn_value_asnumber(args->args[0]);
-    seektype = nn_value_asnumber(args->args[1]);
+    position = (long)nn_value_asnumber(argv[0]);
+    seektype = nn_value_asnumber(argv[1]);
     RETURN_STATUS(fseek(file->handle, position, seektype));
 }
 
-NNValue nn_objfnfile_tell(NNState* state, NNArguments* args)
+NNValue nn_objfnfile_tell(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    file = nn_value_asfile(args->thisval);
+    file = nn_value_asfile(thisval);
     DENY_STD();
     return nn_value_makenumber(ftell(file->handle));
 }
@@ -11292,59 +11252,59 @@ NNObjArray* nn_array_copy(NNObjArray* list, long start, long length)
     return newlist;
 }
 
-NNValue nn_objfnarray_length(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* selfarr;
     (void)state;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
-    selfarr = nn_value_asarray(args->thisval);
+    nn_argcheck_init(state, &check, argv, argc);
+    selfarr = nn_value_asarray(thisval);
     return nn_value_makenumber(nn_valarray_count(&selfarr->varray));
 }
 
-NNValue nn_objfnarray_append(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_append(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     (void)state;
-    for(i = 0; i < args->count; i++)
+    for(i = 0; i < argc; i++)
     {
-        nn_array_push(nn_value_asarray(args->thisval), args->args[i]);
+        nn_array_push(nn_value_asarray(thisval), argv[i]);
     }
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_clear(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    nn_valarray_destroy(&nn_value_asarray(args->thisval)->varray, false);
+    nn_valarray_destroy(&nn_value_asarray(thisval)->varray, false);
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_clone(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     return nn_value_fromobject(nn_array_copy(list, 0, nn_valarray_count(&list->varray)));
 }
 
-NNValue nn_objfnarray_count(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     int count;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     count = 0;
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
-        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), args->args[0]))
+        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), argv[0]))
         {
             count++;
         }
@@ -11352,17 +11312,17 @@ NNValue nn_objfnarray_count(NNState* state, NNArguments* args)
     return nn_value_makenumber(count);
 }
 
-NNValue nn_objfnarray_extend(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
     NNObjArray* list2;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isarray);
-    list = nn_value_asarray(args->thisval);
-    list2 = nn_value_asarray(args->args[0]);
+    list = nn_value_asarray(thisval);
+    list2 = nn_value_asarray(argv[0]);
     for(i = 0; i < nn_valarray_count(&list2->varray); i++)
     {
         nn_array_push(list, nn_valarray_get(&list2->varray, i));
@@ -11370,23 +11330,23 @@ NNValue nn_objfnarray_extend(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_indexof(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     i = 0;
-    if(args->count == 2)
+    if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        i = nn_value_asnumber(args->args[1]);
+        i = nn_value_asnumber(argv[1]);
     }
     for(; i < nn_valarray_count(&list->varray); i++)
     {
-        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), args->args[0]))
+        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), argv[0]))
         {
             return nn_value_makenumber(i);
         }
@@ -11394,29 +11354,29 @@ NNValue nn_objfnarray_indexof(NNState* state, NNArguments* args)
     return nn_value_makenumber(-1);
 }
 
-NNValue nn_objfnarray_insert(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_insert(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int index;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    list = nn_value_asarray(args->thisval);
-    index = (int)nn_value_asnumber(args->args[1]);
-    nn_valarray_insert(&list->varray, args->args[0], index);
+    list = nn_value_asarray(thisval);
+    index = (int)nn_value_asnumber(argv[1]);
+    nn_valarray_insert(&list->varray, argv[0], index);
     return nn_value_makenull();
 }
 
 
-NNValue nn_objfnarray_pop(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_pop(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     if(nn_valarray_count(&list->varray) > 0)
     {
         value = nn_valarray_get(&list->varray, nn_valarray_count(&list->varray) - 1);
@@ -11426,7 +11386,7 @@ NNValue nn_objfnarray_pop(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_shift(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -11434,15 +11394,15 @@ NNValue nn_objfnarray_shift(NNState* state, NNArguments* args)
     NNObjArray* list;
     NNObjArray* newlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     count = 1;
-    if(args->count == 1)
+    if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        count = nn_value_asnumber(args->args[0]);
+        count = nn_value_asnumber(argv[0]);
     }
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     if(count >= nn_valarray_count(&list->varray) || nn_valarray_count(&list->varray) == 1)
     {
         nn_valarray_setcount(&list->varray, 0);
@@ -11472,18 +11432,18 @@ NNValue nn_objfnarray_shift(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_removeat(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_removeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t index;
     NNValue value;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(args->thisval);
-    index = nn_value_asnumber(args->args[0]);
+    list = nn_value_asarray(thisval);
+    index = nn_value_asnumber(argv[0]);
     if(((int)index < 0) || index >= nn_valarray_count(&list->varray))
     {
         NEON_RETURNERROR("list index %d out of range at remove_at()", index);
@@ -11497,19 +11457,19 @@ NNValue nn_objfnarray_removeat(NNState* state, NNArguments* args)
     return value;
 }
 
-NNValue nn_objfnarray_remove(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t index;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     index = -1;
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
-        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), args->args[0]))
+        if(nn_value_compare(state, nn_valarray_get(&list->varray, i), argv[0]))
         {
             index = i;
             break;
@@ -11526,15 +11486,15 @@ NNValue nn_objfnarray_remove(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_reverse(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_reverse(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int fromtop;
     NNObjArray* list;
     NNObjArray* nlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     nlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     /* in-place reversal:*/
     /*
@@ -11556,28 +11516,28 @@ NNValue nn_objfnarray_reverse(NNState* state, NNArguments* args)
     return nn_value_fromobject(nlist);
 }
 
-NNValue nn_objfnarray_sort(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_sort(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     nn_value_sortvalues(state, list->varray.listitems, nn_valarray_count(&list->varray));
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_contains(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
-        if(nn_value_compare(state, args->args[0], nn_valarray_get(&list->varray, i)))
+        if(nn_value_compare(state, argv[0], nn_valarray_get(&list->varray, i)))
         {
             return nn_value_makebool(true);
         }
@@ -11585,24 +11545,24 @@ NNValue nn_objfnarray_contains(NNState* state, NNArguments* args)
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnarray_delete(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_delete(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t idxupper;
     size_t idxlower;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    idxlower = nn_value_asnumber(args->args[0]);
+    idxlower = nn_value_asnumber(argv[0]);
     idxupper = idxlower;
-    if(args->count == 2)
+    if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        idxupper = nn_value_asnumber(args->args[1]);
+        idxupper = nn_value_asnumber(argv[1]);
     }
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     if(((int)idxlower < 0) || idxlower >= nn_valarray_count(&list->varray))
     {
         NEON_RETURNERROR("list index %d out of range at delete()", idxlower);
@@ -11619,13 +11579,13 @@ NNValue nn_objfnarray_delete(NNState* state, NNArguments* args)
     return nn_value_makenumber((double)idxupper - (double)idxlower + 1);
 }
 
-NNValue nn_objfnarray_first(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_first(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     if(nn_valarray_count(&list->varray) > 0)
     {
         return nn_valarray_get(&list->varray, 0);
@@ -11633,13 +11593,13 @@ NNValue nn_objfnarray_first(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_last(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_last(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     if(nn_valarray_count(&list->varray) > 0)
     {
         return nn_valarray_get(&list->varray, nn_valarray_count(&list->varray) - 1);
@@ -11647,25 +11607,25 @@ NNValue nn_objfnarray_last(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_isempty(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makebool(nn_valarray_count(&nn_value_asarray(args->thisval)->varray) == 0);
+    return nn_value_makebool(nn_valarray_count(&nn_value_asarray(thisval)->varray) == 0);
 }
 
 
-NNValue nn_objfnarray_take(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_take(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t count;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(args->thisval);
-    count = nn_value_asnumber(args->args[0]);
+    list = nn_value_asarray(thisval);
+    count = nn_value_asnumber(argv[0]);
     if((int)count < 0)
     {
         count = nn_valarray_count(&list->varray) + count;
@@ -11677,16 +11637,16 @@ NNValue nn_objfnarray_take(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_array_copy(list, 0, count));
 }
 
-NNValue nn_objfnarray_get(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(args->thisval);
-    index = nn_value_asnumber(args->args[0]);
+    list = nn_value_asarray(thisval);
+    index = nn_value_asnumber(argv[0]);
     if((int)index < 0 || index >= nn_valarray_count(&list->varray))
     {
         return nn_value_makenull();
@@ -11694,15 +11654,15 @@ NNValue nn_objfnarray_get(NNState* state, NNArguments* args)
     return nn_valarray_get(&list->varray, index);
 }
 
-NNValue nn_objfnarray_compact(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
     NNObjArray* newlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
@@ -11715,7 +11675,7 @@ NNValue nn_objfnarray_compact(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnarray_unique(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_unique(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -11723,9 +11683,9 @@ NNValue nn_objfnarray_unique(NNState* state, NNArguments* args)
     NNObjArray* list;
     NNObjArray* newlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
@@ -11746,7 +11706,7 @@ NNValue nn_objfnarray_unique(NNState* state, NNArguments* args)
     return nn_value_fromobject(newlist);
 }
 
-NNValue nn_objfnarray_zip(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_zip(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -11755,21 +11715,21 @@ NNValue nn_objfnarray_zip(NNState* state, NNArguments* args)
     NNObjArray* alist;
     NNObjArray** arglist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
-    list = nn_value_asarray(args->thisval);
+    nn_argcheck_init(state, &check, argv, argc);
+    list = nn_value_asarray(thisval);
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    arglist = (NNObjArray**)nn_gcmem_allocate(state, sizeof(NNObjArray*), args->count, false);
-    for(i = 0; i < args->count; i++)
+    arglist = (NNObjArray**)nn_gcmem_allocate(state, sizeof(NNObjArray*), argc, false);
+    for(i = 0; i < argc; i++)
     {
         NEON_ARGS_CHECKTYPE(&check, i, nn_value_isarray);
-        arglist[i] = nn_value_asarray(args->args[i]);
+        arglist[i] = nn_value_asarray(argv[i]);
     }
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
         alist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
         /* item of main list*/
         nn_array_push(alist, nn_valarray_get(&list->varray, i));
-        for(j = 0; j < args->count; j++)
+        for(j = 0; j < argc; j++)
         {
             if(i < nn_valarray_count(&arglist[j]->varray))
             {
@@ -11786,7 +11746,7 @@ NNValue nn_objfnarray_zip(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnarray_zipfrom(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_zipfrom(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -11795,12 +11755,12 @@ NNValue nn_objfnarray_zipfrom(NNState* state, NNArguments* args)
     NNObjArray* alist;
     NNObjArray* arglist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isarray);
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    arglist = nn_value_asarray(args->args[0]);
+    arglist = nn_value_asarray(argv[0]);
     for(i = 0; i < nn_valarray_count(&arglist->varray); i++)
     {
         if(!nn_value_isarray(nn_valarray_get(&arglist->varray, i)))
@@ -11828,16 +11788,16 @@ NNValue nn_objfnarray_zipfrom(NNState* state, NNArguments* args)
     return nn_value_fromobject(newlist);
 }
 
-NNValue nn_objfnarray_todict(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_todict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
-    list = nn_value_asarray(args->thisval);
+    list = nn_value_asarray(thisval);
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
         nn_dict_setentry(dict, nn_value_makenumber(i), nn_valarray_get(&list->varray, i));
@@ -11845,16 +11805,16 @@ NNValue nn_objfnarray_todict(NNState* state, NNArguments* args)
     return nn_value_fromobject(dict);
 }
 
-NNValue nn_objfnarray_iter(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(args->thisval);
-    index = nn_value_asnumber(args->args[0]);
+    list = nn_value_asarray(thisval);
+    index = nn_value_asnumber(argv[0]);
     if(((int)index > -1) && index < nn_valarray_count(&list->varray))
     {
         return nn_valarray_get(&list->varray, index);
@@ -11862,15 +11822,15 @@ NNValue nn_objfnarray_iter(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_itern(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    list = nn_value_asarray(thisval);
+    if(nn_value_isnull(argv[0]))
     {
         if(nn_valarray_count(&list->varray) == 0)
         {
@@ -11878,11 +11838,11 @@ NNValue nn_objfnarray_itern(NNState* state, NNArguments* args)
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(args->args[0]))
+    if(!nn_value_isnumber(argv[0]))
     {
         NEON_RETURNERROR("lists are numerically indexed");
     }
-    index = nn_value_asnumber(args->args[0]);
+    index = nn_value_asnumber(argv[0]);
     if(index < nn_valarray_count(&list->varray) - 1)
     {
         return nn_value_makenumber((double)index + 1);
@@ -11890,71 +11850,75 @@ NNValue nn_objfnarray_itern(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_each(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue callable;
     NNValue unused;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(arity > 0)
         {
-            nn_valarray_set(&nestargs->varray, 0, nn_valarray_get(&list->varray, i));
+            passi++;
+            nestargs[0] = nn_valarray_get(&list->varray, i);
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                passi++;
+                nestargs[1] = nn_value_makenumber(i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
     }
-    nn_vm_stackpop(state);
     return nn_value_makenull();
 }
 
 
-NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue res;
     NNValue callable;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNObjArray* resultlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(!nn_value_isnull(nn_valarray_get(&list->varray, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, nn_valarray_get(&list->varray, i));
+                passi++;
+                nestargs[0] = nn_valarray_get(&list->varray, i);
                 if(arity > 1)
                 {
-                    nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                    passi++;
+                    nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &res);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &res);
             nn_array_push(resultlist, res);
         }
         else
@@ -11966,188 +11930,192 @@ NNValue nn_objfnarray_map(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnarray_filter(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue callable;
     NNValue result;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNObjArray* resultlist;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(!nn_value_isnull(nn_valarray_get(&list->varray, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, nn_valarray_get(&list->varray, i));
+                passi++;
+                nestargs[0] = nn_valarray_get(&list->varray, i);
                 if(arity > 1)
                 {
-                    nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                    passi++;
+                    nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
             if(!nn_value_isfalse(result))
             {
                 nn_array_push(resultlist, nn_valarray_get(&list->varray, i));
             }
         }
     }
-    nn_vm_stackpop(state);
     return nn_value_fromobject(resultlist);
 }
 
-NNValue nn_objfnarray_some(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue callable;
     NNValue result;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(!nn_value_isnull(nn_valarray_get(&list->varray, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, nn_valarray_get(&list->varray, i));
+                passi++;
+                nestargs[0] = nn_valarray_get(&list->varray, i);
                 if(arity > 1)
                 {
-                    nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                    passi++;
+                    nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
             if(!nn_value_isfalse(result))
             {
-                nn_vm_stackpop(state);
                 return nn_value_makebool(true);
             }
         }
     }
-    nn_vm_stackpop(state);
     return nn_value_makebool(false);
 }
 
 
-NNValue nn_objfnarray_every(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue result;
     NNValue callable;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     for(i = 0; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(!nn_value_isnull(nn_valarray_get(&list->varray, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, nn_valarray_get(&list->varray, i));
+                passi++;
+                nestargs[0] = nn_valarray_get(&list->varray, i);
                 if(arity > 1)
                 {
-                    nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                    passi++;
+                    nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
             if(nn_value_isfalse(result))
             {
-                nn_vm_stackpop(state);
                 return nn_value_makebool(false);
             }
         }
     }
-    nn_vm_stackpop(state);
     return nn_value_makebool(true);
 }
 
-NNValue nn_objfnarray_reduce(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     size_t startindex;
     NNValue callable;
     NNValue accumulator;
     NNObjArray* list;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[5];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(args->thisval);
-    callable = args->args[0];
+    list = nn_value_asarray(thisval);
+    callable = argv[0];
     startindex = 0;
     accumulator = nn_value_makenull();
-    if(args->count == 2)
+    if(argc == 2)
     {
-        accumulator = args->args[1];
+        accumulator = argv[1];
     }
     if(nn_value_isnull(accumulator) && nn_valarray_count(&list->varray) > 0)
     {
         accumulator = nn_valarray_get(&list->varray, 0);
         startindex = 1;
     }
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    arity = nn_nestcall_prepare(state, callable, thisval, NULL, 4);
     for(i = startindex; i < nn_valarray_count(&list->varray); i++)
     {
+        passi = 0;
         if(!nn_value_isnull(nn_valarray_get(&list->varray, i)) && !nn_value_isnull(nn_valarray_get(&list->varray, i)))
         {
             if(arity > 0)
             {
-                nn_valarray_set(&nestargs->varray, 0, accumulator);
+                passi++;
+                nestargs[0] = accumulator;
                 if(arity > 1)
                 {
-                    nn_valarray_set(&nestargs->varray, 1, nn_valarray_get(&list->varray, i));
+                    passi++;
+                    nestargs[1] = nn_valarray_get(&list->varray, i);
                     if(arity > 2)
                     {
-                        nn_valarray_set(&nestargs->varray, 2, nn_value_makenumber(i));
+                        passi++;
+                        nestargs[2] = nn_value_makenumber(i);
                         if(arity > 4)
                         {
-                            nn_valarray_set(&nestargs->varray, 3, args->thisval);
+                            passi++;
+                            nestargs[3] = thisval;
                         }
                     }
                 }
             }
-            nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &accumulator);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator);
         }
     }
-    nn_vm_stackpop(state);
     return accumulator;
 }
 
-NNValue nn_objfnarray_slice(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t i;
     int64_t until;
@@ -12160,21 +12128,21 @@ NNValue nn_objfnarray_slice(NNState* state, NNArguments* args)
     NNObjArray* selfarr;
     NNObjArray* narr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfarr = nn_value_asarray(args->thisval);
+    selfarr = nn_value_asarray(thisval);
     salen = nn_valarray_count(&selfarr->varray);
     end = salen;
-    start = nn_value_asnumber(args->args[0]);
+    start = nn_value_asnumber(argv[0]);
     backwards = false;
     if(start < 0)
     {
         backwards = true;
     }
-    if(args->count > 1)
+    if(argc > 1)
     {
-        end = nn_value_asnumber(args->args[1]);
+        end = nn_value_asnumber(argv[1]);
     }
     narr = nn_object_makearray(state);
     i = 0;
@@ -12198,41 +12166,41 @@ NNValue nn_objfnarray_slice(NNState* state, NNArguments* args)
     return nn_value_fromobject(narr);
 }
 
-NNValue nn_objfnrange_lower(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_value_asrange(args->thisval)->lower);
+    return nn_value_makenumber(nn_value_asrange(thisval)->lower);
 }
 
-NNValue nn_objfnrange_upper(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_value_asrange(args->thisval)->upper);
+    return nn_value_makenumber(nn_value_asrange(thisval)->upper);
 }
 
-NNValue nn_objfnrange_range(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_range(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_value_asrange(args->thisval)->range);
+    return nn_value_makenumber(nn_value_asrange(thisval)->range);
 }
 
-NNValue nn_objfnrange_iter(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int val;
     int index;
     NNObjRange* range;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    range = nn_value_asrange(args->thisval);
-    index = nn_value_asnumber(args->args[0]);
+    range = nn_value_asrange(thisval);
+    index = nn_value_asnumber(argv[0]);
     if(index >= 0 && index < range->range)
     {
         if(index == 0)
@@ -12252,15 +12220,15 @@ NNValue nn_objfnrange_iter(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnrange_itern(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int index;
     NNObjRange* range;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    range = nn_value_asrange(args->thisval);
-    if(nn_value_isnull(args->args[0]))
+    range = nn_value_asrange(thisval);
+    if(nn_value_isnull(argv[0]))
     {
         if(range->range == 0)
         {
@@ -12268,11 +12236,11 @@ NNValue nn_objfnrange_itern(NNState* state, NNArguments* args)
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(args->args[0]))
+    if(!nn_value_isnumber(argv[0]))
     {
         NEON_RETURNERROR("ranges are numerically indexed");
     }
-    index = (int)nn_value_asnumber(args->args[0]) + 1;
+    index = (int)nn_value_asnumber(argv[0]) + 1;
     if(index < range->range)
     {
         return nn_value_makenumber(index);
@@ -12280,46 +12248,17 @@ NNValue nn_objfnrange_itern(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnrange_loop(NNState* state, NNArguments* args)
-{
-    int i;
-    int arity;
-    NNValue callable;
-    NNValue unused;
-    NNObjRange* range;
-    NNObjArray* nestargs;
-    NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    range = nn_value_asrange(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
-    for(i = 0; i < range->range; i++)
-    {
-        if(arity > 0)
-        {
-            nn_valarray_set(&nestargs->varray, 0, nn_value_makenumber(i));
-            if(arity > 1)
-            {
-                nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
-            }
-        }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
-    }
-    nn_vm_stackpop(state);
-    return nn_value_makenull();
-}
 
-NNValue nn_objfnrange_expand(NNState* state, NNArguments* args)
+
+NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int i;
     NNValue val;
     NNObjRange* range;
     NNObjArray* oa;
-    range = nn_value_asrange(args->thisval);
+    (void)argv;
+    (void)argc;
+    range = nn_value_asrange(thisval);
     oa = nn_object_makearray(state);
     for(i = 0; i < range->range; i++)
     {
@@ -12329,60 +12268,65 @@ NNValue nn_objfnrange_expand(NNState* state, NNArguments* args)
     return nn_value_fromobject(oa);
 }
 
-NNValue nn_objfnrange_constructor(NNState* state, NNArguments* args)
+NNValue nn_objfnrange_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int a;
     int b;
     NNObjRange* orng;
-    a = nn_value_asnumber(args->args[0]);
-    b = nn_value_asnumber(args->args[1]);
+    (void)thisval;
+    (void)argc;
+    a = nn_value_asnumber(argv[0]);
+    b = nn_value_asnumber(argv[1]);
     orng = nn_object_makerange(state, a, b);
     return nn_value_fromobject(orng);
 }
 
-NNValue nn_objfnstring_utf8numbytes(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int incode;
     int res;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    incode = nn_value_asnumber(args->args[0]);
+    incode = nn_value_asnumber(argv[0]);
     res = nn_util_utf8numbytes(incode);
     return nn_value_makenumber(res);
 }
 
-NNValue nn_objfnstring_utf8decode(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_utf8decode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int res;
     NNObjString* instr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    instr = nn_value_asstring(args->args[0]);
+    instr = nn_value_asstring(argv[0]);
     res = nn_util_utf8decode((const uint8_t*)instr->sbuf.data, instr->sbuf.length);
     return nn_value_makenumber(res);
 }
 
-NNValue nn_objfnstring_utf8encode(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_utf8encode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int incode;
     size_t len;
     NNObjString* res;
     char* buf;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    incode = nn_value_asnumber(args->args[0]);
+    incode = nn_value_asnumber(argv[0]);
     buf = nn_util_utf8encode(incode, &len);
     res = nn_string_takelen(state, buf, len);
     return nn_value_fromobject(res);
 }
 
-NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycodepoint)
+NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc, bool onlycodepoint)
 {
     int cp;
     bool havemax;
@@ -12394,11 +12338,11 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
     NNObjString* instr;
     utf8iterator_t iter;
     havemax = false;
-    instr = nn_value_asstring(args->thisval);
-    if(args->count > 0)
+    instr = nn_value_asstring(thisval);
+    if(argc > 0)
     {
         havemax = true;
-        maxamount = nn_value_asnumber(args->args[0]);
+        maxamount = nn_value_asnumber(argv[0]);
     }
     res = nn_array_make(state);
     nn_utf8iter_init(&iter, instr->sbuf.data, instr->sbuf.length);
@@ -12429,48 +12373,49 @@ NNValue nn_util_stringutf8chars(NNState* state, NNArguments* args, bool onlycode
     return nn_value_fromobject(res);
 }
 
-NNValue nn_objfnstring_utf8chars(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_utf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_util_stringutf8chars(state, args, false);
+    return nn_util_stringutf8chars(state, thisval, argv, argc, false);
 }
 
-NNValue nn_objfnstring_utf8codepoints(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_utf8codepoints(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_util_stringutf8chars(state, args, true);
+    return nn_util_stringutf8chars(state, thisval, argv, argc, true);
 }
 
 
-NNValue nn_objfnstring_fromcharcode(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_fromcharcode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char ch;
     NNObjString* os;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    ch = nn_value_asnumber(args->args[0]);
+    ch = nn_value_asnumber(argv[0]);
     os = nn_string_copylen(state, &ch, 1);
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnstring_constructor(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* os;
     NNArgCheck check;
-    (void)args;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    os = nn_string_internlen(state, "", 0);
+    os = nn_string_copylen(state, "", 0);
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnstring_length(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     NNObjString* selfstr;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     return nn_value_makenumber(selfstr->sbuf.length);
 }
 
@@ -12522,7 +12467,7 @@ NNObjString* nn_string_substring(NNState* state, NNObjString* selfstr, size_t st
     return nn_string_takelen(state, raw, len);
 }
 
-NNValue nn_objfnstring_substring(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_substring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t end;
     size_t start;
@@ -12530,33 +12475,33 @@ NNValue nn_objfnstring_substring(NNState* state, NNArguments* args)
     NNObjString* nos;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
-    selfstr = nn_value_asstring(args->thisval);
+    nn_argcheck_init(state, &check, argv, argc);
+    selfstr = nn_value_asstring(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     maxlen = selfstr->sbuf.length;
     end = maxlen;
-    start = nn_value_asnumber(args->args[0]);
-    if(args->count > 1)
+    start = nn_value_asnumber(argv[0]);
+    if(argc > 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        end = nn_value_asnumber(args->args[1]);
+        end = nn_value_asnumber(argv[1]);
     }
     nos = nn_string_substring(state, selfstr, start, end, true);
     return nn_value_fromobject(nos);
 }
 
-NNValue nn_objfnstring_charcodeat(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_charcodeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ch;
     int idx;
     int selflen;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(args->thisval);
-    idx = nn_value_asnumber(args->args[0]);
+    selfstr = nn_value_asstring(thisval);
+    idx = nn_value_asnumber(argv[0]);
     selflen = (int)selfstr->sbuf.length;
     if((idx < 0) || (idx >= selflen))
     {
@@ -12569,18 +12514,18 @@ NNValue nn_objfnstring_charcodeat(NNState* state, NNArguments* args)
     return nn_value_makenumber(ch);
 }
 
-NNValue nn_objfnstring_charat(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char ch;
     int idx;
     int selflen;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(args->thisval);
-    idx = nn_value_asnumber(args->args[0]);
+    selfstr = nn_value_asstring(thisval);
+    idx = nn_value_asnumber(argv[0]);
     selflen = (int)selfstr->sbuf.length;
     if((idx < 0) || (idx >= selflen))
     {
@@ -12593,42 +12538,42 @@ NNValue nn_objfnstring_charat(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_string_copylen(state, &ch, 1));
 }
 
-NNValue nn_objfnstring_upper(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t slen;
     char* string;
     NNObjString* str;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(args->thisval);
+    str = nn_value_asstring(thisval);
     slen = str->sbuf.length;
     string = nn_util_strtoupper(str->sbuf.data, slen);
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
-NNValue nn_objfnstring_lower(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t slen;
     char* string;
     NNObjString* str;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(args->thisval);
+    str = nn_value_asstring(thisval);
     slen = str->sbuf.length;
     string = nn_util_strtolower(str->sbuf.data, slen);
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
-NNValue nn_objfnstring_isalpha(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isalpha(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNArgCheck check;
     NNObjString* selfstr;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
         if(!isalpha((unsigned char)selfstr->sbuf.data[i]))
@@ -12639,14 +12584,14 @@ NNValue nn_objfnstring_isalpha(NNState* state, NNArguments* args)
     return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
-NNValue nn_objfnstring_isalnum(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isalnum(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
         if(!isalnum((unsigned char)selfstr->sbuf.data[i]))
@@ -12657,16 +12602,16 @@ NNValue nn_objfnstring_isalnum(NNState* state, NNArguments* args)
     return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
-NNValue nn_objfnstring_isfloat(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isfloat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     double f;
     char* p;
     NNObjString* selfstr;
     NNArgCheck check;
     (void)f;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     errno = 0;
     if(selfstr->sbuf.length ==0)
     {
@@ -12687,14 +12632,14 @@ NNValue nn_objfnstring_isfloat(NNState* state, NNArguments* args)
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnstring_isnumber(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
         if(!isdigit((unsigned char)selfstr->sbuf.data[i]))
@@ -12705,15 +12650,15 @@ NNValue nn_objfnstring_isnumber(NNState* state, NNArguments* args)
     return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
-NNValue nn_objfnstring_islower(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_islower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     bool alphafound;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     alphafound = false;
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
@@ -12729,15 +12674,15 @@ NNValue nn_objfnstring_islower(NNState* state, NNArguments* args)
     return nn_value_makebool(alphafound);
 }
 
-NNValue nn_objfnstring_isupper(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isupper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     bool alphafound;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     alphafound = false;
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
@@ -12753,14 +12698,14 @@ NNValue nn_objfnstring_isupper(NNState* state, NNArguments* args)
     return nn_value_makebool(alphafound);
 }
 
-NNValue nn_objfnstring_isspace(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isspace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     for(i = 0; i < selfstr->sbuf.length; i++)
     {
         if(!isspace((unsigned char)selfstr->sbuf.data[i]))
@@ -12771,21 +12716,21 @@ NNValue nn_objfnstring_isspace(NNState* state, NNArguments* args)
     return nn_value_makebool(selfstr->sbuf.length != 0);
 }
 
-NNValue nn_objfnstring_trim(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char trimmer;
     char* end;
     char* string;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     trimmer = '\0';
-    if(args->count == 1)
+    if(argc == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
+        trimmer = (char)nn_value_asstring(argv[0])->sbuf.data[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     string = selfstr->sbuf.data;
     end = NULL;
     /* Trim leading space*/
@@ -12828,21 +12773,21 @@ NNValue nn_objfnstring_trim(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_string_copycstr(state, string));
 }
 
-NNValue nn_objfnstring_ltrim(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* end;
     char* string;
     char trimmer;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     trimmer = '\0';
-    if(args->count == 1)
+    if(argc == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
+        trimmer = (char)nn_value_asstring(argv[0])->sbuf.data[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     string = selfstr->sbuf.data;
     end = NULL;
     /* Trim leading space */
@@ -12870,21 +12815,21 @@ NNValue nn_objfnstring_ltrim(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_string_copycstr(state, string));
 }
 
-NNValue nn_objfnstring_rtrim(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* end;
     char* string;
     char trimmer;
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
     trimmer = '\0';
-    if(args->count == 1)
+    if(argc == 1)
     {
-        trimmer = (char)nn_value_asstring(args->args[0])->sbuf.data[0];
+        trimmer = (char)nn_value_asstring(argv[0])->sbuf.data[0];
     }
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     string = selfstr->sbuf.data;
     end = NULL;
     /* All spaces? */
@@ -12913,46 +12858,52 @@ NNValue nn_objfnstring_rtrim(NNState* state, NNArguments* args)
 }
 
 
-NNValue nn_objfnarray_constructor(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int cnt;
     NNValue filler;
     NNObjArray* arr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     filler = nn_value_makenull();
-    if(args->count > 1)
+    if(argc > 1)
     {
-        filler = args->args[1];
+        filler = argv[1];
     }
-    cnt = nn_value_asnumber(args->args[0]);
+    cnt = nn_value_asnumber(argv[0]);
     arr = nn_array_makefilled(state, cnt, filler);
     return nn_value_fromobject(arr);
 }
 
-NNValue nn_objfnarray_join(NNState* state, NNArguments* args)
+NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    bool havejoinee;
     size_t i;
     size_t count;
     NNPrinter pr;
+    NNValue ret;
     NNValue vjoinee;
     NNObjArray* selfarr;
     NNObjString* joinee;
     NNValue* list;
-    selfarr = nn_value_asarray(args->thisval);
+    selfarr = nn_value_asarray(thisval);
     joinee = NULL;
-    if(args->count > 0)
+    havejoinee = false;
+    if(argc > 0)
     {
-        vjoinee = args->args[0];
+        vjoinee = argv[0];
         if(nn_value_isstring(vjoinee))
         {
             joinee = nn_value_asstring(vjoinee);
+            havejoinee = true;
         }
         else
         {
             joinee = nn_value_tostring(state, vjoinee);
+            havejoinee = true;
         }
     }
     list = selfarr->varray.listitems;
@@ -12965,15 +12916,17 @@ NNValue nn_objfnarray_join(NNState* state, NNArguments* args)
     for(i = 0; i < count; i++)
     {
         nn_printer_printvalue(&pr, list[i], false, true);
-        if((joinee != NULL) && ((i+1) < count))
+        if((havejoinee && (joinee != NULL)) && ((i+1) < count))
         {
             nn_printer_writestringl(&pr, joinee->sbuf.data, joinee->sbuf.length);
         }
     }
-    return nn_value_fromobject(nn_printer_takestring(&pr));
+    ret = nn_value_fromobject(nn_printer_takestring(&pr));
+    nn_printer_destroy(&pr);
+    return ret;
 }
 
-NNValue nn_objfnstring_indexof(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int startindex;
     char* result;
@@ -12981,16 +12934,16 @@ NNValue nn_objfnstring_indexof(NNState* state, NNArguments* args)
     NNObjString* string;
     NNObjString* needle;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    needle = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    needle = nn_value_asstring(argv[0]);
     startindex = 0;
-    if(args->count == 2)
+    if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        startindex = nn_value_asnumber(args->args[1]);
+        startindex = nn_value_asnumber(argv[1]);
     }
     if(string->sbuf.length > 0 && needle->sbuf.length > 0)
     {
@@ -13004,16 +12957,16 @@ NNValue nn_objfnstring_indexof(NNState* state, NNArguments* args)
     return nn_value_makenumber(-1);
 }
 
-NNValue nn_objfnstring_startswith(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_startswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* substr;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    substr = nn_value_asstring(argv[0]);
     if(string->sbuf.length == 0 || substr->sbuf.length == 0 || substr->sbuf.length > string->sbuf.length)
     {
         return nn_value_makebool(false);
@@ -13021,17 +12974,17 @@ NNValue nn_objfnstring_startswith(NNState* state, NNArguments* args)
     return nn_value_makebool(memcmp(substr->sbuf.data, string->sbuf.data, substr->sbuf.length) == 0);
 }
 
-NNValue nn_objfnstring_endswith(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int difference;
     NNObjString* substr;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    substr = nn_value_asstring(argv[0]);
     if(string->sbuf.length == 0 || substr->sbuf.length == 0 || substr->sbuf.length > string->sbuf.length)
     {
         return nn_value_makebool(false);
@@ -13149,44 +13102,44 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnstring_matchcapture(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_matchcapture(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* pattern;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    pattern = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    pattern = nn_value_asstring(argv[0]);
     return nn_util_stringregexmatch(state, string, pattern, true);
 }
 
-NNValue nn_objfnstring_matchonly(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_matchonly(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* pattern;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    pattern = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    pattern = nn_value_asstring(argv[0]);
     return nn_util_stringregexmatch(state, string, pattern, false);
 }
 
-NNValue nn_objfnstring_count(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int count;
     const char* tmp;
     NNObjString* substr;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    substr = nn_value_asstring(argv[0]);
     if(substr->sbuf.length == 0 || string->sbuf.length == 0)
     {
         return nn_value_makenumber(0);
@@ -13201,31 +13154,31 @@ NNValue nn_objfnstring_count(NNState* state, NNArguments* args)
     return nn_value_makenumber(count);
 }
 
-NNValue nn_objfnstring_tonumber(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_tonumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* selfstr;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(args->thisval);
+    selfstr = nn_value_asstring(thisval);
     return nn_value_makenumber(strtod(selfstr->sbuf.data, NULL));
 }
 
-NNValue nn_objfnstring_isascii(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_isascii(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
-    if(args->count == 1)
+    if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isbool);
     }
-    string = nn_value_asstring(args->thisval);
+    string = nn_value_asstring(thisval);
     return nn_value_fromobject(string);
 }
 
-NNValue nn_objfnstring_tolist(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t end;
@@ -13234,9 +13187,9 @@ NNValue nn_objfnstring_tolist(NNState* state, NNArguments* args)
     NNObjArray* list;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    string = nn_value_asstring(args->thisval);
+    string = nn_value_asstring(thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     length = string->sbuf.length;
     if(length > 0)
@@ -13251,7 +13204,7 @@ NNValue nn_objfnstring_tolist(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfnstring_lpad(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t width;
@@ -13265,20 +13218,20 @@ NNValue nn_objfnstring_lpad(NNState* state, NNArguments* args)
     NNObjString* result;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
-    width = nn_value_asnumber(args->args[0]);
+    string = nn_value_asstring(thisval);
+    width = nn_value_asnumber(argv[0]);
     fillchar = ' ';
-    if(args->count == 2)
+    if(argc == 2)
     {
-        ofillstr = nn_value_asstring(args->args[1]);
+        ofillstr = nn_value_asstring(argv[1]);
         fillchar = ofillstr->sbuf.data[0];
     }
     if(width <= string->sbuf.length)
     {
-        return args->thisval;
+        return thisval;
     }
     fillsize = width - string->sbuf.length;
     fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
@@ -13299,7 +13252,7 @@ NNValue nn_objfnstring_lpad(NNState* state, NNArguments* args)
     return nn_value_fromobject(result);
 }
 
-NNValue nn_objfnstring_rpad(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_rpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t width;
@@ -13313,20 +13266,20 @@ NNValue nn_objfnstring_rpad(NNState* state, NNArguments* args)
     NNObjString* string;
     NNObjString* result;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
-    width = nn_value_asnumber(args->args[0]);
+    string = nn_value_asstring(thisval);
+    width = nn_value_asnumber(argv[0]);
     fillchar = ' ';
-    if(args->count == 2)
+    if(argc == 2)
     {
-        ofillstr = nn_value_asstring(args->args[1]);
+        ofillstr = nn_value_asstring(argv[1]);
         fillchar = ofillstr->sbuf.data[0];
     }
     if(width <= string->sbuf.length)
     {
-        return args->thisval;
+        return thisval;
     }
     fillsize = width - string->sbuf.length;
     fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
@@ -13347,7 +13300,7 @@ NNValue nn_objfnstring_rpad(NNState* state, NNArguments* args)
     return nn_value_fromobject(result);
 }
 
-NNValue nn_objfnstring_split(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_split(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t end;
@@ -13357,11 +13310,11 @@ NNValue nn_objfnstring_split(NNState* state, NNArguments* args)
     NNObjString* string;
     NNObjString* delimeter;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    delimeter = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(thisval);
+    delimeter = nn_value_asstring(argv[0]);
     /* empty string matches empty string to empty list */
     if(((string->sbuf.length == 0) && (delimeter->sbuf.length == 0)) || (string->sbuf.length == 0) || (delimeter->sbuf.length == 0))
     {
@@ -13395,7 +13348,7 @@ NNValue nn_objfnstring_split(NNState* state, NNArguments* args)
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t totallength;
@@ -13405,18 +13358,18 @@ NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
     NNObjString* repsubstr;
     NNArgCheck check;
     (void)totallength;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 2, 3);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-    string = nn_value_asstring(args->thisval);
-    substr = nn_value_asstring(args->args[0]);
-    repsubstr = nn_value_asstring(args->args[1]);
+    string = nn_value_asstring(thisval);
+    substr = nn_value_asstring(argv[0]);
+    repsubstr = nn_value_asstring(argv[1]);
     if((string->sbuf.length == 0 && substr->sbuf.length == 0) || string->sbuf.length == 0 || substr->sbuf.length == 0)
     {
         return nn_value_fromobject(nn_string_copylen(state, string->sbuf.data, string->sbuf.length));
     }
-    result = dyn_strbuf_makebasicempty(0, false);
+    result = dyn_strbuf_makebasicempty(0);
     totallength = 0;
     for(i = 0; i < string->sbuf.length; i++)
     {
@@ -13438,19 +13391,19 @@ NNValue nn_objfnstring_replace(NNState* state, NNArguments* args)
     return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(result->data, result->length)));
 }
 
-NNValue nn_objfnstring_iter(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     size_t length;
     NNObjString* string;
     NNObjString* result;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(args->thisval);
+    string = nn_value_asstring(thisval);
     length = string->sbuf.length;
-    index = nn_value_asnumber(args->args[0]);
+    index = nn_value_asnumber(argv[0]);
     if(((int)index > -1) && (index < length))
     {
         result = nn_string_copylen(state, &string->sbuf.data[index], 1);
@@ -13459,17 +13412,17 @@ NNValue nn_objfnstring_iter(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnstring_itern(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     size_t length;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    string = nn_value_asstring(args->thisval);
+    string = nn_value_asstring(thisval);
     length = string->sbuf.length;
-    if(nn_value_isnull(args->args[0]))
+    if(nn_value_isnull(argv[0]))
     {
         if(length == 0)
         {
@@ -13477,11 +13430,11 @@ NNValue nn_objfnstring_itern(NNState* state, NNArguments* args)
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(args->args[0]))
+    if(!nn_value_isnumber(argv[0]))
     {
         NEON_RETURNERROR("strings are numerically indexed");
     }
-    index = nn_value_asnumber(args->args[0]);
+    index = nn_value_asnumber(argv[0]);
     if(index < length - 1)
     {
         return nn_value_makenumber((double)index + 1);
@@ -13489,104 +13442,120 @@ NNValue nn_objfnstring_itern(NNState* state, NNArguments* args)
     return nn_value_makenull();
 }
 
-NNValue nn_objfnstring_each(NNState* state, NNArguments* args)
+NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
+    size_t passi;
     size_t arity;
     NNValue callable;
     NNValue unused;
     NNObjString* string;
-    NNObjArray* nestargs;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    NNValue nestargs[3];
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    string = nn_value_asstring(args->thisval);
-    callable = args->args[0];
-    nestargs = nn_object_makearray(state);
-    nn_vm_stackpush(state, nn_value_fromobject(nestargs));
-    arity = nn_nestcall_prepare(state, callable, args->thisval, nestargs);
+    string = nn_value_asstring(thisval);
+    callable = argv[0];
+    arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     for(i = 0; i < string->sbuf.length; i++)
     {
+        passi = 0;
         if(arity > 0)
         {
-            nn_valarray_set(&nestargs->varray, 0, nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + i, 1)));
+            passi++;
+            nestargs[0] = nn_value_fromobject(nn_string_copylen(state, string->sbuf.data + i, 1));
             if(arity > 1)
             {
-                nn_valarray_set(&nestargs->varray, 1, nn_value_makenumber(i));
+                passi++;
+                nestargs[1] = nn_value_makenumber(i);
             }
         }
-        nn_nestcall_callfunction(state, callable, args->thisval, nestargs, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
     }
     /* pop the argument list */
-    nn_vm_stackpop(state);
     return nn_value_makenull();
 }
 
-NNValue nn_objfnobject_dumpself(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNPrinter pr;
     NNObjString* os;
-    v = args->thisval;
+    v = thisval;
+    (void)argv;
+    (void)argc;
     nn_printer_makestackstring(state, &pr);
     nn_printer_printvalue(&pr, v, true, false);
     os = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_tostring(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNPrinter pr;
     NNObjString* os;
-    v = args->thisval;
+    (void)argv;
+    (void)argc;
+    v = thisval;
     nn_printer_makestackstring(state, &pr);
     nn_printer_printvalue(&pr, v, false, true);
     os = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_typename(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNObjString* os;
-    v = args->args[0];
+    (void)thisval;
+    (void)argc;
+    v = argv[0];
     os = nn_string_copycstr(state, nn_value_typename(v));
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_getselfclass(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    return args->thisval;
+    (void)argv;
+    (void)argc;
+    return thisval;
 }
 
-NNValue nn_objfnobject_isstring(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     (void)state;
-    v = args->thisval;
+    (void)argv;
+    (void)argc;
+    v = thisval;
     return nn_value_makebool(nn_value_isstring(v));
 }
 
-NNValue nn_objfnobject_isarray(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     (void)state;
-    v = args->thisval;
+    (void)argv;
+    (void)argc;
+    v = thisval;
     return nn_value_makebool(nn_value_isarray(v));
 }
 
-NNValue nn_objfnobject_isa(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNValue otherclval;
     NNObjClass* oclass;
     NNObjClass* selfclass;
     (void)state;
-    v = args->thisval;
-    otherclval = args->args[0];
+    (void)argc;
+    v = thisval;
+    otherclval = argv[0];
     if(nn_value_isclass(otherclval))
     {
         oclass = nn_value_asclass(otherclval);
@@ -13599,11 +13568,13 @@ NNValue nn_objfnobject_isa(NNState* state, NNArguments* args)
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnobject_iscallable(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_iscallable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return (nn_value_makebool(
         nn_value_isclass(selfval) ||
         nn_value_isfuncscript(selfval) ||
@@ -13613,51 +13584,63 @@ NNValue nn_objfnobject_iscallable(NNState* state, NNArguments* args)
     ));
 }
 
-NNValue nn_objfnobject_isbool(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isbool(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isbool(selfval));
 }
 
-NNValue nn_objfnobject_isnumber(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isnumber(selfval));
 }
 
-NNValue nn_objfnobject_isint(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isnumber(selfval) && (((int)nn_value_asnumber(selfval)) == nn_value_asnumber(selfval)));
 }
 
-NNValue nn_objfnobject_isdict(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isdict(selfval));
 }
 
-NNValue nn_objfnobject_isobject(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isobject(selfval));
 }
 
-NNValue nn_objfnobject_isfunction(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(
         nn_value_isfuncscript(selfval) ||
         nn_value_isfuncclosure(selfval) ||
@@ -13666,55 +13649,65 @@ NNValue nn_objfnobject_isfunction(NNState* state, NNArguments* args)
     );
 }
 
-NNValue nn_objfnobject_isiterable(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     bool isiterable;
     NNValue dummy;
     NNObjClass* klass;
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     isiterable = nn_value_isarray(selfval) || nn_value_isdict(selfval) || nn_value_isstring(selfval);
     if(!isiterable && nn_value_isinstance(selfval))
     {
         klass = nn_value_asinstance(selfval)->klass;
-        isiterable = nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_intern(state, "@iter")), &dummy)
-            && nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_intern(state, "@itern")), &dummy);
+        isiterable = nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
+            && nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
     }
     return nn_value_makebool(isiterable);
 }
 
-NNValue nn_objfnobject_isclass(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isclass(selfval));
 }
 
-NNValue nn_objfnobject_isfile(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isfile(selfval));
 }
 
-NNValue nn_objfnobject_isinstance(NNState* state, NNArguments* args)
+NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     return nn_value_makebool(nn_value_isinstance(selfval));
 }
 
 
-NNValue nn_objfnclass_getselfname(NNState* state, NNArguments* args)
+NNValue nn_objfnclass_getselfname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     NNObjClass* klass;
     (void)state;
-    selfval = args->thisval;
+    (void)argv;
+    (void)argc;
+    selfval = thisval;
     klass = nn_value_asclass(selfval);
     return nn_value_fromobject(klass->name);
 }
@@ -13802,26 +13795,31 @@ NNObjString* nn_util_numbertohexstring(NNState* state, int64_t n, bool numeric)
     return nn_string_copylen(state, str, length);
 }
 
-NNValue nn_objfnnumber_tobinstring(NNState* state, NNArguments* args)
+NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_value_fromobject(nn_util_numbertobinstring(state, nn_value_asnumber(args->thisval)));
+    (void)argv;
+    (void)argc;
+    return nn_value_fromobject(nn_util_numbertobinstring(state, nn_value_asnumber(thisval)));
 }
 
-NNValue nn_objfnnumber_tooctstring(NNState* state, NNArguments* args)
+NNValue nn_objfnnumber_tooctstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(args->thisval), false));
+    (void)argv;
+    (void)argc;
+    return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(thisval), false));
 }
 
-NNValue nn_objfnnumber_constructor(NNState* state, NNArguments* args)
+NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue val;
     NNValue rtval;
     NNObjString* os;
-    if(args->count == 0)
+    (void)thisval;
+    if(argc == 0)
     {
         return nn_value_makenumber(0);
     }
-    val = args->args[0];
+    val = argv[0];
     if(nn_value_isnumber(val))
     {
         return val;
@@ -13843,93 +13841,115 @@ NNValue nn_objfnnumber_constructor(NNState* state, NNArguments* args)
     return rtval;
 }
 
-NNValue nn_objfnnumber_tohexstring(NNState* state, NNArguments* args)
+NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_value_fromobject(nn_util_numbertohexstring(state, nn_value_asnumber(args->thisval), false));
+    (void)argv;
+    (void)argc;
+    return nn_value_fromobject(nn_util_numbertohexstring(state, nn_value_asnumber(thisval), false));
 }
 
-NNValue nn_objfnmath_abs(NNState* state, NNArguments* args)
-{
-    (void)state;
-    return nn_value_makenumber(fabs(nn_value_asnumber(args->args[0])));
-}
-
-NNValue nn_objfnmath_round(NNState* state, NNArguments* args)
+NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    return nn_value_makenumber(round(nn_value_asnumber(args->args[0])));
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(fabs(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_sqrt(NNState* state, NNArguments* args)
+NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    return nn_value_makenumber(sqrt(nn_value_asnumber(args->args[0])));
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(round(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_ceil(NNState* state, NNArguments* args)
+NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    return nn_value_makenumber(ceil(nn_value_asnumber(args->args[0])));
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(sqrt(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_floor(NNState* state, NNArguments* args)
+NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    return nn_value_makenumber(floor(nn_value_asnumber(args->args[0])));
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(ceil(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_min(NNState* state, NNArguments* args)
+NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    (void)state;
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(floor(nn_value_asnumber(argv[0])));
+}
+
+NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     double b;
     double x;
     double y;
     (void)state;
-    x = nn_value_asnumber(args->args[0]);
-    y = nn_value_asnumber(args->args[1]);
+    (void)thisval;
+    (void)argc;
+    x = nn_value_asnumber(argv[0]);
+    y = nn_value_asnumber(argv[1]);
     b = (x < y) ? x : y;
     return nn_value_makenumber(b);
 }
 
-NNValue nn_objfnprocess_exedirectory(NNState* state, NNArguments* args)
+NNValue nn_objfnprocess_exedirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    (void)args;
+    (void)thisval;
+    (void)argv;
+    (void)argc;
     return nn_value_fromobject(state->processinfo->cliexedirectory);
 }
 
-NNValue nn_objfnprocess_exit(NNState* state, NNArguments* args)
+NNValue nn_objfnprocess_exit(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int rc;
     (void)state;
+    (void)thisval;
     rc = 0;
-    if(args->count > 0)
+    if(argc > 0)
     {
-        rc = nn_value_asnumber(args->args[0]);
+        rc = nn_value_asnumber(argv[0]);
     }
     exit(rc);
     return nn_value_makenull();
 }
 
-NNValue nn_objfnprocess_kill(NNState* state, NNArguments* args)
+NNValue nn_objfnprocess_kill(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int pid;
     int code;
     (void)state;
-    pid = nn_value_asnumber(args->args[0]);
-    code = nn_value_asnumber(args->args[1]);
+    (void)thisval;
+    (void)argc;
+    pid = nn_value_asnumber(argv[0]);
+    code = nn_value_asnumber(argv[1]);
     osfn_kill(pid, code);
     return nn_value_makenull();
 }
 
-NNValue nn_objfnjson_stringify(NNState* state, NNArguments* args)
+NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNPrinter pr;
     NNObjString* os;
-    v = args->args[0];
+    (void)thisval;
+    (void)argc;
+    v = argv[0];
     nn_printer_makestackstring(state, &pr);
     pr.jsonmode = true;
     nn_printer_printvalue(&pr, v, true, false);
     os = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     return nn_value_fromobject(os);
 }
 
@@ -13946,7 +13966,7 @@ struct ClsListMethods
         int i; \
         for(i=0; listmethods[i].name != NULL; i++) \
         { \
-            nn_class_defnativemethod(klass, nn_string_intern(state, listmethods[i].name), listmethods[i].fn); \
+            nn_class_defnativemethod(klass, nn_string_copycstr(state, listmethods[i].name), listmethods[i].fn); \
         } \
     }
 
@@ -13955,15 +13975,15 @@ void nn_state_initbuiltinmethods(NNState* state)
     NNObjClass* klass;
     {
         klass = state->classprimprocess;
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "directory"), nn_value_fromobject(state->processinfo->cliexedirectory));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "env"), nn_value_fromobject(state->envdict));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
-        nn_class_setstaticproperty(klass, nn_string_intern(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "kill"), nn_objfnprocess_kill);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "exit"), nn_objfnprocess_exit);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "exedirectory"), nn_objfnprocess_exedirectory);
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "directory"), nn_value_fromobject(state->processinfo->cliexedirectory));
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "env"), nn_value_fromobject(state->envdict));
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
+        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "kill"), nn_objfnprocess_kill);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exit"), nn_objfnprocess_exit);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exedirectory"), nn_objfnprocess_exedirectory);
     }
     {
         static ClsListMethods objectmethods[] =
@@ -13986,12 +14006,12 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"isInstance", nn_objfnobject_isinstance},
             {NULL, NULL},
         };
-        nn_class_defstaticnativemethod(state->classprimobject, nn_string_intern(state, "typename"), nn_objfnobject_typename);
-        nn_class_defstaticcallablefield(state->classprimobject, nn_string_intern(state, "prototype"), nn_objfnobject_getselfclass);
+        nn_class_defstaticnativemethod(state->classprimobject, nn_string_copycstr(state, "typename"), nn_objfnobject_typename);
+        nn_class_defstaticcallablefield(state->classprimobject, nn_string_copycstr(state, "prototype"), nn_objfnobject_getselfclass);
         installmethods(state, state->classprimobject, objectmethods);
     }
     {
-        nn_class_defstaticcallablefield(state->classprimclass, nn_string_intern(state, "name"), nn_objfnclass_getselfname);
+        nn_class_defstaticcallablefield(state->classprimclass, nn_string_copycstr(state, "name"), nn_objfnclass_getselfname);
 
     }    
     {
@@ -14047,11 +14067,11 @@ void nn_state_initbuiltinmethods(NNState* state)
             {NULL, NULL},
         };
         nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "fromCharCode"), nn_objfnstring_fromcharcode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Decode"), nn_objfnstring_utf8decode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Encode"), nn_objfnstring_utf8encode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
-        nn_class_defcallablefield(state->classprimstring, nn_string_intern(state, "length"), nn_objfnstring_length);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "fromCharCode"), nn_objfnstring_fromcharcode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Decode"), nn_objfnstring_utf8decode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Encode"), nn_objfnstring_utf8encode);
+        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
+        nn_class_defcallablefield(state->classprimstring, nn_string_copycstr(state, "length"), nn_objfnstring_length);
         installmethods(state, state->classprimstring, stringmethods);
     }
     {
@@ -14097,7 +14117,7 @@ void nn_state_initbuiltinmethods(NNState* state)
             {NULL, NULL}
         };
         nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
-        nn_class_defcallablefield(state->classprimarray, nn_string_intern(state, "length"), nn_objfnarray_length);
+        nn_class_defcallablefield(state->classprimarray, nn_string_copycstr(state, "length"), nn_objfnarray_length);
         installmethods(state, state->classprimarray, arraymethods);
     }
     {
@@ -14129,7 +14149,7 @@ void nn_state_initbuiltinmethods(NNState* state)
         };
         #if 0
         nn_class_defnativeconstructor(state->classprimdict, nn_objfndict_constructor);
-        nn_class_defstaticnativemethod(state->classprimdict, nn_string_intern(state, "keys"), nn_objfndict_keys);
+        nn_class_defstaticnativemethod(state->classprimdict, nn_string_copycstr(state, "keys"), nn_objfndict_keys);
         #endif
         installmethods(state, state->classprimdict, dictmethods);
     }
@@ -14159,13 +14179,13 @@ void nn_state_initbuiltinmethods(NNState* state)
             {NULL, NULL},
         };
         nn_class_defnativeconstructor(state->classprimfile, nn_objfnfile_constructor);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "read"), nn_objfnfile_readstatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "write"), nn_objfnfile_writestatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "put"), nn_objfnfile_writestatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "exists"), nn_objfnfile_exists);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "isFile"), nn_objfnfile_isfile);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "isDirectory"), nn_objfnfile_isdirectory);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_intern(state, "stat"), nn_objfnfile_statstatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "read"), nn_objfnfile_readstatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "write"), nn_objfnfile_writestatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "put"), nn_objfnfile_writestatic);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "exists"), nn_objfnfile_exists);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isFile"), nn_objfnfile_isfile);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isDirectory"), nn_objfnfile_isdirectory);
+        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "stat"), nn_objfnfile_statstatic);
         installmethods(state, state->classprimfile, filemethods);
     }
     {
@@ -14174,7 +14194,6 @@ void nn_state_initbuiltinmethods(NNState* state)
             {"lower", nn_objfnrange_lower},
             {"upper", nn_objfnrange_upper},
             {"range", nn_objfnrange_range},
-            {"loop", nn_objfnrange_loop},
             {"expand", nn_objfnrange_expand},
             {"toArray", nn_objfnrange_expand},
             {"@iter", nn_objfnrange_iter},
@@ -14186,88 +14205,92 @@ void nn_state_initbuiltinmethods(NNState* state)
     }
     {
         klass = nn_util_makeclass(state, "Math", state->classprimobject);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "abs"), nn_objfnmath_abs);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "round"), nn_objfnmath_round);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "floor"), nn_objfnmath_floor);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "min"), nn_objfnmath_min);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "abs"), nn_objfnmath_abs);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "round"), nn_objfnmath_round);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "sqrt"), nn_objfnmath_sqrt);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "ceil"), nn_objfnmath_ceil);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "floor"), nn_objfnmath_floor);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "min"), nn_objfnmath_min);
     }
     {
         klass = nn_util_makeclass(state, "JSON", state->classprimobject);
-        nn_class_defstaticnativemethod(klass, nn_string_intern(state, "stringify"), nn_objfnjson_stringify);
+        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "stringify"), nn_objfnjson_stringify);
     }
 }
 
-NNValue nn_nativefn_time(NNState* state, NNArguments* args)
+NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     struct timeval tv;
     NNArgCheck check;
-    (void)args;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     osfn_gettimeofday(&tv, NULL);
     return nn_value_makenumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
 }
 
-NNValue nn_nativefn_microtime(NNState* state, NNArguments* args)
+NNValue nn_nativefn_microtime(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     struct timeval tv;
     NNArgCheck check;
-    (void)args;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     osfn_gettimeofday(&tv, NULL);
     return nn_value_makenumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
 }
 
-NNValue nn_nativefn_id(NNState* state, NNArguments* args)
+NNValue nn_nativefn_id(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue val;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    val = args->args[0];
+    val = argv[0];
     return nn_value_makenumber(*(long*)&val);
 }
 
-NNValue nn_nativefn_int(NNState* state, NNArguments* args)
+NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
-    if(args->count == 0)
+    if(argc == 0)
     {
         return nn_value_makenumber(0);
     }
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    return nn_value_makenumber((double)((int)nn_value_asnumber(args->args[0])));
+    return nn_value_makenumber((double)((int)nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_nativefn_chr(NNState* state, NNArguments* args)
+NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t len;
     char* string;
     int ch;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    ch = nn_value_asnumber(args->args[0]);
+    ch = nn_value_asnumber(argv[0]);
     string = nn_util_utf8encode(ch, &len);
     return nn_value_fromobject(nn_string_takelen(state, string, len));
 }
 
-NNValue nn_nativefn_ord(NNState* state, NNArguments* args)
+NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ord;
     int length;
     NNObjString* string;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(args->args[0]);
+    string = nn_value_asstring(argv[0]);
     length = string->sbuf.length;
     if(length > 1)
     {
@@ -14338,25 +14361,26 @@ double nn_util_mtrand(double lowerlimit, double upperlimit)
     return randnum;
 }
 
-NNValue nn_nativefn_rand(NNState* state, NNArguments* args)
+NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int tmp;
     int lowerlimit;
     int upperlimit;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 2);
     lowerlimit = 0;
     upperlimit = 1;
-    if(args->count > 0)
+    if(argc > 0)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        lowerlimit = nn_value_asnumber(args->args[0]);
+        lowerlimit = nn_value_asnumber(argv[0]);
     }
-    if(args->count == 2)
+    if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        upperlimit = nn_value_asnumber(args->args[1]);
+        upperlimit = nn_value_asnumber(argv[1]);
     }
     if(lowerlimit > upperlimit)
     {
@@ -14367,42 +14391,44 @@ NNValue nn_nativefn_rand(NNState* state, NNArguments* args)
     return nn_value_makenumber(nn_util_mtrand(lowerlimit, upperlimit));
 }
 
-NNValue nn_nativefn_eval(NNState* state, NNArguments* args)
+NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjString* os;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(args->args[0]);
+    os = nn_value_asstring(argv[0]);
     /*fprintf(stderr, "eval:src=%s\n", os->sbuf.data);*/
     result = nn_state_evalsource(state, os->sbuf.data);
     return result;
 }
 
 /*
-NNValue nn_nativefn_loadfile(NNState* state, NNArguments* args)
+NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjString* os;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(args->args[0]);
+    os = nn_value_asstring(argv[0]);
     fprintf(stderr, "eval:src=%s\n", os->sbuf.data);
     result = nn_state_evalsource(state, os->sbuf.data);
     return result;
 }
 */
 
-NNValue nn_nativefn_instanceof(NNState* state, NNArguments* args)
+NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isinstance);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isclass);
-    return nn_value_makebool(nn_util_isinstanceof(nn_value_asinstance(args->args[0])->klass, nn_value_asclass(args->args[1])));
+    return nn_value_makebool(nn_util_isinstanceof(nn_value_asinstance(argv[0])->klass, nn_value_asclass(argv[1])));
 }
 
 
@@ -14499,66 +14525,72 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
     return ok;
 }
 
-NNValue nn_nativefn_sprintf(NNState* state, NNArguments* args)
+NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
     NNPrinter pr;
     NNObjString* res;
     NNObjString* ofmt;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = nn_value_asstring(argv[0]);
     nn_printer_makestackstring(state, &pr);
     nn_strformat_init(state, &nfi, &pr, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
-    if(!nn_strformat_format(&nfi, args->count, 1, args->args))
+    if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
         return nn_value_makenull();
     }
     res = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     return nn_value_fromobject(res);
 }
 
-NNValue nn_nativefn_printf(NNState* state, NNArguments* args)
+NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
     NNObjString* ofmt;
     NNArgCheck check;
-    nn_argcheck_init(state, &check, args);
+    (void)thisval;
+    nn_argcheck_init(state, &check, argv, argc);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(args->args[0]);
+    ofmt = nn_value_asstring(argv[0]);
     nn_strformat_init(state, &nfi, state->stdoutprinter, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
-    if(!nn_strformat_format(&nfi, args->count, 1, args->args))
+    if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
     }
     return nn_value_makenull();
 }
 
-NNValue nn_nativefn_print(NNState* state, NNArguments* args)
+NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
-    for(i = 0; i < args->count; i++)
+    (void)thisval;
+    for(i = 0; i < argc; i++)
     {
-        nn_printer_printvalue(state->stdoutprinter, args->args[i], false, true);
+        nn_printer_printvalue(state->stdoutprinter, argv[i], false, true);
     }
     return nn_value_makenull();
 }
 
-NNValue nn_nativefn_println(NNState* state, NNArguments* args)
+NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
-    v = nn_nativefn_print(state, args);
+    v = nn_nativefn_print(state, thisval, argv, argc);
     nn_printer_writestring(state->stdoutprinter, "\n");
     return v;
 }
 
 
-NNValue nn_nativefn_isnan(NNState* state, NNArguments* args)
+NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
-    (void)args;
+    (void)thisval;
+    (void)argv;
+    (void)argc;
     return nn_value_makebool(false);
 }
 
@@ -14633,12 +14665,14 @@ NNValue nn_except_getstacktrace(NNState* state)
             }
             nn_printer_printf(&pr, "from %s() in %s:%d", fnname, physfile, line);
             os = nn_printer_takestring(&pr);
+            nn_printer_destroy(&pr);
             nn_array_push(oa, nn_value_fromobject(os));
             if((i > 15) && (state->conf.showfullstack == false))
             {
                 nn_printer_makestackstring(state, &pr);
                 nn_printer_printf(&pr, "(only upper 15 entries shown)");
                 os = nn_printer_takestring(&pr);
+                nn_printer_destroy(&pr);
                 nn_array_push(oa, nn_value_fromobject(os));
                 break;
             }
@@ -14818,7 +14852,7 @@ bool nn_except_vthrowwithclass(NNState* state, NNObjClass* exklass, const char* 
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     stacktrace = nn_except_getstacktrace(state);
     nn_vm_stackpush(state, stacktrace);
-    nn_instance_defproperty(instance, nn_string_intern(state, "stacktrace"), stacktrace);
+    nn_instance_defproperty(instance, nn_string_copycstr(state, "stacktrace"), stacktrace);
     nn_vm_stackpop(state);
     return nn_except_propagate(state);
 }
@@ -14841,7 +14875,7 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
     NNObjFunction* closure;
     if(iscs)
     {
-        classname = nn_string_intern(state, cstrname);
+        classname = nn_string_copycstr(state, cstrname);
     }
     else
     {
@@ -14868,7 +14902,7 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 1 & 0xff, 0));
     }
     {
-        messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_intern(state, "message")));
+        messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_copycstr(state, "message")));
         /* s_prop 0 */
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_PROPERTYSET, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
@@ -14898,11 +14932,11 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
     nn_valtable_set(&klass->instmethods, nn_value_fromobject(classname), nn_value_fromobject(closure));
     klass->constructor = nn_value_fromobject(closure);
     /* set class properties */
-    nn_class_defproperty(klass, nn_string_intern(state, "message"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_intern(state, "stacktrace"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_intern(state, "srcfile"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_intern(state, "srcline"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_intern(state, "class"), nn_value_fromobject(klass));
+    nn_class_defproperty(klass, nn_string_copycstr(state, "message"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_copycstr(state, "stacktrace"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_copycstr(state, "srcfile"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_copycstr(state, "srcline"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_copycstr(state, "class"), nn_value_fromobject(klass));
     nn_valtable_set(&state->declaredglobals, nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
     nn_vm_stackpop(state);
@@ -14919,10 +14953,10 @@ NNObjInstance* nn_except_makeinstance(NNState* state, NNObjClass* exklass, const
     instance = nn_object_makeinstance(state, exklass);
     osfile = nn_string_copycstr(state, srcfile);
     nn_vm_stackpush(state, nn_value_fromobject(instance));
-    nn_instance_defproperty(instance, nn_string_intern(state, "class"), nn_value_fromobject(exklass));
-    nn_instance_defproperty(instance, nn_string_intern(state, "message"), nn_value_fromobject(message));
-    nn_instance_defproperty(instance, nn_string_intern(state, "srcfile"), nn_value_fromobject(osfile));
-    nn_instance_defproperty(instance, nn_string_intern(state, "srcline"), nn_value_makenumber(srcline));
+    nn_instance_defproperty(instance, nn_string_copycstr(state, "class"), nn_value_fromobject(exklass));
+    nn_instance_defproperty(instance, nn_string_copycstr(state, "message"), nn_value_fromobject(message));
+    nn_instance_defproperty(instance, nn_string_copycstr(state, "srcfile"), nn_value_fromobject(osfile));
+    nn_instance_defproperty(instance, nn_string_copycstr(state, "srcline"), nn_value_makenumber(srcline));
     nn_vm_stackpop(state);
     return instance;
 }
@@ -14999,7 +15033,7 @@ NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* pare
 {
     NNObjClass* cl;
     NNObjString* os;
-    os = nn_string_intern(state, name);
+    os = nn_string_copycstr(state, name);
     cl = nn_object_makeclass(state, os, parent);
     nn_valtable_set(&state->declaredglobals, nn_value_fromobject(os), nn_value_fromobject(cl));
     return cl;
@@ -15062,6 +15096,7 @@ void nn_vm_resizeinfo(NNState* state, const char* context, NNObjFunction* closur
 {
     const char* name;
     (void)state;
+    (void)needed;
     name = "unknown";
     if(closure->fnclosure.scriptfunc != NULL)
     {
@@ -15244,7 +15279,7 @@ void nn_state_updateprocessinfo(NNState* state)
             {
                 val = nn_value_fromobject(state->processinfo->cliscriptdirectory);
             }
-            nn_class_setstaticproperty(klass, nn_string_intern(state, "scriptdirectory"), val);
+            nn_class_setstaticproperty(klass, nn_string_copycstr(state, "scriptdirectory"), val);
         }
         {
             val = nn_value_makenull();
@@ -15252,7 +15287,7 @@ void nn_state_updateprocessinfo(NNState* state)
             {
                 val = nn_value_fromobject(state->processinfo->cliscriptfile);
             }
-            nn_class_setstaticproperty(klass, nn_string_intern(state, "scriptfile"), val);
+            nn_class_setstaticproperty(klass, nn_string_copycstr(state, "scriptfile"), val);
         }
     }
 
@@ -15326,7 +15361,7 @@ void nn_state_makewithuserptr(NNState* pstate, void* userptr)
     }
     {
         pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
-        pstate->constructorname = nn_string_intern(pstate, "constructor");
+        pstate->constructorname = nn_string_copycstr(pstate, "constructor");
     }
     {
         nn_valarray_init(pstate, &pstate->importpath);
@@ -15473,16 +15508,10 @@ bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, in
     size_t spos;
     NNValue r;
     NNValue* vargs;
-    NNArguments fnargs;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
     spos = state->vmstate.stackidx + (-argcount);
     vargs = &state->vmstate.stackvalues[spos];
-    fnargs.count = argcount;
-    fnargs.args = vargs;
-    fnargs.thisval = thisval;
-    fnargs.userptr = native->fnnativefunc.userptr;
-    fnargs.name = native->name;
-    r = native->fnnativefunc.natfunc(state, &fnargs);
+    r = native->fnnativefunc.natfunc(state, thisval, vargs, argcount);
     {
         state->vmstate.stackvalues[spos - 1] = r;
         state->vmstate.stackidx -= argcount;
@@ -16114,7 +16143,7 @@ void nn_dict_addentrycstr(NNObjDict* dict, const char* ckey, NNValue value)
     NNObjString* os;
     NNState* state;
     state = ((NNObject*)dict)->pstate;
-    os = nn_string_intern(state, ckey);
+    os = nn_string_copycstr(state, ckey);
     nn_dict_addentry(dict, nn_value_fromobject(os), value);
 }
 
@@ -16154,6 +16183,7 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
     size_t i;
     size_t times;
     NNPrinter pr;
+    NNObjString* os;
     times = (size_t)number;
     /* 'str' * 0 == '', 'str' * -1 == '' */
     if(times <= 0)
@@ -16170,7 +16200,9 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
     {
         nn_printer_writestringl(&pr, str->sbuf.data, str->sbuf.length);
     }
-    return nn_printer_takestring(&pr);
+    os = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
+    return os;
 }
 
 NEON_FORCEINLINE NNObjArray* nn_vmutil_combinearrays(NNState* state, NNObjArray* a, NNObjArray* b)
@@ -16790,6 +16822,7 @@ NEON_FORCEINLINE bool nn_vmutil_concatenate(NNState* state)
     nn_printer_printvalue(&pr, vleft, false, true);
     nn_printer_printvalue(&pr, vright, false, true);
     result = nn_printer_takestring(&pr);
+    nn_printer_destroy(&pr);
     nn_vmbits_stackpopn(state, 2);
     nn_vmbits_stackpush(state, nn_value_fromobject(result));
     return true;
@@ -18515,7 +18548,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     stacktrace = nn_except_getstacktrace(state);
                     instance = nn_value_asinstance(peeked);
-                    nn_instance_defproperty(instance, nn_string_intern(state, "stacktrace"), stacktrace);
+                    nn_instance_defproperty(instance, nn_string_copycstr(state, "stacktrace"), stacktrace);
                     if(nn_except_propagate(state))
                     {
                         state->vmstate.currentframe = &state->vmstate.framevalues[state->vmstate.framecount - 1];
@@ -18618,11 +18651,12 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     return NEON_STATUS_OK;
 }
 
-int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjArray* callarr)
+int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNValue* callarr, int maxcallarr)
 {
     int arity;
     NNObjFunction* closure;
     (void)state;
+    (void)maxcallarr;
     arity = 0;
     if(nn_value_isfuncclosure(callable))
     {
@@ -18641,13 +18675,13 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjA
     }
     if(arity > 0)
     {
-        nn_array_push(callarr, nn_value_makenull());
+        callarr[0] = nn_value_makenull();
         if(arity > 1)
         {
-            nn_array_push(callarr, nn_value_makenull());
+            callarr[1] = nn_value_makenull();
             if(arity > 2)
             {
-                nn_array_push(callarr, mthobj);
+                callarr[2] = mthobj;
             }
         }
     }
@@ -18655,21 +18689,19 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNObjA
 }
 
 /* helper function to access call outside the state file. */
-bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval, NNObjArray* args, NNValue* dest)
+bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval, NNValue* argv, size_t argc, NNValue* dest)
 {
     size_t i;
-    int argc;
     size_t pidx;
     NNStatus status;
     pidx = state->vmstate.stackidx;
     /* set the closure before the args */
     nn_vm_stackpush(state, callable);
-    argc = 0;
-    if(args && (argc = nn_valarray_count(&args->varray)))
+    if((argv != NULL) && (argc > 0))
     {
-        for(i = 0; i < nn_valarray_count(&args->varray); i++)
+        for(i = 0; i < argc; i++)
         {
-            nn_vm_stackpush(state, nn_valarray_get(&args->varray, i));
+            nn_vm_stackpush(state, argv[i]);
         }
     }
     if(!nn_vm_callvaluewithobject(state, callable, thisval, argc))
@@ -18684,7 +18716,7 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
         abort();
     }
     *dest = state->vmstate.stackvalues[state->vmstate.stackidx - 1];
-    nn_vm_stackpopn(state, argc + 1);
+    nn_vm_stackpopn(state, argc + 0);
     state->vmstate.stackidx = pidx;
     return true;
 }
@@ -18753,13 +18785,11 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
     NNValue callme;
     NNValue retval;
     NNObjFunction* closure;
-    NNObjArray* args;
     (void)argc;
     closure = nn_state_compilesource(state, state->topmodule, true, source, false);
     callme = nn_value_fromobject(closure);
-    args = nn_array_make(state);
-    argc = nn_nestcall_prepare(state, callme, nn_value_makenull(), args);
-    ok = nn_nestcall_callfunction(state, callme, nn_value_makenull(), args, &retval);
+    argc = nn_nestcall_prepare(state, callme, nn_value_makenull(), NULL, 0);
+    ok = nn_nestcall_callfunction(state, callme, nn_value_makenull(), NULL, 0, &retval);
     if(!ok)
     {
         nn_except_throw(state, "eval() failed");
@@ -18826,7 +18856,7 @@ bool nn_cli_repl(NNState* state)
     state->isrepl = true;
     continuerepl = true;
     printf("Type \".exit\" to quit or \".credits\" for more information\n");
-    source = dyn_strbuf_makebasicempty(0, false);
+    source = dyn_strbuf_makebasicempty(0);
     bracecount = 0;
     parencount = 0;
     bracketcount = 0;
@@ -19304,7 +19334,7 @@ int main(int argc, char* argv[], char** envp)
             nn_array_push(state->processinfo->cliargv, nn_value_fromobject(os));
 
         }
-        nn_valtable_set(&state->declaredglobals, nn_value_internstr(state, "ARGV"), nn_value_fromobject(state->processinfo->cliargv));
+        nn_valtable_set(&state->declaredglobals, nn_value_copystr(state, "ARGV"), nn_value_fromobject(state->processinfo->cliargv));
     }
     state->gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);

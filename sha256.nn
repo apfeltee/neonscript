@@ -183,14 +183,14 @@ function str2binb(str, chrsz)
 function binb2hex(binarray)
 {
     var hex_tab = '0123456789abcdef';
-    var str = '';
+    var str = [];
     for (var i = 0; i < binarray.length * 4; i++)
     {
         var bfirst = hex_tab.charAt((binarray[i >> 2] >> (((3 - i) % 4) * 8 + 4)) & 0xF);
         var bsecond = hex_tab.charAt((binarray[i >> 2] >> (((3 - i) % 4) * 8)) & 0xF);
-        str += bfirst + bsecond;
+        str.push(bfirst, bsecond);
     }
-    return str;
+    return str.join("");
 }
 
 function SHA256(s)

@@ -150,7 +150,7 @@ class FPTokenizer
         }
         // Tokenize anything remaining in the buffer
         this.flushbuffer();
-        println("tokenize: ", JSON.stringify(this.tokens))
+        //println("tokenize: ", JSON.stringify(this.tokens))
         return this.tokens;
     }
 }
@@ -211,7 +211,7 @@ function fp_read(s)
 {
     var tt = new FPTokenizer(s);
     var toks = tt.run();
-    println("toks=", JSON.stringify(toks));
+    //println("toks=", JSON.stringify(toks));
     return fp_syn(toks);
 }
 
@@ -226,9 +226,9 @@ function fp_strcons(s)
     }
     else if(fp_isatom(sd))
     {
-        return sa_r + " . " + sd;
+        return [sa_r, " . ", sd].join("");
     }
-    return sa_r + " " + fp_strcons(sd);
+    return [sa_r, " ", fp_strcons(sd)].join("");
 }
 
 function fp_string(s)
@@ -249,7 +249,7 @@ function fp_string(s)
     {
         return s;
     }
-    return "(" + fp_strcons(s) + ")";
+    return ["(", fp_strcons(s), ")"].join("");
 }
 
 // The evaluator: fp_eval and utility functions
@@ -332,7 +332,7 @@ function fp_debugargs(name, a, b)
     if(conf_enabledebug)
     {
         //printf("%s: a=(%s) %q | b=(%s) %q", name, typeof(a), a, typeof(b), b);
-        println(`${name}: a=(${typeof(a)}) ${JSON.stringify(a)} | b=(${typeof(b)}) ${JSON.stringify(b)}`)
+        //println(`${name}: a=(${typeof(a)}) ${JSON.stringify(a)} | b=(${typeof(b)}) ${JSON.stringify(b)}`)
     }
 }
 
@@ -435,7 +435,7 @@ fp_builtins["lt"] = fp_builtinlessthan;
 
 function fp_apply(f, v)
 {
-    println("fp_apply: ", f, "");
+    //println("fp_apply: ", f, "");
     if(fp_isatom(f))
     {
         return fp_builtins[f](v);
@@ -565,7 +565,7 @@ function fp_rep(e)
 {
     var first = fp_read(e);
     var second = fp_read("()");
-    println("first: ", JSON.stringify(first))
+    //println("first: ", JSON.stringify(first))
     var evaled = fp_eval(first, second);
     println("evaled=", evaled)
     return fp_string(evaled);

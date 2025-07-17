@@ -1,26 +1,26 @@
 
 #include "talloc.h"
 
-#if defined(TALLOC_CONFIG_ATOMICSWINDOWS)
-    #include <Windows.h>
-#elif defined(TALLOC_CONFIG_ATOMICSTDATOMICS)
-    #include <stdatomic.h>
-    #include <stdalign.h>
+#if defined(__cplusplus)
+    #include <atomic>
+#else    
+    #if defined(TALLOC_CONFIG_ATOMICSWINDOWS)
+        #include <Windows.h>
+    #elif defined(TALLOC_CONFIG_ATOMICSTDATOMICS)
+        #include <stdatomic.h>
+        #include <stdalign.h>
+    #endif
 #endif
 
-
-#if defined(TALLOC_CONFIG_ATOMICSWINDOWS)
-    #define tatomic_exchange(ex, val) InterlockedExchange((LONG*)(ex), (val))
-    #define tatomic_store(st, val) ((*st) = (val))
-#elif defined(TALLOC_CONFIG_ATOMICSTDATOMICS)
-    #define tatomic_exchange(ex, val) atomic_exchange((ex), (val))
-    #define tatomic_store(st, val) atomic_store((st), (val))
-#endif
 
 #if defined(TALLOC_CONFIG_ATOMICSWINDOWS)
 typedef volatile bool talatomicbool_t;
 #elif defined(TALLOC_CONFIG_ATOMICSTDATOMICS)
-typedef atomic_bool talatomicbool_t;
+    #if defined(__cplusplus)
+        typedef std::atomic<bool> talatomicbool_t;
+    #else
+        typedef _Atomic(bool) talatomicbool_t;
+    #endif
 #endif
 
 typedef unsigned char talbyte_t;
@@ -32,32 +32,31 @@ typedef unsigned char talbyte_t;
         abort();    \
     } while(0);
 
-/*#define ASSERT(exp, msg) assert((exp) && (msg))*/
-#define ASSERT(exp, msg)
+#if 1
+    #define ASSERT(exp, msg) assert((exp) && (msg))
+#else
+    #define ASSERT(exp, msg)
+#endif
 
+#define TALLOC_CONFIG_VECTORINITCAPACITY 32
 
-#define TALLOC_LOCK(flag)                         \
-    while(tatomic_exchange(&(flag), true)) \
-    {                                      \
-        ;                                  \
+#define TALLOC_CONFIG_ACTUALPOOLSIZE (TALLOC_CONFIG_INITPOOLSIZE)
+
+#define GET_ALLOC_META_PTR(ptr) ((talmetamemory_t*)(ptr) - 1)
+
+#define MOVE_FREE_META_PTR(ptr, bytes) (talmetamemory_t*)((talbyte_t*)(ptr) + (bytes))
+
+#define ADJUST_SIZE(size) \
+    { \
+        (size) += TALLOC_CONFIG_ALIGNMENT - ((size) % TALLOC_CONFIG_ALIGNMENT); \
     }
-#define TALLOC_UNLOCK(flag) tatomic_store(&(flag), false)
-#define VECTOR_INIT_CAPACITY 128
 
+#define GET_UNI_META_PTR(ptr) (((talmetamemory_t*)(ptr)) - 1)
+#define GET_ALLOC_CELL_META(ptr) GET_UNI_META_PTR(ptr)
 
-/*
-struct talfreemeta_t
-{
-    talfreemeta_t* next;
-    talfreemeta_t* prev;
-    bool used;
-    uintptr_t check;
-    int64_t size;
-    talfreemeta_t* left;
-    talfreemeta_t* right;
-    int height;
-}; 
-*/
+#define MOVE_FREE_CELL_META_PTR(cell, n) (talmetamemory_t*)((talbyte_t*)(cell) + (n))
+
+#define CATEGORY_COUNT ((TALLOC_CONFIG_SMALLALLOC / TALLOC_CONFIG_POOLGROUPMULT) * 2)
 
 
 struct talmetamemory_t
@@ -69,35 +68,8 @@ struct talmetamemory_t
     int64_t size;
     talmetamemory_t* left;
     talmetamemory_t* right;
-    int height;
+    int64_t height;
 };
-
-/*
-struct talallocmeta_t
-{
-    talfreemeta_t* next;
-    talfreemeta_t* prev;
-    bool used;
-    uintptr_t check;
-    int64_t size;
-};
-
-struct talpoolmeta_t
-{
-    talpoolmeta_t* next;
-};
-
-struct talfreecellmeta_t
-{
-    talfreecellmeta_t* next;
-};
-
-struct talalloccellmeta_t
-{
-    uintptr_t check;
-    int64_t size;
-};
-*/
 
 struct talcategory_t
 {
@@ -106,14 +78,6 @@ struct talcategory_t
     talatomicbool_t flag;
     int64_t used;
 };
-
-/*
-struct taluniversalmeta_t
-{
-    uintptr_t check;
-    int64_t size;
-};
-*/
 
 struct talvector_t
 {
@@ -135,21 +99,91 @@ struct talstate_t
 };
 
 
-#define FREE_META_SIZE sizeof(talmetamemory_t)
-#define ALLOC_META_SIZE sizeof(talmetamemory_t)
-#define GET_ALLOC_META_PTR(ptr) ((talmetamemory_t*)(ptr) - 1)
-#define MOVE_FREE_META_PTR(ptr, bytes) (talmetamemory_t*)((talbyte_t*)(ptr) + (bytes))
-#define ADJUST_SIZE(size)                                         \
-    {                                                             \
-        (size) += TALLOC_ALIGNMENT - ((size) % TALLOC_ALIGNMENT); \
-    }
-
-
-#define GET_UNI_META_PTR(ptr) (((talmetamemory_t*)(ptr)) - 1)
-#define MOVE_FREE_CELL_META_PTR(cell, n) (talmetamemory_t*)((talbyte_t*)(cell) + (n))
-#define GET_ALLOC_CELL_META(ptr) ((talmetamemory_t*)(ptr) - 1);
 
 static void tal_defaulterrfunc(const char* msg);
+
+static inline bool tal_intern_atomicexchange(talatomicbool_t* ex, bool val)
+{
+    #if defined(TALLOC_CONFIG_ATOMICSWINDOWS)
+        return InterlockedExchange((LONG*)(ex), (val));
+    #else
+        return atomic_exchange((ex), (val));
+    #endif
+
+}
+
+static inline void tal_intern_atomicstore(talatomicbool_t* st, bool val)
+{
+    #if defined(TALLOC_CONFIG_ATOMICSTDATOMICS)
+        (*st) = (val);
+    #else
+        atomic_store(st, val);
+    #endif
+}
+
+#if 1
+    void tal_intern_lock(talatomicbool_t* flag)
+    {
+        while(tal_intern_atomicexchange(flag, true))
+        {
+        }
+    }
+
+    void tal_intern_unlock(talatomicbool_t* flag)
+    {
+        tal_intern_atomicstore(flag, false);
+    }
+#else
+    #define tal_intern_lock(flag)
+    #define tal_intern_unlock(flag)
+#endif
+
+
+static inline int64_t tal_util_sizetocategory(int64_t s)
+{
+    int64_t r;
+    r = ((s / (TALLOC_CONFIG_POOLGROUPMULT)) - 0);
+    return r;
+}
+
+static inline int64_t tal_util_roundup(int64_t numToRound, int64_t multiple)
+{
+    if (multiple == 0)
+    {
+        return numToRound;
+    }
+    int64_t remainder = numToRound % multiple;
+    if (remainder == 0)
+    {
+        return numToRound;
+    }
+    return numToRound + multiple - remainder;
+}
+
+static inline void* tal_intern_malloc(int64_t sz)
+{
+    void* p;
+    p = (void*)malloc(sz);
+    if(p == NULL)
+    {
+        fprintf(stderr, "FATAL ERROR: malloc() cannot allocate %ld bytes\n", sz);
+        return NULL;
+    }
+    memset(p, 0, sz);
+    return p;
+}
+
+static inline void* tal_intern_realloc(void* from, int64_t sz)
+{
+    void* p;
+    p = (void*)realloc(from, sz);
+    if(p == NULL)
+    {
+        fprintf(stderr, "FATAL ERROR: realloc() cannot allocate %ld bytes\n", sz);
+        return NULL;
+    }
+    return p;
+}
 
 void tal_heap_forcereset(talstate_t* state)
 {
@@ -159,17 +193,19 @@ void tal_heap_forcereset(talstate_t* state)
         free(tal_vector_at(&state->sys_alloc_buffer, i));
     }
     tal_vector_free(&state->sys_alloc_buffer);
-    state->list_head = (talmetamemory_t){ 0 };
+    memset(&state->list_head, 0, sizeof(talmetamemory_t));
     state->free_tree_head = NULL;
     state->allocated = 0;
     state->used = 0;
+    memset(state, 0, sizeof(talstate_t));
 }
 
 talstate_t* tal_state_init()
 {
     talstate_t* state;
-    state = (talstate_t*)malloc(sizeof(talstate_t));
+    state = (talstate_t*)tal_intern_malloc(sizeof(talstate_t));
     memset(state, 0, sizeof(talstate_t));
+    fprintf(stderr, "tal_state_init: CATEGORY_COUNT=%d\n", CATEGORY_COUNT);
     state->err_f = tal_defaulterrfunc;
     return state;
 }
@@ -190,7 +226,7 @@ void tal_state_seterrfunc(talstate_t* state, talonerrorfunc_t func)
     state->err_f = func;
 }
 
-static inline int tal_heap_height(talstate_t* state, talmetamemory_t* node)
+static inline int64_t tal_heap_height(talstate_t* state, talmetamemory_t* node)
 {
     (void)state;
     if(!node)
@@ -200,10 +236,10 @@ static inline int tal_heap_height(talstate_t* state, talmetamemory_t* node)
     return node->height;
 }
 
-static inline int tal_heap_balance(talstate_t* state, talmetamemory_t* node)
+static inline int64_t tal_heap_balance(talstate_t* state, talmetamemory_t* node)
 {
-    int ileft;
-    int iright;
+    int64_t ileft;
+    int64_t iright;
     if(!node)
     {
         return 0;
@@ -213,7 +249,7 @@ static inline int tal_heap_balance(talstate_t* state, talmetamemory_t* node)
     return ileft - iright;
 }
 
-static inline int tal_heap_maxnode(int a, int b)
+static inline int64_t tal_heap_maxnode(int64_t a, int64_t b)
 {
     if(a > b)
     {
@@ -256,7 +292,7 @@ talmetamemory_t* tal_heap_lrotate(talstate_t* state, talmetamemory_t* pivot)
     return newroot;
 }
 
-talmetamemory_t* tal_heap_minnode(talstate_t* state, talmetamemory_t* node)
+static inline talmetamemory_t* tal_heap_minnode(talstate_t* state, talmetamemory_t* node)
 {
     talmetamemory_t* current;
     (void)state;
@@ -279,7 +315,7 @@ static inline void tal_heap_initnode(talstate_t* state, talmetamemory_t* node)
 
 talmetamemory_t* tal_heap_removenode(talstate_t* state, talmetamemory_t* root, talmetamemory_t* key)
 {
-    int bl;
+    int64_t bl;
     talmetamemory_t* tmp;
     if(root == NULL)
     {
@@ -369,7 +405,7 @@ talmetamemory_t* tal_heap_removenode(talstate_t* state, talmetamemory_t* root, t
 
 talmetamemory_t* tal_heap_insertnode(talstate_t* state, talmetamemory_t* node, talmetamemory_t* new_node)
 {
-    int bl;
+    int64_t bl;
     int64_t size;
     ASSERT(new_node != node, "trying to insert already inserted node into heap tree");
     if(!node)
@@ -495,20 +531,16 @@ void tal_heap_removeblock(talstate_t* state, talmetamemory_t* block)
 talmetamemory_t* tal_heap_newspace(talstate_t* state, int64_t size)
 {
     talmetamemory_t* newblock;
-    if(size < TALLOC_BLOCK_SIZE)
+    if(size < TALLOC_CONFIG_BLOCKSIZE)
     {
-        size = TALLOC_BLOCK_SIZE;
+        size = TALLOC_CONFIG_BLOCKSIZE;
     }
-    if(size < (int64_t)sizeof(talmetamemory_t))
-    {
-        size += sizeof(talmetamemory_t);
-    }
-    newblock = (talmetamemory_t*)malloc(size);
+    size += sizeof(talmetamemory_t);
+    newblock = (talmetamemory_t*)tal_intern_malloc(size);
     if(!newblock)
     {
         ABORT("bad allocation");
     }
-    memset(newblock, 0, size);
     newblock->size = size;
     newblock->used = false;
     tal_heap_insertblocksorted(state, newblock);
@@ -569,7 +601,7 @@ void* tal_heap_allocate(talstate_t* state, talmetamemory_t* block, int64_t size)
     talmetamemory_t* allocblock;
     remspace = block->size - size;
     state->free_tree_head = tal_heap_removenode(state, state->free_tree_head, block);
-    if(remspace > (int64_t)FREE_META_SIZE)
+    if(remspace > (int64_t)sizeof(talmetamemory_t))
     {
         newblock = MOVE_FREE_META_PTR(block, size);
         newblock->size = remspace;
@@ -594,7 +626,7 @@ void tal_heap_deallocate(talstate_t* state, talmetamemory_t* block)
     talmetamemory_t* newblock;
     newblock = block;
     block->used = false;
-    neighbour= tal_heap_canmergenext(state, block);
+    neighbour = tal_heap_canmergenext(state, block);
     if(neighbour)
     {
         /* remove from tree*/
@@ -620,13 +652,9 @@ void* tal_heap_malloc(talstate_t* state, int64_t count)
 {
     void* ret;
     talmetamemory_t* block;
-    count = count + ALLOC_META_SIZE;
-    if(count < (int64_t)FREE_META_SIZE)
-    {
-        count = FREE_META_SIZE;
-    }
-    ADJUST_SIZE(count);
-    TALLOC_LOCK(state->heap_flag);
+    count = count + sizeof(talmetamemory_t);
+    //ADJUST_SIZE(count);
+    tal_intern_lock(&state->heap_flag);
     block = tal_heap_findfreenode(state, state->free_tree_head, count);
     if(!block)
     {
@@ -636,7 +664,7 @@ void* tal_heap_malloc(talstate_t* state, int64_t count)
     ASSERT(block->size >= count, "not enough space");
     ret = tal_heap_allocate(state, block, count);
     state->used += count;
-    TALLOC_UNLOCK(state->heap_flag);
+    tal_intern_unlock(&state->heap_flag);
     return ret;
 }
 
@@ -647,43 +675,13 @@ void tal_heap_free(talstate_t* state, void* ptr)
     {
         return;
     }
+    tal_intern_lock(&state->heap_flag);
     block = (talmetamemory_t*)GET_ALLOC_META_PTR(ptr);
-    TALLOC_LOCK(state->heap_flag);
     state->used -= block->size;
     tal_heap_deallocate(state, block);
-    TALLOC_UNLOCK(state->heap_flag);
+    tal_intern_unlock(&state->heap_flag);
 }
-
-void tal_heap_expand(talstate_t* state, int64_t count)
-{
-    if(count < TALLOC_BLOCK_SIZE)
-    {
-        count = TALLOC_BLOCK_SIZE;
-    }
-    tal_heap_newspace(state, count);
-}
-
-void tal_heap_printblocks(talstate_t* state, FILE* file)
-{
-    talmetamemory_t* current;
-    fprintf(file, "\n");
-    fprintf(file, "||| address          |||   size   ||| previous         ||| next             |||\n");
-    current = &state->list_head;
-    TALLOC_LOCK(state->heap_flag);
-    while(current)
-    {
-        if(!current->used)
-        {
-            fprintf(file, "||| %16p ||| %8zu ||| %16p ||| %16p |||\n", current, current->size, current->prev, current->next);
-        }
-        if(current == current->next)
-        {
-            break;
-        }
-        current = current->next;
-    }
-    TALLOC_UNLOCK(state->heap_flag);
-}
+        
 
 int64_t tal_heap_allocated(talstate_t* state)
 {
@@ -697,35 +695,29 @@ int64_t tal_heap_used(talstate_t* state)
 
 void tal_pool_newcategory(talstate_t* state, talcategory_t* category, int64_t size)
 {
-    int64_t i;
-    void* newhead;
-    talmetamemory_t* buf;
-    talmetamemory_t* iter;
-    talmetamemory_t* newpool;
-    /* allocate space for n objects of size on global heap*/
-    newhead = tal_heap_malloc(state, (TALLOC_INIT_POOL_SIZE * size) + sizeof(talmetamemory_t) + sizeof(talmetamemory_t));
-    newpool = (talmetamemory_t*)newhead;
-    /* store linked list of pools in category (for future freeing)*/
-    newpool->next = category->next_pool;
-    category->next_pool = newpool;
-    newhead = (talbyte_t*)newhead + sizeof(talmetamemory_t) + sizeof(talmetamemory_t);
-    iter = (talmetamemory_t*)newhead;
-    buf = NULL;
-    i = 0;
-    while(i < TALLOC_INIT_POOL_SIZE - 1)
+    // allocate space for n objects of size on global heap
+    void *new_head =
+        tal_heap_malloc(state, (TALLOC_CONFIG_ACTUALPOOLSIZE * size) + sizeof(talmetamemory_t) + sizeof(talmetamemory_t));
+    talmetamemory_t *new_pool = (talmetamemory_t *)new_head;
+
+    // store linked list of pools in category (for future freeing)
+    new_pool->next = category->next_pool;
+    category->next_pool = new_pool;
+
+    new_head = (talbyte_t *)new_head + sizeof(talmetamemory_t) + sizeof(talmetamemory_t);
+    talmetamemory_t *iter = (talmetamemory_t *)new_head;
+    talmetamemory_t *buf = NULL;
+    for (size_t i = 0; i < TALLOC_CONFIG_ACTUALPOOLSIZE - 1; ++i, iter = MOVE_FREE_CELL_META_PTR(iter, size))
     {
         iter->next = MOVE_FREE_CELL_META_PTR(iter, size);
         buf = GET_ALLOC_CELL_META(iter);
         buf->size = size;
-        buf->check = (uintptr_t)iter;
-        i++;
-        iter = MOVE_FREE_CELL_META_PTR(iter, size);
     }
     iter->next = NULL;
     buf = GET_ALLOC_CELL_META(iter);
     buf->size = size;
-    buf->check = (uintptr_t)iter;
-    category->head = newhead;
+
+    category->head = new_head;
 }
 
 talmetamemory_t* tal_pool_allocate(talstate_t* state, talcategory_t* category, int64_t size)
@@ -733,28 +725,30 @@ talmetamemory_t* tal_pool_allocate(talstate_t* state, talcategory_t* category, i
     talmetamemory_t* ret;
     talmetamemory_t* meta;
     (void)meta;
-    TALLOC_LOCK(category->flag);
+    tal_intern_lock(&category->flag);
     if(category->head == NULL)
     {
         tal_pool_newcategory(state, category, size);
     }
     ret = category->head;
-    meta = GET_ALLOC_CELL_META(ret);
-    ASSERT(meta->check == (uintptr_t)ret, "pool corrupted");
+    #if 0
+        meta = GET_ALLOC_CELL_META(ret);
+        ASSERT(meta->check == (uintptr_t)ret, "tal_pool_allocate: pool corrupted");
+    #endif
     category->head = category->head->next;
     category->used++;
-    TALLOC_UNLOCK(category->flag);
+    tal_intern_unlock(&category->flag);
     return ret;
 }
 
 void tal_pool_deallocate(talstate_t* state, talcategory_t* category, talmetamemory_t* freecell)
 {
     (void)state;
-    TALLOC_LOCK(category->flag);
+    tal_intern_lock(&category->flag);
     freecell->next = category->head;
     category->head = freecell;
     category->used--;
-    TALLOC_UNLOCK(category->flag);
+    tal_intern_unlock(&category->flag);
 }
 
 void* tal_pool_malloc(talstate_t* state, int64_t count)
@@ -762,8 +756,14 @@ void* tal_pool_malloc(talstate_t* state, int64_t count)
     int64_t categoryid;
     talcategory_t* category;
     count = tal_pool_cellsize(state, count);
-    categoryid = SIZE_TO_CATEGORY(count);
-    ASSERT(categoryid < CATEGORY_COUNT, "pool category overflow");
+    categoryid = tal_util_sizetocategory(count);
+    #if 1
+    if(!(categoryid < CATEGORY_COUNT))
+    {
+        fprintf(stderr, "categoryid=%ld CATEGORY_COUNT=%ld\n", categoryid, CATEGORY_COUNT);
+        ASSERT(categoryid < CATEGORY_COUNT, "tal_pool_malloc: pool category overflow");
+    }
+    #endif
     category = &state->categories[categoryid];
     return tal_pool_allocate(state, category, count);
 }
@@ -777,10 +777,17 @@ void tal_pool_free(talstate_t* state, void* ptr)
     talcategory_t* category;
     cell = GET_ALLOC_CELL_META(ptr);
     size = cell->size;
-    ASSERT(cell->check == (uintptr_t)ptr, "pool corrupted");
-    categoryid = SIZE_TO_CATEGORY(size);
-    /*fprintf(stderr, "categoryid=%ld CATEGORY_COUNT=%ld\n", categoryid, CATEGORY_COUNT);*/
-    ASSERT(categoryid < CATEGORY_COUNT, "pool category overflow");
+    #if 0
+    ASSERT(cell->check == (uintptr_t)ptr, "tal_pool_free: pool corrupted");
+    #endif
+    categoryid = tal_util_sizetocategory(size);
+    #if 1
+    if(!(categoryid < CATEGORY_COUNT))
+    {
+        fprintf(stderr, "categoryid=%ld CATEGORY_COUNT=%ld\n", categoryid, CATEGORY_COUNT);
+        ASSERT(categoryid < CATEGORY_COUNT, "tal_pool_free: pool category overflow");
+    }
+    #endif
     category = &state->categories[categoryid];
     freecell = (talmetamemory_t*)ptr;
     tal_pool_deallocate(state, category, freecell);
@@ -789,12 +796,8 @@ void tal_pool_free(talstate_t* state, void* ptr)
 int64_t tal_pool_cellsize(talstate_t* state, int64_t size)
 {
     (void)state;
-    if(size < (int64_t)sizeof(talmetamemory_t))
-    {
-        size = sizeof(talmetamemory_t);
-    }
     size += sizeof(talmetamemory_t);
-    return NEXT_MULT_OF(size, TALLOC_POOL_GROUP_MULT);
+    return tal_util_roundup(size, (TALLOC_CONFIG_POOLGROUPMULT * 4));
 }
 
 void tal_pool_optimize(talstate_t* state)
@@ -807,7 +810,7 @@ void tal_pool_optimize(talstate_t* state)
     for(i = 0; i < CATEGORY_COUNT; i++)
     {
         c = &state->categories[i];
-        TALLOC_LOCK(c->flag);
+        tal_intern_lock(&c->flag);
         /* check category, when its not used -> clean up all its allocated pools*/
         if(!c->used)
         {
@@ -822,42 +825,8 @@ void tal_pool_optimize(talstate_t* state)
             c->next_pool = NULL;
             c->head = NULL;
         }
-        TALLOC_UNLOCK(c->flag);
+        tal_intern_unlock(&c->flag);
     }
-}
-
-bool tal_util_isaligned(talstate_t* state, const void* p, size_t alignment)
-{
-    (void)state;
-    return (uintptr_t)p % alignment == 0;
-}
-
-void tal_util_alignptrup(talstate_t* state, void** p, size_t alignment, ptrdiff_t* adjustment)
-{
-    size_t mask;
-    uintptr_t iunaligned;
-    uintptr_t misalignment;
-    if(tal_util_isaligned(state, *p, alignment))
-    {
-        *adjustment = 0;
-        return;
-    }
-    mask = alignment - 1;
-    ASSERT((alignment & mask) == 0, "wrong alignemet");/* pwr of 2*/
-    iunaligned = (uintptr_t)(*p);
-    misalignment = iunaligned & mask;
-    *adjustment = alignment - misalignment;
-    *p = (void*)(iunaligned + *adjustment);
-}
-
-void tal_util_alignptrwithheader(talstate_t* state, void** p, size_t alignment, int64_t header_size, ptrdiff_t* adjustment)
-{
-    unsigned char* chptr;
-    chptr = (unsigned char*)(*p);
-    chptr += header_size;
-    *p = (void*)chptr;
-    tal_util_alignptrup(state, p, alignment, adjustment);
-    *adjustment += header_size;
 }
 
 void tal_vector_double_if_needed(talvector_t* vec)
@@ -865,17 +834,17 @@ void tal_vector_double_if_needed(talvector_t* vec)
     if(vec->size >= vec->capacity)
     {
         vec->capacity *= 2;
-        vec->data = realloc(vec->data, sizeof(void*) * vec->capacity);
+        vec->data = (void**)tal_intern_realloc(vec->data, sizeof(void*) * vec->capacity);
     }
 }
 
 void tal_vector_init(talvector_t* vec)
 {
     int64_t vs;
-    vs = (sizeof(void*) * VECTOR_INIT_CAPACITY);
+    vs = (sizeof(void*) * TALLOC_CONFIG_VECTORINITCAPACITY);
     vec->size = 0;
-    vec->capacity = VECTOR_INIT_CAPACITY;
-    vec->data = malloc(vs);
+    vec->capacity = TALLOC_CONFIG_VECTORINITCAPACITY;
+    vec->data = (void**)tal_intern_malloc(vs);
     memset(vec->data, 0, vs);
 }
 
@@ -905,7 +874,7 @@ void* tal_state_malloc(talstate_t* state, int64_t count)
     {
         return NULL;
     }
-    if(tal_pool_cellsize(state, count) <= TALLOC_SMALL_TO)
+    if(tal_pool_cellsize(state, count) <= TALLOC_CONFIG_SMALLALLOC)
     {
         return tal_pool_malloc(state, count);
     }
@@ -917,17 +886,18 @@ void* tal_state_realloc(talstate_t* state, void* from, int64_t size)
     int64_t cpysize;
     int64_t bmsize;
     void* dest;
+    (void)bmsize;
     bmsize = 0;
     cpysize = size;
     if(!from)
     {
         return tal_state_malloc(state, size);
     }
-    #if 1
+    #if 0
         talmetamemory_t* block = GET_UNI_META_PTR(from);
         if(block != NULL)
         {
-            if(block->check == (uintptr_t)from)
+            //if(block->check == (uintptr_t)from)
             {
                 bmsize = block->size;
                 if(bmsize > 0)
@@ -971,22 +941,12 @@ void tal_state_free(talstate_t* state, void* ptr)
         ABORT("pointer being freed was not allocated");
     }
     #endif
-    if(block->size <= TALLOC_SMALL_TO)
+    if(block->size <= TALLOC_CONFIG_SMALLALLOC)
     {
         tal_pool_free(state, ptr);
         return;
     }
     tal_heap_free(state, ptr);
-}
-
-void tal_state_expand(talstate_t* state, int64_t count)
-{
-    tal_heap_expand(state, count);
-}
-
-void tal_state_printblocks(talstate_t* state, FILE* file)
-{
-    tal_heap_printblocks(state, file);
 }
 
 void tal_state_optimize(talstate_t* state)
@@ -1004,7 +964,3 @@ int64_t tal_state_getusedmemory(talstate_t* state)
     return tal_heap_used(state);
 }
 
-void tal_state_forcereset(talstate_t* state)
-{
-    tal_heap_forcereset(state);
-}
