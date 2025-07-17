@@ -34,7 +34,7 @@
 * feel free to experiment with this value, but going below seems to only cause trouble.
 */
 //#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 256))
-#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 64))
+#define TALLOC_CONFIG_BLOCKSIZE ((1024 * 256))
 
 /**
  * @def Every allocation with pool allocator is rounded up to next multiply of
@@ -51,7 +51,7 @@
  */
 //#define TALLOC_CONFIG_INITPOOLSIZE (128 * 2)
 //#define TALLOC_CONFIG_INITPOOLSIZE (128 / 16)
-#define TALLOC_CONFIG_INITPOOLSIZE (8)
+#define TALLOC_CONFIG_INITPOOLSIZE (128 / 2)
 
 /**
  * @def Objects with size under this value will be allocated in pools, larger
@@ -60,7 +60,7 @@
 // 2KB
 //#define TALLOC_CONFIG_SMALLALLOC (2048
 //#define TALLOC_CONFIG_SMALLALLOC (TALLOC_CONFIG_BLOCKSIZE / 64)
-#define TALLOC_CONFIG_SMALLALLOC (2048)
+#define TALLOC_CONFIG_SMALLALLOC (2048 / 64)
 
 
 /**

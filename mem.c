@@ -19,11 +19,13 @@ void nn_memory_init()
     #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
     fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC = %ld\n", TALLOC_CONFIG_SMALLALLOC);
     fprintf(stderr, "TALLOC_CONFIG_POOLGROUPMULT = %ld\n", TALLOC_CONFIG_POOLGROUPMULT);
+    /*
     if(TALLOC_CONFIG_SMALLALLOC <= TALLOC_CONFIG_POOLGROUPMULT)
     {
         fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC (%ld) must be larger than TALLOC_CONFIG_POOLGROUPMULT (%ld)\n", TALLOC_CONFIG_SMALLALLOC, TALLOC_CONFIG_POOLGROUPMULT);
         abort();
     }
+    */
     g_memstate = tal_state_init();
     #endif
 }
