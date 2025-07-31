@@ -3,6 +3,7 @@
 print('\'')*/
 
 print("hello world!\n")
+print("script directory: ", Process.scriptdirectory())
 var i =/* dingus */0
 i++
 print(i)

@@ -7,33 +7,26 @@
 #include <assert.h>
 #include "mem.h"
 
-    
-#if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-int64_t g_malloccount = 0;
-int64_t g_realloccount = 0;
-talstate_t* g_memstate;
+#if !defined(NEON_CONF_MEMUSEALLOCATOR) || (NEON_CONF_MEMUSEALLOCATOR == 0)
+    #define NEON_CONF_MEMUSEALLOCATOR 1
 #endif
+
+#if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+    void* g_msp = NULL;
+#endif
+
 
 void nn_memory_init()
 {
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-    fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC = %ld\n", TALLOC_CONFIG_SMALLALLOC);
-    fprintf(stderr, "TALLOC_CONFIG_POOLGROUPMULT = %ld\n", TALLOC_CONFIG_POOLGROUPMULT);
-    /*
-    if(TALLOC_CONFIG_SMALLALLOC <= TALLOC_CONFIG_POOLGROUPMULT)
-    {
-        fprintf(stderr, "TALLOC_CONFIG_SMALLALLOC (%ld) must be larger than TALLOC_CONFIG_POOLGROUPMULT (%ld)\n", TALLOC_CONFIG_SMALLALLOC, TALLOC_CONFIG_POOLGROUPMULT);
-        abort();
-    }
-    */
-    g_memstate = tal_state_init();
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        g_msp = nn_allocator_create();
     #endif
 }
 
 void nn_memory_finish()
 {
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-        tal_state_destroy(g_memstate);
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        nn_allocator_destroy(g_msp);
     #endif
 }
 
@@ -62,8 +55,8 @@ size_t nn_memory_getsize(void * p)
 void* nn_memory_malloc(size_t sz)
 {
     void* p;
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-        p = tal_state_malloc(g_memstate, sz);
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        p = (void*)nn_allocuser_malloc(g_msp, sz);
     #else
         p = (void*)malloc(sz);
     #endif
@@ -73,8 +66,12 @@ void* nn_memory_malloc(size_t sz)
 void* nn_memory_realloc(void* p, size_t nsz)
 {
     void* retp;
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-        retp = (void*)tal_state_realloc(g_memstate, p, nsz);
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        if(p == NULL)
+        {
+            return nn_memory_malloc(nsz);
+        }
+        retp = (void*)nn_allocuser_realloc(g_msp, p, nsz);
     #else
         retp = (void*)realloc(p, nsz);
     #endif
@@ -84,8 +81,8 @@ void* nn_memory_realloc(void* p, size_t nsz)
 void* nn_memory_calloc(size_t count, size_t typsize)
 {
     void* p;
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-        p = (void*)tal_state_calloc(g_memstate, count, typsize);
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        p = (void*)nn_allocuser_malloc(g_msp, count * typsize);
     #else
         p = (void*)calloc(count, typsize);
     #endif
@@ -94,8 +91,8 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 
 void nn_memory_free(void* ptr)
 {
-    #if defined(NEON_CONF_USEMEMPOOL) && (NEON_CONF_USEMEMPOOL == 1)
-        tal_state_free(g_memstate, ptr);
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        nn_allocuser_free(g_msp, ptr);
     #else
         free(ptr);
     #endif

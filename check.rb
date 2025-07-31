@@ -14,6 +14,7 @@ begin
   usepause = false
   usevalgrind = false
   iscyg = false
+  thisdir = __dir__
   failfiles = []
   # different drive directory prefixes for cygwin:
   # wsl uses /mnt/ (C: -> /mnt/c/), cygwin uses /cygdrive/ (C: -> /cygdrive/c/)
@@ -21,7 +22,6 @@ begin
   if system("which cygpath >/dev/null") then
     iscyg = true
   end
-  thisdir = __dir__;
   OptionParser.new{|prs|
     prs.on("-v"){
       usevalgrind = true

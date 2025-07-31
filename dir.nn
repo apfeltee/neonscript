@@ -12,7 +12,8 @@ function scan(dir)
         else
         {
             //var fp = File.join(dir, item);
-            var fp = [dir, "/", item].join("");
+            //var fp = [dir, "/", item].join();
+            var fp = dir+"/"+item
             var isdir = File.isDirectory(fp);
             if(isdir)
             {
@@ -27,7 +28,7 @@ function scan(dir)
     })
 }
 
-var dir = "mods";
+var dir = Process.scriptdirectory() + "/mods";
 if(ARGV.length > 1)
 {
     dir = ARGV[1];

@@ -28,6 +28,8 @@ typedef struct StringBuffer StringBuffer;
 
 struct StringBuffer
 {
+    bool isintern;
+
     /* total length of this buffer */
     size_t length;
 

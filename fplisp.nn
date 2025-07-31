@@ -435,7 +435,7 @@ fp_builtins["lt"] = fp_builtinlessthan;
 
 function fp_apply(f, v)
 {
-    //println("fp_apply: ", f, "");
+    println("fp_apply: ", f, "");
     if(fp_isatom(f))
     {
         return fp_builtins[f](v);
@@ -557,7 +557,7 @@ var ENVINIT = "(quote ( \
            (cons (car s) ((u u) ((cdr s)) (- k 1)))))))  \
     s k)))                                               \
 ))";
-const envinit = fp_eval(fp_read(ENVINIT), null);
+//const envinit = fp_eval(fp_read(ENVINIT), null);
 //const envinit = null;
 
 

@@ -29,10 +29,10 @@ WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self -Wma
 #WFLAGS = -w
 
 
-OPTFLAGS = -O0
+OPTFLAGS = -O3
 #OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
 
-EXTRAFLAGS =
+#EXTRAFLAGS =  -mno-red-zone -fno-omit-frame-pointer
 #EXTRAFLAGS += -fsanitize=memory
 #EXTRAFLAGS += -ansi -pedantic
 #EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
@@ -93,15 +93,14 @@ $(target): $(objfiles_all)
 
 .PHONY: clean
 clean:
-	rm -f $(objfiles_all) $(target)
+	rm -f $(objfiles_all) $(target) *.exe *.ilk *.obj *.pdb
 
 .PHONY: cleandep
 cleandep:
 	rm -f $(depfiles_all)
 
+.PHONY: distclean
+distclean: cleandep clean
+
 .PHONY: rebuild
 rebuild: clean cleandep $(target)
-
-.PHONY: sanity
-sanity:
-	./run sanity.msl

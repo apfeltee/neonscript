@@ -333,9 +333,13 @@ void dyn_strutil_callboundscheckreadrange(const StringBuffer* sbuf, size_t start
 */
 StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
 {
+    sbuf->isintern = false;
     sbuf->length = 0;
-    //sbuf->capacity = ROUNDUP2POW(len + 1);
-    sbuf->capacity = len + 1;
+    #if 0
+        sbuf->capacity = ROUNDUP2POW(len + 1);
+    #else
+        sbuf->capacity = len + 1;
+    #endif
     sbuf->data = (char*)nn_memory_malloc(sbuf->capacity);
     if(!sbuf->data)
     {
@@ -347,6 +351,7 @@ StringBuffer* dyn_strbuf_makefromptr(StringBuffer* sbuf, size_t len)
 
 bool dyn_strbuf_initbasicempty(StringBuffer* sbuf, size_t len, bool onstack)
 {
+    sbuf->isintern = false;
     sbuf->length = len;
     sbuf->capacity = 0;
     sbuf->data = NULL;
@@ -383,20 +388,30 @@ StringBuffer* dyn_strbuf_makebasicempty(size_t len)
 
 bool dyn_strbuf_destroyfromstack(StringBuffer* sb)
 {
+    if(sb->isintern)
+    {
+        return true;
+    }
     nn_memory_free(sb->data);
     return true;
 }
 
 bool dyn_strbuf_destroy(StringBuffer* sb)
 {
-    nn_memory_free(sb->data);
+    if(!sb->isintern)
+    {
+        nn_memory_free(sb->data);
+    }
     nn_memory_free(sb);
     return true;
 }
 
 bool dyn_strbuf_destroyfromptr(StringBuffer* sb)
 {
-    nn_memory_free(sb->data);
+    if(!sb->isintern)
+    {
+        nn_memory_free(sb->data);
+    }
     memset(sb, 0, sizeof(*sb));
     return true;
 }
@@ -479,6 +494,7 @@ bool dyn_strbuf_resize(StringBuffer* sbuf, size_t newlen)
 {
     size_t capacity;
     char* newbuf;
+    sbuf->isintern = false;
     capacity = ROUNDUP2POW(newlen + 1);
     newbuf = (char*)nn_memory_realloc(sbuf->data, capacity * sizeof(char));
     if(newbuf == NULL)
