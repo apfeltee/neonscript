@@ -33,7 +33,7 @@
 #include "optparse.h"
 #include "os.h"
 #include "mem.h"
-#include "deps/myregex/mrx.h"
+#include "mrx.h"
 /* needed when compiling with wasi. must be defined *before* signal.h is included! */
 #if defined(__wasi__)
     #define _WASI_EMULATED_SIGNAL
