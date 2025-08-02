@@ -1,10 +1,10 @@
 
-#ifndef __libmc_mem_h__
-#define __libmc_mem_h__
+#if !defined(__NNMEMHEADERFILE_H__)
+#define __NNMEMHEADERFILE_H__
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "ljalloc.h"
+#include "allocator.h"
 
 /*
 * set to 1 to use allocator (default).
@@ -42,4 +42,4 @@ void* nn_memory_calloc(size_t count, size_t typsize);
 /* see free(3) */
 void nn_memory_free(void* ptr);
 
-#endif /* __libmc_mem_h__ */
+#endif

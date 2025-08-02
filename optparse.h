@@ -1,5 +1,6 @@
 
-#pragma once
+#if !defined(__NNOPTPARSEHEADERFILE_H__)
+#define __NNOPTPARSEHEADERFILE_H__
 /* Optparse --- portable, reentrant, embeddable, getopt-like option parser
  *
  * This is free and unencumbered software released into the public domain.
@@ -97,3 +98,4 @@ int optprs_nextshortflag(optcontext_t* ox, const char* optstring);
 int optprs_nextlongflag(optcontext_t* ox, const optlongflags_t* longopts, int* longindex);
 char* optprs_nextpositional(optcontext_t* ox);
 
+#endif

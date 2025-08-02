@@ -1,7 +1,7 @@
 
 var scanner = import "astscan";
 var infile;
-infile = Process.directory + "/hello.nn";
+infile = Process.scriptdirectory() + "/hello.nn";
 
 var src = File(infile).read()
 var toks = scanner.scan(src)

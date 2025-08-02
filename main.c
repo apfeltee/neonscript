@@ -1,6 +1,6 @@
 
 
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER)
     #define NEON_PLAT_ISWINDOWS
 #else
     #if defined(__wasi__)
@@ -78,11 +78,12 @@
     #endif
 #endif
 
-#undef NEON_FORCEINLINE
-#undef NEON_INLINE
-#define NEON_FORCEINLINE
-#define NEON_INLINE
-
+#if 0
+    #undef NEON_FORCEINLINE
+    #undef NEON_INLINE
+    #define NEON_FORCEINLINE
+    #define NEON_INLINE
+#endif
 
 #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
     #if defined(_MSC_VER)
@@ -2791,7 +2792,9 @@ void nn_gcmem_collectgarbage(NNState* state)
 
 NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
-    //nn_vm_stackpopn(ch->pstate, ch->argc);
+    #if 0
+        nn_vm_stackpopn(ch->pstate, ch->argc);
+    #endif
     if(!nn_except_vthrowwithclass(ch->pstate, ch->pstate->exceptions.argumenterror, srcfile, srcline, fmt, va))
     {
     }
@@ -4258,7 +4261,7 @@ uint32_t nn_util_hashdouble(double value)
 
 uint32_t nn_util_hashstring(const char *str, size_t length)
 {
-    // Source: https://stackoverflow.com/a/21001712
+    /* Source: https://stackoverflow.com/a/21001712 */
     size_t ci;
     unsigned int byte;
     unsigned int crc;
@@ -15341,6 +15344,10 @@ void nn_state_updateprocessinfo(NNState* state)
         nn_memory_free(prealpath);
         nn_memory_free(prealdir);
     }
+    if(state->processinfo->cliscriptdirectory != NULL)
+    {
+        nn_state_addsearchpathobj(state, state->processinfo->cliscriptdirectory);
+    }
 }
 
 bool nn_state_makestack(NNState* pstate)
@@ -15423,13 +15430,7 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
         pstate->constructorname = nn_string_copycstr(pstate, "constructor");
     }
-    {
-        nn_valarray_init(pstate, &pstate->importpath);
-        for(i=0; defaultsearchpaths[i]!=NULL; i++)
-        {
-            nn_state_addsearchpath(pstate, defaultsearchpaths[i]);
-        }
-    }
+
     {
         pstate->classprimclass = nn_util_makeclass(pstate, "Class", NULL);
         pstate->classprimobject = nn_util_makeclass(pstate, "Object", pstate->classprimclass);
@@ -15459,6 +15460,13 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     }
     nn_state_buildprocessinfo(pstate);
     nn_state_addsearchpathobj(pstate, pstate->processinfo->cliexedirectory);
+    {
+        nn_valarray_init(pstate, &pstate->importpath);
+        for(i=0; defaultsearchpaths[i]!=NULL; i++)
+        {
+            nn_state_addsearchpath(pstate, defaultsearchpaths[i]);
+        }
+    }
     {
         nn_state_initbuiltinfunctions(pstate);
         nn_state_initbuiltinmethods(pstate);

@@ -1,5 +1,6 @@
 
-#pragma once
+#if !defined(__NNSTRBUFHEADERFILE_H__)
+#define __NNSTRBUFHEADERFILE_H__
 
 /*
  stream_buffer.h
@@ -106,3 +107,5 @@ int dyn_strbuf_appendformatnoterm(StringBuffer *sbuf, size_t pos, const char *fm
 void dyn_strbuf_triminplace(StringBuffer *sbuf);
 void dyn_strbuf_trimleftinplace(StringBuffer *sbuf, const char *list);
 void dyn_strbuf_trimrightinplace(StringBuffer *sbuf, const char *list);
+
+#endif

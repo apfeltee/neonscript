@@ -12,21 +12,20 @@
 #endif
 
 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-    void* g_msp = NULL;
+    /* if any global variables need to be declared, declare them here. */
 #endif
 
 
 void nn_memory_init()
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        g_msp = nn_allocator_create();
+        nn_allocator_init();
     #endif
 }
 
 void nn_memory_finish()
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        nn_allocator_destroy(g_msp);
     #endif
 }
 
@@ -56,7 +55,7 @@ void* nn_memory_malloc(size_t sz)
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        p = (void*)nn_allocuser_malloc(g_msp, sz);
+        p = (void*)nn_allocuser_malloc(sz);
     #else
         p = (void*)malloc(sz);
     #endif
@@ -71,7 +70,7 @@ void* nn_memory_realloc(void* p, size_t nsz)
         {
             return nn_memory_malloc(nsz);
         }
-        retp = (void*)nn_allocuser_realloc(g_msp, p, nsz);
+        retp = (void*)nn_allocuser_realloc(p, nsz);
     #else
         retp = (void*)realloc(p, nsz);
     #endif
@@ -82,7 +81,7 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        p = (void*)nn_allocuser_malloc(g_msp, count * typsize);
+        p = (void*)nn_allocuser_malloc(count * typsize);
     #else
         p = (void*)calloc(count, typsize);
     #endif
@@ -92,7 +91,7 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 void nn_memory_free(void* ptr)
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        nn_allocuser_free(g_msp, ptr);
+        nn_allocuser_free(ptr);
     #else
         free(ptr);
     #endif

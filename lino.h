@@ -1,5 +1,6 @@
 
-#pragma once
+#if !defined(__NNLINOHEADERFILE_H__)
+#define __NNLINOHEADERFILE_H__
 /* lino.h -- based on linenoise VERSION 1.0
  *
  * Guerrilla line editing library against the idea that a line editing lib
@@ -164,4 +165,5 @@ int lino_historysetmaxlength(int len);
 int lino_historysavetofile(const char *filename);
 int lino_historyloadfromfile(const char *filename);
 
+#endif
 

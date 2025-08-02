@@ -1,5 +1,6 @@
-#pragma once
 
+#if !defined(__NNOSHEADERFILE_H__)
+#define __NNOSHEADERFILE_H__
 /*
 * this file contains platform-specific functions.
 * unless target platform is unix-like, they are all non-functional stubs, that default to
@@ -148,3 +149,4 @@ int osfn_chdir(const char *path);
 int osfn_getpid();
 int osfn_kill(int pid, int code);
 
+#endif

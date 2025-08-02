@@ -29,13 +29,14 @@ WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self -Wma
 #WFLAGS = -w
 
 
-OPTFLAGS = -O3
+OPTFLAGS = -O0
 #OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
 
 #EXTRAFLAGS =  -mno-red-zone -fno-omit-frame-pointer
 #EXTRAFLAGS += -fsanitize=memory
 #EXTRAFLAGS += -ansi -pedantic
 #EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
+### WARNING: can be quite verbose! prints unused sections, giving a better clue which functions can be removed.
 #EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
 
 #CC = clang++ -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
