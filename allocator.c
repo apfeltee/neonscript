@@ -1120,6 +1120,11 @@ static nnallocstate_t g_allocvar_mallocstate;
 
 #if NNALLOC_CONF_USELOCKS
     #if !defined(NNALLOC_CONF_ISWIN32)
+        /*
+        * for various reasons, MUCC croaks if these are inited with PTHREAD_MUTEX_INITIALIZER.
+        * that's why its necessary for nn_allocator_init() to exist;
+        * they call the C functions to init these vars instead.
+        */
         #if NNALLOC_CONF_HAVEMORECORE
             static nnallocmutlock_t g_allocvar_morecoremutex;
         #endif
@@ -1160,16 +1165,15 @@ NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(nnallocstate_t* m);
 void nn_allocator_init()
 {
 #if NNALLOC_CONF_USELOCKS
-    pthread_mutexattr_t attr;
-    pthread_mutexattr_init(&attr);
     #if !defined(NNALLOC_CONF_ISWIN32)
+        pthread_mutexattr_t attr;
+        pthread_mutexattr_init(&attr);
         #if NNALLOC_CONF_HAVEMORECORE
             pthread_mutex_init(&g_allocvar_morecoremutex, &attr);
         #endif
         pthread_mutex_init(&g_allocvar_magicinitmutex, &attr);
     #endif
 #endif
-
 }
 
 NEON_FORCEINLINE nnallocbindex_t nn_allocator_computebit2idx(nnallocbinmap_t xv)

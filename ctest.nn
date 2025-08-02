@@ -3,14 +3,8 @@
     colors = try{ import colors }
 */
 
-try
-{
+
     colors = import "colors"
-}
-catch(e)
-{
-    throw Exception("FAILED TO IMPORT COLORS");
-}
 
 println("colors=", colors);
 

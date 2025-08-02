@@ -1125,6 +1125,7 @@ struct NNState
         NNObjClass* oserror;
         NNObjClass* argumenterror;
         NNObjClass* regexerror;
+        NNObjClass* importerror;
     } exceptions;
 
     NNValue lastreplvalue;
@@ -9855,14 +9856,14 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     physpath = nn_import_resolvepath(state, modulename->sbuf.data, intomodule->physicalpath->sbuf.data, NULL, false);
     if(physpath == NULL)
     {
-        nn_except_throw(state, "module not found: '%s'\n", modulename->sbuf.data);
+        nn_except_throwclass(state, state->exceptions.importerror, "module not found: '%s'", modulename->sbuf.data);
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
     source = nn_util_filereadfile(state, physpath, &fsz, false, 0);
     if(source == NULL)
     {
-        nn_except_throw(state, "could not read import file %s", physpath);
+        nn_except_throwclass(state, state->exceptions.importerror, "could not read import file %s", physpath);
         return NULL;
     }
     nn_blob_init(state, &blob);
@@ -9876,7 +9877,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), NULL, 0, &retv))
     {
         nn_blob_destroy(&blob);
-        nn_except_throw(state, "failed to call compiled import closure");
+        nn_except_throwclass(state, state->exceptions.importerror, "failed to call compiled import closure");
         return NULL;
     }
     nn_blob_destroy(&blob);
@@ -14772,12 +14773,14 @@ bool nn_except_propagate(NNState* state)
     const char* colred;
     const char* colreset;
     const char* colyellow;
+    const char* colblue;
     const char* srcfile;
     NNValue stackitm;
     NNObjArray* oa;
     NNObjFunction* function;
     NNExceptionFrame* handler;
     NNObjString* emsg;
+    NNObjString* tmp;
     NNObjInstance* exception;
     NNProperty* field;
     exception = nn_value_asinstance(nn_vm_stackpeek(state, 0));
@@ -14804,46 +14807,50 @@ bool nn_except_propagate(NNState* state)
         state->vmstate.framecount--;
     }
     colred = nn_util_color(NEON_COLOR_RED);
+    colblue = nn_util_color(NEON_COLOR_BLUE);
     colreset = nn_util_color(NEON_COLOR_RESET);
     colyellow = nn_util_color(NEON_COLOR_YELLOW);
     /* at this point, the exception is unhandled; so, print it out. */
-    fprintf(stderr, "%sunhandled %s%s", colred, exception->klass->name->sbuf.data, colreset);
+    nn_printer_printf(state->debugwriter, "%sunhandled %s%s", colred, exception->klass->name->sbuf.data, colreset);
     srcfile = "none";
     srcline = 0;
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcline");
     if(field != NULL)
     {
-        srcline = nn_value_asnumber(field->value);
+        /* why does this happen? */
+        if(nn_value_isnumber(field->value))
+        {
+            srcline = nn_value_asnumber(field->value);
+        }
     }
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcfile");
     if(field != NULL)
     {
-        srcfile = nn_value_asstring(field->value)->sbuf.data;
+        if(nn_value_isstring(field->value))
+        {
+            tmp = nn_value_asstring(field->value);
+            srcfile = tmp->sbuf.data;
+        }
     }
-    fprintf(stderr, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
-    
+    nn_printer_printf(state->debugwriter, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
     field = nn_valtable_getfieldbycstr(&exception->properties, "message");
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
         if(emsg->sbuf.length > 0)
         {
-            fprintf(stderr, ": %s", emsg->sbuf.data);
+            nn_printer_printf(state->debugwriter, ": %s", emsg->sbuf.data);
         }
         else
         {
-            fprintf(stderr, ":");
+            nn_printer_printf(state->debugwriter, ":");
         }
-        fprintf(stderr, "\n");
     }
-    else
-    {
-        fprintf(stderr, "\n");
-    }
+    nn_printer_printf(state->debugwriter, "\n");
     field = nn_valtable_getfieldbycstr(&exception->properties, "stacktrace");
     if(field != NULL)
     {
-        fprintf(stderr, "  stacktrace:\n");
+        nn_printer_printf(state->debugwriter, "%sstacktrace%s:\n", colblue, colreset);
         oa = nn_value_asarray(field->value);
         cnt = nn_valarray_count(&oa->varray);
         i = cnt-1;
@@ -14852,9 +14859,10 @@ bool nn_except_propagate(NNState* state)
             while(true)
             {
                 stackitm = nn_valarray_get(&oa->varray, i);
+                nn_printer_printf(state->debugwriter, "%s", colyellow);
                 nn_printer_printf(state->debugwriter, "  ");
                 nn_printer_printvalue(state->debugwriter, stackitm, false, true);
-                nn_printer_printf(state->debugwriter, "\n");
+                nn_printer_printf(state->debugwriter, "%s\n", colreset);
                 if(i == 0)
                 {
                     break;
@@ -15457,6 +15465,8 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->exceptions.oserror = nn_except_makeclass(pstate, NULL, "OSError", true);
         pstate->exceptions.argumenterror = nn_except_makeclass(pstate, NULL, "ArgumentError", true);
         pstate->exceptions.regexerror = nn_except_makeclass(pstate, NULL, "RegexError", true);
+        pstate->exceptions.importerror = nn_except_makeclass(pstate, NULL, "ImportError", true);
+
     }
     nn_state_buildprocessinfo(pstate);
     nn_state_addsearchpathobj(pstate, pstate->processinfo->cliexedirectory);

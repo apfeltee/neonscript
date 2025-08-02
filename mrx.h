@@ -1,5 +1,6 @@
 
-#pragma once
+#if !defined(__NNMRXHEADERFILE_H__)
+#define __NNMRXHEADERFILE_H__
 
 /************
  
@@ -237,7 +238,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
 REMIMU_INLINE int64_t mrx_regex_match(RegexContext* ctx, const char* text, size_t starti, uint16_t capslots, int64_t* cappos, int64_t* capspan);
 REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens);
 
-#define MRX_DO_INVERT() \
+#define MRX_DO_INVERT(token, macn) \
     { \
         for(macn = 0; macn < 16; macn++) \
         { \
@@ -253,13 +254,13 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens);
         token.count_hi = 2; \
     }
 
-#define MRX_PUSH_TOKEN() \
+#define MRX_PUSH_TOKEN(ctx, token) \
     { \
         if(k == 0 || ctx->tokens[k - 1].kind != token.kind || (token.kind != REMIMU_KIND_BOUND && token.kind != REMIMU_KIND_NBOUND)) \
         { \
             if(token.mode & REMIMU_MODE_INVERTED) \
             { \
-                MRX_DO_INVERT(); \
+                MRX_DO_INVERT(token, macn); \
             } \
             if(k >= tokenslen) \
             { \
@@ -271,12 +272,12 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens);
         } \
     }
 
-#define MRX_SET_MASK(byte) \
+#define MRX_SET_MASK(token, byte) \
     { \
         token.mask[((uint8_t)(byte)) >> 4] |= 1 << ((uint8_t)(byte) & 0xF); \
     }
 
-#define MRX_SET_MASK_ALL() \
+#define MRX_SET_MASK_ALL(token, macn) \
     { \
         for(macn = 0; macn < 16; macn++) \
         { \
@@ -507,23 +508,23 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 escstate = 0;
                 if(c == 'n')
                 {
-                    MRX_SET_MASK('\n')
+                    MRX_SET_MASK(token, '\n')
                 }
                 else if(c == 'r')
                 {
-                    MRX_SET_MASK('\r')
+                    MRX_SET_MASK(token, '\r')
                 }
                 else if(c == 't')
                 {
-                    MRX_SET_MASK('\t')
+                    MRX_SET_MASK(token, '\t')
                 }
                 else if(c == 'v')
                 {
-                    MRX_SET_MASK('\v')
+                    MRX_SET_MASK(token, '\v')
                 }
                 else if(c == 'f')
                 {
-                    MRX_SET_MASK('\f')
+                    MRX_SET_MASK(token, '\f')
                 }
                 else if(c == 'x')
                 {
@@ -556,12 +557,12 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                     }
                     n0 -= '0';
                     n1 -= '0';
-                    MRX_SET_MASK((n1 << 4) | n0)
+                    MRX_SET_MASK(token, (n1 << 4) | n0)
                     i += 2;
                 }
                 else if(mrx_util_isquantchar(c))
                 {
-                    MRX_SET_MASK(c)
+                    MRX_SET_MASK(token, c)
                     state = STATE_QUANT;
                 }
                 else if(c == 'd' || c == 's' || c == 'w' || c == 'D' || c == 'S' || c == 'W')
@@ -613,7 +614,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
             }
             else
             {
-                MRX_PUSH_TOKEN();
+                MRX_PUSH_TOKEN(ctx, token);
                 if(c == '\\')
                 {
                     escstate = 1;
@@ -644,7 +645,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                     else if(pattern[i + 1] == '?' && pattern[i + 2] == '>')
                     {
                         token.kind = REMIMU_KIND_NCOPEN;
-                        MRX_PUSH_TOKEN();
+                        MRX_PUSH_TOKEN(ctx, token);
                         state = STATE_NORMAL;
                         token.kind = REMIMU_KIND_NCOPEN;
                         token.mode = REMIMU_MODE_POSSESSIVE;
@@ -700,7 +701,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                     /*  phantom group foratomic group emulation */
                     if(ctx->tokens[found].mode == REMIMU_MODE_POSSESSIVE)
                     {
-                        MRX_PUSH_TOKEN();
+                        MRX_PUSH_TOKEN(ctx, token);
                         token.kind = REMIMU_KIND_CLOSE;
                         token.mode = REMIMU_MODE_POSSESSIVE;
                         token.pair_offset = -diff - 2;
@@ -715,7 +716,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 else if(c == '.')
                 {
                     /* puts("setting ALL of mask..."); */
-                    MRX_SET_MASK_ALL();
+                    MRX_SET_MASK_ALL(token, macn);
                     if(flags & REMIMU_FLAG_DOT_NO_NEWLINES)
                     {
                         token.mask[1] ^= 0x04; /*  \n */
@@ -740,7 +741,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 }
                 else
                 {
-                    MRX_SET_MASK(c);
+                    MRX_SET_MASK(token, c);
                     state = STATE_QUANT;
                 }
             }
@@ -861,7 +862,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
             if(state == STATE_CC_INIT)
             {
                 charclassmem = c;
-                MRX_SET_MASK(c);
+                MRX_SET_MASK(token, c);
                 state = STATE_CC_NORMAL;
             }
             else if(state == STATE_CC_NORMAL)
@@ -880,7 +881,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 else
                 {
                     charclassmem = c;
-                    MRX_SET_MASK(c);
+                    MRX_SET_MASK(token, c);
                     state = STATE_CC_NORMAL;
                 }
             }
@@ -889,7 +890,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 if(c == ']' && escc == 0)
                 {
                     charclassmem = -1;
-                    MRX_SET_MASK('-');
+                    MRX_SET_MASK(token, '-');
                     state = STATE_QUANT;
                     continue;
                 }
@@ -908,7 +909,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                     /* printf("enabling char class from %d to %d...\n", charclassmem, c); */
                     for(clsi = c; clsi > charclassmem; clsi--)
                     {
-                        MRX_SET_MASK(clsi);
+                        MRX_SET_MASK(token, clsi);
                     }
                     state = STATE_CC_NORMAL;
                     charclassmem = -1;
@@ -935,15 +936,15 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
         mrx_context_seterror(ctx, "(state >= STATE_CC_INIT)");
         return -1; /*  open character class */
     }
-    MRX_PUSH_TOKEN();
+    MRX_PUSH_TOKEN(ctx, token);
     /*  add invisible non-capturing group specifier */
     token.kind = REMIMU_KIND_CLOSE;
     token.count_lo = 1;
     token.count_hi = 2;
-    MRX_PUSH_TOKEN();
+    MRX_PUSH_TOKEN(ctx, token);
     /*  add end token (tells matcher that it's done) */
     token.kind = REMIMU_KIND_END;
-    MRX_PUSH_TOKEN();
+    MRX_PUSH_TOKEN(ctx, token);
     ctx->tokens[0].pair_offset = k - 2;
     ctx->tokens[k - 2].pair_offset = -(k - 2);
     ctx->tokencount = k;
@@ -1024,9 +1025,11 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
 #undef MRX_CLEAR_TOKEN
 
 /*  NOTE: undef'd later */
-#define _REGEX_CHECK_MASK(tokens, K, byte) \
-    (!!(tokens[K].mask[((uint8_t)byte) >> 4] & (1 << ((uint8_t)byte & 0xF))))
-
+REMIMU_INLINE int mrx_util_checkmask(RegexToken* tokens, size_t K, uint8_t byte)
+{
+    return (!!(tokens[K].mask[((uint8_t)byte) >> 4] & (1 << ((uint8_t)byte & 0xF))));
+}
+    
 #if defined(MRX_VERBOSE) && (MRX_VERBOSE == 1)
     #define MRX_IFVERBOSE(X) \
         { \
@@ -1561,7 +1564,7 @@ REMIMU_INLINE int64_t mrx_regex_match(RegexContext* ctx, const char* text, size_
                     ntcnt = 0;
                     /*  do whatever the obligatory minimum amount of matching is */
                     oldi = i;
-                    while(ntcnt < ctx->tokens[k].count_lo && text[i] != 0 && _REGEX_CHECK_MASK(ctx->tokens, k, text[i]))
+                    while(ntcnt < ctx->tokens[k].count_lo && text[i] != 0 && mrx_util_checkmask(ctx->tokens, k, text[i]))
                     {
                         i += 1;
                         ntcnt += 1;
@@ -1587,7 +1590,7 @@ REMIMU_INLINE int64_t mrx_regex_match(RegexContext* ctx, const char* text, size_
                             hiclimit = ~hiclimit;
                         }
                         range_min = ntcnt;
-                        while(text[i] != 0 && _REGEX_CHECK_MASK(ctx->tokens, k, text[i]) && ntcnt + 1 < hiclimit)
+                        while(text[i] != 0 && mrx_util_checkmask(ctx->tokens, k, text[i]) && ntcnt + 1 < hiclimit)
                         {
                             MRX_IFVERBOSE({ printf("match!! (%c)\n", text[i]); });
                             i += 1;
@@ -1611,7 +1614,7 @@ REMIMU_INLINE int64_t mrx_regex_match(RegexContext* ctx, const char* text, size_
                         {
                             rangelimit = ~rangelimit;
                         }
-                        if(_REGEX_CHECK_MASK(ctx->tokens, k, text[i]) && text[i] != 0 && range_min < rangelimit)
+                        if(mrx_util_checkmask(ctx->tokens, k, text[i]) && text[i] != 0 && range_min < rangelimit)
                         {
                             MRX_IFVERBOSE({ printf("match2!! (%c) (k: %d)\n", text[i], k); });
                             i += 1;
@@ -1701,17 +1704,17 @@ REMIMU_INLINE int64_t mrx_regex_match(RegexContext* ctx, const char* text, size_
 #undef _P_TEXT_HIGHLIGHTED
 #undef MRX_IFVERBOSE
 
-#define _PRINT_C_SMART(c) \
-    { \
-        if(c >= 0x20 && c <= 0x7E) \
-        { \
-            printf("%c", c); \
-        } \
-        else \
-        { \
-            printf("\\x%02x", c); \
-        } \
+REMIMU_INLINE void mrx_util_printcsmart(int c)
+{
+    if(c >= 0x20 && c <= 0x7E)
+    {
+        printf("%c", c);
     }
+    else
+    {
+        printf("\\x%02x", c);
+    }
+}
 
 REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens)
 {
@@ -1732,7 +1735,7 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens)
         cold = -1;
         for(c = 0; c < (tokens[k].kind ? 0 : 256); c++)
         {
-            if(_REGEX_CHECK_MASK(tokens, k, c))
+            if(mrx_util_checkmask(tokens, k, c))
             {
                 if(cold == -1)
                 {
@@ -1743,20 +1746,20 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens)
             {
                 if(c - 1 == cold)
                 {
-                    _PRINT_C_SMART(cold)
+                    mrx_util_printcsmart(cold);
                     cold = -1;
                 }
                 else if(c - 2 == cold)
                 {
-                    _PRINT_C_SMART(cold)
-                    _PRINT_C_SMART(cold + 1)
+                    mrx_util_printcsmart(cold);
+                    mrx_util_printcsmart(cold + 1);
                     cold = -1;
                 }
                 else
                 {
-                    _PRINT_C_SMART(cold)
+                    mrx_util_printcsmart(cold);
                     printf("-");
-                    _PRINT_C_SMART(c - 1)
+                    mrx_util_printcsmart(c - 1);
                     cold = -1;
                 }
             }
@@ -1774,4 +1777,4 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens)
     }
 }
 
-#undef _REGEX_CHECK_MASK
+#endif

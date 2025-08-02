@@ -877,6 +877,9 @@ void dyn_strbuf_trimrightinplace(StringBuffer *sbuf, const char *list);
 /* hashtabval.h */
 /* lino.h */
 /* mem.h */
+/* mrx.h */
+void mrx_context_destroy(RegexContext *ctx);
+void mrx_context_seterror(RegexContext *ctx, const char *fmt, ...);
 /* optparse.h */
 /* os.h */
 /* replinc.h */
