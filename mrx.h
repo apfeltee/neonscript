@@ -306,7 +306,7 @@ REMIMU_INLINE RegexContext* mrx_context_init(RegexToken* tokens, size_t maxtoken
     return ctx;
 }
 
-void mrx_context_destroy(RegexContext* ctx)
+REMIMU_INLINE void mrx_context_destroy(RegexContext* ctx)
 {
     if(!ctx->isallocated)
     {
@@ -315,7 +315,7 @@ void mrx_context_destroy(RegexContext* ctx)
     free(ctx);
 }
 
-void mrx_context_seterror(RegexContext* ctx, const char* fmt, ...)
+REMIMU_INLINE void mrx_context_seterror(RegexContext* ctx, const char* fmt, ...)
 {
     va_list va;
     ctx->haderror = true;

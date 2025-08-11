@@ -1,0 +1,371 @@
+
+#include "neon.h"
+
+NNRegModule* nn_natmodule_load_astscan(NNState* state)
+{
+    NNRegModule* ret;
+    static NNRegFunc modfuncs[] =
+    {
+        {"scan",   true,  nn_modfn_astscan_scan},
+        {NULL,     false, NULL},
+    };
+    static NNRegField modfields[] =
+    {
+        {NULL,       false, NULL},
+    };
+    static NNRegModule module;
+    (void)state;
+    module.name = "astscan";
+    module.fields = modfields;
+    module.functions = modfuncs;
+    module.classes = NULL;
+    module.fnpreloaderfunc = NULL;
+    module.fnunloaderfunc = NULL;
+    ret = &module;
+    return ret;
+}
+
+NNRegModule* nn_natmodule_load_os(NNState* state)
+{
+    static NNRegFunc modfuncs[] =
+    {
+        {"readdir",   true,  nn_modfn_os_readdir},
+        {NULL,     false, NULL},
+    };
+    static NNRegField modfields[] =
+    {
+        /*{"platform", true, get_os_platform},*/
+        {NULL,       false, NULL},
+    };
+    static NNRegModule module;
+    (void)state;
+    module.name = "os";
+    module.fields = modfields;
+    module.functions = modfuncs;
+    module.classes = NULL;
+    module.fnpreloaderfunc = &nn_modfn_os_preloader;
+    module.fnunloaderfunc = NULL;
+    return &module;
+}
+
+void nn_import_loadbuiltinmodules(NNState* state)
+{
+    int i;
+    static NNModInitFN g_builtinmodules[] =
+    {
+        nn_natmodule_load_null,
+        nn_natmodule_load_os,
+        nn_natmodule_load_astscan,
+        NULL,
+    };
+    for(i = 0; g_builtinmodules[i] != NULL; i++)
+    {
+        nn_import_loadnativemodule(state, g_builtinmodules[i], NULL, "<__native__>", NULL);
+    }
+}
+
+void nn_module_setfilefield(NNState* state, NNObjModule* module)
+{
+    return;
+    nn_valtable_set(&module->deftable, nn_value_fromobject(nn_string_copycstr(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
+}
+
+void nn_module_destroy(NNState* state, NNObjModule* module)
+{
+    NNModLoaderFN asfn;
+    nn_valtable_destroy(&module->deftable);
+    /*
+    nn_memory_free(module->name);
+    nn_memory_free(module->physicalpath);
+    */
+    if(module->fnunloaderptr != NULL && module->imported)
+    {
+        asfn = *(NNModLoaderFN*)module->fnunloaderptr;
+        asfn(state);
+    }
+    if(module->handle != NULL)
+    {
+        nn_import_closemodule(module->handle);
+    }
+}
+
+NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule, NNObjString* modulename)
+{
+    int argc;
+    size_t fsz;
+    char* source;
+    char* physpath;
+    NNBlob blob;
+    NNValue retv;
+    NNValue callable;
+    NNProperty* field;
+    NNObjString* os;
+    NNObjModule* module;
+    NNObjFunction* closure;
+    NNObjFunction* function;
+    (void)os;
+    (void)argc;
+    (void)intomodule;
+    field = nn_valtable_getfieldbyostr(&state->openedmodules, modulename);
+    if(field != NULL)
+    {
+        return nn_value_asmodule(field->value);
+    }
+    physpath = nn_import_resolvepath(state, modulename->sbuf.data, intomodule->physicalpath->sbuf.data, NULL, false);
+    if(physpath == NULL)
+    {
+        nn_except_throwclass(state, state->exceptions.importerror, "module not found: '%s'", modulename->sbuf.data);
+        return NULL;
+    }
+    fprintf(stderr, "loading module from '%s'\n", physpath);
+    source = nn_util_filereadfile(state, physpath, &fsz, false, 0);
+    if(source == NULL)
+    {
+        nn_except_throwclass(state, state->exceptions.importerror, "could not read import file %s", physpath);
+        return NULL;
+    }
+    nn_blob_init(state, &blob);
+    module = nn_module_make(state, modulename->sbuf.data, physpath, true, true);
+    nn_memory_free(physpath);
+    function = nn_astparser_compilesource(state, module, source, &blob, true, false);
+    nn_memory_free(source);
+    closure = nn_object_makefuncclosure(state, function);
+    callable = nn_value_fromobject(closure);
+    nn_nestcall_prepare(state, callable, nn_value_makenull(), NULL, 0);     
+    if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), NULL, 0, &retv))
+    {
+        nn_blob_destroy(&blob);
+        nn_except_throwclass(state, state->exceptions.importerror, "failed to call compiled import closure");
+        return NULL;
+    }
+    nn_blob_destroy(&blob);
+    return module;
+}
+
+char* nn_import_resolvepath(NNState* state, char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+{
+    size_t i;
+    size_t mlen;
+    size_t splen;
+    char* path1;
+    char* path2;
+    char* retme;
+    const char* cstrpath;
+    struct stat stroot;
+    struct stat stmod;
+    NNObjString* pitem;
+    NNStringBuffer* pathbuf;
+    (void)rootfile;
+    (void)isrelative;
+    (void)stroot;
+    (void)stmod;
+    mlen = strlen(modulename);
+    splen = nn_valarray_count(&state->importpath);
+    pathbuf = nn_strbuf_makebasicempty(0);
+    for(i=0; i<splen; i++)
+    {
+        pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));
+        nn_strbuf_reset(pathbuf);
+        nn_strbuf_appendstrn(pathbuf, pitem->sbuf.data, pitem->sbuf.length);
+        if(nn_strbuf_containschar(pathbuf, '@'))
+        {
+            nn_strbuf_charreplace(pathbuf, '@', modulename, mlen);
+        }
+        else
+        {
+            nn_strbuf_appendstr(pathbuf, "/");
+            nn_strbuf_appendstr(pathbuf, modulename);
+            nn_strbuf_appendstr(pathbuf, NEON_CONFIG_FILEEXT);
+        }
+        cstrpath = pathbuf->data; 
+        fprintf(stderr, "import: trying '%s' ... ", cstrpath);
+        if(nn_util_fsfileexists(state, cstrpath))
+        {
+            fprintf(stderr, "found!\n");
+            /* stop a core library from importing itself */
+            #if 0
+            if(stat(currentfile, &stroot) == -1)
+            {
+                fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
+                return NULL;
+            }
+            if(stat(cstrpath, &stmod) == -1)
+            {
+                fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
+                return NULL;
+            }
+            if(stroot.st_ino == stmod.st_ino)
+            {
+                fprintf(stderr, "resolvepath: refusing to import itself\n");
+                return NULL;
+            }
+            #endif
+            #if 1   
+                path1 = osfn_realpath(cstrpath, NULL);
+                path2 = osfn_realpath(currentfile, NULL);
+            #else
+                path1 = strdup(cstrpath);
+                path2 = strdup(currentfile);
+            #endif
+            if(path1 != NULL && path2 != NULL)
+            {
+                if(memcmp(path1, path2, (int)strlen(path2)) == 0)
+                {
+                    nn_memory_free(path1);
+                    nn_memory_free(path2);
+                    path1 = NULL;
+                    path2 = NULL;
+                    fprintf(stderr, "resolvepath: refusing to import itself\n");
+                    return NULL;
+                }
+                if(path2 != NULL)
+                {
+                    nn_memory_free(path2);
+                }
+                nn_strbuf_destroy(pathbuf);
+                pathbuf = NULL;
+                retme = nn_util_strdup(path1);
+                if(path1 != NULL)
+                {
+                    nn_memory_free(path1);
+                }
+                return retme;
+            }
+        }
+        else
+        {
+            fprintf(stderr, "does not exist\n");
+        }
+    }
+    nn_strbuf_destroy(pathbuf);
+    return NULL;
+}
+
+
+bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* importname, const char* source, void* dlw)
+{
+    int j;
+    int k;
+    NNValue v;
+    NNValue fieldname;
+    NNValue funcname;
+    NNValue funcrealvalue;
+    NNRegFunc func;
+    NNRegField field;
+    NNRegModule* module;
+    NNObjModule* themodule;
+    NNRegClass klassreg;
+    NNObjString* classname;
+    NNObjFunction* native;
+    NNObjClass* klass;
+    NNHashValTable* tabdest;
+    module = init_fn(state);
+    if(module != NULL)
+    {
+        themodule = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make(state, (char*)module->name, source, false, true));
+        themodule->fnpreloaderptr = (void*)module->fnpreloaderfunc;
+        themodule->fnunloaderptr = (void*)module->fnunloaderfunc;
+        if(module->fields != NULL)
+        {
+            for(j = 0; module->fields[j].name != NULL; j++)
+            {
+                field = module->fields[j];
+                fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
+                v = field.fieldvalfn(state);
+                nn_vm_stackpush(state, v);
+                nn_valtable_set(&themodule->deftable, fieldname, v);
+                nn_vm_stackpop(state);
+            }
+        }
+        if(module->functions != NULL)
+        {
+            for(j = 0; module->functions[j].name != NULL; j++)
+            {
+                func = module->functions[j];
+                funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
+                funcrealvalue = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL)));
+                nn_vm_stackpush(state, funcrealvalue);
+                nn_valtable_set(&themodule->deftable, funcname, funcrealvalue);
+                nn_vm_stackpop(state);
+            }
+        }
+        if(module->classes != NULL)
+        {
+            for(j = 0; module->classes[j].name != NULL; j++)
+            {
+                klassreg = module->classes[j];
+                classname = (NNObjString*)nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, klassreg.name));
+                klass = (NNObjClass*)nn_gcmem_protect(state, (NNObject*)nn_object_makeclass(state, classname, state->classprimobject));
+                if(klassreg.functions != NULL)
+                {
+                    for(k = 0; klassreg.functions[k].name != NULL; k++)
+                    {
+                        func = klassreg.functions[k];
+                        funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
+                        native = (NNObjFunction*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
+                        if(func.isstatic)
+                        {
+                            native->contexttype = NEON_FNCONTEXTTYPE_STATIC;
+                        }
+                        else if(strlen(func.name) > 0 && func.name[0] == '_')
+                        {
+                            native->contexttype = NEON_FNCONTEXTTYPE_PRIVATE;
+                        }
+                        nn_valtable_set(&klass->instmethods, funcname, nn_value_fromobject(native));
+                    }
+                }
+                if(klassreg.fields != NULL)
+                {
+                    for(k = 0; klassreg.fields[k].name != NULL; k++)
+                    {
+                        field = klassreg.fields[k];
+                        fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
+                        v = field.fieldvalfn(state);
+                        nn_vm_stackpush(state, v);
+                        tabdest = &klass->instproperties;
+                        if(field.isstatic)
+                        {
+                            tabdest = &klass->staticproperties;
+                        }
+                        nn_valtable_set(tabdest, fieldname, v);
+                        nn_vm_stackpop(state);
+                    }
+                }
+                nn_valtable_set(&themodule->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));
+            }
+        }
+        if(dlw != NULL)
+        {
+            themodule->handle = dlw;
+        }
+        nn_import_addnativemodule(state, themodule, themodule->name->sbuf.data);
+        nn_gcmem_clearprotect(state);
+        return true;
+    }
+    else
+    {
+        nn_state_warn(state, "Error loading module: %s\n", importname);
+    }
+    return false;
+}
+
+void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* as)
+{
+    NNValue name;
+    if(as != NULL)
+    {
+        module->name = nn_string_copycstr(state, as);
+    }
+    name = nn_value_fromobject(nn_string_copyobject(state, module->name));
+    nn_vm_stackpush(state, name);
+    nn_vm_stackpush(state, nn_value_fromobject(module));
+    nn_valtable_set(&state->openedmodules, name, nn_value_fromobject(module));
+    nn_vm_stackpopn(state, 2);
+}
+
+
+void nn_import_closemodule(void* hnd)
+{
+    (void)hnd;
+}
+

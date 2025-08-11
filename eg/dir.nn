@@ -28,7 +28,7 @@ function scan(dir)
     })
 }
 
-var dir = Process.scriptdirectory() + "/mods";
+var dir = Process.scriptdirectory() + "/../mods";
 if(ARGV.length > 1)
 {
     dir = ARGV[1];

@@ -49,7 +49,7 @@ begin
     $stderr.printf("error: not executable: %p\n", exe)
     exit(1)
   end
-  Dir.glob(File.join(thisdir, "*.nn")) do |file|
+  Dir.glob(File.join(thisdir, "eg", "*.nn")) do |file|
     #if file.match(/bintrees/i) then
       #next
     #end

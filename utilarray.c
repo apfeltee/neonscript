@@ -1,5 +1,5 @@
 
-
+#include "neon.h"
 
 #if 1
     #define MC_UTIL_INCCAPACITY(capacity) (((capacity) < 8) ? 8 : ((capacity) * 2))
@@ -7,9 +7,9 @@
     #define MC_UTIL_INCCAPACITY(capacity) ((capacity) + 2)
 #endif
 
-NEON_INLINE bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first);
+bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first);
 
-NEON_INLINE void nn_valarray_init(NNState* state, NNValArray* list)
+void nn_valarray_init(NNState* state, NNValArray* list)
 {
     size_t initialsize;
     initialsize = 32;
@@ -51,52 +51,7 @@ void nn_valarray_destroy(NNValArray* list, bool actuallydelete)
     }
 }
 
-NEON_INLINE void nn_valarray_setcount(NNValArray* list, size_t cnt)
-{
-    list->listcount = cnt;
-}
-
-NEON_INLINE void nn_valarray_increaseby(NNValArray* list, size_t cnt)
-{
-    list->listcount += cnt;
-}
-    
-NEON_INLINE void nn_valarray_decreaseby(NNValArray* list, size_t cnt)
-{
-    list->listcount -= cnt;
-}
-
-NEON_INLINE size_t nn_valarray_count(NNValArray* list)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, 0);
-    return list->listcount;
-}
-
-NEON_INLINE size_t nn_valarray_capacity(NNValArray* list)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, 0);
-    return list->listcapacity;
-}
-
-NEON_INLINE NNValue* nn_valarray_data(NNValArray* list)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, NULL);
-    return list->listitems;
-}
-
-NEON_INLINE NNValue nn_valarray_get(NNValArray* list, size_t idx)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, nn_value_makenull());
-    return list->listitems[idx];
-}
-
-NEON_INLINE NNValue* nn_valarray_getp(NNValArray* list, size_t idx)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, NULL);
-    return &list->listitems[idx];
-}
-
-NEON_INLINE void nn_valarray_mark(NNValArray* list)
+void nn_valarray_mark(NNValArray* list)
 {
     size_t i;
     NN_NULLPTRCHECK_RETURN(list);
@@ -106,7 +61,7 @@ NEON_INLINE void nn_valarray_mark(NNValArray* list)
     }
 }
 
-NEON_INLINE bool nn_valarray_push(NNValArray* list, NNValue value)
+bool nn_valarray_push(NNValArray* list, NNValue value)
 {
     size_t oldcap;
     NN_NULLPTRCHECK_RETURNVALUE(list, false);
@@ -128,7 +83,7 @@ NEON_INLINE bool nn_valarray_push(NNValArray* list, NNValue value)
     return true;
 }
 
-NEON_INLINE bool nn_valarray_set(NNValArray* list, size_t idx, NNValue val)
+bool nn_valarray_set(NNValArray* list, size_t idx, NNValue val)
 {
     size_t need;
     NN_NULLPTRCHECK_RETURNVALUE(list, false);
@@ -152,25 +107,7 @@ NEON_INLINE bool nn_valarray_set(NNValArray* list, size_t idx, NNValue val)
     return true;
 }
 
-NEON_INLINE bool nn_valarray_insert(NNValArray* list, NNValue val, size_t idx)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, false);
-    return nn_valarray_set(list, idx, val);
-}
-
-NEON_INLINE bool nn_valarray_pop(NNValArray* list, NNValue* dest)
-{
-    NN_NULLPTRCHECK_RETURNVALUE(list, false);
-    if(list->listcount > 0)
-    {
-        *dest = list->listitems[list->listcount - 1];
-        list->listcount--;
-        return true;
-    }
-    return false;
-}
-
-NEON_INLINE bool nn_valarray_removeatintern(NNValArray* list, unsigned int ix)
+bool nn_valarray_removeatintern(NNValArray* list, unsigned int ix)
 {
     size_t tomovebytes;
     void* src;
@@ -189,7 +126,7 @@ NEON_INLINE bool nn_valarray_removeatintern(NNValArray* list, unsigned int ix)
     return true;
 }
 
-NEON_INLINE bool nn_valarray_removeat(NNValArray* list, unsigned int ix)
+bool nn_valarray_removeat(NNValArray* list, unsigned int ix)
 {
     NN_NULLPTRCHECK_RETURNVALUE(list, false);
     if(ix >= list->listcount)
@@ -206,7 +143,7 @@ NEON_INLINE bool nn_valarray_removeat(NNValArray* list, unsigned int ix)
     return nn_valarray_removeatintern(list, ix);
 }
 
-NEON_INLINE bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first)
+bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first)
 {
     size_t i;
     size_t ncap;
@@ -245,7 +182,7 @@ NEON_INLINE bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, N
     return true;
 }
 
-NEON_INLINE NNValArray* nn_valarray_copy(NNValArray* list)
+NNValArray* nn_valarray_copy(NNValArray* list)
 {
     size_t i;
     NNValArray* nlist;
@@ -258,7 +195,7 @@ NEON_INLINE NNValArray* nn_valarray_copy(NNValArray* list)
     return nlist;
 }
 
-NEON_INLINE void nn_valarray_setempty(NNValArray* list)
+void nn_valarray_setempty(NNValArray* list)
 {
     if((list->listcapacity > 0) && (list->listitems != NULL))
     {

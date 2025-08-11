@@ -1,4 +1,7 @@
 
+#include "neon.h"
+
+
 void nn_valtable_init(NNState* state, NNHashValTable* tab)
 {
     tab->pstate = state;
@@ -271,7 +274,6 @@ bool nn_valtable_adjustcapacity(NNHashValTable* table, int capacity)
     return true;
 }
 
-
 bool nn_valtable_setwithtype(NNHashValTable* table, NNValue key, NNValue value, NNFieldType ftyp, bool keyisstring)
 {
     bool isnew;
@@ -304,7 +306,6 @@ bool nn_valtable_set(NNHashValTable* table, NNValue key, NNValue value)
 {
     return nn_valtable_setwithtype(table, key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
 }
-
 
 bool nn_valtable_delete(NNHashValTable* table, NNValue key)
 {
@@ -519,4 +520,3 @@ void nn_valtable_removewhites(NNState* state, NNHashValTable* table)
         }
     }
 }
-

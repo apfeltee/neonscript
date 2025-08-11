@@ -41,12 +41,6 @@
 
 /*------------------------------ internal #includes ---------------------- */
 
-#ifdef _MSC_VER
-    /* no "unsigned" warnings */
-    #pragma warning(disable : 4146
-#endif
-
-
 #ifndef NNALLOC_CONF_LACKSERRNOH
     /* for NNALLOC_CONF_MALLOCFAILUREACTION */
     #include <errno.h>
@@ -1271,7 +1265,7 @@ NEON_FORCEINLINE size_t nn_allocator_computetreeindex(size_t sz)
         {
             char* cptr;
             MEMORY_BASIC_INFORMATION minfo;
-            cptr = ptr;
+            cptr = (char*)ptr;
             while(size)
             {
                 if(VirtualQuery(cptr, &minfo, sizeof(minfo)) == 0)
@@ -1960,15 +1954,15 @@ NEON_FORCEINLINE void* nn_allocator_internalmalloc(nnallocmspace_t* msp, size_t 
 NEON_FORCEINLINE void nn_allocator_internalfree(nnallocmspace_t *msp, void *mem)
 {
 #if NNALLOC_CONF_ONLYMSPACES
-    return nn_allocator_mspacefree(msp, mem);
+    nn_allocator_mspacefree(msp, mem);
 #else /* NNALLOC_CONF_ONLYMSPACES */
     if(msp == (&g_allocvar_mallocstate))
     {
-        return nn_allocuser_free(mem);
+        nn_allocuser_free(mem);
     }
     else
     {
-        return nn_allocator_mspacefree(msp, mem);
+        nn_allocator_mspacefree(msp, mem);
     }
 #endif /* NNALLOC_CONF_ONLYMSPACES */
 }
