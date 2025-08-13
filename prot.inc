@@ -39,8 +39,6 @@ void nn_argcheck_init(NNState *state, NNArgCheck *ch, const char *name, NNValue 
 NNProperty nn_property_makewithpointer(NNState *state, NNValue val, NNFieldType type);
 NNProperty nn_property_makewithgetset(NNState *state, NNValue val, NNValue getter, NNValue setter, NNFieldType type);
 NNProperty nn_property_make(NNState *state, NNValue val, NNFieldType type);
-NNRegModule *nn_natmodule_load_null(NNState *state);
-NNValue nn_modfn_astscan_scan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnnumber_tobinstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnnumber_tooctstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnnumber_constructor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -249,12 +247,10 @@ void nn_funcscript_destroy(NNObjFunction *function);
 NNObjFunction *nn_object_makefuncnative(NNState *state, NNNativeFN function, const char *name, void *uptr);
 NNObjFunction *nn_object_makefuncclosure(NNState *state, NNObjFunction *function);
 /* libmodule.c */
-NNRegModule *nn_natmodule_load_astscan(NNState *state);
-NNRegModule *nn_natmodule_load_os(NNState *state);
+void nn_import_loadbuiltinmodules(NNState *state);
 bool nn_state_addmodulesearchpathobj(NNState *state, NNObjString *os);
 bool nn_state_addmodulesearchpath(NNState *state, const char *path);
 void nn_state_setupmodulepaths(NNState *state);
-void nn_import_loadbuiltinmodules(NNState *state);
 void nn_module_setfilefield(NNState *state, NNObjModule *module);
 void nn_module_destroy(NNState *state, NNObjModule *module);
 NNObjModule *nn_import_loadmodulescript(NNState *state, NNObjModule *intomodule, NNObjString *modulename);
@@ -434,6 +430,11 @@ void nn_gcmem_sweep(NNState *state);
 void nn_gcmem_destroylinkedobjects(NNState *state);
 void nn_gcmem_collectgarbage(NNState *state);
 void nn_gcmem_markcompilerroots(NNState *state);
+/* modast.c */
+NNValue nn_modfn_astscan_scan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNRegModule *nn_natmodule_load_astscan(NNState *state);
+/* modnull.c */
+NNRegModule *nn_natmodule_load_null(NNState *state);
 /* modos.c */
 char *osfn_utilstrndup(const char *src, size_t len);
 char *osfn_utilstrdup(const char *src);
@@ -466,6 +467,7 @@ bool nn_util_fsfileisdirectory(NNState *state, const char *filepath);
 char *nn_util_fsgetbasename(NNState *state, char *path);
 void nn_modfn_os_preloader(NNState *state);
 NNValue nn_modfn_os_readdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNRegModule *nn_natmodule_load_os(NNState *state);
 /* object.c */
 NNObject *nn_object_allocobject(NNState *state, size_t size, NNObjType type, bool retain);
 NNObjUpvalue *nn_object_makeupvalue(NNState *state, NNValue *slot, int stackpos);

@@ -512,5 +512,26 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-
+NNRegModule* nn_natmodule_load_os(NNState* state)
+{
+    static NNRegFunc modfuncs[] =
+    {
+        {"readdir",   true,  nn_modfn_os_readdir},
+        {NULL,     false, NULL},
+    };
+    static NNRegField modfields[] =
+    {
+        /*{"platform", true, get_os_platform},*/
+        {NULL,       false, NULL},
+    };
+    static NNRegModule module;
+    (void)state;
+    module.name = "os";
+    module.fields = modfields;
+    module.functions = modfuncs;
+    module.classes = NULL;
+    module.fnpreloaderfunc = &nn_modfn_os_preloader;
+    module.fnunloaderfunc = NULL;
+    return &module;
+}
 

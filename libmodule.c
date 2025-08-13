@@ -1,52 +1,33 @@
 
 #include "neon.h"
 
-NNRegModule* nn_natmodule_load_astscan(NNState* state)
+/*
+* TODO: when executable is run outside of current dev environment, it should correctly
+*       find the 'mods' folder. trickier than it sounds:
+*   src/<cfiles>
+*   src/vsbuild/run.exe
+*   src/eg/<scriptfiles>
+*   src/mods/<scriptmodules>
+*
+* there's definitely some easy workaround by using Process.scriptdirectory() et al, but it's less than ideal.
+*/
+
+void nn_import_loadbuiltinmodules(NNState* state)
 {
-    NNRegModule* ret;
-    static NNRegFunc modfuncs[] =
+    int i;
+    static NNModInitFN g_builtinmodules[] =
     {
-        {"scan",   true,  nn_modfn_astscan_scan},
-        {NULL,     false, NULL},
+        nn_natmodule_load_null,
+        nn_natmodule_load_os,
+        nn_natmodule_load_astscan,
+        NULL,
     };
-    static NNRegField modfields[] =
+    for(i = 0; g_builtinmodules[i] != NULL; i++)
     {
-        {NULL,       false, NULL},
-    };
-    static NNRegModule module;
-    (void)state;
-    module.name = "astscan";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
-    module.fnpreloaderfunc = NULL;
-    module.fnunloaderfunc = NULL;
-    ret = &module;
-    return ret;
+        nn_import_loadnativemodule(state, g_builtinmodules[i], NULL, "<__native__>", NULL);
+    }
 }
 
-NNRegModule* nn_natmodule_load_os(NNState* state)
-{
-    static NNRegFunc modfuncs[] =
-    {
-        {"readdir",   true,  nn_modfn_os_readdir},
-        {NULL,     false, NULL},
-    };
-    static NNRegField modfields[] =
-    {
-        /*{"platform", true, get_os_platform},*/
-        {NULL,       false, NULL},
-    };
-    static NNRegModule module;
-    (void)state;
-    module.name = "os";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
-    module.fnpreloaderfunc = &nn_modfn_os_preloader;
-    module.fnunloaderfunc = NULL;
-    return &module;
-}
 
 bool nn_state_addmodulesearchpathobj(NNState* state, NNObjString* os)
 {
@@ -74,22 +55,6 @@ void nn_state_setupmodulepaths(NNState* state)
     for(i=0; defaultsearchpaths[i]!=NULL; i++)
     {
         nn_state_addmodulesearchpath(state, defaultsearchpaths[i]);
-    }
-}
-
-void nn_import_loadbuiltinmodules(NNState* state)
-{
-    int i;
-    static NNModInitFN g_builtinmodules[] =
-    {
-        nn_natmodule_load_null,
-        nn_natmodule_load_os,
-        nn_natmodule_load_astscan,
-        NULL,
-    };
-    for(i = 0; g_builtinmodules[i] != NULL; i++)
-    {
-        nn_import_loadnativemodule(state, g_builtinmodules[i], NULL, "<__native__>", NULL);
     }
 }
 

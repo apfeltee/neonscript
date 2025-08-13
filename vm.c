@@ -598,7 +598,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         }
                         return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
                     }
-                    return nn_except_throw(state, "module %s does not define class or method %s()", module->name, name->sbuf.data);
+                    return nn_except_throw(state, "module '%s' does not have a field named '%s'", module->name->sbuf.data, name->sbuf.data);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -1541,7 +1541,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
                     }
                     return field;
                 }
-                nn_except_throw(state, "%s module does not define '%s'", module->name, name->sbuf.data);
+                nn_except_throw(state, "module '%s' does not have a field named '%s'", module->name->sbuf.data, name->sbuf.data);
                 return NULL;
             }
             break;
@@ -1803,7 +1803,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
             nn_vmbits_stackpush(state, field->value);
             return true;
         }
-        nn_vmmac_tryraise(state, false, "module %s does not define '%s'", module->name, name->sbuf.data);
+        nn_vmmac_tryraise(state, false, "module '%s' does not have a field named '%s'", module->name->sbuf.data, name->sbuf.data);
         return false;
     }
     nn_vmmac_tryraise(state, false, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf.data,
@@ -3086,7 +3086,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     klass = nn_value_asclass(nn_vmbits_stackpeek(state, 0));
                     if(!nn_vmutil_bindmethod(state, klass->superclass, name))
                     {
-                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "class %s does not define a function %s", klass->name->sbuf.data, name->sbuf.data);
+                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "class '%s' does not have a function '%s'", klass->name->sbuf.data, name->sbuf.data);
                     }
                 }
                 VM_DISPATCH();

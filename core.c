@@ -68,63 +68,6 @@ NNProperty nn_property_make(NNState* state, NNValue val, NNFieldType type)
     return nn_property_makewithpointer(state, val, type);
 }
 
-
-NNRegModule* nn_natmodule_load_null(NNState* state)
-{
-    static NNRegFunc modfuncs[] =
-    {
-        /* {"somefunc",   true,  myfancymodulefunction},*/
-        {NULL, false, NULL},
-    };
-
-    static NNRegField modfields[] =
-    {
-        /*{"somefield", true, the_function_that_gets_called},*/
-        {NULL, false, NULL},
-    };
-    static NNRegModule module;
-    (void)state;
-    module.name = "null";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
-    module.fnpreloaderfunc = NULL;
-    module.fnunloaderfunc = NULL;
-    return &module;
-}
-
-NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    const char* cstr;
-    NNObjString* insrc;
-    NNAstLexer* scn;
-    NNObjArray* arr;
-    NNObjDict* itm;
-    NNAstToken token;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "scan", argv, argc);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    insrc = nn_value_asstring(argv[0]);
-    scn = nn_astlex_make(state, insrc->sbuf.data);
-    arr = nn_array_make(state);
-    while(!nn_astlex_isatend(scn))
-    {
-        itm = nn_object_makedict(state);
-        token = nn_astlex_scantoken(scn);
-        nn_dict_addentrycstr(itm, "line", nn_value_makenumber(token.line));
-        cstr = nn_astutil_toktype2str(token.type);
-        /* 12 == "NEON_ASTTOK_".length */
-        nn_dict_addentrycstr(itm, "type", nn_value_fromobject(nn_string_copycstr(state, cstr + 12)));
-        nn_dict_addentrycstr(itm, "source", nn_value_fromobject(nn_string_copylen(state, token.start, token.length)));
-        nn_array_push(arr, nn_value_fromobject(itm));
-    }
-    nn_astlex_destroy(state, scn);
-    return nn_value_fromobject(arr);
-}
-
-
-
 NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)argv;

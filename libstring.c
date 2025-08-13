@@ -2,6 +2,10 @@
 #include "neon.h"
 #include "mrx.h"
 
+/*
+* TODO: get rid of unused functions
+*/
+
 #if !defined(va_copy)
     #if defined(__GNUC__) || defined(__CLANG__)
         #define va_copy(d,s) __builtin_va_copy(d,s)
@@ -2125,39 +2129,6 @@ NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue* argv, 
     difference = string->sbuf.length - substr->sbuf.length;
     return nn_value_makebool(memcmp(substr->sbuf.data, string->sbuf.data + difference, substr->sbuf.length) == 0);
 }
-
-
-/*
-    //  Returns 0 on success, or -1 on invalid or unsupported regex, or -2 on not enough tokens given to parse regex.
-    REMIMU_INLINE int mrx_regex_parse(
-        //  Regex pattern to parse. Must be null-terminated.
-        const char * pattern,       
-        //  Output buffer of tokencount regex tokens
-        RegexToken * tokens,
-        //  Maximum allowed number of tokens to write
-        int16_t * tokencount,
-        // Optional bitflags.
-        int32_t flags
-        
-    )
-    
-    // Returns match length, or -1 on no match, or -2 on out of memory, or -3 ifthe regex is invalid.
-    REMIMU_INLINE int64_t mrx_regex_match(
-        // Parsed regex to match against text.
-        const RegexToken * tokens,
-        // Text to match against tokens.
-        const char * text,
-        // index value to match at.
-        size_t starti,
-        // Number of allowed capture info output slots.
-        uint16_t capslots,
-        // Capture position info output buffer.
-        int64_t* cappos,
-        // Capture length info output buffer.
-        int64_t* capspan
-    ) 
-    
-*/
 
 NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjString* pattern, bool capture)
 {
