@@ -5,43 +5,23 @@
 #include "lino.h"
 
 
-static char* nn_cli_getinput(const char* prompt)
+static char* nn_cli_getinput(linocontext_t* lictx, const char* prompt)
 {
-    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
-        return lino_readline(prompt);
-    #else
-        enum { kMaxLineSize = 1024 };
-        size_t len;
-        char* rt;
-        char rawline[kMaxLineSize+1] = {0};
-        fprintf(stdout, "%s", prompt);
-        fflush(stdout);
-        rt = nn_util_filegetshandle(rawline, kMaxLineSize, stdin, &len);
-        rt[len - 1] = 0;
-        return rt;
-    #endif
+    return lino_context_readline(lictx, prompt);
 }
 
-static void nn_cli_addhistoryline(const char* line)
+static void nn_cli_addhistoryline(linocontext_t* lictx, const char* line)
 {
-    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
-        lino_historyadd(line);
-    #else
-        (void)line;
-    #endif
+    lino_context_historyadd(lictx, line);
 }
 
-static void nn_cli_freeline(char* line)
+static void nn_cli_freeline(linocontext_t* lictx, char* line)
 {
-    #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
-        lino_freeline(line);
-    #else
-        (void)line;
-    #endif
+    lino_context_freeline(lictx, line);
 }
 
 #if !defined(NEON_PLAT_ISWASM)
-static bool nn_cli_repl(NNState* state)
+static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
 {
     enum { kMaxVarName = 512 };
     size_t i;
@@ -70,13 +50,8 @@ static bool nn_cli_repl(NNState* state)
     bracketcount = 0;
     singlequotecount = 0;
     doublequotecount = 0;
-    #if !defined(NEON_PLAT_ISWINDOWS)
-        #if defined(NEON_CONFIG_USELINENOISE) && (NEON_CONFIG_USELINENOISE == 1)
-            /* linenoiseSetEncodingFunctions(linenoiseUtf8PrevCharLen, linenoiseUtf8NextCharLen, linenoiseUtf8ReadCode); */
-            lino_setmultiline(0);
-            lino_historyadd(".exit");
-        #endif
-    #endif
+    lino_context_setmultiline(lictx, 0);
+    lino_context_historyadd(lictx, ".exit");
     while(true)
     {
         if(!continuerepl)
@@ -98,7 +73,7 @@ static bool nn_cli_repl(NNState* state)
         {
             cursor = "";
         }
-        line = nn_cli_getinput(cursor);
+        line = nn_cli_getinput(lictx, cursor);
         if(line == NULL || strcmp(line, ".exit") == 0)
         {
             nn_strbuf_destroy(source);
@@ -111,7 +86,7 @@ static bool nn_cli_repl(NNState* state)
             nn_strbuf_reset(source);
             continue;
         }
-        nn_cli_addhistoryline(line);
+        nn_cli_addhistoryline(lictx, line);
         if(linelength > 0 && line[0] == '#')
         {
             continue;
@@ -175,7 +150,7 @@ static bool nn_cli_repl(NNState* state)
         {
             nn_strbuf_appendstr(source, "\n");
         }
-        nn_cli_freeline(line);
+        nn_cli_freeline(lictx, line);
         if(bracketcount == 0 && parencount == 0 && bracecount == 0 && singlequotecount == 0 && doublequotecount == 0)
         {
             memset(varnamebuf, 0, kMaxVarName);
@@ -437,6 +412,7 @@ int main(int argc, char* argv[], char** envp)
     char* nargv[128];
     optcontext_t options;
     NNState* state;
+    linocontext_t lictx;
     static optlongflags_t longopts[] =
     {
         {"help", 'h', OPTPARSE_NONE, "this help"},
@@ -451,6 +427,7 @@ int main(int argc, char* argv[], char** envp)
         {"gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC"},
         {0, 0, (optargtype_t)0, NULL}
     };
+    lino_context_init(&lictx);
     nn_memory_init();
     #if defined(NEON_PLAT_ISWINDOWS)
         _setmode(fileno(stdin), _O_BINARY);
@@ -561,7 +538,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else
     {
-        ok = nn_cli_repl(state);
+        ok = nn_cli_repl(&lictx, state);
     }
     cleanup:
     nn_state_destroy(state, false);

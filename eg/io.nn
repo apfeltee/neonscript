@@ -4,12 +4,12 @@
 var fh = null
 
     var i = 1;
-    fh = File("Makefile", "rb")
-    //println("raw: ", raw.toString())
+    fh = File(Process.scriptdirectory() + "/../Makefile", "rb")
+    println("raw: ", fh)
     while((line = fh.readLine()) != null)
     {
         //if(line.matches('^\s*#\s*\b\w+\b\s*='))
-        if(line.matches('fsanitize'))
+        if(!line.matches('^\s*#'))
         {
             println("[", i, "]: ", line);
         }

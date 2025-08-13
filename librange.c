@@ -83,8 +83,6 @@ NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-
-
 NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int i;

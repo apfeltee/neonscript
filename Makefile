@@ -43,7 +43,7 @@ EXTRAFLAGS =
 #EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
 
 ### WARNING: can be quite verbose! prints unused sections, giving a better clue which functions can be removed.
-EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
+#EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
 
 #CC = clang++ -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
 #CC = g++ $(WFLAGS) $(EXTRAFLAGS)

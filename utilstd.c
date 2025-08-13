@@ -211,58 +211,6 @@ int nn_util_filegetlinehandle(char **lineptr, size_t *destlen, FILE* hnd)
     return linelen;
 }
 
-bool nn_util_fsfileexists(NNState* state, const char* filepath)
-{
-    (void)state;
-    #if !defined(NEON_PLAT_ISWINDOWS)
-        return access(filepath, F_OK) == 0;
-    #else
-        struct stat sb;
-        if(stat(filepath, &sb) == -1)
-        {
-            return false;
-        }
-        return true;
-    #endif
-}
-
-bool nn_util_fsfileistype(NNState* state, const char* filepath, int typ)
-{
-    struct stat st;
-    (void)state;
-    (void)filepath;
-    if(stat(filepath, &st) == -1)
-    {
-        return false;
-    }
-    if(typ == 'f')
-    {
-        return S_ISREG(st.st_mode);
-    }
-    else if(typ == 'd')
-    {
-        return S_ISDIR(st.st_mode);
-    }
-    return false;
-}
-
-bool nn_util_fsfileisfile(NNState* state, const char* filepath)
-{
-    return nn_util_fsfileistype(state, filepath, 'f');
-}
-
-bool nn_util_fsfileisdirectory(NNState* state, const char* filepath)
-{
-    return nn_util_fsfileistype(state, filepath, 'd');
-}
-
-char* nn_util_fsgetbasename(NNState* state, char* path)
-{
-    (void)state;
-    return osfn_basename(path);
-}
-
-
 char* nn_util_strtoupper(char* str, size_t length)
 {
     int c;
@@ -369,58 +317,6 @@ NNObjString* nn_util_numbertohexstring(NNState* state, int64_t n, bool numeric)
     char str[66];
     length = sprintf(str, numeric ? "0x%lx" : "%lx", n);
     return nn_string_copylen(state, str, length);
-}
-
-
-uint32_t nn_util_hashbits(uint64_t hs)
-{
-    /*
-    // From v8's ComputeLongHash() which in turn cites:
-    // Thomas Wang, Integer Hash Functions.
-    // http://www.concentric.net/~Ttwang/tech/inthash.htm
-    // hs = (hs << 18) - hs - 1;
-    */
-    hs = ~hs + (hs << 18);
-    hs = hs ^ (hs >> 31);
-    /* hs = (hs + (hs << 2)) + (hs << 4); */
-    hs = hs * 21;
-    hs = hs ^ (hs >> 11);
-    hs = hs + (hs << 6);
-    hs = hs ^ (hs >> 22);
-    return (uint32_t)(hs & 0x3fffffff);
-}
-
-uint32_t nn_util_hashdouble(double value)
-{
-    NNUtilDblUnion bits;
-    bits.num = value;
-    return nn_util_hashbits(bits.bits);
-}
-
-uint32_t nn_util_hashstring(const char *str, size_t length)
-{
-    /* Source: https://stackoverflow.com/a/21001712 */
-    size_t ci;
-    unsigned int byte;
-    unsigned int crc;
-    unsigned int mask;
-    int i = 0;
-    int j;
-    crc = 0xFFFFFFFF;
-    ci = 0;
-    while(ci < length)
-    {
-        byte = str[i];
-        crc = crc ^ byte;
-        for (j = 7; j >= 0; j--)
-        {
-            mask = -(crc & 1);
-            crc = (crc >> 1) ^ (0xEDB88320 & mask);
-        }
-        i = i + 1;
-        ci++;
-    }
-    return ~crc;
 }
 
 uint32_t nn_object_hashobject(NNObject* object)

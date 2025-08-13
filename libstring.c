@@ -53,33 +53,6 @@ size_t nn_strutil_rndup2pow64(uint64_t x)
 }
 
 /*
-// `n` is the maximum number of bytes to copy including the NULL byte
-// copies at most n bytes from `src` to `dst`
-// Always appends a NULL terminating byte, unless n is zero.
-// Returns a pointer to dst
-*/
-char* nn_strutil_safencpy(char* dst, const char* src, size_t n)
-{
-    if(n == 0)
-    {
-        return dst;
-    }
-    /*
-    // From The Open Group:
-    //   The memccpy() function copies bytes from memory area s2 into s1, stopping
-    //   after the first occurrence of byte c is copied, or after n bytes are copied,
-    //   whichever comes first. If copying takes place between objects that overlap,
-    //   the behaviour is undefined.
-    // Returns NULL if character c was not found in the copied memory
-    */
-    if(memccpy(dst, src, '\0', n - 1) == NULL)
-    {
-        dst[n - 1] = '\0';
-    }
-    return dst;
-}
-
-/*
 // Replaces `sep` with \0 in str
 // Returns number of occurances of `sep` character in `str`
 // Stores `nptrs` pointers in `ptrs`
@@ -470,13 +443,6 @@ void nn_strutil_cbufcapacity(char** buf, size_t* sizeptr, size_t len)
     }
 }
 
-void nn_strutil_cbufappendchar(char** buf, size_t* lenptr, size_t* sizeptr, char c)
-{
-    nn_strutil_cbufcapacity(buf, sizeptr, *lenptr + 1);
-    (*buf)[(*lenptr)++] = c;
-    (*buf)[*lenptr] = '\0';
-}
-
 /*
 // Resize the buffer to have capacity to hold a string of length newlen
 // (+ a null terminating character).  Can also be used to downsize the buffer's
@@ -776,7 +742,6 @@ void nn_strbuf_set(NNStringBuffer* sb, const char* str)
     memcpy(sb->data, str, len);
     sb->data[sb->length = len] = '\0';
 }
-
 
 /* Set string buffer to match existing string buffer */
 void nn_strbuf_setbuff(NNStringBuffer* dest, NNStringBuffer* from)
@@ -2210,7 +2175,7 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     int64_t capstarts[matchMaxCaptures + 1];
     int64_t caplengths[matchMaxCaptures + 1];
     RegexToken tokens[matchMaxTokens + 1];
-    RegexContext* pctx;
+    RegexContext pctx;
     memset(tokens, 0, (matchMaxTokens+1) * sizeof(RegexToken));
     memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
     memset(capstarts, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
@@ -2220,15 +2185,15 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     NNObjDict* dm;
     restokens = matchMaxTokens;
     actualmaxcaptures = 0;
-    pctx = mrx_context_init(tokens, restokens);
+    mrx_context_initstack(&pctx, tokens, restokens);
     if(capture)
     {
         actualmaxcaptures = matchMaxCaptures;
     }
-    prc = mrx_regex_parse(pctx, pattern->sbuf.data, 0);
+    prc = mrx_regex_parse(&pctx, pattern->sbuf.data, 0);
     if(prc == 0)
     {
-        cpres = mrx_regex_match(pctx, string->sbuf.data, 0, actualmaxcaptures, capstarts, caplengths);
+        cpres = mrx_regex_match(&pctx, string->sbuf.data, 0, actualmaxcaptures, capstarts, caplengths);
         if(cpres > 0)
         {
             if(capture)
@@ -2259,9 +2224,9 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     }
     else
     {
-        nn_except_throwclass(state, state->exceptions.regexerror, pctx->errorbuf);
+        nn_except_throwclass(state, state->exceptions.regexerror, pctx.errorbuf);
     }
-    mrx_context_destroy(pctx);
+    mrx_context_destroy(&pctx);
     if(capture)
     {
         return nn_value_makenull();

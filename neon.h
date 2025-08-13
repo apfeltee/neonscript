@@ -53,11 +53,6 @@
 */
 #define NEON_CONFIG_USENULLPTRCHECKS 0
 
-#if !defined(NEON_PLAT_ISWASM) && !defined(NEON_PLAT_ISWINDOWS)
-    #define NEON_CONFIG_USELINENOISE 1
-#endif
-
-
 #if defined(__STRICT_ANSI__)
     #define va_copy(...)
     #define NEON_INLINE static
@@ -687,17 +682,17 @@ typedef struct FSDirItem FSDirItem;
 
 
 /* fwd from allocator.h */
-typedef size_t nnallocinfofieldtype_t;
-typedef void nnallocmspace_t;
-typedef size_t nnallocbindex_t;
-typedef unsigned int nnallocbinmap_t;
-typedef unsigned int nnallocflag_t;
-typedef struct nnallocmallocinfo_t nnallocmallocinfo_t;
-typedef struct nnallocchunkitem_t nnallocchunkitem_t;
-typedef struct nnallocmemsegment_t nnallocmemsegment_t;
-typedef struct nnallocchunktree_t nnallocchunktree_t;
-typedef struct nnallocstate_t nnallocstate_t;
-typedef struct nnallocparams_t nnallocparams_t;
+typedef size_t NNAllocInfoField;
+typedef void NNAllocMSpace;
+typedef size_t NNAllocBIndex;
+typedef unsigned int NNAllocBinMap;
+typedef unsigned int NNAllocFlag;
+typedef struct NNAllocMallocInfo NNAllocMallocInfo;
+typedef struct NNAllocChunkItem NNAllocChunkItem;
+typedef struct NNAllocMemSegment NNAllocMemSegment;
+typedef struct NNAllocChunkTree NNAllocChunkTree;
+typedef struct NNAllocState NNAllocState;
+typedef struct NNAllocParams NNAllocParams;
 
 
 typedef bool(*NNValIsFuncFN)(NNValue);
@@ -1399,6 +1394,330 @@ struct NNArgCheck
 
 
 #include "prot.inc"
+
+NEON_FORCEINLINE uint32_t nn_util_hashbits(uint64_t hs)
+{
+    /*
+    // From v8's ComputeLongHash() which in turn cites:
+    // Thomas Wang, Integer Hash Functions.
+    // http://www.concentric.net/~Ttwang/tech/inthash.htm
+    // hs = (hs << 18) - hs - 1;
+    */
+    hs = ~hs + (hs << 18);
+    hs = hs ^ (hs >> 31);
+    /* hs = (hs + (hs << 2)) + (hs << 4); */
+    hs = hs * 21;
+    hs = hs ^ (hs >> 11);
+    hs = hs + (hs << 6);
+    hs = hs ^ (hs >> 22);
+    return (uint32_t)(hs & 0x3fffffff);
+}
+
+NEON_FORCEINLINE uint32_t nn_util_hashdouble(double value)
+{
+    NNUtilDblUnion bits;
+    bits.num = value;
+    return nn_util_hashbits(bits.bits);
+}
+
+NEON_FORCEINLINE uint32_t nn_util_hashstring(const char *str, size_t length)
+{
+    /* Source: https://stackoverflow.com/a/21001712 */
+    size_t ci;
+    unsigned int byte;
+    unsigned int crc;
+    unsigned int mask;
+    int i = 0;
+    int j;
+    crc = 0xFFFFFFFF;
+    ci = 0;
+    while(ci < length)
+    {
+        byte = str[i];
+        crc = crc ^ byte;
+        for (j = 7; j >= 0; j--)
+        {
+            mask = -(crc & 1);
+            crc = (crc >> 1) ^ (0xEDB88320 & mask);
+        }
+        i = i + 1;
+        ci++;
+    }
+    return ~crc;
+}
+
+NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return ((v & (NEON_NANBOX_QNAN | NEON_NANBOX_TYPEBITS)) == (NEON_NANBOX_QNAN | NEON_NANBOX_TAGOBJ));
+    #else
+        return ((v).type == NEON_VALTYPE_OBJ);
+    #endif
+}
+
+NEON_FORCEINLINE NNObject* nn_value_asobject(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return ((NNObject*) (uintptr_t) ((v) & (0 - ((NEON_NANBOX_TAGOBJ | NEON_NANBOX_QNAN) + 1))));
+    #else
+        return ((v).valunion.vobjpointer);
+    #endif
+}
+
+NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
+{
+    return nn_value_isobject(v) && nn_value_asobject(v)->type == t;
+}
+
+NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return (v == NEON_VALUE_NULL);
+    #else
+        return ((v).type == NEON_VALTYPE_NULL);
+    #endif
+}
+
+NEON_FORCEINLINE bool nn_value_isbool(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return ((v & (NEON_NANBOX_QNAN | NEON_NANBOX_TYPEBITS)) == (NEON_NANBOX_QNAN | NEON_NANBOX_TAGBOOL));
+    #else
+        return ((v).type == NEON_VALTYPE_BOOL);
+    #endif
+}
+
+NEON_FORCEINLINE bool nn_value_isnumber(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return ((v & NEON_NANBOX_QNAN) != NEON_NANBOX_QNAN);
+    #else
+        return ((v).type == NEON_VALTYPE_NUMBER);
+    #endif
+}
+
+NEON_FORCEINLINE bool nn_value_isstring(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_STRING);
+}
+
+NEON_FORCEINLINE bool nn_value_isfuncnative(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCNATIVE);
+}
+
+NEON_FORCEINLINE bool nn_value_isfuncscript(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCSCRIPT);
+}
+
+NEON_FORCEINLINE bool nn_value_isfuncclosure(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCCLOSURE);
+}
+
+NEON_FORCEINLINE bool nn_value_isfuncbound(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCBOUND);
+}
+
+NEON_FORCEINLINE bool nn_value_isclass(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_CLASS);
+}
+
+NEON_FORCEINLINE bool nn_value_isinstance(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_INSTANCE);
+}
+
+NEON_FORCEINLINE bool nn_value_isarray(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_ARRAY);
+}
+
+NEON_FORCEINLINE bool nn_value_isdict(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_DICT);
+}
+
+NEON_FORCEINLINE bool nn_value_isfile(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_FILE);
+}
+
+NEON_FORCEINLINE bool nn_value_isrange(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_RANGE);
+}
+
+NEON_FORCEINLINE bool nn_value_ismodule(NNValue v)
+{
+    return nn_value_isobjtype(v, NEON_OBJTYPE_MODULE);
+}
+
+NEON_FORCEINLINE bool nn_value_iscallable(NNValue v)
+{
+    return (
+        nn_value_isclass(v) ||
+        nn_value_isfuncscript(v) ||
+        nn_value_isfuncclosure(v) ||
+        nn_value_isfuncbound(v) ||
+        nn_value_isfuncnative(v)
+    );
+}
+
+NEON_FORCEINLINE NNObjType nn_value_objtype(NNValue v)
+{
+    return nn_value_asobject(v)->type;
+}
+
+NEON_FORCEINLINE bool nn_value_asbool(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        if(v == NEON_VALUE_TRUE)
+        {
+            return true;
+        }
+        return false;
+    #else
+        return ((v).valunion.vbool);
+    #endif
+}
+
+NEON_FORCEINLINE double nn_value_asnumber(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        NNUtilDblUnion data;
+        data.bits = v;
+        return data.num;
+    #else
+        return ((v).valunion.vfltnum);
+    #endif
+}
+
+NEON_FORCEINLINE NNObjString* nn_value_asstring(NNValue v)
+{
+    return ((NNObjString*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjFunction* nn_value_asfunction(NNValue v)
+{
+    return ((NNObjFunction*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjClass* nn_value_asclass(NNValue v)
+{
+    return ((NNObjClass*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjInstance* nn_value_asinstance(NNValue v)
+{
+    return ((NNObjInstance*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjSwitch* nn_value_asswitch(NNValue v)
+{
+    return ((NNObjSwitch*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjUserdata* nn_value_asuserdata(NNValue v)
+{
+    return ((NNObjUserdata*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjModule* nn_value_asmodule(NNValue v)
+{
+    return ((NNObjModule*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjArray* nn_value_asarray(NNValue v)
+{
+    return ((NNObjArray*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjDict* nn_value_asdict(NNValue v)
+{
+    return ((NNObjDict*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjFile* nn_value_asfile(NNValue v)
+{
+    return ((NNObjFile*)nn_value_asobject(v));
+}
+
+NEON_FORCEINLINE NNObjRange* nn_value_asrange(NNValue v)
+{
+    return ((NNObjRange*)nn_value_asobject(v));
+}
+
+#if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
+    NNValue nn_value_makevalue(NNValType type)
+    {
+        NNValue v;
+        v.type = type;
+        return v;
+    }
+#endif
+
+NEON_FORCEINLINE NNValue nn_value_makenull()
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return NEON_VALUE_NULL;
+    #else
+        NNValue v;
+        v = nn_value_makevalue(NEON_VALTYPE_NULL);
+        return v;
+    #endif
+}
+
+NEON_FORCEINLINE NNValue nn_value_makebool(bool b)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        if(b)
+        {
+            return NEON_VALUE_TRUE;
+        }
+        return NEON_VALUE_FALSE;
+    #else
+        NNValue v;
+        v = nn_value_makevalue(NEON_VALTYPE_BOOL);
+        v.valunion.vbool = b;
+        return v;
+    #endif
+}
+
+NEON_FORCEINLINE NNValue nn_value_makenumber(double d)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        NNUtilDblUnion data;
+        data.num = d;
+        return data.bits;
+    #else
+        NNValue v;
+        v = nn_value_makevalue(NEON_VALTYPE_NUMBER);
+        v.valunion.vfltnum = d;
+        return v;
+    #endif
+}
+
+NEON_FORCEINLINE NNValue nn_value_makeint(int i)
+{
+    return nn_value_makenumber(i);
+}
+
+NEON_FORCEINLINE NNValue nn_value_fromobject_actual(NNObject* obj)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        return ((NNValue) (NEON_NANBOX_TAGOBJ | NEON_NANBOX_QNAN | (uint64_t)(uintptr_t)(obj)));
+    #else
+        NNValue v;
+        v = nn_value_makevalue(NEON_VALTYPE_OBJ);
+        v.valunion.vobjpointer = obj;
+        return v;
+    #endif
+}
+
 
 NEON_INLINE void nn_valarray_setcount(NNValArray* list, size_t cnt)
 {

@@ -41,7 +41,6 @@ NNProperty* nn_dict_getentry(NNObjDict* dict, NNValue key)
     return nn_valtable_getfield(&dict->htab, key);
 }
 
-
 NNObjDict* nn_dict_copy(NNObjDict* dict)
 {
 

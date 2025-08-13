@@ -3,8 +3,7 @@
     colors = try{ import colors }
 */
 
-
-    colors = import "colors"
+colors = import "colors"
 
 println("colors=", colors);
 

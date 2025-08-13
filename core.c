@@ -1,4 +1,10 @@
 
+/* for struct timeval - yeah, i don't know either why windows defines it in winsock ... */
+#if defined(_MSC_VER)
+    #include <winsock2.h>
+#else
+    #include <sys/time.h>
+#endif
 #include "neon.h"
 
 NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
@@ -833,16 +839,17 @@ void nn_state_initbuiltinfunctions(NNState* state)
     nn_state_defnativefunction(state, "id", nn_nativefn_id);
     nn_state_defnativefunction(state, "int", nn_nativefn_int);
     nn_state_defnativefunction(state, "instanceof", nn_nativefn_instanceof);
-    nn_state_defnativefunction(state, "microtime", nn_nativefn_microtime);
     nn_state_defnativefunction(state, "ord", nn_nativefn_ord);
     nn_state_defnativefunction(state, "sprintf", nn_nativefn_sprintf);
     nn_state_defnativefunction(state, "printf", nn_nativefn_printf);
     nn_state_defnativefunction(state, "print", nn_nativefn_print);
     nn_state_defnativefunction(state, "println", nn_nativefn_println);
     nn_state_defnativefunction(state, "rand", nn_nativefn_rand);
-    nn_state_defnativefunction(state, "time", nn_nativefn_time);
     nn_state_defnativefunction(state, "eval", nn_nativefn_eval);
     nn_state_defnativefunction(state, "isNaN", nn_nativefn_isnan);
+    nn_state_defnativefunction(state, "microtime", nn_nativefn_microtime);
+    nn_state_defnativefunction(state, "time", nn_nativefn_time);
+
 }
 
 /**
@@ -1301,16 +1308,7 @@ NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* pare
     return cl;
 }
 
-bool nn_state_addsearchpathobj(NNState* state, NNObjString* os)
-{
-    nn_valarray_push(&state->importpath, nn_value_fromobject(os));
-    return true;
-}
 
-bool nn_state_addsearchpath(NNState* state, const char* path)
-{
-    return nn_state_addsearchpathobj(state, nn_string_copycstr(state, path));
-}
 
 void nn_state_buildprocessinfo(NNState* state)
 {
@@ -1364,7 +1362,7 @@ void nn_state_updateprocessinfo(NNState* state)
     }
     if(state->processinfo->cliscriptdirectory != NULL)
     {
-        nn_state_addsearchpathobj(state, state->processinfo->cliscriptdirectory);
+        nn_state_addmodulesearchpathobj(state, state->processinfo->cliscriptdirectory);
     }
 }
 
@@ -1389,17 +1387,8 @@ NNState* nn_state_makealloc()
     return state;
 }
 
-
 bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
 {
-    static const char* defaultsearchpaths[] =
-    {
-        "mods",
-        "mods/@/index" NEON_CONFIG_FILEEXT,
-        ".",
-        NULL
-    };
-    size_t i;
     if(pstate == NULL)
     {
         return false;
@@ -1480,14 +1469,7 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
 
     }
     nn_state_buildprocessinfo(pstate);
-    nn_state_addsearchpathobj(pstate, pstate->processinfo->cliexedirectory);
-    {
-        nn_valarray_init(pstate, &pstate->importpath);
-        for(i=0; defaultsearchpaths[i]!=NULL; i++)
-        {
-            nn_state_addsearchpath(pstate, defaultsearchpaths[i]);
-        }
-    }
+    nn_state_setupmodulepaths(pstate);
     {
         nn_state_initbuiltinfunctions(pstate);
         nn_state_initbuiltinmethods(pstate);

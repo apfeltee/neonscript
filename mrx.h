@@ -103,7 +103,7 @@ USAGE
     RegexContext ctx; 
     RegexToken tokens[1024];
     int16_t tokencount = 1024;
-    mrx_context_init(&ctx);
+    mrx_context_initstack(&ctx);
     int e = mrx_regex_parse(&ctx, "[0-9]+\\.[0-9]+", tokens, &tokencount, 0);
     assert(!e);
     
@@ -114,7 +114,7 @@ USAGE
     RegexContext ctx; 
     RegexToken tokens[256];
     int16_t tokencount = sizeof(tokens)/sizeof(tokens[0]);
-    mrx_context_init(&xtx);
+    mrx_context_initstack(&xtx);
     int e = mrx_regex_parse(&ctx, "((a)|(b))++", tokens, &tokencount, 0);
     assert(!e);
     
@@ -277,24 +277,26 @@ REMIMU_INLINE void mrx_regex_printtokens(RegexToken* tokens);
         token.mask[((uint8_t)(byte)) >> 4] |= 1 << ((uint8_t)(byte) & 0xF); \
     }
 
-#define MRX_SET_MASK_ALL(token, macn) \
-    { \
-        for(macn = 0; macn < 16; macn++) \
-        { \
-            token.mask[macn] = 0xFFFF; \
-        } \
-    }
-
-REMIMU_INLINE void mrx_context_initctx(RegexContext* ctx, RegexToken* tokens, size_t maxtokens, bool onstack)
+REMIMU_INLINE size_t MRX_SET_MASK_ALL(RegexToken* token, size_t macn)
 {
-    ctx->isallocated = (onstack ? false : true);
+    for(macn = 0; macn < 16; macn++)
+    {
+        token->mask[macn] = 0xFFFF;
+    }
+    return macn;
+}
+
+
+REMIMU_INLINE void mrx_context_initstack(RegexContext* ctx, RegexToken* tokens, size_t maxtokens)
+{
+    ctx->isallocated = false;
     ctx->haderror = false;
     ctx->tokens = tokens;
     ctx->maxtokens = maxtokens;
 }
 
 
-REMIMU_INLINE RegexContext* mrx_context_init(RegexToken* tokens, size_t maxtokens)
+REMIMU_INLINE RegexContext* mrx_context_initalloc(RegexToken* tokens, size_t maxtokens)
 {
     RegexContext* ctx;
     ctx = (RegexContext*)malloc(sizeof(RegexContext));
@@ -302,7 +304,8 @@ REMIMU_INLINE RegexContext* mrx_context_init(RegexToken* tokens, size_t maxtoken
     {
         return NULL;
     }
-    mrx_context_initctx(ctx, tokens, maxtokens, false);
+    mrx_context_initstack(ctx, tokens, maxtokens);
+    ctx->isallocated = true;
     return ctx;
 }
 
@@ -327,8 +330,25 @@ REMIMU_INLINE void mrx_context_seterror(RegexContext* ctx, const char* fmt, ...)
 
 REMIMU_INLINE int mrx_util_isquantchar(int c)
 {
-    return (c == '{' || c == '}' || c == '[' || c == ']' || c == '-' || c == '(' || c == ')' || c == '|' || c == '^' || c == '$' || c == '*' || c == '+'
-            || c == '?' || c == ':' || c == '.' || c == '/' || c == '\\');
+    return (
+        (c == '{') ||
+        (c == '}') ||
+        (c == '[') ||
+        (c == ']') ||
+        (c == '-') ||
+        (c == '(') ||
+        (c == ')') ||
+        (c == '|') ||
+        (c == '^') ||
+        (c == '$') ||
+        (c == '*') ||
+        (c == '+') ||
+        (c == '?') ||
+        (c == ':') ||
+        (c == '.') ||
+        (c == '/') ||
+        (c == '\\')
+    );
 }
 
 /*
@@ -716,7 +736,7 @@ REMIMU_INLINE int mrx_regex_parse(RegexContext* ctx, const char* pattern, int32_
                 else if(c == '.')
                 {
                     /* puts("setting ALL of mask..."); */
-                    MRX_SET_MASK_ALL(token, macn);
+                    macn = MRX_SET_MASK_ALL(&token, macn);
                     if(flags & REMIMU_FLAG_DOT_NO_NEWLINES)
                     {
                         token.mask[1] ^= 0x04; /*  \n */

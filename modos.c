@@ -78,9 +78,11 @@
 #if !defined (S_ISDIR)
     #define	S_ISDIR(m)	(((m)&S_IFMT) == S_IFDIR)	/* directory */
 #endif
+
 #if !defined (S_ISREG)
     #define	S_ISREG(m)	(((m)&S_IFMT) == S_IFREG)	/* file */
 #endif
+
 #if !defined(S_ISLNK)
     #define S_ISLNK(m)    (((m) & S_IFMT) == S_IFLNK)
 #endif
@@ -412,6 +414,58 @@ int osfn_kill(int pid, int code)
         return -1;
     #endif
 }
+
+bool nn_util_fsfileexists(NNState* state, const char* filepath)
+{
+    (void)state;
+    #if !defined(NEON_PLAT_ISWINDOWS)
+        return access(filepath, F_OK) == 0;
+    #else
+        struct stat sb;
+        if(stat(filepath, &sb) == -1)
+        {
+            return false;
+        }
+        return true;
+    #endif
+}
+
+bool nn_util_fsfileistype(NNState* state, const char* filepath, int typ)
+{
+    struct stat st;
+    (void)state;
+    (void)filepath;
+    if(stat(filepath, &st) == -1)
+    {
+        return false;
+    }
+    if(typ == 'f')
+    {
+        return S_ISREG(st.st_mode);
+    }
+    else if(typ == 'd')
+    {
+        return S_ISDIR(st.st_mode);
+    }
+    return false;
+}
+
+bool nn_util_fsfileisfile(NNState* state, const char* filepath)
+{
+    return nn_util_fsfileistype(state, filepath, 'f');
+}
+
+bool nn_util_fsfileisdirectory(NNState* state, const char* filepath)
+{
+    return nn_util_fsfileistype(state, filepath, 'd');
+}
+
+char* nn_util_fsgetbasename(NNState* state, char* path)
+{
+    (void)state;
+    return osfn_basename(path);
+}
+
 
 void nn_modfn_os_preloader(NNState* state)
 {

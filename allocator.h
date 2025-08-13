@@ -174,29 +174,29 @@
 * NNALLOC_CONF_DEFINEMSPACES
   If NNALLOC_CONF_DEFINEMSPACES is defined, then in addition to malloc, free, etc.,
   this file also defines mspace_malloc, mspace_free, etc. These
-  are versions of malloc routines that take an "nnallocmspace_t" argument
+  are versions of malloc routines that take an "NNAllocMSpace" argument
   obtained using create_mspace, to control all internal bookkeeping.
   If NNALLOC_CONF_ONLYMSPACES is defined, only these versions are compiled.
   So if you would like to use this allocator for only some allocations,
   and your system malloc for others, you can compile with
   NNALLOC_CONF_ONLYMSPACES and then do something like...
-    static nnallocmspace_t* mymspace = create_mspace(0,0); // for example
+    static NNAllocMSpace* mymspace = create_mspace(0,0); // for example
     #define mymalloc(bytes)  mspace_malloc(mymspace, bytes)
 
   You can similarly create thread-local allocators by storing
   mspaces as thread-locals. For example:
-    static __thread nnallocmspace_t* tlms = 0;
+    static __thread NNAllocMSpace* tlms = 0;
     void*  tlmalloc(size_t bytes) {
       if (tlms == 0) tlms = create_mspace(0, 0);
       return mspace_malloc(tlms, bytes);
     }
     void  tlfree(void* mem) { mspace_free(tlms, mem); }
 
-  Unless NNALLOC_CONF_STOREFOOTERS is defined, each nnallocmspace_t is completely independent.
+  Unless NNALLOC_CONF_STOREFOOTERS is defined, each NNAllocMSpace is completely independent.
   You cannot allocate from one and free to another (although
   conformance is only weakly checked, so usage errors are not always
   caught). If NNALLOC_CONF_STOREFOOTERS is defined, then each chunk carries around a tag
-  indicating its originating nnallocmspace_t, and frees are directed to their
+  indicating its originating NNAllocMSpace, and frees are directed to their
   originating spaces.
 
  -------------------------  Compile-time options ---------------------------
@@ -223,7 +223,7 @@ NNALLOC_CONF_DEFINEMSPACES                  default: 0 (false)
 NNALLOC_CONF_USELOCKS                default: 0 (false)
   Causes each call to each public routine to be surrounded with
   pthread or NNALLOC_CONF_ISWIN32 mutex lock/unlock. (If set true, this can be
-  overridden on a per-nnallocmspace_t basis for nnallocmspace_t versions.)
+  overridden on a per-NNAllocMSpace basis for NNAllocMSpace versions.)
 
 NNALLOC_CONF_STOREFOOTERS                  default: 0
   If true, provide extra checking and dispatching by placing
@@ -581,77 +581,77 @@ NNALLOC_CONF_DEFAULTMMAPTHRESHOLD       default: 256K
 #endif
 
 /*
-  The type of the fields in the nnallocmallocinfo_t struct. This was originally
+  The type of the fields in the NNAllocMallocInfo struct. This was originally
   defined as "int" in SVID etc, but is more usefully defined as
   size_t. The value is used only if  HAVE_USR_INCLUDE_MALLOC_H is not set
 */
-typedef size_t nnallocinfofieldtype_t;
+typedef size_t NNAllocInfoField;
 
 /*
-  nnallocmspace_t is an opaque type representing an independent
+  NNAllocMSpace is an opaque type representing an independent
   region of space that supports nn_allocator_mspace_malloc, etc.
 */
-typedef void nnallocmspace_t;
+typedef void NNAllocMSpace;
 
 /* Described below */
-typedef size_t nnallocbindex_t;
+typedef size_t NNAllocBIndex;
 /* Described below */
-typedef unsigned int nnallocbinmap_t;
+typedef unsigned int NNAllocBinMap;
 /* The type of various bit flag sets */
-typedef unsigned int nnallocflag_t;
+typedef unsigned int NNAllocFlag;
 
-typedef struct nnallocmallocinfo_t nnallocmallocinfo_t;
+typedef struct NNAllocMallocInfo NNAllocMallocInfo;
 
-typedef struct nnallocchunkitem_t nnallocchunkitem_t;
-typedef struct nnallocmemsegment_t nnallocmemsegment_t;
-typedef struct nnallocchunktree_t nnallocchunktree_t;
-typedef struct nnallocstate_t nnallocstate_t;
-typedef struct nnallocparams_t nnallocparams_t;
+typedef struct NNAllocChunkItem NNAllocChunkItem;
+typedef struct NNAllocMemSegment NNAllocMemSegment;
+typedef struct NNAllocChunkTree NNAllocChunkTree;
+typedef struct NNAllocState NNAllocState;
+typedef struct NNAllocParams NNAllocParams;
 
-struct nnallocmallocinfo_t
+struct NNAllocMallocInfo
 {
     /* non-mmapped space allocated from system */
-    nnallocinfofieldtype_t arena;
+    NNAllocInfoField arena;
     /* number of free chunks */
-    nnallocinfofieldtype_t ordblks;
+    NNAllocInfoField ordblks;
     /* always 0 */
-    nnallocinfofieldtype_t smblks;
+    NNAllocInfoField smblks;
     /* always 0 */
-    nnallocinfofieldtype_t hblks;
+    NNAllocInfoField hblks;
     /* space in mmapped regions */
-    nnallocinfofieldtype_t hblkhd;
+    NNAllocInfoField hblkhd;
     /* maximum total allocated space */
-    nnallocinfofieldtype_t usmblks;
+    NNAllocInfoField usmblks;
     /* always 0 */
-    nnallocinfofieldtype_t fsmblks;
+    NNAllocInfoField fsmblks;
     /* total allocated space */
-    nnallocinfofieldtype_t uordblks;
+    NNAllocInfoField uordblks;
     /* total free space */
-    nnallocinfofieldtype_t fordblks;
+    NNAllocInfoField fordblks;
     /* releasable (via malloc_trim) space */
-    nnallocinfofieldtype_t keepcost;
+    NNAllocInfoField keepcost;
 };
 
-struct nnallocchunkitem_t
+struct NNAllocChunkItem
 {
     /* Size of previous chunk (if free).  */
     size_t prevfoot;
     /* Size and inuse bits. */
     size_t head;
     /* double links -- used only if free. */
-    nnallocchunkitem_t* forwardptr;
-    nnallocchunkitem_t* backwardptr;
+    NNAllocChunkItem* forwardptr;
+    NNAllocChunkItem* backwardptr;
 };
 
 
-struct nnallocmemsegment_t
+struct NNAllocMemSegment
 {
     /* base address */
     char* base;
     /* allocated size */
     size_t size;
     /* ptr to next segment */
-    nnallocmemsegment_t* next;
+    NNAllocMemSegment* next;
 #if FFI_MMAP_EXEC_WRIT
     /* We use an offset here, instead of a pointer, because then, when
        base changes, we don't have to modify this.  On architectures
@@ -659,7 +659,7 @@ struct nnallocmemsegment_t
     ptrdiff_t execoffset;
 #else
     /* mmap and extern flag */
-    nnallocflag_t sflags;
+    NNAllocFlag sflags;
 #endif
 };
 
@@ -810,7 +810,7 @@ size_t nn_allocuser_getmaxfootprint(void);
   be kept as longs, the reported values may wrap around zero and
   thus be inaccurate.
 */
-nnallocmallocinfo_t nn_allocuser_mallinfo(void);
+NNAllocMallocInfo nn_allocuser_mallinfo(void);
 
 /*
   independent_calloc(size_t n_elements, size_t element_size, void* chunks[]);
@@ -1005,7 +1005,7 @@ void nn_allocuser_stats(void);
   compiling with a different NNALLOC_CONF_DEFAULTGRANULARITY or dynamically
   setting with mallopt(DLMALLOC_OPTMALLOPT_GRANULARITY, value).
 */
-nnallocmspace_t* nn_allocator_mspacecreate(size_t capacity, int locked);
+NNAllocMSpace* nn_allocator_mspacecreate(size_t capacity, int locked);
 
 /*
   nn_allocator_mspacedestroy destroys the given space, and attempts to return all
@@ -1013,24 +1013,24 @@ nnallocmspace_t* nn_allocator_mspacecreate(size_t capacity, int locked);
   bytes freed. After destruction, the results of access to all memory
   used by the space become undefined.
 */
-size_t nn_allocator_mspacedestroy(nnallocmspace_t* msp);
+size_t nn_allocator_mspacedestroy(NNAllocMSpace* msp);
 
 /*
   nn_allocator_mspacecreatewithbase uses the memory supplied as the initial base
-  of a new nnallocmspace_t*. Part (less than 128*sizeof(size_t) bytes) of this
+  of a new NNAllocMSpace*. Part (less than 128*sizeof(size_t) bytes) of this
   space is used for bookkeeping, so the capacity must be at least this
   large. (Otherwise 0 is returned.) When this initial space is
   exhausted, additional memory will be obtained from the system.
   Destroying this space will deallocate all additionally allocated
   space (if possible) but not the initial base.
 */
-nnallocmspace_t* nn_allocator_mspacecreatewithbase(void* base, size_t capacity, int locked);
+NNAllocMSpace* nn_allocator_mspacecreatewithbase(void* base, size_t capacity, int locked);
 
 /*
   nn_allocator_mspacemalloc behaves as malloc, but operates within
   the given space.
 */
-void* nn_allocator_mspacemalloc(nnallocmspace_t* msp, size_t bytes);
+void* nn_allocator_mspacemalloc(NNAllocMSpace* msp, size_t bytes);
 
 /*
   nn_allocator_mspacefree behaves as free, but operates within
@@ -1040,7 +1040,7 @@ void* nn_allocator_mspacemalloc(nnallocmspace_t* msp, size_t bytes);
   free may be called instead of nn_allocator_mspacefree because freed chunks from
   any space are handled by their originating spaces.
 */
-void nn_allocator_mspacefree(nnallocmspace_t* msp, void* mem);
+void nn_allocator_mspacefree(NNAllocMSpace* msp, void* mem);
 
 /*
   nn_allocator_mspacerealloc behaves as realloc, but operates within
@@ -1051,61 +1051,61 @@ void nn_allocator_mspacefree(nnallocmspace_t* msp, void* mem);
   realloced chunks from any space are handled by their originating
   spaces.
 */
-void* nn_allocator_mspacerealloc(nnallocmspace_t* msp, void* mem, size_t newsize);
+void* nn_allocator_mspacerealloc(NNAllocMSpace* msp, void* mem, size_t newsize);
 
 /*
   nn_allocator_mspacecalloc behaves as calloc, but operates within
   the given space.
 */
-void* nn_allocator_mspacecalloc(nnallocmspace_t* msp, size_t n_elements, size_t elem_size);
+void* nn_allocator_mspacecalloc(NNAllocMSpace* msp, size_t n_elements, size_t elem_size);
 
 /*
   nn_allocator_mspacememalign behaves as memalign, but operates within
   the given space.
 */
-void* nn_allocator_mspacememalign(nnallocmspace_t* msp, size_t alignment, size_t bytes);
+void* nn_allocator_mspacememalign(NNAllocMSpace* msp, size_t alignment, size_t bytes);
 
 /*
   nn_allocator_mspaceindependentcalloc behaves as independent_calloc, but
   operates within the given space.
 */
-void** nn_allocator_mspaceindependentcalloc(nnallocmspace_t* msp, size_t n_elements, size_t elem_size, void* chunks[]);
+void** nn_allocator_mspaceindependentcalloc(NNAllocMSpace* msp, size_t n_elements, size_t elem_size, void* chunks[]);
 
 /*
   nn_allocator_mspaceindependentcomalloc behaves as independent_comalloc, but
   operates within the given space.
 */
-void** nn_allocator_mspaceindependentcomalloc(nnallocmspace_t* msp, size_t n_elements, size_t sizes[], void* chunks[]);
+void** nn_allocator_mspaceindependentcomalloc(NNAllocMSpace* msp, size_t n_elements, size_t sizes[], void* chunks[]);
 
 /*
   nn_allocator_mspacefootprint() returns the number of bytes obtained from the
   system for this space.
 */
-size_t nn_allocator_mspacefootprint(nnallocmspace_t* msp);
+size_t nn_allocator_mspacefootprint(NNAllocMSpace* msp);
 
 /*
   nn_allocator_mspacemaxfootprint() returns the peak number of bytes obtained from the
   system for this space.
 */
-size_t nn_allocator_mspacemaxfootprint(nnallocmspace_t* msp);
+size_t nn_allocator_mspacemaxfootprint(NNAllocMSpace* msp);
 
 /*
   nn_allocator_mspacemallinfo behaves as mallinfo, but reports properties of
   the given space.
 */
-nnallocmallocinfo_t nn_allocator_mspacemallinfo(nnallocmspace_t* msp);
+NNAllocMallocInfo nn_allocator_mspacemallinfo(NNAllocMSpace* msp);
 
 /*
   nn_allocator_mspacemallocstats behaves as malloc_stats, but reports
   properties of the given space.
 */
-void nn_allocator_mspacemallocstats(nnallocmspace_t* msp);
+void nn_allocator_mspacemallocstats(NNAllocMSpace* msp);
 
 /*
   nn_allocator_mspacetrim behaves as malloc_trim, but
   operates within the given space.
 */
-int nn_allocator_mspacetrim(nnallocmspace_t* msp, size_t pad);
+int nn_allocator_mspacetrim(NNAllocMSpace* msp, size_t pad);
 
 /*
   An alias for mallopt.

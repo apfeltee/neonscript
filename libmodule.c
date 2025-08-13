@@ -48,6 +48,35 @@ NNRegModule* nn_natmodule_load_os(NNState* state)
     return &module;
 }
 
+bool nn_state_addmodulesearchpathobj(NNState* state, NNObjString* os)
+{
+    nn_valarray_push(&state->importpath, nn_value_fromobject(os));
+    return true;
+}
+
+bool nn_state_addmodulesearchpath(NNState* state, const char* path)
+{
+    return nn_state_addmodulesearchpathobj(state, nn_string_copycstr(state, path));
+}
+
+void nn_state_setupmodulepaths(NNState* state)
+{
+    int i;
+    static const char* defaultsearchpaths[] =
+    {
+        "mods",
+        "mods/@/index" NEON_CONFIG_FILEEXT,
+        ".",
+        NULL
+    };
+    nn_valarray_init(state, &state->importpath);
+    nn_state_addmodulesearchpathobj(state, state->processinfo->cliexedirectory);
+    for(i=0; defaultsearchpaths[i]!=NULL; i++)
+    {
+        nn_state_addmodulesearchpath(state, defaultsearchpaths[i]);
+    }
+}
+
 void nn_import_loadbuiltinmodules(NNState* state)
 {
     int i;

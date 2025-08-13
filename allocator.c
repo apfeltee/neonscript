@@ -234,7 +234,7 @@
     #define NNALLOC_CMAC_CALLMORECORE(S) NNALLOC_CONST_MFAIL
 #endif
 
-/* nnallocstate_t bit set if contiguous morecore disabled or failed */
+/* NNAllocState bit set if contiguous morecore disabled or failed */
 #define NNALLOC_CONST_USENONCONTIGUOUSBIT (4U)
 
 /* segment bit set in nn_allocator_mspacecreatewithbase */
@@ -301,7 +301,7 @@
 /*
   (The following includes lightly edited explanations by Colin Plumb.)
 
-  The nnallocchunkitem_t declaration below is misleading (but accurate and
+  The NNAllocChunkItem declaration below is misleading (but accurate and
   necessary).  It declares a "view" into memory allowing access to
   necessary fields at known offsets from a given base.
 
@@ -435,7 +435,7 @@
 
 /* ------------------- Chunks sizes and alignments ----------------------- */
 
-#define NNALLOC_CONST_MCHUNKSIZE (sizeof(nnallocchunkitem_t))
+#define NNALLOC_CONST_MCHUNKSIZE (sizeof(NNAllocChunkItem))
 
 #define NNALLOC_CONST_CHUNKOVERHEAD (NNALLOC_CONST_SIZETSIZE)
 
@@ -449,9 +449,9 @@
 
 /* conversion from malloc headers to user pointers, and back */
 #define nn_allocator_chunk2mem(p) ((void*)((char*)(p) + NNALLOC_CONST_TWOSIZETSIZES))
-#define nn_allocator_mem2chunk(mem) ((nnallocchunkitem_t*)((char*)(mem) - NNALLOC_CONST_TWOSIZETSIZES))
+#define nn_allocator_mem2chunk(mem) ((NNAllocChunkItem*)((char*)(mem) - NNALLOC_CONST_TWOSIZETSIZES))
 /* chunk associated with aligned address A */
-#define nn_allocator_alignaschunk(A) (nnallocchunkitem_t*)((A) + nn_allocator_alignoffset(nn_allocator_chunk2mem(A)))
+#define nn_allocator_alignaschunk(A) (NNAllocChunkItem*)((A) + nn_allocator_alignoffset(nn_allocator_chunk2mem(A)))
 
 /* Bounds on request (not chunk) sizes. */
 #define NNALLOC_CONST_MAXREQUEST ((-NNALLOC_CONST_MINCHUNKSIZE) << 2)
@@ -490,19 +490,19 @@
 #define nn_allocator_clearpinuse(p) ((p)->head &= ~NNALLOC_CONST_PINUSEBIT)
 
 /* Treat space at ptr +/- offset as a chunk */
-#define nn_allocator_chunkplusoffset(p, s) ((nnallocchunkitem_t*)(((char*)(p)) + (s)))
-#define nn_allocator_chunkminusoffset(p, s) ((nnallocchunkitem_t*)(((char*)(p)) - (s)))
+#define nn_allocator_chunkplusoffset(p, s) ((NNAllocChunkItem*)(((char*)(p)) + (s)))
+#define nn_allocator_chunkminusoffset(p, s) ((NNAllocChunkItem*)(((char*)(p)) - (s)))
 
-/* Ptr to next or previous physical nnallocchunkitem_t. */
-#define nn_allocator_nextchunk(p) ((nnallocchunkitem_t*)(((char*)(p)) + ((p)->head & ~NNALLOC_CONST_INUSEBITS)))
+/* Ptr to next or previous physical NNAllocChunkItem. */
+#define nn_allocator_nextchunk(p) ((NNAllocChunkItem*)(((char*)(p)) + ((p)->head & ~NNALLOC_CONST_INUSEBITS)))
 #if defined(NNALLOC_CONF_DEBUG) && (NNALLOC_CONF_DEBUG == 1)
-    #define nn_allocator_prevchunk(p) ((nnallocchunkitem_t*)(((char*)(p)) - ((p)->prevfoot)))
+    #define nn_allocator_prevchunk(p) ((NNAllocChunkItem*)(((char*)(p)) - ((p)->prevfoot)))
     /* extract next chunk's pinuse bit */
     #define nn_allocator_nextpinuse(p) ((nn_allocator_nextchunk(p)->head) & NNALLOC_CONST_PINUSEBIT)
 #endif
 
 /* Get/set size at footer */
-#define nn_allocator_setfoot(p, s) (((nnallocchunkitem_t*)((char*)(p) + (s)))->prevfoot = (s))
+#define nn_allocator_setfoot(p, s) (((NNAllocChunkItem*)((char*)(p) + (s)))->prevfoot = (s))
 
 /* Set size, pinuse bit, and foot */
 #define nn_allocator_setsizeandpinuseoffreechunk(p, s) \
@@ -535,7 +535,7 @@
 
 /*
   Each malloc space may include non-contiguous segments, held in a
-  list headed by an embedded nnallocmemsegment_t record representing the
+  list headed by an embedded NNAllocMemSegment record representing the
   top-most space. Segments also include flags holding properties of
   the space. Large chunks that are directly allocated by mmap are not
   included in this list. They are instead independently created and
@@ -570,10 +570,10 @@
     memory; if they cannot be prepended to others, they are held in
     different segments.
 
-  Except for the top-most segment of an nnallocstate_t, each segment record
+  Except for the top-most segment of an NNAllocState, each segment record
   is kept at the tail of its segment. Segments are added by pushing
-  segment records onto the list headed by &nnallocstate_t.seg for the
-  containing nnallocstate_t.
+  segment records onto the list headed by &NNAllocState.seg for the
+  containing NNAllocState.
 
   Segment flags control allocation/merge/deallocation policies:
   * If NNALLOC_CONST_EXTERNBIT set, then we did not allocate this segment,
@@ -757,7 +757,7 @@
 #define nn_allocator_smallindex2size(i) ((i) << NNALLOC_CONST_SMALLBINSHIFT)
 
 /* addressing by index. See above about smallbin repositioning */
-#define nn_allocator_smallbinat(M, i) ((nnallocchunkitem_t*)((char*)&((M)->smallbins[(i) << 1])))
+#define nn_allocator_smallbinat(M, i) ((NNAllocChunkItem*)((char*)&((M)->smallbins[(i) << 1])))
 #define nn_allocator_treebinat(M, i) (&((M)->treebins[i]))
 
 
@@ -775,7 +775,7 @@
 /* ------------------------ Operations on bin maps ----------------------- */
 
 /* bit corresponding to given index */
-#define nn_allocator_idx2bit(i) ((nnallocbinmap_t)(1) << (i))
+#define nn_allocator_idx2bit(i) ((NNAllocBinMap)(1) << (i))
 
 /* Mark/Clear bits with given index */
 #define nn_allocator_marksmallmap(M, i) ((M)->smallmap |= nn_allocator_idx2bit(i))
@@ -796,10 +796,10 @@
 
 /*
   For security, the main invariant is that malloc/free/etc never
-  writes to a static address other than nnallocstate_t, unless static
-  nnallocstate_t itself has been corrupted, which cannot occur via
+  writes to a static address other than NNAllocState, unless static
+  NNAllocState itself has been corrupted, which cannot occur via
   malloc (because of these checks). In essence this means that we
-  believe all pointers, sizes, maps etc held in nnallocstate_t, but
+  believe all pointers, sizes, maps etc held in NNAllocState, but
   check all of those linked or offsetted from other embedded data
   structures.  These checks are interspersed with main code in a way
   that tends to minimize their run-time cost.
@@ -823,7 +823,7 @@
     #define nn_allocator_okpinuse(p) (1)
 #endif
 
-/* Check if (alleged) nnallocstate_t m has expected magic field */
+/* Check if (alleged) NNAllocState m has expected magic field */
 #define nn_allocator_okmagic(M) ((M)->magictag == g_allocvar_mallocparams.magic)
 
 /* In gcc, use __builtin_expect to minimize impact of checks */
@@ -844,12 +844,12 @@
 /* Set cinuse bit and pinuse bit of next chunk */
 #define nn_allocator_setinuse(M, p, s)                                                          \
     ((p)->head = (((p)->head & NNALLOC_CONST_PINUSEBIT) | s | NNALLOC_CONST_CINUSEBIT), \
-     ((nnallocchunkitem_t*)(((char*)(p)) + (s)))->head |= NNALLOC_CONST_PINUSEBIT)
+     ((NNAllocChunkItem*)(((char*)(p)) + (s)))->head |= NNALLOC_CONST_PINUSEBIT)
 
 /* Set cinuse and pinuse of this chunk and pinuse of next chunk */
 #define nn_allocator_setinuseandpinuse(M, p, s)                                   \
     ((p)->head = (s | NNALLOC_CONST_PINUSEBIT | NNALLOC_CONST_CINUSEBIT), \
-     ((nnallocchunkitem_t*)(((char*)(p)) + (s)))->head |= NNALLOC_CONST_PINUSEBIT)
+     ((NNAllocChunkItem*)(((char*)(p)) + (s)))->head |= NNALLOC_CONST_PINUSEBIT)
 
 /* Set size, cinuse and pinuse bit of this chunk */
 #define nn_allocator_setsizeandpinuseofinusechunk(M, p, s) \
@@ -958,20 +958,20 @@ nextchunk-> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
   is of course much better.
 */
 
-struct nnallocchunktree_t
+struct NNAllocChunkTree
 {
-    /* The first four fields must be compatible with nnallocchunkitem_t */
+    /* The first four fields must be compatible with NNAllocChunkItem */
     size_t prevfoot;
     size_t head;
-    nnallocchunktree_t* forwardptr;
-    nnallocchunktree_t* backwardptr;
-    nnallocchunktree_t* child[2];
-    nnallocchunktree_t* parent;
-    nnallocbindex_t index;
+    NNAllocChunkTree* forwardptr;
+    NNAllocChunkTree* backwardptr;
+    NNAllocChunkTree* child[2];
+    NNAllocChunkTree* parent;
+    NNAllocBIndex index;
 };
 
 /*
-   A nnallocstate_t holds all of the bookkeeping for a space.
+   A NNAllocState holds all of the bookkeeping for a space.
    The main fields are:
 
   Top
@@ -994,7 +994,7 @@ struct nnallocchunktree_t
     An array of bin headers for free chunks.  These bins hold chunks
     with sizes less than NNALLOC_CONST_MINLARGESIZE bytes. Each bin contains
     chunks of all the same size, spaced 8 bytes apart.  To simplify
-    use in double-linked lists, each bin header acts as a nnallocchunkitem_t
+    use in double-linked lists, each bin header acts as a NNAllocChunkItem
     pointing to the real first node, if it exists (else pointing to
     itself).  This avoids special-casing for headers.  But to avoid
     waste, we allocate only the forwardptr/backwardptr pointers of bins, and then use
@@ -1020,7 +1020,7 @@ struct nnallocchunktree_t
     well as to reduce the number of memory locations read or written.
 
   Segments
-    A list of segments headed by an embedded nnallocmemsegment_t record
+    A list of segments headed by an embedded NNAllocMemSegment record
     representing the initial space.
 
   Address check support
@@ -1052,45 +1052,45 @@ struct nnallocchunktree_t
 #define NNALLOC_CONST_MAXSMALLSIZE (NNALLOC_CONST_MINLARGESIZE - NNALLOC_CONST_SIZETONE)
 #define NNALLOC_CONST_MAXSMALLREQUEST (NNALLOC_CONST_MAXSMALLSIZE - NNALLOC_CONST_CHUNKALIGNMASK - NNALLOC_CONST_CHUNKOVERHEAD)
 
-struct nnallocstate_t
+struct NNAllocState
 {
-    nnallocbinmap_t smallmap;
-    nnallocbinmap_t treemap;
+    NNAllocBinMap smallmap;
+    NNAllocBinMap treemap;
     size_t designatvictimsize;
     size_t topsize;
     char* leastaddr;
-    nnallocchunkitem_t* designatvictimchunk;
-    nnallocchunkitem_t* top;
+    NNAllocChunkItem* designatvictimchunk;
+    NNAllocChunkItem* top;
     size_t trimcheck;
     size_t magictag;
-    nnallocchunkitem_t* smallbins[(NNALLOC_CONST_NSMALLBINS + 1) * 2];
-    nnallocchunktree_t* treebins[NNALLOC_CONST_NTREEBINS];
+    NNAllocChunkItem* smallbins[(NNALLOC_CONST_NSMALLBINS + 1) * 2];
+    NNAllocChunkTree* treebins[NNALLOC_CONST_NTREEBINS];
     size_t footprint;
     size_t maxfootprint;
-    nnallocflag_t mflags;
+    NNAllocFlag mflags;
 #if NNALLOC_CONF_USELOCKS
     /* locate lock among fields that rarely change */
     nnallocmutlock_t mutex;
 #endif
-    nnallocmemsegment_t seg;
+    NNAllocMemSegment seg;
 };
 
-/* ------------- Global nnallocstate_t and nnallocparams_t ------------------- */
+/* ------------- Global NNAllocState and NNAllocParams ------------------- */
 
 /*
-  nnallocparams_t holds global properties, including those that can be
+  NNAllocParams holds global properties, including those that can be
   dynamically set using mallopt. There is a single instance, g_allocvar_mallocparams,
   initialized in nn_allocator_mparams_init.
 */
 
-struct nnallocparams_t
+struct NNAllocParams
 {
     size_t magic;
     size_t pagesize;
     size_t granularity;
     size_t mmapthreshold;
     size_t trimthreshold;
-    nnallocflag_t defaultmflags;
+    NNAllocFlag defaultmflags;
 };
 
 /* ------------------------ Mallinfo declarations ------------------------ */
@@ -1107,10 +1107,10 @@ struct nnallocparams_t
   interest.
 */
 
-static nnallocparams_t g_allocvar_mallocparams;
+static NNAllocParams g_allocvar_mallocparams;
 
-/* The global nnallocstate_t used for all non-"mspace" calls */
-static nnallocstate_t g_allocvar_mallocstate;
+/* The global NNAllocState used for all non-"mspace" calls */
+static NNAllocState g_allocvar_mallocstate;
 
 #if NNALLOC_CONF_USELOCKS
     #if !defined(NNALLOC_CONF_ISWIN32)
@@ -1137,21 +1137,21 @@ static nnallocstate_t g_allocvar_mallocstate;
 static int g_allocvar_corruptionerrorcount = 0;
 
 /* default corruption action */
-NEON_FORCEINLINE void nn_allocator_resetonerror(nnallocstate_t* m);
+NEON_FORCEINLINE void nn_allocator_resetonerror(NNAllocState* m);
 #endif
 #if defined(NNALLOC_CONF_PERFORMCHECKS) && (NNALLOC_CONF_PERFORMCHECKS == 1)
-NEON_FORCEINLINE void nn_alloccheck_anychunk(nnallocstate_t* m, nnallocchunkitem_t* p);
-NEON_FORCEINLINE void nn_alloccheck_checktopchunk(nnallocstate_t* m, nnallocchunkitem_t* p);
-NEON_FORCEINLINE void nn_alloccheck_checkmmappedchunk(nnallocstate_t* m, nnallocchunkitem_t* p);
-NEON_FORCEINLINE void nn_alloccheck_checkinusechunk(nnallocstate_t* m, nnallocchunkitem_t* p);
-NEON_FORCEINLINE void nn_alloccheck_checkfreechunk(nnallocstate_t* m, nnallocchunkitem_t* p);
-NEON_FORCEINLINE void nn_alloccheck_checkmallocedchunk(nnallocstate_t* m, void* mem, size_t s);
-NEON_FORCEINLINE void nn_alloccheck_checktree(nnallocstate_t* m, nnallocchunktree_t* t);
-NEON_FORCEINLINE void nn_alloccheck_checktreebin(nnallocstate_t* m, nnallocbindex_t i);
-NEON_FORCEINLINE void nn_alloccheck_checksmallbin(nnallocstate_t* m, nnallocbindex_t i);
-NEON_FORCEINLINE void nn_alloccheck_checkmallocstate(nnallocstate_t* m);
-NEON_FORCEINLINE int nn_alloccheck_binfind(nnallocstate_t* m, nnallocchunkitem_t* x);
-NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(nnallocstate_t* m);
+NEON_FORCEINLINE void nn_alloccheck_anychunk(NNAllocState* m, NNAllocChunkItem* p);
+NEON_FORCEINLINE void nn_alloccheck_checktopchunk(NNAllocState* m, NNAllocChunkItem* p);
+NEON_FORCEINLINE void nn_alloccheck_checkmmappedchunk(NNAllocState* m, NNAllocChunkItem* p);
+NEON_FORCEINLINE void nn_alloccheck_checkinusechunk(NNAllocState* m, NNAllocChunkItem* p);
+NEON_FORCEINLINE void nn_alloccheck_checkfreechunk(NNAllocState* m, NNAllocChunkItem* p);
+NEON_FORCEINLINE void nn_alloccheck_checkmallocedchunk(NNAllocState* m, void* mem, size_t s);
+NEON_FORCEINLINE void nn_alloccheck_checktree(NNAllocState* m, NNAllocChunkTree* t);
+NEON_FORCEINLINE void nn_alloccheck_checktreebin(NNAllocState* m, NNAllocBIndex i);
+NEON_FORCEINLINE void nn_alloccheck_checksmallbin(NNAllocState* m, NNAllocBIndex i);
+NEON_FORCEINLINE void nn_alloccheck_checkmallocstate(NNAllocState* m);
+NEON_FORCEINLINE int nn_alloccheck_binfind(NNAllocState* m, NNAllocChunkItem* x);
+NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(NNAllocState* m);
 #endif
 
 /* index corresponding to given bit */
@@ -1170,9 +1170,9 @@ void nn_allocator_init()
 #endif
 }
 
-NEON_FORCEINLINE nnallocbindex_t nn_allocator_computebit2idx(nnallocbinmap_t xv)
+NEON_FORCEINLINE NNAllocBIndex nn_allocator_computebit2idx(NNAllocBinMap xv)
 {
-    nnallocbindex_t res;
+    NNAllocBIndex res;
     #if NNALLOC_CONF_USEBUILTINFFSFUNC
         return (ffs(xv) - 1)
     #else
@@ -1188,7 +1188,7 @@ NEON_FORCEINLINE nnallocbindex_t nn_allocator_computebit2idx(nnallocbinmap_t xv)
         yv >>= kv;
         nv += kv = yv >> (1 - 0) & 1;
         yv >>= kv;
-        res = (nnallocbindex_t)(nv + yv);
+        res = (NNAllocBIndex)(nv + yv);
     #endif
     return res;
 }
@@ -1342,15 +1342,15 @@ NEON_FORCEINLINE size_t nn_allocator_gettopfootsize()
     dummy = NULL;
     ptmp = nn_allocator_chunk2mem(dummy);
     tmpa = nn_allocator_alignoffset(ptmp);
-    tmpb = nn_allocator_padrequest(sizeof(nnallocmemsegment_t));
+    tmpb = nn_allocator_padrequest(sizeof(NNAllocMemSegment));
     return (tmpa + tmpb + NNALLOC_CONST_MINCHUNKSIZE);
 }
 
 
 /* Return segment holding given address */
-NEON_FORCEINLINE nnallocmemsegment_t* nn_allocator_segment_holding(nnallocstate_t* m, char* addr)
+NEON_FORCEINLINE NNAllocMemSegment* nn_allocator_segment_holding(NNAllocState* m, char* addr)
 {
-    nnallocmemsegment_t* sp;
+    NNAllocMemSegment* sp;
     sp = &m->seg;
     for(;;)
     {
@@ -1367,9 +1367,9 @@ NEON_FORCEINLINE nnallocmemsegment_t* nn_allocator_segment_holding(nnallocstate_
 }
 
 /* Return true if segment contains a segment link */
-NEON_FORCEINLINE int nn_allocator_segment_haslink(nnallocstate_t* m, nnallocmemsegment_t* ss)
+NEON_FORCEINLINE int nn_allocator_segment_haslink(NNAllocState* m, NNAllocMemSegment* ss)
 {
-    nnallocmemsegment_t* sp;
+    NNAllocMemSegment* sp;
     sp = &m->seg;
     for(;;)
     {
@@ -1500,17 +1500,17 @@ static int nn_allocator_changemparam(int param_number, int value)
 /* ------------------------- Debugging Support --------------------------- */
 
 /* Check properties of any chunk, whether free, inuse, mmapped etc  */
-NEON_FORCEINLINE void nn_alloccheck_anychunk(nnallocstate_t* m, nnallocchunkitem_t* p)
+NEON_FORCEINLINE void nn_alloccheck_anychunk(NNAllocState* m, NNAllocChunkItem* p)
 {
     NNALLOCASSERT((nn_allocator_isaligned(nn_allocator_chunk2mem(p))) || (p->head == NNALLOC_CONST_FENCEPOSTHEAD));
     NNALLOCASSERT(nn_allocator_okaddress(m, p));
 }
 
 /* Check properties of top chunk */
-NEON_FORCEINLINE void nn_alloccheck_checktopchunk(nnallocstate_t* m, nnallocchunkitem_t* p)
+NEON_FORCEINLINE void nn_alloccheck_checktopchunk(NNAllocState* m, NNAllocChunkItem* p)
 {
     size_t sz;
-    nnallocmemsegment_t* sp;
+    NNAllocMemSegment* sp;
     sp = nn_allocator_segment_holding(m, (char*)p);
     sz = nn_allocator_chunksize(p);
     NNALLOCASSERT(sp != 0);
@@ -1524,7 +1524,7 @@ NEON_FORCEINLINE void nn_alloccheck_checktopchunk(nnallocstate_t* m, nnallocchun
 }
 
 /* Check properties of (inuse) mmapped chunks */
-NEON_FORCEINLINE void nn_alloccheck_checkmmappedchunk(nnallocstate_t* m, nnallocchunkitem_t* p)
+NEON_FORCEINLINE void nn_alloccheck_checkmmappedchunk(NNAllocState* m, NNAllocChunkItem* p)
 {
     size_t sz;
     size_t len;
@@ -1541,7 +1541,7 @@ NEON_FORCEINLINE void nn_alloccheck_checkmmappedchunk(nnallocstate_t* m, nnalloc
 }
 
 /* Check properties of inuse chunks */
-NEON_FORCEINLINE void nn_alloccheck_checkinusechunk(nnallocstate_t* m, nnallocchunkitem_t* p)
+NEON_FORCEINLINE void nn_alloccheck_checkinusechunk(NNAllocState* m, NNAllocChunkItem* p)
 {
     nn_alloccheck_anychunk(m, p);
     NNALLOCASSERT(nn_allocator_cinuse(p));
@@ -1555,10 +1555,10 @@ NEON_FORCEINLINE void nn_alloccheck_checkinusechunk(nnallocstate_t* m, nnallocch
 }
 
 /* Check properties of free chunks */
-NEON_FORCEINLINE void nn_alloccheck_checkfreechunk(nnallocstate_t* m, nnallocchunkitem_t* p)
+NEON_FORCEINLINE void nn_alloccheck_checkfreechunk(NNAllocState* m, NNAllocChunkItem* p)
 {
     size_t sz;
-    nnallocchunkitem_t* next;
+    NNAllocChunkItem* next;
     sz = p->head & ~(NNALLOC_CONST_PINUSEBIT | NNALLOC_CONST_CINUSEBIT);
     next = nn_allocator_chunkplusoffset(p, sz);
     nn_alloccheck_anychunk(m, p);
@@ -1585,10 +1585,10 @@ NEON_FORCEINLINE void nn_alloccheck_checkfreechunk(nnallocstate_t* m, nnallocchu
 }
 
 /* Check properties of malloced chunks at the point they are malloced */
-NEON_FORCEINLINE void nn_alloccheck_checkmallocedchunk(nnallocstate_t* m, void* mem, size_t s)
+NEON_FORCEINLINE void nn_alloccheck_checkmallocedchunk(NNAllocState* m, void* mem, size_t s)
 {
     size_t sz;
-    nnallocchunkitem_t* p;
+    NNAllocChunkItem* p;
     if(mem != 0)
     {
         p = nn_allocator_mem2chunk(mem);
@@ -1603,13 +1603,13 @@ NEON_FORCEINLINE void nn_alloccheck_checkmallocedchunk(nnallocstate_t* m, void* 
 }
 
 /* Check a tree and its subtrees.  */
-NEON_FORCEINLINE void nn_alloccheck_checktree(nnallocstate_t* m, nnallocchunktree_t* t)
+NEON_FORCEINLINE void nn_alloccheck_checktree(NNAllocState* m, NNAllocChunkTree* t)
 {
     size_t tsize;
-    nnallocbindex_t idx;
-    nnallocbindex_t tindex;
-    nnallocchunktree_t* u;
-    nnallocchunktree_t* head;
+    NNAllocBIndex idx;
+    NNAllocBIndex tindex;
+    NNAllocChunkTree* u;
+    NNAllocChunkTree* head;
     head = 0;
     u = t;
     tindex = t->index;
@@ -1622,7 +1622,7 @@ NEON_FORCEINLINE void nn_alloccheck_checktree(nnallocstate_t* m, nnallocchunktre
 
     do
     { /* traverse through chain of same-sized nodes */
-        nn_alloccheck_anychunk(m, ((nnallocchunkitem_t*)u));
+        nn_alloccheck_anychunk(m, ((NNAllocChunkItem*)u));
         NNALLOCASSERT(u->index == tindex);
         NNALLOCASSERT(nn_allocator_chunksize(u) == tsize);
         NNALLOCASSERT(!nn_allocator_cinuse(u));
@@ -1639,7 +1639,7 @@ NEON_FORCEINLINE void nn_alloccheck_checktree(nnallocstate_t* m, nnallocchunktre
             NNALLOCASSERT(head == 0); /* only one node on chain has parent */
             head = u;
             NNALLOCASSERT(u->parent != u);
-            NNALLOCASSERT(u->parent->child[0] == u || u->parent->child[1] == u || *((nnallocchunktree_t**)(u->parent)) == u);
+            NNALLOCASSERT(u->parent->child[0] == u || u->parent->child[1] == u || *((NNAllocChunkTree**)(u->parent)) == u);
             if(u->child[0] != 0)
             {
                 NNALLOCASSERT(u->child[0]->parent == u);
@@ -1663,11 +1663,11 @@ NEON_FORCEINLINE void nn_alloccheck_checktree(nnallocstate_t* m, nnallocchunktre
 }
 
 /*  Check all the chunks in a treebin.  */
-NEON_FORCEINLINE void nn_alloccheck_checktreebin(nnallocstate_t* m, nnallocbindex_t i)
+NEON_FORCEINLINE void nn_alloccheck_checktreebin(NNAllocState* m, NNAllocBIndex i)
 {
     int empty;
-    nnallocchunktree_t* t;
-    nnallocchunktree_t** tb;
+    NNAllocChunkTree* t;
+    NNAllocChunkTree** tb;
     tb = nn_allocator_treebinat(m, i);
     t = *tb;
     empty = (m->treemap & (1U << i)) == 0;
@@ -1682,13 +1682,13 @@ NEON_FORCEINLINE void nn_alloccheck_checktreebin(nnallocstate_t* m, nnallocbinde
 }
 
 /*  Check all the chunks in a smallbin.  */
-NEON_FORCEINLINE void nn_alloccheck_checksmallbin(nnallocstate_t* m, nnallocbindex_t i)
+NEON_FORCEINLINE void nn_alloccheck_checksmallbin(NNAllocState* m, NNAllocBIndex i)
 {
     size_t size;
     unsigned int empty;
-    nnallocchunkitem_t* q;
-    nnallocchunkitem_t* b;
-    nnallocchunkitem_t* p;
+    NNAllocChunkItem* q;
+    NNAllocChunkItem* b;
+    NNAllocChunkItem* p;
     b = nn_allocator_smallbinat(m, i);
     p = b->backwardptr;
     empty = (m->smallmap & (1U << i)) == 0;
@@ -1717,16 +1717,16 @@ NEON_FORCEINLINE void nn_alloccheck_checksmallbin(nnallocstate_t* m, nnallocbind
 }
 
 /* Find x in a bin. Used in other check functions. */
-NEON_FORCEINLINE int nn_alloccheck_binfind(nnallocstate_t* m, nnallocchunkitem_t* x)
+NEON_FORCEINLINE int nn_alloccheck_binfind(NNAllocState* m, NNAllocChunkItem* x)
 {
     size_t size;
     size_t sizebits;
-    nnallocbindex_t sidx;
-    nnallocbindex_t tidx;
-    nnallocchunkitem_t* b;
-    nnallocchunkitem_t* p;
-    nnallocchunktree_t* u;
-    nnallocchunktree_t* t;
+    NNAllocBIndex sidx;
+    NNAllocBIndex tidx;
+    NNAllocChunkItem* b;
+    NNAllocChunkItem* p;
+    NNAllocChunkTree* u;
+    NNAllocChunkTree* t;
     size = nn_allocator_chunksize(x);
     if(nn_allocator_issmall(size))
     {
@@ -1761,7 +1761,7 @@ NEON_FORCEINLINE int nn_alloccheck_binfind(nnallocstate_t* m, nnallocchunkitem_t
                 u = t;
                 do
                 {
-                    if(u == (nnallocchunktree_t*)x)
+                    if(u == (NNAllocChunkTree*)x)
                     {
                         return 1;
                     }
@@ -1773,12 +1773,12 @@ NEON_FORCEINLINE int nn_alloccheck_binfind(nnallocstate_t* m, nnallocchunkitem_t
 }
 
 /* Traverse each chunk and check it; return total */
-NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(nnallocstate_t* m)
+NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(NNAllocState* m)
 {
     size_t sum;
-    nnallocmemsegment_t* s;
-    nnallocchunkitem_t* q;
-    nnallocchunkitem_t* lastq;
+    NNAllocMemSegment* s;
+    NNAllocChunkItem* q;
+    NNAllocChunkItem* lastq;
     sum = 0;
     if(nn_allocator_isinitialized(m))
     {
@@ -1812,10 +1812,10 @@ NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(nnallocstate_t* m)
     return sum;
 }
 
-/* Check all properties of nnallocstate_t. */
-NEON_FORCEINLINE void nn_alloccheck_checkmallocstate(nnallocstate_t* m)
+/* Check all properties of NNAllocState. */
+NEON_FORCEINLINE void nn_alloccheck_checkmallocstate(NNAllocState* m)
 {
-    nnallocbindex_t i;
+    NNAllocBIndex i;
     size_t total;
     /* check bins */
     for(i = 0; i < NNALLOC_CONST_NSMALLBINS; ++i)
@@ -1848,15 +1848,15 @@ NEON_FORCEINLINE void nn_alloccheck_checkmallocstate(nnallocstate_t* m)
 
 /* ----------------------------- statistics ------------------------------ */
 
-NEON_FORCEINLINE nnallocmallocinfo_t nn_allocator_mstate_internalmallinfo(nnallocstate_t* m)
+NEON_FORCEINLINE NNAllocMallocInfo nn_allocator_mstate_internalmallinfo(NNAllocState* m)
 {
     size_t sz;
     size_t sum;
     size_t mfree;
     size_t nfree;
-    nnallocmemsegment_t* s;
-    nnallocchunkitem_t* q;
-    nnallocmallocinfo_t nm = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+    NNAllocMemSegment* s;
+    NNAllocChunkItem* q;
+    NNAllocMallocInfo nm = { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
     if(!NNALLOC_CMAC_PREACTION(m))
     {
         nn_allocator_checkmallocstate(m);
@@ -1895,12 +1895,12 @@ NEON_FORCEINLINE nnallocmallocinfo_t nn_allocator_mstate_internalmallinfo(nnallo
     return nm;
 }
 
-NEON_FORCEINLINE void nn_allocator_mstate_internalmallocstats(nnallocstate_t* m)
+NEON_FORCEINLINE void nn_allocator_mstate_internalmallocstats(NNAllocState* m)
 {
     size_t fp;
     size_t used;
     size_t maxfp;
-    nnallocchunkitem_t* q;
+    NNAllocChunkItem* q;
     if(!NNALLOC_CMAC_PREACTION(m))
     {
         maxfp = 0;
@@ -1909,7 +1909,7 @@ NEON_FORCEINLINE void nn_allocator_mstate_internalmallocstats(nnallocstate_t* m)
         nn_allocator_checkmallocstate(m);
         if(nn_allocator_isinitialized(m))
         {
-            nnallocmemsegment_t* s = &m->seg;
+            NNAllocMemSegment* s = &m->seg;
             maxfp = m->maxfootprint;
             fp = m->footprint;
             used = fp - (m->topsize + nn_allocator_gettopfootsize());
@@ -1938,7 +1938,7 @@ NEON_FORCEINLINE void nn_allocator_mstate_internalmallocstats(nnallocstate_t* m)
 
 /* Relays to internal calls to malloc/free from realloc, memalign etc */
 
-NEON_FORCEINLINE void* nn_allocator_internalmalloc(nnallocmspace_t* msp, size_t sz)
+NEON_FORCEINLINE void* nn_allocator_internalmalloc(NNAllocMSpace* msp, size_t sz)
 {
 #if NNALLOC_CONF_ONLYMSPACES
     return nn_allocator_mspacemalloc(msp, sz);
@@ -1951,7 +1951,7 @@ NEON_FORCEINLINE void* nn_allocator_internalmalloc(nnallocmspace_t* msp, size_t 
 #endif /* NNALLOC_CONF_ONLYMSPACES */
 }
 
-NEON_FORCEINLINE void nn_allocator_internalfree(nnallocmspace_t *msp, void *mem)
+NEON_FORCEINLINE void nn_allocator_internalfree(NNAllocMSpace *msp, void *mem)
 {
 #if NNALLOC_CONF_ONLYMSPACES
     nn_allocator_mspacefree(msp, mem);
@@ -1975,11 +1975,11 @@ NEON_FORCEINLINE void nn_allocator_internalfree(nnallocmspace_t *msp, void *mem)
 */
 
 /* Link a free chunk into a smallbin  */
-NEON_FORCEINLINE void nn_allocator_insertsmallchunk(nnallocstate_t* mst, nnallocchunkitem_t* chunk, size_t segment)
+NEON_FORCEINLINE void nn_allocator_insertsmallchunk(NNAllocState* mst, NNAllocChunkItem* chunk, size_t segment)
 {
-    nnallocbindex_t bi = nn_allocator_smallindex(segment);
-    nnallocchunkitem_t* bp = nn_allocator_smallbinat(mst, bi);
-    nnallocchunkitem_t* fp = bp;
+    NNAllocBIndex bi = nn_allocator_smallindex(segment);
+    NNAllocChunkItem* bp = nn_allocator_smallbinat(mst, bi);
+    NNAllocChunkItem* fp = bp;
     NNALLOCASSERT(segment >= NNALLOC_CONST_MINCHUNKSIZE);
     if(!nn_allocator_smallmapismarked(mst, bi))
     {
@@ -2000,11 +2000,11 @@ NEON_FORCEINLINE void nn_allocator_insertsmallchunk(nnallocstate_t* mst, nnalloc
 }
 
 /* Unlink a chunk from a smallbin  */
-NEON_FORCEINLINE void nn_allocator_unlinksmallchunk(nnallocstate_t* mst, nnallocchunkitem_t* chunk, size_t segment)
+NEON_FORCEINLINE void nn_allocator_unlinksmallchunk(NNAllocState* mst, NNAllocChunkItem* chunk, size_t segment)
 {
-    nnallocchunkitem_t* fp = chunk->forwardptr;
-    nnallocchunkitem_t* bp = chunk->backwardptr;
-    nnallocbindex_t I = nn_allocator_smallindex(segment);
+    NNAllocChunkItem* fp = chunk->forwardptr;
+    NNAllocChunkItem* bp = chunk->backwardptr;
+    NNAllocBIndex I = nn_allocator_smallindex(segment);
     NNALLOCASSERT(chunk != bp);
     NNALLOCASSERT(chunk != fp);
     NNALLOCASSERT(nn_allocator_chunksize(chunk) == nn_allocator_smallindex2size(I));
@@ -2024,9 +2024,9 @@ NEON_FORCEINLINE void nn_allocator_unlinksmallchunk(nnallocstate_t* mst, nnalloc
 }
 
 /* Unlink the first chunk from a smallbin */
-NEON_FORCEINLINE void nn_allocator_unlinkfirstsmallchunk(nnallocstate_t* mst, nnallocchunkitem_t* bp, nnallocchunkitem_t* chunk, size_t idx)
+NEON_FORCEINLINE void nn_allocator_unlinkfirstsmallchunk(NNAllocState* mst, NNAllocChunkItem* bp, NNAllocChunkItem* chunk, size_t idx)
 {
-    nnallocchunkitem_t* fp = chunk->forwardptr;
+    NNAllocChunkItem* fp = chunk->forwardptr;
     NNALLOCASSERT(chunk != bp);
     NNALLOCASSERT(chunk != fp);
     NNALLOCASSERT(nn_allocator_chunksize(chunk) == nn_allocator_smallindex2size(idx));
@@ -2047,12 +2047,12 @@ NEON_FORCEINLINE void nn_allocator_unlinkfirstsmallchunk(nnallocstate_t* mst, nn
 
 /* Replace dv node, binning the old one */
 /* Used only when designatvictimsize known to be small */
-NEON_FORCEINLINE void nn_allocator_replacedv(nnallocstate_t* mst, nnallocchunkitem_t* chunk, size_t segment)
+NEON_FORCEINLINE void nn_allocator_replacedv(NNAllocState* mst, NNAllocChunkItem* chunk, size_t segment)
 {
     size_t DVS = (mst)->designatvictimsize;
     if(DVS != 0)
     {
-        nnallocchunkitem_t* DV = (mst)->designatvictimchunk;
+        NNAllocChunkItem* DV = (mst)->designatvictimchunk;
         NNALLOCASSERT(nn_allocator_issmall(DVS));
         nn_allocator_insertsmallchunk(mst, DV, DVS);
     }
@@ -2064,14 +2064,14 @@ NEON_FORCEINLINE void nn_allocator_replacedv(nnallocstate_t* mst, nnallocchunkit
 
 /* Insert chunk into tree */
 
-NEON_FORCEINLINE void nn_allocator_insertlargechunk(nnallocstate_t* mst, nnallocchunktree_t* chunk, size_t sv)
+NEON_FORCEINLINE void nn_allocator_insertlargechunk(NNAllocState* mst, NNAllocChunkTree* chunk, size_t sv)
 {
     size_t k;
-    nnallocbindex_t bi;
-    nnallocchunktree_t* f;
-    nnallocchunktree_t* t;
-    nnallocchunktree_t** h;
-    nnallocchunktree_t** c;
+    NNAllocBIndex bi;
+    NNAllocChunkTree* f;
+    NNAllocChunkTree* t;
+    NNAllocChunkTree** h;
+    NNAllocChunkTree** c;
     bi = nn_allocator_computetreeindex(sv);
     h = nn_allocator_treebinat((mst), bi);
     (chunk)->index = bi;
@@ -2080,7 +2080,7 @@ NEON_FORCEINLINE void nn_allocator_insertlargechunk(nnallocstate_t* mst, nnalloc
     {
         nn_allocator_marktreemap((mst), bi);
         *h = (chunk);
-        (chunk)->parent = (nnallocchunktree_t*)h;
+        (chunk)->parent = (NNAllocChunkTree*)h;
         (chunk)->forwardptr = (chunk)->backwardptr = (chunk);
     }
     else
@@ -2148,16 +2148,16 @@ NEON_FORCEINLINE void nn_allocator_insertlargechunk(nnallocstate_t* mst, nnalloc
      x's parent and children to x's replacement (or null if none).
 */
 
-NEON_FORCEINLINE void nn_allocator_unlinklargechunk(nnallocstate_t* mst, nnallocchunktree_t* chunk)
+NEON_FORCEINLINE void nn_allocator_unlinklargechunk(NNAllocState* mst, NNAllocChunkTree* chunk)
 {
-    nnallocchunktree_t* r;
-    nnallocchunktree_t* f;
-    nnallocchunktree_t** h;
-    nnallocchunktree_t* xp;
-    nnallocchunktree_t** rp;
-    nnallocchunktree_t** cp;
-    nnallocchunktree_t* c0;
-    nnallocchunktree_t* c1;
+    NNAllocChunkTree* r;
+    NNAllocChunkTree* f;
+    NNAllocChunkTree** h;
+    NNAllocChunkTree* xp;
+    NNAllocChunkTree** rp;
+    NNAllocChunkTree** cp;
+    NNAllocChunkTree* c0;
+    NNAllocChunkTree* c1;
     xp = (chunk)->parent;
     if((chunk)->backwardptr != (chunk))
     {
@@ -2255,30 +2255,30 @@ NEON_FORCEINLINE void nn_allocator_unlinklargechunk(nnallocstate_t* mst, nnalloc
 }
 
 /* Relays to large vs small bin operations */
-NEON_FORCEINLINE void nn_allocator_insertchunk(nnallocstate_t* msp, nnallocchunkitem_t* chunk, size_t sv)
+NEON_FORCEINLINE void nn_allocator_insertchunk(NNAllocState* msp, NNAllocChunkItem* chunk, size_t sv)
 {
-    nnallocchunktree_t* tmpchunk;
+    NNAllocChunkTree* tmpchunk;
     if(nn_allocator_issmall(sv))
     {
         nn_allocator_insertsmallchunk(msp, chunk, sv);
     }
     else
     {
-        tmpchunk = (nnallocchunktree_t*)(chunk);
+        tmpchunk = (NNAllocChunkTree*)(chunk);
         nn_allocator_insertlargechunk(msp, tmpchunk, sv);
     }
 }
 
-NEON_FORCEINLINE void nn_allocator_unlinkchunk(nnallocstate_t* msp, nnallocchunkitem_t* chunk, size_t sv)
+NEON_FORCEINLINE void nn_allocator_unlinkchunk(NNAllocState* msp, NNAllocChunkItem* chunk, size_t sv)
 {
-    nnallocchunktree_t* tmpchunk;
+    NNAllocChunkTree* tmpchunk;
     if(nn_allocator_issmall(sv))
     {
         nn_allocator_unlinksmallchunk(msp, chunk, sv);
     }
     else
     {
-        tmpchunk = (nnallocchunktree_t*)(chunk);
+        tmpchunk = (NNAllocChunkTree*)(chunk);
         nn_allocator_unlinklargechunk(msp, tmpchunk);
     }
 }
@@ -2296,13 +2296,13 @@ NEON_FORCEINLINE void nn_allocator_unlinkchunk(nnallocstate_t* msp, nnallocchunk
 */
 
 /* Malloc using mmap */
-static void* nn_allocator_mstate_mmapalloc(nnallocstate_t* m, size_t nb)
+static void* nn_allocator_mstate_mmapalloc(NNAllocState* m, size_t nb)
 {
     size_t mmsize;
     size_t offset;
     size_t psize;
     char* mm;
-    nnallocchunkitem_t* p;
+    NNAllocChunkItem* p;
     mmsize = nn_allocator_granularityalign(nb + NNALLOC_CONST_SIXSIZETSIZES + NNALLOC_CONST_CHUNKALIGNMASK);
     if(mmsize > nb)
     { /* Check for wrap around 0 */
@@ -2311,7 +2311,7 @@ static void* nn_allocator_mstate_mmapalloc(nnallocstate_t* m, size_t nb)
         {
             offset = nn_allocator_alignoffset(nn_allocator_chunk2mem(mm));
             psize = mmsize - offset - NNALLOC_CONST_MMAPFOOTPAD;
-            p = (nnallocchunkitem_t*)(mm + offset);
+            p = (NNAllocChunkItem*)(mm + offset);
             p->prevfoot = offset | NNALLOC_CONST_ISMMAPPEDBIT;
             (p)->head = (psize | NNALLOC_CONST_CINUSEBIT);
             nn_allocator_markinusefoot(m, p, psize);
@@ -2334,7 +2334,7 @@ static void* nn_allocator_mstate_mmapalloc(nnallocstate_t* m, size_t nb)
 }
 
 /* Realloc using mmap */
-static nnallocchunkitem_t* nn_allocator_mstate_mmapresize(nnallocstate_t* m, nnallocchunkitem_t* oldp, size_t nb)
+static NNAllocChunkItem* nn_allocator_mstate_mmapresize(NNAllocState* m, NNAllocChunkItem* oldp, size_t nb)
 {
     size_t oldsize;
     size_t offset;
@@ -2342,7 +2342,7 @@ static nnallocchunkitem_t* nn_allocator_mstate_mmapresize(nnallocstate_t* m, nna
     size_t newmmsize;
     size_t psize;
     char* cp;
-    nnallocchunkitem_t* newp;
+    NNAllocChunkItem* newp;
     oldsize = nn_allocator_chunksize(oldp);
     if(nn_allocator_issmall(nb)) /* Can't shrink mmap regions below small size */
     {
@@ -2361,7 +2361,7 @@ static nnallocchunkitem_t* nn_allocator_mstate_mmapresize(nnallocstate_t* m, nna
         cp = (char*)NNALLOC_CMAC_CALLMREMAP((char*)oldp - offset, oldmmsize, newmmsize, 1);
         if(cp != NNALLOC_CONST_CMFAIL)
         {
-            newp = (nnallocchunkitem_t*)(cp + offset);
+            newp = (NNAllocChunkItem*)(cp + offset);
             psize = newmmsize - offset - NNALLOC_CONST_MMAPFOOTPAD;
             newp->head = (psize | NNALLOC_CONST_CINUSEBIT);
             nn_allocator_markinusefoot(m, newp, psize);
@@ -2385,12 +2385,12 @@ static nnallocchunkitem_t* nn_allocator_mstate_mmapresize(nnallocstate_t* m, nna
 /* -------------------------- mspace management -------------------------- */
 
 /* Initialize top chunk and its size */
-NEON_FORCEINLINE void nn_allocator_mstate_inittop(nnallocstate_t* m, nnallocchunkitem_t* p, size_t psize)
+NEON_FORCEINLINE void nn_allocator_mstate_inittop(NNAllocState* m, NNAllocChunkItem* p, size_t psize)
 {
     size_t offset;
     /* Ensure alignment */
     offset = nn_allocator_alignoffset(nn_allocator_chunk2mem(p));
-    p = (nnallocchunkitem_t*)((char*)p + offset);
+    p = (NNAllocChunkItem*)((char*)p + offset);
     psize -= offset;
     m->top = p;
     m->topsize = psize;
@@ -2400,12 +2400,12 @@ NEON_FORCEINLINE void nn_allocator_mstate_inittop(nnallocstate_t* m, nnallocchun
     m->trimcheck = g_allocvar_mallocparams.trimthreshold; /* reset on each update */
 }
 
-/* Initialize bins for a new nnallocstate_t* that is otherwise zeroed out */
-NEON_FORCEINLINE void nn_allocator_mstate_initbins(nnallocstate_t* m)
+/* Initialize bins for a new NNAllocState* that is otherwise zeroed out */
+NEON_FORCEINLINE void nn_allocator_mstate_initbins(NNAllocState* m)
 {
     /* Establish circular links for smallbins */
-    nnallocbindex_t i;
-    nnallocchunkitem_t* bin;
+    NNAllocBIndex i;
+    NNAllocChunkItem* bin;
     for(i = 0; i < NNALLOC_CONST_NSMALLBINS; ++i)
     {
         bin = nn_allocator_smallbinat(m, i);
@@ -2416,7 +2416,7 @@ NEON_FORCEINLINE void nn_allocator_mstate_initbins(nnallocstate_t* m)
 #if NNALLOC_CONF_PROCEEDONERROR
 
 /* default corruption action */
-NEON_FORCEINLINE void nn_allocator_resetonerror(nnallocstate_t* m)
+NEON_FORCEINLINE void nn_allocator_resetonerror(NNAllocState* m)
 {
     int i;
     ++g_allocvar_corruptionerrorcount;
@@ -2437,16 +2437,16 @@ NEON_FORCEINLINE void nn_allocator_resetonerror(nnallocstate_t* m)
 #endif /* NNALLOC_CONF_PROCEEDONERROR */
 
 /* Allocate chunk and prepend remainder with chunk in successor base. */
-static void* nn_allocator_mstate_prependalloc(nnallocstate_t* m, char* newbase, char* oldbase, size_t nb)
+static void* nn_allocator_mstate_prependalloc(NNAllocState* m, char* newbase, char* oldbase, size_t nb)
 {
     size_t nsize;
     size_t dsize;
     size_t tsize;
     size_t qsize;
     size_t psize;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* q;
-    nnallocchunkitem_t* oldfirst;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* q;
+    NNAllocChunkItem* oldfirst;
     p = nn_allocator_alignaschunk(newbase);
     oldfirst = nn_allocator_alignaschunk(oldbase);
     psize = (char*)oldfirst - (char*)p;
@@ -2489,7 +2489,7 @@ static void* nn_allocator_mstate_prependalloc(nnallocstate_t* m, char* newbase, 
 }
 
 /* Add a segment to hold a new noncontiguous region */
-static void nn_allocator_mstate_addsegment(nnallocstate_t* m, char* tbase, size_t tsize, nnallocflag_t mmapped)
+static void nn_allocator_mstate_addsegment(NNAllocState* m, char* tbase, size_t tsize, NNAllocFlag mmapped)
 {
     size_t psize;
     size_t ssize;
@@ -2500,31 +2500,31 @@ static void nn_allocator_mstate_addsegment(nnallocstate_t* m, char* tbase, size_
     char* asp;
     char* csp;
     int nfences;
-    nnallocchunkitem_t* sp;
-    nnallocmemsegment_t* ss;
-    nnallocchunkitem_t* tnext;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* nextp;
-    nnallocchunkitem_t* q;
-    nnallocchunkitem_t* tn;
-    nnallocmemsegment_t* oldsp;
+    NNAllocChunkItem* sp;
+    NNAllocMemSegment* ss;
+    NNAllocChunkItem* tnext;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* nextp;
+    NNAllocChunkItem* q;
+    NNAllocChunkItem* tn;
+    NNAllocMemSegment* oldsp;
     (void)nfences;
     /* Determine locations and sizes of segment, fenceposts, old top */
     old_top = (char*)m->top;
     oldsp = nn_allocator_segment_holding(m, old_top);
     old_end = oldsp->base + oldsp->size;
-    ssize = nn_allocator_padrequest(sizeof(nnallocmemsegment_t));
+    ssize = nn_allocator_padrequest(sizeof(NNAllocMemSegment));
     rawsp = old_end - (ssize + NNALLOC_CONST_FOURSIZETSIZES + NNALLOC_CONST_CHUNKALIGNMASK);
     offset = nn_allocator_alignoffset(nn_allocator_chunk2mem(rawsp));
     asp = rawsp + offset;
     csp = (asp < (old_top + NNALLOC_CONST_MINCHUNKSIZE)) ? old_top : asp;
-    sp = (nnallocchunkitem_t*)csp;
-    ss = (nnallocmemsegment_t*)(nn_allocator_chunk2mem(sp));
+    sp = (NNAllocChunkItem*)csp;
+    ss = (NNAllocMemSegment*)(nn_allocator_chunk2mem(sp));
     tnext = nn_allocator_chunkplusoffset(sp, ssize);
     p = tnext;
     nfences = 0;
     /* reset top to new space */
-    nn_allocator_mstate_inittop(m, (nnallocchunkitem_t*)tbase, tsize - nn_allocator_gettopfootsize());
+    nn_allocator_mstate_inittop(m, (NNAllocChunkItem*)tbase, tsize - nn_allocator_gettopfootsize());
     /* Set up segment record */
     NNALLOCASSERT(nn_allocator_isaligned(ss));
     nn_allocator_setsizeandpinuseofinusechunk(m, sp, ssize);
@@ -2552,7 +2552,7 @@ static void nn_allocator_mstate_addsegment(nnallocstate_t* m, char* tbase, size_
     /* Insert the rest of old top into a bin as an ordinary free chunk */
     if(csp != old_top)
     {
-        q = (nnallocchunkitem_t*)old_top;
+        q = (NNAllocChunkItem*)old_top;
         psize = csp - old_top;
         tn = nn_allocator_chunkplusoffset(q, psize);
         nn_allocator_setfreewithpinuse(q, psize, tn);
@@ -2564,7 +2564,7 @@ static void nn_allocator_mstate_addsegment(nnallocstate_t* m, char* tbase, size_
 /* -------------------------- System allocation -------------------------- */
 
 /* Get memory from system using NNALLOC_CONF_MORECOREFUNCNAME or MMAP */
-static void* nn_allocator_mstate_sysalloc(nnallocstate_t* m, size_t nb)
+static void* nn_allocator_mstate_sysalloc(NNAllocState* m, size_t nb)
 {
 
     size_t asize;
@@ -2580,12 +2580,12 @@ static void* nn_allocator_mstate_sysalloc(nnallocstate_t* m, size_t nb)
     char* mp;
     char* oldbase;
     char* tbase;
-    nnallocflag_t mmap_flag;
-    nnallocchunkitem_t* mn;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* r;        
-    nnallocmemsegment_t* sp;
-    nnallocmemsegment_t* ss;
+    NNAllocFlag mmap_flag;
+    NNAllocChunkItem* mn;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* r;        
+    NNAllocMemSegment* sp;
+    NNAllocMemSegment* ss;
     tbase = NNALLOC_CONST_CMFAIL;
     tsize = 0;
     mmap_flag = 0;
@@ -2737,11 +2737,11 @@ static void* nn_allocator_mstate_sysalloc(nnallocstate_t* m, size_t nb)
             nn_allocator_mstate_initbins(m);
             if(nn_allocator_isglobal(m))
             {
-                nn_allocator_mstate_inittop(m, (nnallocchunkitem_t*)tbase, tsize - nn_allocator_gettopfootsize());
+                nn_allocator_mstate_inittop(m, (NNAllocChunkItem*)tbase, tsize - nn_allocator_gettopfootsize());
             }
             else
             {
-                /* Offset top by embedded nnallocstate_t */
+                /* Offset top by embedded NNAllocState */
                 mn = nn_allocator_nextchunk(nn_allocator_mem2chunk(m));
                 nn_allocator_mstate_inittop(m, mn, (size_t)((tbase + tsize) - (char*)mn) - nn_allocator_gettopfootsize());
             }
@@ -2804,17 +2804,17 @@ static void* nn_allocator_mstate_sysalloc(nnallocstate_t* m, size_t nb)
 /* -----------------------  system deallocation -------------------------- */
 
 /* Unmap and unlink any mmapped segments that don't contain used chunks */
-static size_t nn_allocator_mstate_releaseunusedsegments(nnallocstate_t* m)
+static size_t nn_allocator_mstate_releaseunusedsegments(NNAllocState* m)
 {
     size_t size;
     size_t psize;
     size_t released;
     char* base;
-    nnallocchunkitem_t* p;
-    nnallocchunktree_t* tp;
-    nnallocmemsegment_t* sp;
-    nnallocmemsegment_t* pred;
-    nnallocmemsegment_t* next;
+    NNAllocChunkItem* p;
+    NNAllocChunkTree* tp;
+    NNAllocMemSegment* sp;
+    NNAllocMemSegment* pred;
+    NNAllocMemSegment* next;
     released = 0;
     pred = &m->seg;
     sp = pred->next;
@@ -2830,7 +2830,7 @@ static size_t nn_allocator_mstate_releaseunusedsegments(nnallocstate_t* m)
             /* Can unmap if first chunk holds entire segment and not pinned */
             if(!nn_allocator_cinuse(p) && (char*)p + psize >= base + size - nn_allocator_gettopfootsize())
             {
-                tp = (nnallocchunktree_t*)p;
+                tp = (NNAllocChunkTree*)p;
                 NNALLOCASSERT(nn_allocator_segmentholds(sp, (char*)sp));
                 if(p == m->designatvictimchunk)
                 {
@@ -2861,7 +2861,7 @@ static size_t nn_allocator_mstate_releaseunusedsegments(nnallocstate_t* m)
     return released;
 }
 
-static int nn_allocator_mstate_systrim(nnallocstate_t* m, size_t pad)
+static int nn_allocator_mstate_systrim(NNAllocState* m, size_t pad)
 {
     size_t released;
     size_t unit;
@@ -2870,7 +2870,7 @@ static int nn_allocator_mstate_systrim(nnallocstate_t* m, size_t pad)
     char* old_br;
     char* rel_br;
     char* new_br;
-    nnallocmemsegment_t* sp;
+    NNAllocMemSegment* sp;
     (void)newsize;
     released = 0;
     if(pad < NNALLOC_CONST_MAXREQUEST && nn_allocator_isinitialized(m))
@@ -2944,20 +2944,20 @@ static int nn_allocator_mstate_systrim(nnallocstate_t* m, size_t pad)
 /* ---------------------------- malloc support --------------------------- */
 
 /* allocate a large request from the best fitting chunk in a treebin */
-static void* nn_allocator_mstate_tmalloclarge(nnallocstate_t* m, size_t nb)
+static void* nn_allocator_mstate_tmalloclarge(NNAllocState* m, size_t nb)
 {
     size_t trem;
     size_t rsize;
     size_t sizebits;
-    nnallocbindex_t i;
-    nnallocbindex_t idx;
-    nnallocbinmap_t leastbit;
-    nnallocbinmap_t leftbits;
-    nnallocchunkitem_t* r;
-    nnallocchunktree_t* t;
-    nnallocchunktree_t* v;
-    nnallocchunktree_t* rt;
-    nnallocchunktree_t* rst;
+    NNAllocBIndex i;
+    NNAllocBIndex idx;
+    NNAllocBinMap leastbit;
+    NNAllocBinMap leftbits;
+    NNAllocChunkItem* r;
+    NNAllocChunkTree* t;
+    NNAllocChunkTree* v;
+    NNAllocChunkTree* rt;
+    NNAllocChunkTree* rst;
     v = 0;
     rsize = -nb; /* Unsigned negation */
     idx = nn_allocator_computetreeindex(nb);
@@ -3040,15 +3040,15 @@ static void* nn_allocator_mstate_tmalloclarge(nnallocstate_t* m, size_t nb)
 }
 
 /* allocate a small request from the best fitting chunk in a treebin */
-static void* nn_allocator_mstate_tmallocsmall(nnallocstate_t* m, size_t nb)
+static void* nn_allocator_mstate_tmallocsmall(NNAllocState* m, size_t nb)
 {
     size_t trem;
     size_t rsize;
-    nnallocbindex_t i;
-    nnallocbinmap_t leastbit;
-    nnallocchunkitem_t* r;
-    nnallocchunktree_t* t;
-    nnallocchunktree_t* v;
+    NNAllocBIndex i;
+    NNAllocBinMap leastbit;
+    NNAllocChunkItem* r;
+    NNAllocChunkTree* t;
+    NNAllocChunkTree* v;
     leastbit = nn_allocator_leastbit(m->treemap);
     i = nn_allocator_computebit2idx(leastbit);
     v = t = *nn_allocator_treebinat(m, i);
@@ -3088,7 +3088,7 @@ static void* nn_allocator_mstate_tmallocsmall(nnallocstate_t* m, size_t nb)
 
 /* --------------------------- realloc support --------------------------- */
 
-static void* nn_allocator_mstate_internalrealloc(nnallocstate_t* m, void* oldmem, size_t bytes)
+static void* nn_allocator_mstate_internalrealloc(NNAllocState* m, void* oldmem, size_t bytes)
 {
     size_t nb;
     size_t rsize;
@@ -3098,11 +3098,11 @@ static void* nn_allocator_mstate_internalrealloc(nnallocstate_t* m, void* oldmem
     size_t oc;
     void* extra;
     void* newmem;
-    nnallocchunkitem_t* oldp;
-    nnallocchunkitem_t* next;
-    nnallocchunkitem_t* newp;
-    nnallocchunkitem_t* newtop;
-    nnallocchunkitem_t* remainder;
+    NNAllocChunkItem* oldp;
+    NNAllocChunkItem* next;
+    NNAllocChunkItem* newp;
+    NNAllocChunkItem* newtop;
+    NNAllocChunkItem* remainder;
     if(bytes >= NNALLOC_CONST_MAXREQUEST)
     {
         NNALLOC_CONF_MALLOCFAILUREACTION;
@@ -3181,7 +3181,7 @@ static void* nn_allocator_mstate_internalrealloc(nnallocstate_t* m, void* oldmem
 
 /* --------------------------- memalign support -------------------------- */
 
-static void* nn_allocator_mstate_internalmemalign(nnallocstate_t* m, size_t alignment, size_t bytes)
+static void* nn_allocator_mstate_internalmemalign(NNAllocState* m, size_t alignment, size_t bytes)
 {
     size_t a;
     size_t nb;
@@ -3195,9 +3195,9 @@ static void* nn_allocator_mstate_internalmemalign(nnallocstate_t* m, size_t alig
     char* mem;
     void* leader;
     void* trailer;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* newp;
-    nnallocchunkitem_t* remainder;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* newp;
+    NNAllocChunkItem* remainder;
     if(alignment <= NNALLOC_CONF_MALLOCALIGNMENT) /* Can just use malloc */
     {
         return nn_allocator_internalmalloc(m, bytes);
@@ -3248,7 +3248,7 @@ static void* nn_allocator_mstate_internalmemalign(nnallocstate_t* m, size_t alig
                 */
                 br = (char*)nn_allocator_mem2chunk((size_t)(((size_t)(mem + alignment - NNALLOC_CONST_SIZETONE)) & -alignment));
                 pos = ((size_t)(br - (char*)(p)) >= NNALLOC_CONST_MINCHUNKSIZE) ? br : br + alignment;
-                newp = (nnallocchunkitem_t*)pos;
+                newp = (NNAllocChunkItem*)pos;
                 leadsize = pos - (char*)(p);
                 newsize = nn_allocator_chunksize(p) - leadsize;
                 if(nn_allocator_ismmapped(p))
@@ -3297,7 +3297,7 @@ static void* nn_allocator_mstate_internalmemalign(nnallocstate_t* m, size_t alig
 
 /* ------------------------ comalloc/coalloc support --------------------- */
 
-static void** nn_allocator_mstate_ialloc(nnallocstate_t* m, size_t n_elements, size_t* sizes, int opts, void* chunks[])
+static void** nn_allocator_mstate_ialloc(NNAllocState* m, size_t n_elements, size_t* sizes, int opts, void* chunks[])
 {
     size_t i;
     size_t size;
@@ -3309,9 +3309,9 @@ static void** nn_allocator_mstate_ialloc(nnallocstate_t* m, size_t n_elements, s
     void* tmp;
     void* mem; /* malloced aggregate space */
     void** marray; /* either "chunks" or malloced ptr array */
-    nnallocflag_t was_enabled; /* to disable mmap */
-    nnallocchunkitem_t* p; /* corresponding chunk */
-    nnallocchunkitem_t* array_chunk; /* chunk for malloced ptr array */
+    NNAllocFlag was_enabled; /* to disable mmap */
+    NNAllocChunkItem* p; /* corresponding chunk */
+    NNAllocChunkItem* array_chunk; /* chunk for malloced ptr array */
     /*
       This provides common support for independent_X routines, handling
       all of the combinations that can result.
@@ -3449,14 +3449,14 @@ void* nn_allocuser_malloc(size_t bytes)
     size_t dvs;
     size_t rsize;
     void* mem;
-    nnallocbindex_t i;
-    nnallocbindex_t idx;
-    nnallocbinmap_t leftbits;
-    nnallocbinmap_t leastbit;
-    nnallocbinmap_t smallbits;
-    nnallocchunkitem_t* b;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* r;
+    NNAllocBIndex i;
+    NNAllocBIndex idx;
+    NNAllocBinMap leftbits;
+    NNAllocBinMap leastbit;
+    NNAllocBinMap smallbits;
+    NNAllocChunkItem* b;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* r;
     /*
        Basic algorithm:
        If a small request (< 256 bytes minus per-chunk overhead):
@@ -3606,9 +3606,9 @@ void nn_allocuser_free(void* mem)
     size_t nsize;
     size_t psize;
     size_t prevsize;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* next;
-    nnallocchunkitem_t* prev;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* next;
+    NNAllocChunkItem* prev;
     /*
        Consolidate freed chunks with preceding or succeeding bordering
        free chunks, if they exist, and then place in a bin.  Intermixed
@@ -3753,7 +3753,7 @@ void* nn_allocuser_realloc(void* oldmem, size_t bytes)
     #endif /* REALLOC_ZERO_BYTES_FREES */
     else
     {
-        nnallocstate_t* m = &g_allocvar_mallocstate;
+        NNAllocState* m = &g_allocvar_mallocstate;
         return nn_allocator_mstate_internalrealloc(m, oldmem, bytes);
     }
 }
@@ -3813,7 +3813,7 @@ size_t nn_allocuser_getmaxfootprint()
     return g_allocvar_mallocstate.maxfootprint;
 }
 
-nnallocmallocinfo_t nn_allocuser_mallinfo()
+NNAllocMallocInfo nn_allocuser_mallinfo()
 {
     return nn_allocator_mstate_internalmallinfo(&g_allocvar_mallocstate);
 }
@@ -3825,7 +3825,7 @@ void nn_allocuser_mallocstats()
 
 size_t nn_allocuser_usablesize(void* mem)
 {
-    nnallocchunkitem_t* p;
+    NNAllocChunkItem* p;
     if(mem != 0)
     {
         p = nn_allocator_mem2chunk(mem);
@@ -3845,15 +3845,15 @@ int nn_allocuser_mallopt(int param_number, int value)
 #endif /* !NNALLOC_CONF_ONLYMSPACES */
 
 
-static nnallocstate_t* nn_allocator_mstate_initusermstate(char* tbase, size_t tsize)
+static NNAllocState* nn_allocator_mstate_initusermstate(char* tbase, size_t tsize)
 {
     size_t msize;
-    nnallocchunkitem_t* mn;
-    nnallocchunkitem_t* msp;
-    nnallocstate_t* m;
-    msize = nn_allocator_padrequest(sizeof(nnallocstate_t));
+    NNAllocChunkItem* mn;
+    NNAllocChunkItem* msp;
+    NNAllocState* m;
+    msize = nn_allocator_padrequest(sizeof(NNAllocState));
     msp = nn_allocator_alignaschunk(tbase);
-    m = (nnallocstate_t*)(nn_allocator_chunk2mem(msp));
+    m = (NNAllocState*)(nn_allocator_chunk2mem(msp));
     memset(m, 0, msize);
     NNALLOC_CMAC_INITIALLOCK(&m->mutex);
     msp->head = (msize | NNALLOC_CONST_PINUSEBIT | NNALLOC_CONST_CINUSEBIT);
@@ -3869,16 +3869,16 @@ static nnallocstate_t* nn_allocator_mstate_initusermstate(char* tbase, size_t ts
     return m;
 }
 
-nnallocmspace_t* nn_allocator_mspacecreate(size_t capacity, int locked)
+NNAllocMSpace* nn_allocator_mspacecreate(size_t capacity, int locked)
 {
     size_t rs;
     size_t msize;
     size_t tsize;
     char* tbase;
-    nnallocstate_t* m;
+    NNAllocState* m;
     (void)locked;
     m = 0;
-    msize = nn_allocator_padrequest(sizeof(nnallocstate_t));
+    msize = nn_allocator_padrequest(sizeof(NNAllocState));
     nn_allocator_mparams_init(); /* Ensure pagesize etc initialized */
     if(capacity < (size_t) - (msize + nn_allocator_gettopfootsize() + g_allocvar_mallocparams.pagesize))
     {
@@ -3900,16 +3900,16 @@ nnallocmspace_t* nn_allocator_mspacecreate(size_t capacity, int locked)
             nn_allocator_lockset(m, locked);
         }
     }
-    return (nnallocmspace_t*)m;
+    return (NNAllocMSpace*)m;
 }
 
-nnallocmspace_t* nn_allocator_mspacecreatewithbase(void* base, size_t capacity, int locked)
+NNAllocMSpace* nn_allocator_mspacecreatewithbase(void* base, size_t capacity, int locked)
 {
     size_t msize;
-    nnallocstate_t* m;
+    NNAllocState* m;
     (void)locked;
     m = 0;
-    msize = nn_allocator_padrequest(sizeof(nnallocstate_t));
+    msize = nn_allocator_padrequest(sizeof(NNAllocState));
     nn_allocator_mparams_init(); /* Ensure pagesize etc initialized */
     if(capacity > msize + nn_allocator_gettopfootsize() && capacity < (size_t) - (msize + nn_allocator_gettopfootsize() + g_allocvar_mallocparams.pagesize))
     {
@@ -3917,20 +3917,20 @@ nnallocmspace_t* nn_allocator_mspacecreatewithbase(void* base, size_t capacity, 
         nn_allocator_setsegmentflags(&m->seg, NNALLOC_CONST_EXTERNBIT);
         nn_allocator_lockset(m, locked);
     }
-    return (nnallocmspace_t*)m;
+    return (NNAllocMSpace*)m;
 }
 
-size_t nn_allocator_mspacedestroy(nnallocmspace_t* msp)
+size_t nn_allocator_mspacedestroy(NNAllocMSpace* msp)
 {
     size_t size;
     size_t freed;
     char* base;
-    nnallocflag_t flag;
-    nnallocstate_t* ms;
-    nnallocmemsegment_t* sp;
+    NNAllocFlag flag;
+    NNAllocState* ms;
+    NNAllocMemSegment* sp;
     (void)base;
     freed = 0;
-    ms = (nnallocstate_t*)msp;
+    ms = (NNAllocState*)msp;
     if(nn_allocator_okmagic(ms))
     {
         sp = &ms->seg;
@@ -3954,26 +3954,26 @@ size_t nn_allocator_mspacedestroy(nnallocmspace_t* msp)
 }
 
 /*
-  nnallocmspace_t* versions of routines are near-clones of the global
+  NNAllocMSpace* versions of routines are near-clones of the global
   versions. This is not so nice but better than the alternatives.
 */
 
-void* nn_allocator_mspacemalloc(nnallocmspace_t* msp, size_t bytes)
+void* nn_allocator_mspacemalloc(NNAllocMSpace* msp, size_t bytes)
 {
     size_t nb;
     size_t dvs;
     size_t rsize;
     void* mem;
-    nnallocbindex_t i;
-    nnallocbindex_t idx;
-    nnallocbinmap_t leftbits;
-    nnallocbinmap_t leastbit;
-    nnallocbinmap_t smallbits;
-    nnallocchunkitem_t *b;
-    nnallocchunkitem_t* p;
-    nnallocchunkitem_t* r;
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocBIndex i;
+    NNAllocBIndex idx;
+    NNAllocBinMap leftbits;
+    NNAllocBinMap leastbit;
+    NNAllocBinMap smallbits;
+    NNAllocChunkItem *b;
+    NNAllocChunkItem* p;
+    NNAllocChunkItem* r;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4104,21 +4104,21 @@ void* nn_allocator_mspacemalloc(nnallocmspace_t* msp, size_t bytes)
     return 0;
 }
 
-void nn_allocator_mspacefree(nnallocmspace_t* msp, void* mem)
+void nn_allocator_mspacefree(NNAllocMSpace* msp, void* mem)
 {
     size_t psize;
     size_t tsize;
     size_t dsize;
     size_t nsize;
     size_t prevsize;
-    nnallocchunkitem_t* p;
-    nnallocstate_t* fm;
-    nnallocchunkitem_t* next;
-    nnallocchunkitem_t* prev;
+    NNAllocChunkItem* p;
+    NNAllocState* fm;
+    NNAllocChunkItem* next;
+    NNAllocChunkItem* prev;
     if(mem != 0)
     {
         p = nn_allocator_mem2chunk(mem);
-        fm = (nnallocstate_t*)msp;
+        fm = (NNAllocState*)msp;
         if(!nn_allocator_okmagic(fm))
         {
             NNALLOC_CMAC_USAGEERRORACTION(fm, p);
@@ -4227,13 +4227,13 @@ void nn_allocator_mspacefree(nnallocmspace_t* msp, void* mem)
     }
 }
 
-void* nn_allocator_mspacecalloc(nnallocmspace_t* msp, size_t n_elements, size_t elem_size)
+void* nn_allocator_mspacecalloc(NNAllocMSpace* msp, size_t n_elements, size_t elem_size)
 {
     void* mem;
     size_t req;
-    nnallocstate_t* ms;
+    NNAllocState* ms;
     req = 0;
-    ms = (nnallocstate_t*)msp;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4256,9 +4256,9 @@ void* nn_allocator_mspacecalloc(nnallocmspace_t* msp, size_t n_elements, size_t 
     return mem;
 }
 
-void* nn_allocator_mspacerealloc(nnallocmspace_t* msp, void* oldmem, size_t bytes)
+void* nn_allocator_mspacerealloc(NNAllocMSpace* msp, void* oldmem, size_t bytes)
 {
-    nnallocstate_t* ms;
+    NNAllocState* ms;
     if(oldmem == 0)
     {
         return nn_allocator_mspacemalloc(msp, bytes);
@@ -4272,7 +4272,7 @@ void* nn_allocator_mspacerealloc(nnallocmspace_t* msp, void* oldmem, size_t byte
     #endif
     else
     {
-        ms = (nnallocstate_t*)msp;
+        ms = (NNAllocState*)msp;
         if(!nn_allocator_okmagic(ms))
         {
             NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4282,10 +4282,10 @@ void* nn_allocator_mspacerealloc(nnallocmspace_t* msp, void* oldmem, size_t byte
     }
 }
 
-void* nn_allocator_mspacememalign(nnallocmspace_t* msp, size_t alignment, size_t bytes)
+void* nn_allocator_mspacememalign(NNAllocMSpace* msp, size_t alignment, size_t bytes)
 {
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4294,13 +4294,13 @@ void* nn_allocator_mspacememalign(nnallocmspace_t* msp, size_t alignment, size_t
     return nn_allocator_mstate_internalmemalign(ms, alignment, bytes);
 }
 
-void** nn_allocator_mspaceindependentcalloc(nnallocmspace_t* msp, size_t n_elements, size_t elem_size, void* chunks[])
+void** nn_allocator_mspaceindependentcalloc(NNAllocMSpace* msp, size_t n_elements, size_t elem_size, void* chunks[])
 {
     size_t sz;
-    nnallocstate_t* ms;
+    NNAllocState* ms;
     /* serves as 1-element array */
     sz = elem_size;
-    ms = (nnallocstate_t*)msp;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4309,10 +4309,10 @@ void** nn_allocator_mspaceindependentcalloc(nnallocmspace_t* msp, size_t n_eleme
     return nn_allocator_mstate_ialloc(ms, n_elements, &sz, 3, chunks);
 }
 
-void** nn_allocator_mspaceindependentcomalloc(nnallocmspace_t* msp, size_t n_elements, size_t sizes[], void* chunks[])
+void** nn_allocator_mspaceindependentcomalloc(NNAllocMSpace* msp, size_t n_elements, size_t sizes[], void* chunks[])
 {
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
@@ -4321,12 +4321,12 @@ void** nn_allocator_mspaceindependentcomalloc(nnallocmspace_t* msp, size_t n_ele
     return nn_allocator_mstate_ialloc(ms, n_elements, sizes, 0, chunks);
 }
 
-int nn_allocator_mspacetrim(nnallocmspace_t* msp, size_t pad)
+int nn_allocator_mspacetrim(NNAllocMSpace* msp, size_t pad)
 {
     int result;
-    nnallocstate_t* ms;
+    NNAllocState* ms;
     result = 0;
-    ms = (nnallocstate_t*)msp;
+    ms = (NNAllocState*)msp;
     if(nn_allocator_okmagic(ms))
     {
         if(!NNALLOC_CMAC_PREACTION(ms))
@@ -4342,10 +4342,10 @@ int nn_allocator_mspacetrim(nnallocmspace_t* msp, size_t pad)
     return result;
 }
 
-void nn_allocator_mspacemallocstats(nnallocmspace_t* msp)
+void nn_allocator_mspacemallocstats(NNAllocMSpace* msp)
 {
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(nn_allocator_okmagic(ms))
     {
         nn_allocator_mstate_internalmallocstats(ms);
@@ -4356,11 +4356,11 @@ void nn_allocator_mspacemallocstats(nnallocmspace_t* msp)
     }
 }
 
-size_t nn_allocator_mspacefootprint(nnallocmspace_t* msp)
+size_t nn_allocator_mspacefootprint(NNAllocMSpace* msp)
 {
     size_t result;
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(nn_allocator_okmagic(ms))
     {
         result = ms->footprint;
@@ -4369,11 +4369,11 @@ size_t nn_allocator_mspacefootprint(nnallocmspace_t* msp)
     return result;
 }
 
-size_t nn_allocator_mspacemaxfootprint(nnallocmspace_t* msp)
+size_t nn_allocator_mspacemaxfootprint(NNAllocMSpace* msp)
 {
     size_t result;
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(nn_allocator_okmagic(ms))
     {
         result = ms->maxfootprint;
@@ -4382,10 +4382,10 @@ size_t nn_allocator_mspacemaxfootprint(nnallocmspace_t* msp)
     return result;
 }
 
-nnallocmallocinfo_t nn_allocator_mspacemallinfo(nnallocmspace_t* msp)
+NNAllocMallocInfo nn_allocator_mspacemallinfo(NNAllocMSpace* msp)
 {
-    nnallocstate_t* ms;
-    ms = (nnallocstate_t*)msp;
+    NNAllocState* ms;
+    ms = (NNAllocState*)msp;
     if(!nn_allocator_okmagic(ms))
     {
         NNALLOC_CMAC_USAGEERRORACTION(ms, ms);
