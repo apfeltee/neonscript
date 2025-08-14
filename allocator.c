@@ -19,11 +19,9 @@
 
 #if !defined(NEON_FORCEINLINE)
     #if defined(__STRICT_ANSI__)
-        #define NEON_INLINE static
         #define NEON_FORCEINLINE static
         #define inline
     #else
-        #define NEON_INLINE static inline
         #if defined(__GNUC__)
             #define NEON_FORCEINLINE static __attribute__((always_inline)) inline
         #else

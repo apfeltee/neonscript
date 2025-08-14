@@ -27,6 +27,25 @@ void nn_vm_initvmstate(NNState* state)
     }
 }
 
+NEON_INLINE void nn_vm_resizeinfo(NNState* state, const char* context, NNObjFunction* closure, size_t needed)
+{
+    const char* name;
+    (void)state;
+    (void)needed;
+    name = "unknown";
+    if(closure->fnclosure.scriptfunc != NULL)
+    {
+        if(closure->fnclosure.scriptfunc->name != NULL)
+        {
+            if(closure->fnclosure.scriptfunc->name->sbuf.data != NULL)
+            {
+                name = closure->fnclosure.scriptfunc->name->sbuf.data; 
+            }
+        }
+    }
+    fprintf(stderr, "resizing %s for closure %s\n", context, name);
+}
+
 
 /**
 * grows vmstate.(stack|frame)values, respectively.
@@ -39,7 +58,7 @@ void nn_vm_initvmstate(NNState* state)
 * i.e., [NNValue x 32] -> [NNValue x <newsize>], without
 * copying anything beyond primitive values.
 */
-bool nn_vm_resizestack(NNState* state, NNObjFunction* closure, size_t needed)
+NEON_INLINE bool nn_vm_resizestack(NNState* state, NNObjFunction* closure, size_t needed)
 {
     size_t oldsz;
     size_t newsz;
@@ -71,7 +90,7 @@ bool nn_vm_resizestack(NNState* state, NNObjFunction* closure, size_t needed)
     return true;
 }
 
-bool nn_vm_resizeframes(NNState* state, NNObjFunction* closure, size_t needed)
+NEON_INLINE bool nn_vm_resizeframes(NNState* state, NNObjFunction* closure, size_t needed)
 {
     /* return false; */
     size_t i;
@@ -120,7 +139,7 @@ bool nn_vm_resizeframes(NNState* state, NNObjFunction* closure, size_t needed)
     return true;
 }
 
-bool nn_vm_checkmayberesize(NNState* state)
+NEON_INLINE bool nn_vm_checkmayberesize(NNState* state)
 {
     NNObjFunction* closure;
     closure = NULL;
@@ -147,24 +166,6 @@ bool nn_vm_checkmayberesize(NNState* state)
     return false;
 }
 
-void nn_vm_resizeinfo(NNState* state, const char* context, NNObjFunction* closure, size_t needed)
-{
-    const char* name;
-    (void)state;
-    (void)needed;
-    name = "unknown";
-    if(closure->fnclosure.scriptfunc != NULL)
-    {
-        if(closure->fnclosure.scriptfunc->name != NULL)
-        {
-            if(closure->fnclosure.scriptfunc->name->sbuf.data != NULL)
-            {
-                name = closure->fnclosure.scriptfunc->name->sbuf.data; 
-            }
-        }
-    }
-    fprintf(stderr, "resizing %s for closure %s\n", context, name);
-}
 
 void nn_state_resetvmstate(NNState* state)
 {

@@ -809,4 +809,39 @@ NNValue nn_objfnfile_tell(NNState* state, NNValue thisval, NNValue* argv, size_t
 #undef DENY_STD
 
 
-
+void nn_state_installobjectfile(NNState* state)
+{
+    static NNConstClassMethodItem filemethods[] =
+    {
+        {"close", nn_objfnfile_close},
+        {"open", nn_objfnfile_open},
+        {"read", nn_objfnfile_readmethod},
+        {"get", nn_objfnfile_get},
+        {"gets", nn_objfnfile_gets},
+        {"write", nn_objfnfile_write},
+        {"puts", nn_objfnfile_puts},
+        {"printf", nn_objfnfile_printf},
+        {"number", nn_objfnfile_number},
+        {"isTTY", nn_objfnfile_istty},
+        {"isOpen", nn_objfnfile_isopen},
+        {"isClosed", nn_objfnfile_isclosed},
+        {"flush", nn_objfnfile_flush},
+        {"stats", nn_objfnfile_statmethod},
+        {"path", nn_objfnfile_path},
+        {"seek", nn_objfnfile_seek},
+        {"tell", nn_objfnfile_tell},
+        {"mode", nn_objfnfile_mode},
+        {"name", nn_objfnfile_name},
+        {"readLine", nn_objfnfile_readline},
+        {NULL, NULL},
+    };
+    nn_class_defnativeconstructor(state->classprimfile, nn_objfnfile_constructor);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "read"), nn_objfnfile_readstatic);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "write"), nn_objfnfile_writestatic);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "put"), nn_objfnfile_writestatic);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "exists"), nn_objfnfile_exists);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isFile"), nn_objfnfile_isfile);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isDirectory"), nn_objfnfile_isdirectory);
+    nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "stat"), nn_objfnfile_statstatic);
+    nn_state_installmethods(state, state->classprimfile, filemethods);
+}

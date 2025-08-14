@@ -612,3 +612,38 @@ NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size
     return accumulator;
 }
 
+void nn_state_installobjectdict(NNState* state)
+{
+    static NNConstClassMethodItem dictmethods[] =
+    {
+        {"keys", nn_objfndict_keys},
+        {"size", nn_objfndict_length},
+        {"add", nn_objfndict_add},
+        {"set", nn_objfndict_set},
+        {"clear", nn_objfndict_clear},
+        {"clone", nn_objfndict_clone},
+        {"compact", nn_objfndict_compact},
+        {"contains", nn_objfndict_contains},
+        {"extend", nn_objfndict_extend},
+        {"get", nn_objfndict_get},
+        {"values", nn_objfndict_values},
+        {"remove", nn_objfndict_remove},
+        {"isEmpty", nn_objfndict_isempty},
+        {"findKey", nn_objfndict_findkey},
+        {"toList", nn_objfndict_tolist},
+        {"each", nn_objfndict_each},
+        {"filter", nn_objfndict_filter},
+        {"some", nn_objfndict_some},
+        {"every", nn_objfndict_every},
+        {"reduce", nn_objfndict_reduce},
+        {"@iter", nn_objfndict_iter},
+        {"@itern", nn_objfndict_itern},
+        {NULL, NULL},
+    };
+    #if 0
+    nn_class_defnativeconstructor(state->classprimdict, nn_objfndict_constructor);
+    nn_class_defstaticnativemethod(state->classprimdict, nn_string_copycstr(state, "keys"), nn_objfndict_keys);
+    #endif
+    nn_state_installmethods(state, state->classprimdict, dictmethods);
+}
+

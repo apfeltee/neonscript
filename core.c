@@ -68,70 +68,6 @@ NNProperty nn_property_make(NNState* state, NNValue val, NNFieldType type)
     return nn_property_makewithpointer(state, val, type);
 }
 
-NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    (void)argv;
-    (void)argc;
-    return nn_value_fromobject(nn_util_numbertobinstring(state, nn_value_asnumber(thisval)));
-}
-
-NNValue nn_objfnnumber_tooctstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    (void)argv;
-    (void)argc;
-    return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(thisval), false));
-}
-
-NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue val;
-    NNValue rtval;
-    NNObjString* os;
-    (void)thisval;
-    if(argc == 0)
-    {
-        return nn_value_makenumber(0);
-    }
-    val = argv[0];
-    if(nn_value_isnumber(val))
-    {
-        return val;
-    }
-    if(nn_value_isnull(val))
-    {
-        return nn_value_makenumber(0);
-    }
-    if(!nn_value_isstring(val))
-    {
-        NEON_RETURNERROR("Number() expects no arguments, or number, or string");
-    }
-    NNAstToken tok;
-    NNAstLexer lex;
-    os = nn_value_asstring(val);
-    nn_astlex_init(&lex, state, os->sbuf.data);
-    tok = nn_astlex_scannumber(&lex);
-    rtval = nn_astparser_compilestrnumber(tok.type, tok.start);
-    return rtval;
-}
-
-
-
-NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue v;
-    NNPrinter pr;
-    NNObjString* os;
-    (void)thisval;
-    (void)argc;
-    v = argv[0];
-    nn_printer_makestackstring(state, &pr);
-    pr.jsonmode = true;
-    nn_printer_printvalue(&pr, v, true, false);
-    os = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
-    return nn_value_fromobject(os);
-}
-
 void nn_state_installmethods(NNState* state, NNObjClass* klass, NNConstClassMethodItem* listmethods)
 {
     int i;
@@ -149,650 +85,15 @@ void nn_state_installmethods(NNState* state, NNObjClass* klass, NNConstClassMeth
 
 void nn_state_initbuiltinmethods(NNState* state)
 {
-    NNObjClass* klass;
-    {
-        klass = state->classprimprocess;
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "directory"), nn_value_fromobject(state->processinfo->cliexedirectory));
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "env"), nn_value_fromobject(state->envdict));
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
-        nn_class_setstaticproperty(klass, nn_string_copycstr(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "kill"), nn_objfnprocess_kill);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exit"), nn_objfnprocess_exit);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exedirectory"), nn_objfnprocess_exedirectory);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "scriptdirectory"), nn_objfnprocess_scriptdirectory);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "script"), nn_objfnprocess_scriptfile);
-    }
-    {
-        static NNConstClassMethodItem objectmethods[] =
-        {
-            {"dump", nn_objfnobject_dumpself},
-            {"isa", nn_objfnobject_isa},
-            {"toString", nn_objfnobject_tostring},
-            {"isArray", nn_objfnobject_isarray},
-            {"isString", nn_objfnobject_isstring},
-            {"isCallable", nn_objfnobject_iscallable},
-            {"isBool", nn_objfnobject_isbool},
-            {"isNumber", nn_objfnobject_isnumber},
-            {"isInt", nn_objfnobject_isint},
-            {"isDict", nn_objfnobject_isdict},
-            {"isObject", nn_objfnobject_isobject},
-            {"isFunction", nn_objfnobject_isfunction},
-            {"isIterable", nn_objfnobject_isiterable},
-            {"isClass", nn_objfnobject_isclass},
-            {"isFile", nn_objfnobject_isfile},
-            {"isInstance", nn_objfnobject_isinstance},
-            {NULL, NULL},
-        };
-        nn_class_defstaticnativemethod(state->classprimobject, nn_string_copycstr(state, "typename"), nn_objfnobject_typename);
-        nn_class_defstaticcallablefield(state->classprimobject, nn_string_copycstr(state, "prototype"), nn_objfnobject_getselfclass);
-        nn_state_installmethods(state, state->classprimobject, objectmethods);
-    }
-    {
-        nn_class_defstaticcallablefield(state->classprimclass, nn_string_copycstr(state, "name"), nn_objfnclass_getselfname);
-
-    }    
-    {
-        static NNConstClassMethodItem numbermethods[] =
-        {
-            {"toHexString", nn_objfnnumber_tohexstring},
-            {"toOctString", nn_objfnnumber_tooctstring},
-            {"toBinString", nn_objfnnumber_tobinstring},
-            {NULL, NULL},
-        };
-        nn_class_defnativeconstructor(state->classprimnumber, nn_objfnnumber_constructor);
-        nn_state_installmethods(state, state->classprimnumber, numbermethods);
-    }
-    {
-        static NNConstClassMethodItem stringmethods[] =
-        {
-            {"@iter", nn_objfnstring_iter},
-            {"@itern", nn_objfnstring_itern},
-            {"size", nn_objfnstring_length},
-            {"substr", nn_objfnstring_substring},
-            {"substring", nn_objfnstring_substring},
-            {"charCodeAt", nn_objfnstring_charcodeat},
-            {"charAt", nn_objfnstring_charat},
-            {"upper", nn_objfnstring_upper},
-            {"lower", nn_objfnstring_lower},
-            {"trim", nn_objfnstring_trim},
-            {"ltrim", nn_objfnstring_ltrim},
-            {"rtrim", nn_objfnstring_rtrim},
-            {"split", nn_objfnstring_split},
-            {"indexOf", nn_objfnstring_indexof},
-            {"count", nn_objfnstring_count},
-            {"toNumber", nn_objfnstring_tonumber},
-            {"toList", nn_objfnstring_tolist},
-            {"lpad", nn_objfnstring_lpad},
-            {"rpad", nn_objfnstring_rpad},
-            {"replace", nn_objfnstring_replace},
-            {"each", nn_objfnstring_each},
-            {"startsWith", nn_objfnstring_startswith},
-            {"endsWith", nn_objfnstring_endswith},
-            {"isAscii", nn_objfnstring_isascii},
-            {"isAlpha", nn_objfnstring_isalpha},
-            {"isAlnum", nn_objfnstring_isalnum},
-            {"isNumber", nn_objfnstring_isnumber},
-            {"isFloat", nn_objfnstring_isfloat},
-            {"isLower", nn_objfnstring_islower},
-            {"isUpper", nn_objfnstring_isupper},
-            {"isSpace", nn_objfnstring_isspace},
-            {"utf8Chars", nn_objfnstring_utf8chars},
-            {"utf8Codepoints", nn_objfnstring_utf8codepoints},
-            {"utf8Bytes", nn_objfnstring_utf8codepoints},
-            {"match", nn_objfnstring_matchcapture},
-            {"matches", nn_objfnstring_matchonly},
-            {NULL, NULL},
-        };
-        nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "fromCharCode"), nn_objfnstring_fromcharcode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Decode"), nn_objfnstring_utf8decode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Encode"), nn_objfnstring_utf8encode);
-        nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
-        nn_class_defcallablefield(state->classprimstring, nn_string_copycstr(state, "length"), nn_objfnstring_length);
-        nn_state_installmethods(state, state->classprimstring, stringmethods);
-    }
-    {
-        static NNConstClassMethodItem arraymethods[] =
-        {
-            {"size", nn_objfnarray_length},
-            {"join", nn_objfnarray_join},
-            {"append", nn_objfnarray_append},
-            {"push", nn_objfnarray_append},
-            {"clear", nn_objfnarray_clear},
-            {"clone", nn_objfnarray_clone},
-            {"count", nn_objfnarray_count},
-            {"extend", nn_objfnarray_extend},
-            {"indexOf", nn_objfnarray_indexof},
-            {"insert", nn_objfnarray_insert},
-            {"pop", nn_objfnarray_pop},
-            {"shift", nn_objfnarray_shift},
-            {"removeAt", nn_objfnarray_removeat},
-            {"remove", nn_objfnarray_remove},
-            {"reverse", nn_objfnarray_reverse},
-            {"sort", nn_objfnarray_sort},
-            {"contains", nn_objfnarray_contains},
-            {"delete", nn_objfnarray_delete},
-            {"first", nn_objfnarray_first},
-            {"last", nn_objfnarray_last},
-            {"isEmpty", nn_objfnarray_isempty},
-            {"take", nn_objfnarray_take},
-            {"get", nn_objfnarray_get},
-            {"compact", nn_objfnarray_compact},
-            {"unique", nn_objfnarray_unique},
-            {"zip", nn_objfnarray_zip},
-            {"zipFrom", nn_objfnarray_zipfrom},
-            {"toDict", nn_objfnarray_todict},
-            {"each", nn_objfnarray_each},
-            {"map", nn_objfnarray_map},
-            {"filter", nn_objfnarray_filter},
-            {"some", nn_objfnarray_some},
-            {"every", nn_objfnarray_every},
-            {"reduce", nn_objfnarray_reduce},
-            {"slice", nn_objfnarray_slice},
-            {"@iter", nn_objfnarray_iter},
-            {"@itern", nn_objfnarray_itern},
-            {NULL, NULL}
-        };
-        nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
-        nn_class_defcallablefield(state->classprimarray, nn_string_copycstr(state, "length"), nn_objfnarray_length);
-        nn_state_installmethods(state, state->classprimarray, arraymethods);
-    }
-    {
-        static NNConstClassMethodItem dictmethods[] =
-        {
-            {"keys", nn_objfndict_keys},
-            {"size", nn_objfndict_length},
-            {"add", nn_objfndict_add},
-            {"set", nn_objfndict_set},
-            {"clear", nn_objfndict_clear},
-            {"clone", nn_objfndict_clone},
-            {"compact", nn_objfndict_compact},
-            {"contains", nn_objfndict_contains},
-            {"extend", nn_objfndict_extend},
-            {"get", nn_objfndict_get},
-            {"values", nn_objfndict_values},
-            {"remove", nn_objfndict_remove},
-            {"isEmpty", nn_objfndict_isempty},
-            {"findKey", nn_objfndict_findkey},
-            {"toList", nn_objfndict_tolist},
-            {"each", nn_objfndict_each},
-            {"filter", nn_objfndict_filter},
-            {"some", nn_objfndict_some},
-            {"every", nn_objfndict_every},
-            {"reduce", nn_objfndict_reduce},
-            {"@iter", nn_objfndict_iter},
-            {"@itern", nn_objfndict_itern},
-            {NULL, NULL},
-        };
-        #if 0
-        nn_class_defnativeconstructor(state->classprimdict, nn_objfndict_constructor);
-        nn_class_defstaticnativemethod(state->classprimdict, nn_string_copycstr(state, "keys"), nn_objfndict_keys);
-        #endif
-        nn_state_installmethods(state, state->classprimdict, dictmethods);
-    }
-    {
-        static NNConstClassMethodItem filemethods[] =
-        {
-            {"close", nn_objfnfile_close},
-            {"open", nn_objfnfile_open},
-            {"read", nn_objfnfile_readmethod},
-            {"get", nn_objfnfile_get},
-            {"gets", nn_objfnfile_gets},
-            {"write", nn_objfnfile_write},
-            {"puts", nn_objfnfile_puts},
-            {"printf", nn_objfnfile_printf},
-            {"number", nn_objfnfile_number},
-            {"isTTY", nn_objfnfile_istty},
-            {"isOpen", nn_objfnfile_isopen},
-            {"isClosed", nn_objfnfile_isclosed},
-            {"flush", nn_objfnfile_flush},
-            {"stats", nn_objfnfile_statmethod},
-            {"path", nn_objfnfile_path},
-            {"seek", nn_objfnfile_seek},
-            {"tell", nn_objfnfile_tell},
-            {"mode", nn_objfnfile_mode},
-            {"name", nn_objfnfile_name},
-            {"readLine", nn_objfnfile_readline},
-            {NULL, NULL},
-        };
-        nn_class_defnativeconstructor(state->classprimfile, nn_objfnfile_constructor);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "read"), nn_objfnfile_readstatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "write"), nn_objfnfile_writestatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "put"), nn_objfnfile_writestatic);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "exists"), nn_objfnfile_exists);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isFile"), nn_objfnfile_isfile);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "isDirectory"), nn_objfnfile_isdirectory);
-        nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr(state, "stat"), nn_objfnfile_statstatic);
-        nn_state_installmethods(state, state->classprimfile, filemethods);
-    }
-    {
-        static NNConstClassMethodItem rangemethods[] =
-        {
-            {"lower", nn_objfnrange_lower},
-            {"upper", nn_objfnrange_upper},
-            {"range", nn_objfnrange_range},
-            {"expand", nn_objfnrange_expand},
-            {"toArray", nn_objfnrange_expand},
-            {"@iter", nn_objfnrange_iter},
-            {"@itern", nn_objfnrange_itern},
-            {NULL, NULL},
-        };
-        nn_class_defnativeconstructor(state->classprimrange, nn_objfnrange_constructor);
-        nn_state_installmethods(state, state->classprimrange, rangemethods);
-    }
-    {
-        klass = nn_util_makeclass(state, "Math", state->classprimobject);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "abs"), nn_objfnmath_abs);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "round"), nn_objfnmath_round);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "sqrt"), nn_objfnmath_sqrt);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "ceil"), nn_objfnmath_ceil);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "floor"), nn_objfnmath_floor);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "min"), nn_objfnmath_min);
-    }
-    {
-        klass = nn_util_makeclass(state, "JSON", state->classprimobject);
-        nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "stringify"), nn_objfnjson_stringify);
-    }
-}
-
-NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    struct timeval tv;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "time", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 0);
-    osfn_gettimeofday(&tv, NULL);
-    return nn_value_makenumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
-}
-
-NNValue nn_nativefn_microtime(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    struct timeval tv;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "microtime", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 0);
-    osfn_gettimeofday(&tv, NULL);
-    return nn_value_makenumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
-}
-
-NNValue nn_nativefn_id(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue val;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "id", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    val = argv[0];
-    return nn_value_makenumber(*(long*)&val);
-}
-
-NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "int", argv, argc);
-    NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
-    if(argc == 0)
-    {
-        return nn_value_makenumber(0);
-    }
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    return nn_value_makenumber((double)((int)nn_value_asnumber(argv[0])));
-}
-
-NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    size_t len;
-    char* string;
-    int ch;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "chr", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    ch = nn_value_asnumber(argv[0]);
-    string = nn_util_utf8encode(ch, &len);
-    return nn_value_fromobject(nn_string_takelen(state, string, len));
-}
-
-NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    int ord;
-    int length;
-    NNObjString* string;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "ord", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(argv[0]);
-    length = string->sbuf.length;
-    if(length > 1)
-    {
-        NEON_RETURNERROR("ord() expects character as argument, string given");
-    }
-    ord = (int)string->sbuf.data[0];
-    if(ord < 0)
-    {
-        ord += 256;
-    }
-    return nn_value_makenumber(ord);
-}
-
-void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index)
-{
-    uint32_t i;
-    binst[0] = seed;
-    for(i = 1; i < NEON_CONFIG_MTSTATESIZE; i++)
-    {
-        binst[i] = (uint32_t)(1812433253UL * (binst[i - 1] ^ (binst[i - 1] >> 30)) + i);
-    }
-    *index = NEON_CONFIG_MTSTATESIZE;
-}
-
-uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index)
-{
-    uint32_t i;
-    uint32_t y;
-    if(*index >= NEON_CONFIG_MTSTATESIZE)
-    {
-        for(i = 0; i < NEON_CONFIG_MTSTATESIZE - 397; i++)
-        {
-            y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-            binst[i] = binst[i + 397] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        }
-        for(; i < NEON_CONFIG_MTSTATESIZE - 1; i++)
-        {
-            y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-            binst[i] = binst[i + (397 - NEON_CONFIG_MTSTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        }
-        y = (binst[NEON_CONFIG_MTSTATESIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
-        binst[NEON_CONFIG_MTSTATESIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        *index = 0;
-    }
-    y = binst[*index];
-    *index = *index + 1;
-    y = y ^ (y >> 11);
-    y = y ^ ((y << 7) & 0x9d2c5680);
-    y = y ^ ((y << 15) & 0xefc60000);
-    y = y ^ (y >> 18);
-    return y;
-}
-
-double nn_util_mtrand(double lowerlimit, double upperlimit)
-{
-    double randnum;
-    uint32_t randval;
-    struct timeval tv;
-    static uint32_t mtstate[NEON_CONFIG_MTSTATESIZE];
-    static uint32_t mtindex = NEON_CONFIG_MTSTATESIZE + 1;
-    if(mtindex >= NEON_CONFIG_MTSTATESIZE)
-    {
-        osfn_gettimeofday(&tv, NULL);
-        nn_util_mtseed((uint32_t)(1000000 * tv.tv_sec + tv.tv_usec), mtstate, &mtindex);
-    }
-    randval = nn_util_mtgenerate(mtstate, &mtindex);
-    randnum = lowerlimit + ((double)randval / UINT32_MAX) * (upperlimit - lowerlimit);
-    return randnum;
-}
-
-NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    int tmp;
-    int lowerlimit;
-    int upperlimit;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "rand", argv, argc);
-    NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 2);
-    lowerlimit = 0;
-    upperlimit = 1;
-    if(argc > 0)
-    {
-        NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        lowerlimit = nn_value_asnumber(argv[0]);
-    }
-    if(argc == 2)
-    {
-        NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        upperlimit = nn_value_asnumber(argv[1]);
-    }
-    if(lowerlimit > upperlimit)
-    {
-        tmp = upperlimit;
-        upperlimit = lowerlimit;
-        lowerlimit = tmp;
-    }
-    return nn_value_makenumber(nn_util_mtrand(lowerlimit, upperlimit));
-}
-
-NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue result;
-    NNObjString* os;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "eval", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(argv[0]);
-    /*fprintf(stderr, "eval:src=%s\n", os->sbuf.data);*/
-    result = nn_state_evalsource(state, os->sbuf.data);
-    return result;
-}
-
-/*
-NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue result;
-    NNObjString* os;
-    NNArgCheck check;
-    nn_argcheck_init(state, &check, "loadfile", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(argv[0]);
-    fprintf(stderr, "eval:src=%s\n", os->sbuf.data);
-    result = nn_state_evalsource(state, os->sbuf.data);
-    return result;
-}
-*/
-
-NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "instanceof", argv, argc);
-    NEON_ARGS_CHECKCOUNT(&check, 2);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isinstance);
-    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isclass);
-    return nn_value_makebool(nn_util_isinstanceof(nn_value_asinstance(argv[0])->klass, nn_value_asclass(argv[1])));
-}
-
-
-void nn_strformat_init(NNState* state, NNFormatInfo* nfi, NNPrinter* writer, const char* fmtstr, size_t fmtlen)
-{
-    nfi->pstate = state;
-    nfi->fmtstr = fmtstr;
-    nfi->fmtlen = fmtlen;
-    nfi->writer = writer;
-}
-
-void nn_strformat_destroy(NNFormatInfo* nfi)
-{
-    (void)nfi;
-}
-
-bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* argv)
-{
-    int ch;
-    int ival;
-    int nextch;
-    bool ok;
-    size_t i;
-    size_t argpos;
-    NNValue cval;
-    i = 0;
-    argpos = argbegin;
-    ok = true;
-    while(i < nfi->fmtlen)
-    {
-        ch = nfi->fmtstr[i];
-        nextch = -1;
-        if((i + 1) < nfi->fmtlen)
-        {
-            nextch = nfi->fmtstr[i+1];
-        }
-        i++;
-        if(ch == '%')
-        {
-            if(nextch == '%')
-            {
-                nn_printer_writechar(nfi->writer, '%');
-            }
-            else
-            {
-                i++;
-                if((int)argpos > argc)
-                {
-                    nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "too few arguments");
-                    ok = false;
-                    cval = nn_value_makenull();
-                }
-                else
-                {
-                    cval = argv[argpos];
-                }
-                argpos++;
-                switch(nextch)
-                {
-                    case 'q':
-                    case 'p':
-                        {
-                            nn_printer_printvalue(nfi->writer, cval, true, true);
-                        }
-                        break;
-                    case 'c':
-                        {
-                            ival = (int)nn_value_asnumber(cval);
-                            nn_printer_printf(nfi->writer, "%c", ival);
-                        }
-                        break;
-                    /* TODO: implement actual field formatting */
-                    case 's':
-                    case 'd':
-                    case 'i':
-                    case 'g':
-                        {
-                            nn_printer_printvalue(nfi->writer, cval, false, true);
-                        }
-                        break;
-                    default:
-                        {
-                            nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
-                        }
-                        break;
-                }
-            }
-        }
-        else
-        {
-            nn_printer_writechar(nfi->writer, ch);
-        }
-    }
-    return ok;
-}
-
-NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNFormatInfo nfi;
-    NNPrinter pr;
-    NNObjString* res;
-    NNObjString* ofmt;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "sprintf", argv, argc);
-    NEON_ARGS_CHECKMINARG(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(argv[0]);
-    nn_printer_makestackstring(state, &pr);
-    nn_strformat_init(state, &nfi, &pr, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
-    if(!nn_strformat_format(&nfi, argc, 1, argv))
-    {
-        return nn_value_makenull();
-    }
-    res = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
-    return nn_value_fromobject(res);
-}
-
-NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNFormatInfo nfi;
-    NNObjString* ofmt;
-    NNArgCheck check;
-    (void)thisval;
-    nn_argcheck_init(state, &check, "printf", argv, argc);
-    NEON_ARGS_CHECKMINARG(&check, 1);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(argv[0]);
-    nn_strformat_init(state, &nfi, state->stdoutprinter, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
-    if(!nn_strformat_format(&nfi, argc, 1, argv))
-    {
-    }
-    return nn_value_makenull();
-}
-
-NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    size_t i;
-    (void)thisval;
-    for(i = 0; i < argc; i++)
-    {
-        nn_printer_printvalue(state->stdoutprinter, argv[i], false, true);
-    }
-    return nn_value_makenull();
-}
-
-NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    NNValue v;
-    v = nn_nativefn_print(state, thisval, argv, argc);
-    nn_printer_writestring(state->stdoutprinter, "\n");
-    return v;
-}
-
-
-NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
-{
-    (void)state;
-    (void)thisval;
-    (void)argv;
-    (void)argc;
-    return nn_value_makebool(false);
-}
-
-/**
-* setup global functions.
-*/
-void nn_state_initbuiltinfunctions(NNState* state)
-{
-    nn_state_defnativefunction(state, "chr", nn_nativefn_chr);
-    nn_state_defnativefunction(state, "id", nn_nativefn_id);
-    nn_state_defnativefunction(state, "int", nn_nativefn_int);
-    nn_state_defnativefunction(state, "instanceof", nn_nativefn_instanceof);
-    nn_state_defnativefunction(state, "ord", nn_nativefn_ord);
-    nn_state_defnativefunction(state, "sprintf", nn_nativefn_sprintf);
-    nn_state_defnativefunction(state, "printf", nn_nativefn_printf);
-    nn_state_defnativefunction(state, "print", nn_nativefn_print);
-    nn_state_defnativefunction(state, "println", nn_nativefn_println);
-    nn_state_defnativefunction(state, "rand", nn_nativefn_rand);
-    nn_state_defnativefunction(state, "eval", nn_nativefn_eval);
-    nn_state_defnativefunction(state, "isNaN", nn_nativefn_isnan);
-    nn_state_defnativefunction(state, "microtime", nn_nativefn_microtime);
-    nn_state_defnativefunction(state, "time", nn_nativefn_time);
-
+    nn_state_installobjectprocess(state);
+    nn_state_installobjectobject(state);
+    nn_state_installobjectnumber(state);
+    nn_state_installobjectstring(state);
+    nn_state_installobjectarray(state);
+    nn_state_installobjectdict(state);
+    nn_state_installobjectfile(state);
+    nn_state_installobjectrange(state);
+    nn_state_installmodmath(state);
 }
 
 /**
@@ -1345,6 +646,9 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     pstate->markvalue = true;
     nn_vm_initvmstate(pstate);
     nn_state_resetvmstate(pstate);
+    /*
+    * setup default config
+    */
     {
         pstate->conf.enablestrictmode = false;
         pstate->conf.shoulddumpstack = false;
@@ -1355,6 +659,9 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->conf.enableapidebug = false;
         pstate->conf.maxsyntaxerrors = NEON_CONFIG_MAXSYNTAXERRORS;
     }
+    /*
+    * initialize GC state
+    */
     {
         pstate->gcstate.bytesallocated = 0;
         /* default is 1mb. Can be modified via the -g flag. */
@@ -1364,6 +671,9 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->gcstate.graystack = NULL;
         pstate->lastreplvalue = nn_value_makenull();
     }
+    /*
+    * initialize various printer instances
+    */
     {
         pstate->stdoutprinter = nn_printer_makeio(pstate, stdout, false);
         pstate->stdoutprinter->shouldflush = true;
@@ -1372,16 +682,24 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->debugwriter->shortenvalues = true;
         pstate->debugwriter->maxvallength = 15;
     }
+    /*
+    * initialize runtime tables
+    */
     {
         nn_valtable_init(pstate, &pstate->openedmodules);
         nn_valtable_init(pstate, &pstate->allocatedstrings);
         nn_valtable_init(pstate, &pstate->declaredglobals);
     }
+    /*
+    * initialize the toplevel module
+    */
     {
         pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
         pstate->constructorname = nn_string_copycstr(pstate, "constructor");
     }
-
+    /*
+    * declare default classes
+    */
     {
         pstate->classprimclass = nn_util_makeclass(pstate, "Class", NULL);
         pstate->classprimobject = nn_util_makeclass(pstate, "Object", pstate->classprimclass);
@@ -1394,9 +712,15 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->classprimcallable = nn_util_makeclass(pstate, "Function", pstate->classprimobject);
         pstate->classprimprocess = nn_util_makeclass(pstate, "Process", pstate->classprimobject);
     }
+    /*
+    * declare environment variables dictionary
+    */
     {
         pstate->envdict = nn_object_makedict(pstate);
     }
+    /*
+    * declare default exception types
+    */
     {
         if(pstate->exceptions.stdexception == NULL)
         {
@@ -1409,9 +733,10 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
         pstate->exceptions.argumenterror = nn_except_makeclass(pstate, NULL, "ArgumentError", true);
         pstate->exceptions.regexerror = nn_except_makeclass(pstate, NULL, "RegexError", true);
         pstate->exceptions.importerror = nn_except_makeclass(pstate, NULL, "ImportError", true);
-
     }
+    /* all the other bits .... */
     nn_state_buildprocessinfo(pstate);
+    /* NOW the module paths can be set up */
     nn_state_setupmodulepaths(pstate);
     {
         nn_state_initbuiltinfunctions(pstate);

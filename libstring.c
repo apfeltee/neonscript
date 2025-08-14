@@ -42,6 +42,100 @@
 
 #define ROUNDUP2POW(x) nn_strutil_rndup2pow64(x)
 
+
+void nn_strformat_init(NNState* state, NNFormatInfo* nfi, NNPrinter* writer, const char* fmtstr, size_t fmtlen)
+{
+    nfi->pstate = state;
+    nfi->fmtstr = fmtstr;
+    nfi->fmtlen = fmtlen;
+    nfi->writer = writer;
+}
+
+void nn_strformat_destroy(NNFormatInfo* nfi)
+{
+    (void)nfi;
+}
+
+bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* argv)
+{
+    int ch;
+    int ival;
+    int nextch;
+    bool ok;
+    size_t i;
+    size_t argpos;
+    NNValue cval;
+    i = 0;
+    argpos = argbegin;
+    ok = true;
+    while(i < nfi->fmtlen)
+    {
+        ch = nfi->fmtstr[i];
+        nextch = -1;
+        if((i + 1) < nfi->fmtlen)
+        {
+            nextch = nfi->fmtstr[i+1];
+        }
+        i++;
+        if(ch == '%')
+        {
+            if(nextch == '%')
+            {
+                nn_printer_writechar(nfi->writer, '%');
+            }
+            else
+            {
+                i++;
+                if((int)argpos > argc)
+                {
+                    nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "too few arguments");
+                    ok = false;
+                    cval = nn_value_makenull();
+                }
+                else
+                {
+                    cval = argv[argpos];
+                }
+                argpos++;
+                switch(nextch)
+                {
+                    case 'q':
+                    case 'p':
+                        {
+                            nn_printer_printvalue(nfi->writer, cval, true, true);
+                        }
+                        break;
+                    case 'c':
+                        {
+                            ival = (int)nn_value_asnumber(cval);
+                            nn_printer_printf(nfi->writer, "%c", ival);
+                        }
+                        break;
+                    /* TODO: implement actual field formatting */
+                    case 's':
+                    case 'd':
+                    case 'i':
+                    case 'g':
+                        {
+                            nn_printer_printvalue(nfi->writer, cval, false, true);
+                        }
+                        break;
+                    default:
+                        {
+                            nn_except_throwclass(nfi->pstate, nfi->pstate->exceptions.argumenterror, "unknown/invalid format flag '%%c'", nextch);
+                        }
+                        break;
+                }
+            }
+        }
+        else
+        {
+            nn_printer_writechar(nfi->writer, ch);
+        }
+    }
+    return ok;
+}
+
 size_t nn_strutil_rndup2pow64(uint64_t x)
 {
     /* long long >=64 bits guaranteed in C99 */
@@ -55,6 +149,7 @@ size_t nn_strutil_rndup2pow64(uint64_t x)
     ++x;
     return x;
 }
+
 
 /*
 // Replaces `sep` with \0 in str
@@ -1485,6 +1580,103 @@ NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
     return nn_string_copylen(state, origos->sbuf.data, origos->sbuf.length);
 }
 
+bool nn_string_appendstringlen(NNObjString* os, const char* str, size_t len)
+{
+    return nn_strbuf_appendstrn(&os->sbuf, str, len);
+}
+
+bool nn_string_appendstring(NNObjString* os, const char* str)
+{
+    return nn_string_appendstringlen(os, str, strlen(str));
+}
+
+bool nn_string_appendobject(NNObjString* os, NNObjString* other)
+{
+    return nn_string_appendstringlen(os, other->sbuf.data, other->sbuf.length);
+}
+
+bool nn_string_appendbyte(NNObjString* os, int ch)
+{
+    return nn_strbuf_appendchar(&os->sbuf, ch);
+}
+
+bool nn_string_appendnumulong(NNObjString* os, unsigned long val)
+{
+    return nn_strbuf_appendnumulong(&os->sbuf, val);
+}
+
+bool nn_string_appendnumint(NNObjString* os, int val)
+{
+    return nn_strbuf_appendnumint(&os->sbuf, val);
+}
+
+int nn_string_appendfmtv(NNObjString* os, const char* fmt, va_list va)
+{
+    return nn_strbuf_appendformatv(&os->sbuf, fmt, va);
+}
+
+int nn_string_appendfmt(NNObjString* os, const char* fmt, ...)
+{
+    int r;
+    va_list va;
+    va_start(va, fmt);
+    r = nn_string_appendfmtv(os, fmt, va);
+    va_end(va);
+    return r;
+}
+
+NNObjString* nn_string_substrlen(NNObjString* os, size_t start, size_t maxlen)
+{
+    char* str;
+    NNObjString* rt;
+    str = nn_strbuf_substr(&os->sbuf, start, maxlen);
+    rt = nn_string_takelen(((NNObject*)os)->pstate, str, maxlen);
+    return rt;
+}
+
+NNObjString* nn_string_substr(NNObjString* os, size_t start)
+{
+    return nn_string_substrlen(os, start, os->sbuf.length);
+}
+
+size_t nn_string_chompinplace(NNObjString* os)
+{
+    return nn_strbuf_chomp(&os->sbuf);
+}
+
+NNObjString* nn_string_chomp(NNObjString* os)
+{
+    NNObjString* r;
+    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
+    nn_string_chompinplace(r);
+    return r;
+}
+
+void nn_string_reverseinplace(NNObjString* os)
+{
+    return nn_strbuf_reverse(&os->sbuf);
+}
+
+NNObjString* nn_string_reverse(NNObjString* os)
+{
+    NNObjString* r;
+    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
+    nn_string_reverseinplace(r);
+    return r;
+}
+
+void nn_string_triminplace(NNObjString* os)
+{
+    nn_strbuf_triminplace(&os->sbuf);
+}
+
+NNObjString* nn_string_trim(NNObjString* os)
+{
+    NNObjString* r;
+    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
+    nn_string_triminplace(r);
+    return r;
+}
 
 
 NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -1532,7 +1724,7 @@ NNValue nn_objfnstring_utf8encode(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_fromobject(res);
 }
 
-NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc, bool onlycodepoint)
+static NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc, bool onlycodepoint)
 {
     int cp;
     bool havemax;
@@ -2579,3 +2771,57 @@ NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size
     /* pop the argument list */
     return nn_value_makenull();
 }
+
+
+void nn_state_installobjectstring(NNState* state)
+{
+    static NNConstClassMethodItem stringmethods[] =
+    {
+        {"@iter", nn_objfnstring_iter},
+        {"@itern", nn_objfnstring_itern},
+        {"size", nn_objfnstring_length},
+        {"substr", nn_objfnstring_substring},
+        {"substring", nn_objfnstring_substring},
+        {"charCodeAt", nn_objfnstring_charcodeat},
+        {"charAt", nn_objfnstring_charat},
+        {"upper", nn_objfnstring_upper},
+        {"lower", nn_objfnstring_lower},
+        {"trim", nn_objfnstring_trim},
+        {"ltrim", nn_objfnstring_ltrim},
+        {"rtrim", nn_objfnstring_rtrim},
+        {"split", nn_objfnstring_split},
+        {"indexOf", nn_objfnstring_indexof},
+        {"count", nn_objfnstring_count},
+        {"toNumber", nn_objfnstring_tonumber},
+        {"toList", nn_objfnstring_tolist},
+        {"lpad", nn_objfnstring_lpad},
+        {"rpad", nn_objfnstring_rpad},
+        {"replace", nn_objfnstring_replace},
+        {"each", nn_objfnstring_each},
+        {"startsWith", nn_objfnstring_startswith},
+        {"endsWith", nn_objfnstring_endswith},
+        {"isAscii", nn_objfnstring_isascii},
+        {"isAlpha", nn_objfnstring_isalpha},
+        {"isAlnum", nn_objfnstring_isalnum},
+        {"isNumber", nn_objfnstring_isnumber},
+        {"isFloat", nn_objfnstring_isfloat},
+        {"isLower", nn_objfnstring_islower},
+        {"isUpper", nn_objfnstring_isupper},
+        {"isSpace", nn_objfnstring_isspace},
+        {"utf8Chars", nn_objfnstring_utf8chars},
+        {"utf8Codepoints", nn_objfnstring_utf8codepoints},
+        {"utf8Bytes", nn_objfnstring_utf8codepoints},
+        {"match", nn_objfnstring_matchcapture},
+        {"matches", nn_objfnstring_matchonly},
+        {NULL, NULL},
+    };
+    nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "fromCharCode"), nn_objfnstring_fromcharcode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Decode"), nn_objfnstring_utf8decode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Encode"), nn_objfnstring_utf8encode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
+    nn_class_defcallablefield(state->classprimstring, nn_string_copycstr(state, "length"), nn_objfnstring_length);
+    nn_state_installmethods(state, state->classprimstring, stringmethods);
+
+}
+

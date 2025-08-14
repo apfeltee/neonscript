@@ -1055,3 +1055,51 @@ NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(narr);
 }
 
+void nn_state_installobjectarray(NNState* state)
+{
+    static NNConstClassMethodItem arraymethods[] =
+    {
+        {"size", nn_objfnarray_length},
+        {"join", nn_objfnarray_join},
+        {"append", nn_objfnarray_append},
+        {"push", nn_objfnarray_append},
+        {"clear", nn_objfnarray_clear},
+        {"clone", nn_objfnarray_clone},
+        {"count", nn_objfnarray_count},
+        {"extend", nn_objfnarray_extend},
+        {"indexOf", nn_objfnarray_indexof},
+        {"insert", nn_objfnarray_insert},
+        {"pop", nn_objfnarray_pop},
+        {"shift", nn_objfnarray_shift},
+        {"removeAt", nn_objfnarray_removeat},
+        {"remove", nn_objfnarray_remove},
+        {"reverse", nn_objfnarray_reverse},
+        {"sort", nn_objfnarray_sort},
+        {"contains", nn_objfnarray_contains},
+        {"delete", nn_objfnarray_delete},
+        {"first", nn_objfnarray_first},
+        {"last", nn_objfnarray_last},
+        {"isEmpty", nn_objfnarray_isempty},
+        {"take", nn_objfnarray_take},
+        {"get", nn_objfnarray_get},
+        {"compact", nn_objfnarray_compact},
+        {"unique", nn_objfnarray_unique},
+        {"zip", nn_objfnarray_zip},
+        {"zipFrom", nn_objfnarray_zipfrom},
+        {"toDict", nn_objfnarray_todict},
+        {"each", nn_objfnarray_each},
+        {"map", nn_objfnarray_map},
+        {"filter", nn_objfnarray_filter},
+        {"some", nn_objfnarray_some},
+        {"every", nn_objfnarray_every},
+        {"reduce", nn_objfnarray_reduce},
+        {"slice", nn_objfnarray_slice},
+        {"@iter", nn_objfnarray_iter},
+        {"@itern", nn_objfnarray_itern},
+        {NULL, NULL}
+    };
+    nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
+    nn_class_defcallablefield(state->classprimarray, nn_string_copycstr(state, "length"), nn_objfnarray_length);
+    nn_state_installmethods(state, state->classprimarray, arraymethods);
+
+}

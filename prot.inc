@@ -39,33 +39,8 @@ void nn_argcheck_init(NNState *state, NNArgCheck *ch, const char *name, NNValue 
 NNProperty nn_property_makewithpointer(NNState *state, NNValue val, NNFieldType type);
 NNProperty nn_property_makewithgetset(NNState *state, NNValue val, NNValue getter, NNValue setter, NNFieldType type);
 NNProperty nn_property_make(NNState *state, NNValue val, NNFieldType type);
-NNValue nn_objfnnumber_tobinstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnnumber_tooctstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnnumber_constructor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnjson_stringify(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_installmethods(NNState *state, NNObjClass *klass, NNConstClassMethodItem *listmethods);
 void nn_state_initbuiltinmethods(NNState *state);
-NNValue nn_nativefn_time(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_microtime(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_id(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_int(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_chr(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_ord(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-void nn_util_mtseed(uint32_t seed, uint32_t *binst, uint32_t *index);
-uint32_t nn_util_mtgenerate(uint32_t *binst, uint32_t *index);
-double nn_util_mtrand(double lowerlimit, double upperlimit);
-NNValue nn_nativefn_rand(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_eval(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_instanceof(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-void nn_strformat_init(NNState *state, NNFormatInfo *nfi, NNPrinter *writer, const char *fmtstr, size_t fmtlen);
-void nn_strformat_destroy(NNFormatInfo *nfi);
-bool nn_strformat_format(NNFormatInfo *nfi, int argc, int argbegin, NNValue *argv);
-NNValue nn_nativefn_sprintf(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_printf(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_print(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_println(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_nativefn_isnan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-void nn_state_initbuiltinfunctions(NNState *state);
 void nn_state_vwarn(NNState *state, const char *fmt, va_list va);
 void nn_state_warn(NNState *state, const char *fmt, ...);
 NNValue nn_except_getstacktrace(NNState *state);
@@ -151,6 +126,7 @@ NNValue nn_objfnarray_some(NNState *state, NNValue thisval, NNValue *argv, size_
 NNValue nn_objfnarray_every(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnarray_reduce(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnarray_slice(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectarray(NNState *state);
 /* libclass.c */
 NNObjClass *nn_object_makeclass(NNState *state, NNObjString *name, NNObjClass *parent);
 void nn_class_destroy(NNObjClass *klass);
@@ -205,6 +181,7 @@ NNValue nn_objfndict_filter(NNState *state, NNValue thisval, NNValue *argv, size
 NNValue nn_objfndict_some(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfndict_every(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfndict_reduce(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectdict(NNState *state);
 /* libfile.c */
 NNObjFile *nn_object_makefile(NNState *state, FILE *handle, bool isstd, const char *path, const char *mode);
 void nn_file_destroy(NNObjFile *file);
@@ -240,6 +217,7 @@ NNValue nn_objfnfile_mode(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_objfnfile_name(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_seek(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_tell(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectfile(NNState *state);
 /* libfunc.c */
 NNObjFunction *nn_object_makefuncbound(NNState *state, NNValue receiver, NNObjFunction *method);
 NNObjFunction *nn_object_makefuncscript(NNState *state, NNObjModule *module, NNFuncContextType type);
@@ -266,12 +244,39 @@ NNValue nn_objfnmath_sqrt(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_objfnmath_ceil(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnmath_floor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnmath_min(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnnumber_tobinstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnnumber_tooctstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnnumber_constructor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectnumber(NNState *state);
+void nn_state_installmodmath(NNState *state);
+/* libobject.c */
+NNValue nn_objfnobject_dumpself(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_tostring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_typename(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_getselfclass(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isarray(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isa(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_iscallable(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isbool(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isnumber(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isint(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isdict(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isobject(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isfunction(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isiterable(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isclass(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isfile(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnobject_isinstance(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnclass_getselfname(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectobject(NNState *state);
 /* libprocess.c */
 NNValue nn_objfnprocess_exedirectory(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnprocess_scriptfile(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnprocess_scriptdirectory(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnprocess_exit(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnprocess_kill(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectprocess(NNState *state);
 /* librange.c */
 NNValue nn_objfnrange_lower(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnrange_upper(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -280,7 +285,11 @@ NNValue nn_objfnrange_iter(NNState *state, NNValue thisval, NNValue *argv, size_
 NNValue nn_objfnrange_itern(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnrange_expand(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnrange_constructor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectrange(NNState *state);
 /* libstring.c */
+void nn_strformat_init(NNState *state, NNFormatInfo *nfi, NNPrinter *writer, const char *fmtstr, size_t fmtlen);
+void nn_strformat_destroy(NNFormatInfo *nfi);
+bool nn_strformat_format(NNFormatInfo *nfi, int argc, int argbegin, NNValue *argv);
 size_t nn_strutil_rndup2pow64(uint64_t x);
 size_t nn_strutil_splitstr(char *str, char sep, char **ptrs, size_t nptrs);
 size_t nn_strutil_charreplace(char *str, char from, char to);
@@ -359,10 +368,25 @@ NNObjString *nn_string_takecstr(NNState *state, char *chars);
 NNObjString *nn_string_copylen(NNState *state, const char *chars, int length);
 NNObjString *nn_string_copycstr(NNState *state, const char *chars);
 NNObjString *nn_string_copyobject(NNState *state, NNObjString *origos);
+bool nn_string_appendstringlen(NNObjString *os, const char *str, size_t len);
+bool nn_string_appendstring(NNObjString *os, const char *str);
+bool nn_string_appendobject(NNObjString *os, NNObjString *other);
+bool nn_string_appendbyte(NNObjString *os, int ch);
+bool nn_string_appendnumulong(NNObjString *os, unsigned long val);
+bool nn_string_appendnumint(NNObjString *os, int val);
+int nn_string_appendfmtv(NNObjString *os, const char *fmt, va_list va);
+int nn_string_appendfmt(NNObjString *os, const char *fmt, ...);
+NNObjString *nn_string_substrlen(NNObjString *os, size_t start, size_t maxlen);
+NNObjString *nn_string_substr(NNObjString *os, size_t start);
+size_t nn_string_chompinplace(NNObjString *os);
+NNObjString *nn_string_chomp(NNObjString *os);
+void nn_string_reverseinplace(NNObjString *os);
+NNObjString *nn_string_reverse(NNObjString *os);
+void nn_string_triminplace(NNObjString *os);
+NNObjString *nn_string_trim(NNObjString *os);
 NNValue nn_objfnstring_utf8numbytes(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_utf8decode(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_utf8encode(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_util_stringutf8chars(NNState *state, NNValue thisval, NNValue *argv, size_t argc, bool onlycodepoint);
 NNValue nn_objfnstring_utf8chars(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_utf8codepoints(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_fromcharcode(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -402,6 +426,7 @@ NNValue nn_objfnstring_replace(NNState *state, NNValue thisval, NNValue *argv, s
 NNValue nn_objfnstring_iter(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_itern(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_each(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_installobjectstring(NNState *state);
 /* main.c */
 int main(int argc, char *argv[], char **envp);
 int replmain(const char *file);
@@ -433,6 +458,26 @@ void nn_gcmem_markcompilerroots(NNState *state);
 /* modast.c */
 NNValue nn_modfn_astscan_scan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNRegModule *nn_natmodule_load_astscan(NNState *state);
+/* modglobal.c */
+NNValue nn_nativefn_time(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_microtime(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_id(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_int(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_chr(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_ord(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_util_mtseed(uint32_t seed, uint32_t *binst, uint32_t *index);
+uint32_t nn_util_mtgenerate(uint32_t *binst, uint32_t *index);
+double nn_util_mtrand(double lowerlimit, double upperlimit);
+NNValue nn_nativefn_rand(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_eval(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_instanceof(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_sprintf(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_printf(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_print(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_println(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_nativefn_isnan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnjson_stringify(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+void nn_state_initbuiltinfunctions(NNState *state);
 /* modnull.c */
 NNRegModule *nn_natmodule_load_null(NNState *state);
 /* modos.c */
@@ -475,25 +520,6 @@ NNObjUserdata *nn_object_makeuserdata(NNState *state, void *pointer, const char 
 NNObjModule *nn_module_make(NNState *state, const char *name, const char *file, bool imported, bool retain);
 NNObjSwitch *nn_object_makeswitch(NNState *state);
 NNObjRange *nn_object_makerange(NNState *state, int lower, int upper);
-NNValue nn_objfnobject_dumpself(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_tostring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_typename(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_getselfclass(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isarray(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isa(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_iscallable(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isbool(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isnumber(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isint(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isdict(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isobject(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isfunction(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isiterable(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isclass(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isfile(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnobject_isinstance(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnclass_getselfname(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 /* parsercc.c */
 void nn_blob_init(NNState *state, NNBlob *blob);
 void nn_blob_push(NNBlob *blob, NNInstruction ins);
@@ -756,10 +782,6 @@ void nn_value_sortvalues(NNState *state, NNValue *values, int count);
 NNValue nn_value_copyvalue(NNState *state, NNValue value);
 /* vm.c */
 void nn_vm_initvmstate(NNState *state);
-bool nn_vm_resizestack(NNState *state, NNObjFunction *closure, size_t needed);
-bool nn_vm_resizeframes(NNState *state, NNObjFunction *closure, size_t needed);
-bool nn_vm_checkmayberesize(NNState *state);
-void nn_vm_resizeinfo(NNState *state, const char *context, NNObjFunction *closure, size_t needed);
 void nn_state_resetvmstate(NNState *state);
 bool nn_vm_callclosure(NNState *state, NNObjFunction *closure, NNValue thisval, int argcount);
 bool nn_vm_callnative(NNState *state, NNObjFunction *native, NNValue thisval, int argcount);

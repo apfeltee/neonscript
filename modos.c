@@ -517,6 +517,22 @@ NNRegModule* nn_natmodule_load_os(NNState* state)
     static NNRegFunc modfuncs[] =
     {
         {"readdir",   true,  nn_modfn_os_readdir},
+        /* todo: implement these! */
+        #if 0
+        {"chdir",   true,  nn_modfn_os_chdir},
+        {"mkdir",   true,  nn_modfn_os_mkdir},
+        {"rmdir",   true,  nn_modfn_os_rmdir},
+        {"touch",   true,  nn_modfn_os_touch},
+        {"stat",   true,  nn_modfn_os_stat},
+        {"unlink",   true,  nn_modfn_os_unlink},
+        {"pwd",   true,  nn_modfn_os_pwd},
+        {"basename",   true,  nn_modfn_os_basename},
+        {"dirname",   true,  nn_modfn_os_dirname},
+        {"getenv",   true,  nn_modfn_os_getenv},
+        {"setenv",   true,  nn_modfn_os_setenv},
+
+        /* shell-like directory state - might be trickier */
+        #endif
         {NULL,     false, NULL},
     };
     static NNRegField modfields[] =

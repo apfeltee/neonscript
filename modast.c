@@ -3,6 +3,10 @@
 
 NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    enum {
+        /* 12 == "NEON_ASTTOK_".length */
+        kTokPrefixLength = 12
+    };
     const char* cstr;
     NNObjString* insrc;
     NNAstLexer* scn;
@@ -22,8 +26,7 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, si
         token = nn_astlex_scantoken(scn);
         nn_dict_addentrycstr(itm, "line", nn_value_makenumber(token.line));
         cstr = nn_astutil_toktype2str(token.type);
-        /* 12 == "NEON_ASTTOK_".length */
-        nn_dict_addentrycstr(itm, "type", nn_value_fromobject(nn_string_copycstr(state, cstr + 12)));
+        nn_dict_addentrycstr(itm, "type", nn_value_fromobject(nn_string_copycstr(state, cstr + kTokPrefixLength)));
         nn_dict_addentrycstr(itm, "source", nn_value_fromobject(nn_string_copylen(state, token.start, token.length)));
         nn_array_push(arr, nn_value_fromobject(itm));
     }

@@ -114,4 +114,19 @@ NNValue nn_objfnrange_constructor(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_fromobject(orng);
 }
 
-
+void nn_state_installobjectrange(NNState* state)
+{    
+    static NNConstClassMethodItem rangemethods[] =
+    {
+        {"lower", nn_objfnrange_lower},
+        {"upper", nn_objfnrange_upper},
+        {"range", nn_objfnrange_range},
+        {"expand", nn_objfnrange_expand},
+        {"toArray", nn_objfnrange_expand},
+        {"@iter", nn_objfnrange_iter},
+        {"@itern", nn_objfnrange_itern},
+        {NULL, NULL},
+    };
+    nn_class_defnativeconstructor(state->classprimrange, nn_objfnrange_constructor);
+    nn_state_installmethods(state, state->classprimrange, rangemethods);    
+}

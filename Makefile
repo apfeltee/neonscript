@@ -7,7 +7,7 @@ unflags = \
 	-Wunused-but-set-variable \
 	-Wunused-const-variable \
 	-Wunused-const-variable \
-	-Wunused-function \
+	-Wno-unused-function \
 	-Wunused-label \
 	-Wunused-local-typedefs \
 	-Wunused-macros \
@@ -86,17 +86,20 @@ $(protofile): $(srcfiles_all)
 endif
 
 $(target): $(objfiles_all)
-	$(CC) -o $@ $^ $(LDFLAGS)
+	@echo "LINK $@"
+	@$(CC) -o $@ $^ $(LDFLAGS)
 
 -include $(depfiles_all)
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.c
-	$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
+	@echo "DEP $< -> $@"
+	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
 
 %.o: %.c
-	$(CC) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
+	@echo "CC $@ -> $<"
+	@$(CC) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:

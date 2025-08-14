@@ -65,3 +65,20 @@ NNValue nn_objfnprocess_kill(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
+void nn_state_installobjectprocess(NNState* state)
+{
+    NNObjClass* klass;
+    klass = state->classprimprocess;
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "directory"), nn_value_fromobject(state->processinfo->cliexedirectory));
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "env"), nn_value_fromobject(state->envdict));
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdin"), nn_value_fromobject(state->processinfo->filestdin));
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stdout"), nn_value_fromobject(state->processinfo->filestdout));
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "stderr"), nn_value_fromobject(state->processinfo->filestderr));
+    nn_class_setstaticproperty(klass, nn_string_copycstr(state, "pid"), nn_value_makenumber(state->processinfo->cliprocessid));
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "kill"), nn_objfnprocess_kill);
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exit"), nn_objfnprocess_exit);
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "exedirectory"), nn_objfnprocess_exedirectory);
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "scriptdirectory"), nn_objfnprocess_scriptdirectory);
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "script"), nn_objfnprocess_scriptfile);
+}
+
