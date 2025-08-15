@@ -144,11 +144,13 @@ NNObjString* nn_printer_copystring(NNPrinter* pr)
 
 bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
 {
+    size_t chlen;
+    chlen = sizeof(char);
     if(elen > 0)
     {
         if(pr->wrmode == NEON_PRMODE_FILE)
         {
-            fwrite(estr, sizeof(char), elen, pr->handle);
+            fwrite(estr, chlen, elen, pr->handle);
             if(pr->shouldflush)
             {
                 fflush(pr->handle);

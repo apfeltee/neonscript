@@ -1491,21 +1491,6 @@ NNObjString* nn_string_makefromstrbuf(NNState* state, NNStringBuffer* sbuf, uint
     return rs;
 }
 
-size_t nn_string_getlength(NNObjString* os)
-{
-    return os->sbuf.length;
-}
-
-const char* nn_string_getdata(NNObjString* os)
-{
-    return os->sbuf.data;
-}
-
-const char* nn_string_getcstr(NNObjString* os)
-{
-    return nn_string_getdata(os);
-}
-
 void nn_string_destroy(NNState* state, NNObjString* str)
 {
     nn_strbuf_destroyfromstack(&str->sbuf);

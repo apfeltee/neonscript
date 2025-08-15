@@ -1446,6 +1446,21 @@ NEON_FORCEINLINE uint32_t nn_util_hashstring(const char *str, size_t length)
     return ~crc;
 }
 
+NEON_FORCEINLINE size_t nn_string_getlength(NNObjString* os)
+{
+    return os->sbuf.length;
+}
+
+NEON_FORCEINLINE const char* nn_string_getdata(NNObjString* os)
+{
+    return os->sbuf.data;
+}
+
+NEON_FORCEINLINE const char* nn_string_getcstr(NNObjString* os)
+{
+    return nn_string_getdata(os);
+}
+
 NEON_FORCEINLINE bool nn_value_isobject(NNValue v)
 {
     #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)

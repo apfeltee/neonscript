@@ -429,7 +429,7 @@ int main(int argc, char* argv[], char** envp)
     };
     lino_context_init(&lictx);
     nn_memory_init();
-    #if defined(NEON_PLAT_ISWINDOWS)
+    #if defined(NEON_PLAT_ISWINDOWS) || defined(_MSC_VER)
         _setmode(fileno(stdin), _O_BINARY);
         _setmode(fileno(stdout), _O_BINARY);
         _setmode(fileno(stderr), _O_BINARY);
@@ -550,6 +550,9 @@ int main(int argc, char* argv[], char** envp)
     return 1;
 }
 
+/**
+* this function is used by clang-repl ONLY. don't call it directly, or bad things will happen!
+*/
 int replmain(const char* file)
 {
     const char* deffile;

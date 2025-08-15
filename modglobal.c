@@ -1,4 +1,11 @@
 
+/* for struct timeval - yeah, i don't know either why windows defines it in winsock ... */
+#if defined(_MSC_VER)
+    #include <winsock2.h>
+#else
+    #include <sys/time.h>
+#endif
+
 #include "neon.h"
 
 NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t argc)

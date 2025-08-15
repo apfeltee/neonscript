@@ -388,6 +388,34 @@ int osfn_mkdir(const char* path, size_t mode)
     #endif
 }
 
+int osfn_rmdir(const char* path)
+{
+    #if defined(OSFN_ISUNIXLIKE)
+        return rmdir(path);
+    #else
+        return -1;
+    #endif
+}
+
+int osfn_unlink(const char* path)
+{
+    #if defined(OSFN_ISUNIXLIKE)
+        return unlink(path);
+    #else
+        return -1;
+    #endif
+}
+
+
+const char* osfn_getenv(const char* key)
+{
+    return getenv(key);
+}
+
+bool osfn_setenv(const char* key, const char* value, bool replace)
+{
+    return (setenv(key, value, replace) == 0);
+}
 
 int osfn_chdir(const char* path)
 {
@@ -512,24 +540,147 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
+/*
+NNValue nn_modfn_os_$template(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    int64_t mod;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "chmod", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
+    path = nn_value_asstring(argv[0]);
+    mod = nn_value_asnumber(argv[1]);
+    r = osfn_chmod(nn_string_getdata(path), mod);
+    return nn_value_makenumber(r);
+}
+*/
+
+NNValue nn_modfn_os_chmod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    int64_t mod;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "chmod", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
+    path = nn_value_asstring(argv[0]);
+    mod = nn_value_asnumber(argv[1]);
+    r = osfn_chmod(nn_string_getdata(path), mod);
+    return nn_value_makenumber(r);
+}
+
+NNValue nn_modfn_os_mkdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    int64_t mod;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "mkdir", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
+    path = nn_value_asstring(argv[0]);
+    mod = nn_value_asnumber(argv[1]);
+    r = osfn_mkdir(nn_string_getdata(path), mod);
+    return nn_value_makenumber(r);
+}
+
+
+NNValue nn_modfn_os_chdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "chdir", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    r = osfn_chdir(nn_string_getdata(path));
+    return nn_value_makenumber(r);
+}
+
+NNValue nn_modfn_os_rmdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "rmdir", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
+    path = nn_value_asstring(argv[0]);
+    r = osfn_rmdir(nn_string_getdata(path));
+    return nn_value_makenumber(r);
+}
+
+NNValue nn_modfn_os_unlink(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int64_t r;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "unlink", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    r = osfn_unlink(nn_string_getdata(path));
+    return nn_value_makenumber(r);
+}
+
+NNValue nn_modfn_os_getenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    const char* r;
+    NNObjString* key;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "getenv", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    key = nn_value_asstring(argv[0]);
+    r = osfn_getenv(nn_string_getdata(key));
+    if(r == NULL)
+    {
+        return nn_value_makenull();
+    }
+    return nn_value_fromobject(nn_string_copycstr(state, r));
+}
+
+NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    NNObjString* key;
+    NNObjString* value;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "setenv", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
+    key = nn_value_asstring(argv[0]);
+    value = nn_value_asstring(argv[1]);
+    return nn_value_makebool(osfn_setenv(nn_string_getdata(key), nn_string_getdata(value), true));
+}
+
 NNRegModule* nn_natmodule_load_os(NNState* state)
 {
     static NNRegFunc modfuncs[] =
     {
         {"readdir",   true,  nn_modfn_os_readdir},
-        /* todo: implement these! */
-        #if 0
+        {"chmod",   true,  nn_modfn_os_chmod},
         {"chdir",   true,  nn_modfn_os_chdir},
         {"mkdir",   true,  nn_modfn_os_mkdir},
+        {"unlink",   true,  nn_modfn_os_unlink},
+        {"getenv",   true,  nn_modfn_os_getenv},
+        {"setenv",   true,  nn_modfn_os_setenv},
         {"rmdir",   true,  nn_modfn_os_rmdir},
+        /* todo: implement these! */
+        #if 0
         {"touch",   true,  nn_modfn_os_touch},
         {"stat",   true,  nn_modfn_os_stat},
-        {"unlink",   true,  nn_modfn_os_unlink},
         {"pwd",   true,  nn_modfn_os_pwd},
         {"basename",   true,  nn_modfn_os_basename},
         {"dirname",   true,  nn_modfn_os_dirname},
-        {"getenv",   true,  nn_modfn_os_getenv},
-        {"setenv",   true,  nn_modfn_os_setenv},
 
         /* shell-like directory state - might be trickier */
         #endif

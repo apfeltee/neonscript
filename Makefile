@@ -94,11 +94,11 @@ $(target): $(objfiles_all)
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
 %.d: %.c
-	@echo "DEP $< -> $@"
+	@echo "DEP $@ -> $<"
 	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
 
 %.o: %.c
-	@echo "CC $@ -> $<"
+	@echo "CC $< -> $@"
 	@$(CC) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
 
 .PHONY: clean

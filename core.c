@@ -1,10 +1,5 @@
 
-/* for struct timeval - yeah, i don't know either why windows defines it in winsock ... */
-#if defined(_MSC_VER)
-    #include <winsock2.h>
-#else
-    #include <sys/time.h>
-#endif
+
 #include "neon.h"
 
 NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
