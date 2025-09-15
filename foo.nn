@@ -1,0 +1,32 @@
+
+class Foo
+{
+    constructor()
+    {
+        println("constructor: this=", this)
+        this.g_number = 0;
+        this.g_items = {
+            color: "red",
+            name: "joe",
+        }
+    }
+
+    __indexget__(idx)
+    {
+        println("indexget: this=", this, ", idx=", idx)
+        return this.g_items[idx];
+    }
+
+    __add__(a)
+    {
+        println("println=", println);
+        println("add: this=", this, ", a=", a);
+        this.g_number += a;
+        return this;
+    }
+}
+
+f = Foo()
+println(f["color"])
+println(f + 5 + 10)
+println(f.g_number)

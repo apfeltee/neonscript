@@ -768,7 +768,7 @@ NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv, size_
                 nestargs[1] = nn_value_makenumber(i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused, false);
     }
     return nn_value_makenull();
 }
@@ -807,7 +807,7 @@ NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv, size_t
                     nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &res);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &res, false);
             nn_array_push(resultlist, res);
         }
         else
@@ -852,7 +852,7 @@ NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* argv, siz
                     nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
             if(!nn_value_isfalse(result))
             {
                 nn_array_push(resultlist, nn_valarray_get(&list->varray, i));
@@ -893,7 +893,7 @@ NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv, size_
                     nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
             if(!nn_value_isfalse(result))
             {
                 return nn_value_makebool(true);
@@ -935,7 +935,7 @@ NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* argv, size
                     nestargs[1] = nn_value_makenumber(i);
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
             if(nn_value_isfalse(result))
             {
                 return nn_value_makebool(false);
@@ -998,7 +998,7 @@ NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* argv, siz
                     }
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator, false);
         }
     }
     return accumulator;

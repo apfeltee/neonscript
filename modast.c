@@ -35,24 +35,24 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, si
 }
 
 
-NNRegModule* nn_natmodule_load_astscan(NNState* state)
+NNDefModule* nn_natmodule_load_astscan(NNState* state)
 {
-    NNRegModule* ret;
-    static NNRegFunc modfuncs[] =
+    NNDefModule* ret;
+    static NNDefFunc modfuncs[] =
     {
         {"scan",   true,  nn_modfn_astscan_scan},
         {NULL,     false, NULL},
     };
-    static NNRegField modfields[] =
+    static NNDefField modfields[] =
     {
         {NULL,       false, NULL},
     };
-    static NNRegModule module;
+    static NNDefModule module;
     (void)state;
     module.name = "astscan";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
+    module.definedfields = modfields;
+    module.definedfunctions = modfuncs;
+    module.definedclasses = NULL;
     module.fnpreloaderfunc = NULL;
     module.fnunloaderfunc = NULL;
     ret = &module;

@@ -182,20 +182,29 @@ NNProperty* nn_class_getstaticmethodfield(NNObjClass* klass, NNObjString* name)
     NNProperty* field;
     field = nn_valtable_getfield(&klass->staticmethods, nn_value_fromobject(name));
     return field;
+
 }
 
 NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
 {
+    NNObjInstance* oinst;
     NNObjInstance* instance;
+    oinst = NULL;
     instance = (NNObjInstance*)nn_object_allocobject(state, sizeof(NNObjInstance), NEON_OBJTYPE_INSTANCE, false);
     /* gc fix */
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     instance->active = true;
     instance->klass = klass;
+    instance->superinstance = NULL;
     nn_valtable_init(state, &instance->properties);
-    if(klass->instproperties.count > 0)
+    if(nn_valtable_count(&klass->instproperties) > 0)
     {
         nn_valtable_copy(&klass->instproperties, &instance->properties);
+    }
+    if(klass->superclass != NULL)
+    {
+        oinst = nn_object_makeinstance(state, klass->superclass);
+        instance->superinstance = oinst;
     }
     /* gc fix */
     nn_vm_stackpop(state);
@@ -221,7 +230,7 @@ void nn_instance_destroy(NNObjInstance* instance)
     state = ((NNObject*)instance)->pstate;
     if(!nn_value_isnull(instance->klass->destructor))
     {
-        if(!nn_vm_callvaluewithobject(state, instance->klass->constructor, nn_value_fromobject(instance), 0))
+        if(!nn_vm_callvaluewithobject(state, instance->klass->destructor, nn_value_fromobject(instance), 0, false))
         {
             
         }
@@ -235,3 +244,47 @@ bool nn_instance_defproperty(NNObjInstance* instance, NNObjString* name, NNValue
 {
     return nn_valtable_set(&instance->properties, nn_value_fromobject(name), val);
 }
+
+NNProperty* nn_instance_getvar(NNObjInstance* inst, NNObjString* name)
+{
+    NNProperty* field;
+    field = nn_valtable_getfield(&inst->properties, nn_value_fromobject(name));
+    if(field == NULL)
+    {
+        if(inst->superinstance != NULL)
+        {
+            return nn_instance_getvar(inst->superinstance, name);
+        }
+    }
+    return field;
+}
+
+
+NNProperty* nn_instance_getvarcstr(NNObjInstance* inst, const char* name)
+{
+    NNObjString* os;
+    os = nn_string_intern(((NNObject*)inst)->pstate, name);
+    return nn_instance_getvar(inst, os);
+}
+
+NNProperty* nn_instance_getmethod(NNObjInstance* inst, NNObjString* name)
+{
+    NNProperty* field;
+    field = nn_class_getmethodfield(inst->klass, name);
+    if(field == NULL)
+    {
+        if(inst->superinstance != NULL)
+        {
+            return nn_instance_getmethod(inst->superinstance, name);
+        }
+    }
+    return field;
+}
+
+NNProperty* nn_instance_getmethodcstr(NNObjInstance* inst, const char* name)
+{
+    NNObjString* os;
+    os = nn_string_intern(((NNObject*)inst)->pstate, name);
+    return nn_instance_getmethod(inst, os);    
+}
+

@@ -8,25 +8,25 @@
 * then, add said function in libmodule.c's nn_import_loadbuiltinmodules, and you're good to go!
 */
 
-NNRegModule* nn_natmodule_load_null(NNState* state)
+NNDefModule* nn_natmodule_load_null(NNState* state)
 {
-    static NNRegFunc modfuncs[] =
+    static NNDefFunc modfuncs[] =
     {
         /* {"somefunc",   true,  myfancymodulefunction},*/
         {NULL, false, NULL},
     };
 
-    static NNRegField modfields[] =
+    static NNDefField modfields[] =
     {
         /*{"somefield", true, the_function_that_gets_called},*/
         {NULL, false, NULL},
     };
-    static NNRegModule module;
+    static NNDefModule module;
     (void)state;
     module.name = "null";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
+    module.definedfields = modfields;
+    module.definedfunctions = modfuncs;
+    module.definedclasses = NULL;
     module.fnpreloaderfunc = NULL;
     module.fnunloaderfunc = NULL;
     return &module;

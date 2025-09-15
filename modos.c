@@ -514,6 +514,8 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
     NNValue nestargs[2];
     nn_argcheck_init(state, &check, "readdir", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    NEON_ARGS_CHECKTYPE(&check, 1, nn_value_iscallable);
+
     os = nn_value_asstring(argv[0]);
     callable = argv[1];
     dirn = os->sbuf.data;
@@ -528,7 +530,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
             #endif
             itemval = nn_value_fromobject(itemstr);
             nestargs[0] = itemval;
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, 1, &res);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, 1, &res, false);
         }
         fslib_dirclose(&rd);
         return nn_value_makenull();
@@ -662,9 +664,87 @@ NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(osfn_setenv(nn_string_getdata(key), nn_string_getdata(value), true));
 }
 
-NNRegModule* nn_natmodule_load_os(NNState* state)
+NNValue nn_modfn_os_cwdhelper(NNState* state, NNValue thisval, NNValue* argv, size_t argc, const char* name)
 {
-    static NNRegFunc modfuncs[] =
+    enum { kMaxBufSz = 1024 };
+    NNArgCheck check;
+    char* r;
+    char buf[kMaxBufSz];
+    (void)thisval;
+    nn_argcheck_init(state, &check, name, argv, argc);
+    r = osfn_getcwd(buf, kMaxBufSz);
+    if(r == NULL)
+    {
+        return nn_value_makenull();
+    }
+    return nn_value_fromobject(nn_string_copycstr(state, r));
+}
+
+NNValue nn_modfn_os_cwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    return nn_modfn_os_cwdhelper(state, thisval, argv, argc, "cwd");
+}
+
+NNValue nn_modfn_os_pwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    return nn_modfn_os_cwdhelper(state, thisval, argv, argc, "pwd");
+}
+
+NNValue nn_modfn_os_basename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    const char* r;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "basename", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    r = osfn_basename(nn_string_getdata(path));
+    if(r == NULL)
+    {
+        return nn_value_makenull();
+    }
+    return nn_value_fromobject(nn_string_copycstr(state, r));
+}
+
+NNValue nn_modfn_os_dirname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    const char* r;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "dirname", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    r = osfn_dirname(nn_string_getdata(path));
+    if(r == NULL)
+    {
+        return nn_value_makenull();
+    }
+    return nn_value_fromobject(nn_string_copycstr(state, r));
+}
+
+NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    FILE* fh;
+    NNObjString* path;
+    NNArgCheck check;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "touch", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    fh = fopen(nn_string_getdata(path), "rb");
+    if(fh == NULL)
+    {
+        return nn_value_makebool(false);
+    }
+    fclose(fh);
+    return nn_value_makebool(true);
+}
+
+NNDefModule* nn_natmodule_load_os(NNState* state)
+{
+    static NNDefFunc modfuncs[] =
     {
         {"readdir",   true,  nn_modfn_os_readdir},
         {"chmod",   true,  nn_modfn_os_chmod},
@@ -674,31 +754,31 @@ NNRegModule* nn_natmodule_load_os(NNState* state)
         {"getenv",   true,  nn_modfn_os_getenv},
         {"setenv",   true,  nn_modfn_os_setenv},
         {"rmdir",   true,  nn_modfn_os_rmdir},
-        /* todo: implement these! */
-        #if 0
-        {"touch",   true,  nn_modfn_os_touch},
-        {"stat",   true,  nn_modfn_os_stat},
         {"pwd",   true,  nn_modfn_os_pwd},
+        {"pwd",   true,  nn_modfn_os_cwd},
         {"basename",   true,  nn_modfn_os_basename},
         {"dirname",   true,  nn_modfn_os_dirname},
+        {"touch",   true,  nn_modfn_os_touch},
 
+        /* todo: implement these! */
+        #if 0
+        {"stat",   true,  nn_modfn_os_stat},
         /* shell-like directory state - might be trickier */
         #endif
         {NULL,     false, NULL},
     };
-    static NNRegField modfields[] =
+    static NNDefField modfields[] =
     {
         /*{"platform", true, get_os_platform},*/
         {NULL,       false, NULL},
     };
-    static NNRegModule module;
+    static NNDefModule module;
     (void)state;
     module.name = "os";
-    module.fields = modfields;
-    module.functions = modfuncs;
-    module.classes = NULL;
+    module.definedfields = modfields;
+    module.definedfunctions = modfuncs;
+    module.definedclasses = NULL;
     module.fnpreloaderfunc = &nn_modfn_os_preloader;
     module.fnunloaderfunc = NULL;
     return &module;
 }
-

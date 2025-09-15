@@ -1,10 +1,19 @@
 
 #include "neon.h"
 
+NNObjFunction* nn_object_makefuncgeneric(NNState* state, NNObjType fntype, NNValue thisval)
+{
+    NNObjFunction* ofn;
+    ofn = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), fntype, false);
+    ofn->clsthisval = thisval;
+    return ofn;
+
+}
+
 NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFunction* method)
 {
     NNObjFunction* bound;
-    bound = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCBOUND, false);
+    bound = nn_object_makefuncgeneric(state, NEON_OBJTYPE_FUNCBOUND, nn_value_makenull());
     bound->fnmethod.receiver = receiver;
     bound->fnmethod.method = method;
     return bound;
@@ -13,7 +22,7 @@ NNObjFunction* nn_object_makefuncbound(NNState* state, NNValue receiver, NNObjFu
 NNObjFunction* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNFuncContextType type)
 {
     NNObjFunction* function;
-    function = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCSCRIPT, false);
+    function = nn_object_makefuncgeneric(state, NEON_OBJTYPE_FUNCSCRIPT, nn_value_makenull());
     function->fnscriptfunc.arity = 0;
     function->upvalcount = 0;
     function->fnscriptfunc.isvariadic = false;
@@ -35,7 +44,7 @@ void nn_funcscript_destroy(NNObjFunction* function)
 NNObjFunction* nn_object_makefuncnative(NNState* state, NNNativeFN function, const char* name, void* uptr)
 {
     NNObjFunction* native;
-    native = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCNATIVE, false);
+    native = nn_object_makefuncgeneric(state, NEON_OBJTYPE_FUNCNATIVE, nn_value_makenull());
     native->fnnativefunc.natfunc = function;
     native->name = nn_string_copycstr(state, name);
     native->contexttype = NEON_FNCONTEXTTYPE_FUNCTION;
@@ -43,7 +52,7 @@ NNObjFunction* nn_object_makefuncnative(NNState* state, NNNativeFN function, con
     return native;
 }
 
-NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function)
+NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function, NNValue thisval)
 {
     int i;
     NNObjUpvalue** upvals;
@@ -57,7 +66,7 @@ NNObjFunction* nn_object_makefuncclosure(NNState* state, NNObjFunction* function
             upvals[i] = NULL;
         }
     }
-    closure = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), NEON_OBJTYPE_FUNCCLOSURE, false);
+    closure = nn_object_makefuncgeneric(state, NEON_OBJTYPE_FUNCCLOSURE, thisval);
     closure->fnclosure.scriptfunc = function;
     closure->fnclosure.upvalues = upvals;
     closure->upvalcount = function->upvalcount;

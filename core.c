@@ -427,7 +427,7 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
         /* ret */
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_RETURN, 0));
     }
-    closure = nn_object_makefuncclosure(state, function);
+    closure = nn_object_makefuncclosure(state, function, nn_value_makenull());
     nn_vm_stackpop(state);
     /* set class constructor */
     nn_vm_stackpush(state, nn_value_fromobject(closure));
@@ -809,7 +809,7 @@ NNObjFunction* nn_state_compilesource(NNState* state, NNObjModule* module, bool 
     {
         function->name = nn_string_copycstr(state, "(evaledcode)");
     }
-    closure = nn_object_makefuncclosure(state, function);
+    closure = nn_object_makefuncclosure(state, function, nn_value_makenull());
     if(!fromeval)
     {
         nn_vm_stackpop(state);
@@ -838,7 +838,11 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
     {
         return NEON_STATUS_OK;
     }
-    nn_vm_callclosure(state, closure, nn_value_makenull(), 0);
+    /*
+    * NB. it is a closure, since it's compiled code.
+    * so no need to create a NNValue and call nn_vm_callvalue().
+    */
+    nn_vm_callclosure(state, closure, nn_value_makenull(), 0, false);
     status = nn_vm_runvm(state, 0, dest);
     return status;
 }
@@ -854,7 +858,7 @@ NNValue nn_state_evalsource(NNState* state, const char* source)
     closure = nn_state_compilesource(state, state->topmodule, true, source, false);
     callme = nn_value_fromobject(closure);
     argc = nn_nestcall_prepare(state, callme, nn_value_makenull(), NULL, 0);
-    ok = nn_nestcall_callfunction(state, callme, nn_value_makenull(), NULL, 0, &retval);
+    ok = nn_nestcall_callfunction(state, callme, nn_value_makenull(), NULL, 0, &retval, false);
     if(!ok)
     {
         nn_except_throw(state, "eval() failed");

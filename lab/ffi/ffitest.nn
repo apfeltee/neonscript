@@ -1,0 +1,27 @@
+
+// how does LuaJIT implement the parser for C declarations?
+// should be trivial to do, but maybe we can reuse something from it.
+//
+// having a decent libffi wrapper would greatly increase usefulness of Neon,
+// but it is far from trivial.
+// merely loading and unloading modules with fixed names is simple enough,
+// but that would require quite a lot of manual labor to abstracct, say, SDL.
+// FFI could greatly reduce the time to create an abstraction.
+/*
+here's how LuaJit does it:
+
+local ffi = require("ffi")
+ffi.cdef[[
+int printf(const char *fmt, ...);
+]]
+ffi.C.printf("Hello %s!", "world")
+
+
+*/
+
+const FFI = import("ffi")
+
+FFI.loadLibrary("SomeLib")
+...
+
+const somefn = FFI.loadFunction("int printf(const char* fmt, ...)")

@@ -68,6 +68,12 @@
     #endif
 #endif
 
+#if !defined(NEON_FORCEINLINE)
+    #define NEON_FORCEINLINE static
+#endif
+#if !defined(NEON_INLINE)
+    #define NEON_INLINE static
+#endif
 
 #if 0
     #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
@@ -200,6 +206,7 @@
     #define NEON_ATTR_PRINTFLIKE(a, b)
 #endif
 
+
 /*
 // NOTE:
 // 1. Any call to nn_gcmem_protect() within a function/block must be accompanied by
@@ -257,10 +264,10 @@
     }
 
 /* check for argument at index $i for $type, where $type is a nn_value_is*() function */
-#define NEON_ARGS_CHECKTYPE(chp, i, type) \
-    if(nn_util_unlikely(!type((chp)->argv[i]))) \
+#define NEON_ARGS_CHECKTYPE(chp, i, typefunc) \
+    if(nn_util_unlikely(!typefunc((chp)->argv[i]))) \
     { \
-        return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", (chp)->name, (i) + 1, nn_value_typefromfunction(type), nn_value_typename((chp)->argv[i])); \
+        return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", (chp)->name, (i) + 1, nn_value_typefromfunction(typefunc), nn_value_typename((chp)->argv[i], false), false); \
     }
 
 #if 0
@@ -661,17 +668,16 @@ typedef struct /**/ NNAstUpvalue NNAstUpvalue;
 typedef struct /**/ NNAstClassCompiler NNAstClassCompiler;
 typedef struct /**/ NNAstParser NNAstParser;
 typedef struct /**/ NNAstRule NNAstRule;
-typedef struct /**/ NNRegFunc NNRegFunc;
-typedef struct /**/ NNRegField NNRegField;
-typedef struct /**/ NNRegClass NNRegClass;
-typedef struct /**/ NNRegModule NNRegModule;
+typedef struct /**/ NNDefFunc NNDefFunc;
+typedef struct /**/ NNDefField NNDefField;
+typedef struct /**/ NNDefClass NNDefClass;
+typedef struct /**/ NNDefModule NNDefModule;
 typedef struct /**/ NNState NNState;
 typedef struct /**/ NNPrinter NNPrinter;
 typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
 typedef struct NNBoxedString NNBoxedString;
-typedef struct NNHashPtrTable NNHashPtrTable;
 typedef struct NNConstClassMethodItem NNConstClassMethodItem;
 typedef struct NNStringBuffer NNStringBuffer;
 typedef union NNUtilDblUnion NNUtilDblUnion;
@@ -702,7 +708,7 @@ typedef bool (*NNAstParsePrefixFN)(NNAstParser*, bool);
 typedef bool (*NNAstParseInfixFN)(NNAstParser*, NNAstToken, bool);
 typedef NNValue (*NNClassFieldFN)(NNState*);
 typedef void (*NNModLoaderFN)(NNState*);
-typedef NNRegModule* (*NNModInitFN)(NNState*);
+typedef NNDefModule* (*NNModInitFN)(NNState*);
 typedef double(*nnbinopfunc_t)(double, double);
 
 typedef size_t (*mcitemhashfn_t)(void*);
@@ -905,30 +911,12 @@ struct NNHashValTable
     * obviously the reason is that somewhere a table (from NNObjInstance) is being
     * read after being freed, but for now, this will work(-ish).
     */
-    bool active;
-    int count;
-    int capacity;
+    bool htactive;
+    int htcount;
+    int htcapacity;
     NNState* pstate;
-    NNHashValEntry* entries;
+    NNHashValEntry* htentries;
 };
-
-struct NNHashPtrTable
-{
-    NNState* pstate;
-    size_t keytypesize;
-    size_t valtypesize;
-    unsigned int* vdcells;
-    unsigned long* vdhashes;
-    char** vdkeys;
-    void** vdvalues;
-    unsigned int* vdcellindices;
-    unsigned int vdcount;
-    unsigned int vditemcapacity;
-    unsigned int vdcellcapacity;
-    mcitemhashfn_t funchashfn;
-    mcitemcomparefn_t funckeyequalsfn;
-};
-
 
 struct NNObjString
 {
@@ -1017,6 +1005,7 @@ struct NNObjInstance
     bool active;
     NNHashValTable properties;
     NNObjClass* klass;
+    NNObjInstance* superinstance;
 };
 
 struct NNObjFunction
@@ -1025,6 +1014,7 @@ struct NNObjFunction
     NNFuncContextType contexttype;
     NNObjString* name;
     int upvalcount;
+    NNValue clsthisval;
     union
     {
         /* closure */
@@ -1328,28 +1318,28 @@ struct NNAstRule
     NNAstPrecedence precedence;
 };
 
-struct NNRegFunc
+struct NNDefFunc
 {
     const char* name;
     bool isstatic;
     NNNativeFN function;
 };
 
-struct NNRegField
+struct NNDefField
 {
     const char* name;
     bool isstatic;
     NNClassFieldFN fieldvalfn;
 };
 
-struct NNRegClass
+struct NNDefClass
 {
     const char* name;
-    NNRegField* fields;
-    NNRegFunc* functions;
+    NNDefField* defpubfields;
+    NNDefFunc* defpubfunctions;
 };
 
-struct NNRegModule
+struct NNDefModule
 {
     /*
     * the name of this module.
@@ -1359,23 +1349,23 @@ struct NNRegModule
     const char* name;
 
     /* exported fields, if any. */
-    NNRegField* fields;
+    NNDefField* definedfields;
 
     /* regular functions, if any. */
-    NNRegFunc* functions;
+    NNDefFunc* definedfunctions;
 
     /* exported classes, if any.
     * i.e.:
     * {"Stuff",
-    *   (NNRegField[]){
+    *   (NNDefField[]){
     *       {"enabled", true},
     *       ...
     *   },
-    *   (NNRegFunc[]){
+    *   (NNDefFunc[]){
     *       {"isStuff", myclass_fn_isstuff},
     *       ...
     * }})*/
-    NNRegClass* classes;
+    NNDefClass* definedclasses;
 
     /* function that is called directly upon loading the module. can be NULL. */
     NNModLoaderFN fnpreloaderfunc;
@@ -1391,7 +1381,6 @@ struct NNArgCheck
     int argc;
     NNValue* argv;
 };
-
 
 #include "prot.inc"
 
@@ -1446,6 +1435,21 @@ NEON_FORCEINLINE uint32_t nn_util_hashstring(const char *str, size_t length)
     return ~crc;
 }
 
+NEON_FORCEINLINE size_t nn_valtable_count(NNHashValTable* table)
+{
+    return table->htcount;
+}
+
+NEON_FORCEINLINE size_t nn_valtable_capacity(NNHashValTable* table)
+{
+    return table->htcapacity;
+}
+
+NEON_FORCEINLINE NNHashValEntry* nn_valtable_entryatindex(NNHashValTable* table, size_t idx)
+{
+    return &table->htentries[idx];
+}
+
 NEON_FORCEINLINE size_t nn_string_getlength(NNObjString* os)
 {
     return os->sbuf.length;
@@ -1481,7 +1485,7 @@ NEON_FORCEINLINE NNObject* nn_value_asobject(NNValue v)
 
 NEON_FORCEINLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
 {
-    return nn_value_isobject(v) && nn_value_asobject(v)->type == t;
+    return nn_value_isobject(v) && (nn_value_asobject(v)->type == t);
 }
 
 NEON_FORCEINLINE bool nn_value_isnull(NNValue v)
@@ -1581,6 +1585,64 @@ NEON_FORCEINLINE bool nn_value_iscallable(NNValue v)
         nn_value_isfuncnative(v)
     );
 }
+
+NEON_FORCEINLINE const char* nn_value_typefromfunction(NNValIsFuncFN func)
+{
+    if(func == nn_value_isstring)
+    {
+        return "string";
+    }
+    else if(func == nn_value_isnull)
+    {
+        return "null";
+    }        
+    else if(func == nn_value_isbool)
+    {
+        return "bool";
+    }        
+    else if(func == nn_value_isnumber)
+    {
+        return "number";
+    }
+    else if(func == nn_value_isstring)
+    {
+        return "string";
+    }
+    else if((func == nn_value_isfuncnative) || (func == nn_value_isfuncbound) || (func == nn_value_isfuncscript) || (func == nn_value_isfuncclosure) || (func == nn_value_iscallable))
+    {
+        return "function";
+    }
+    else if(func == nn_value_isclass)
+    {
+        return "class";
+    }
+    else if(func == nn_value_isinstance)
+    {
+        return "instance";
+    }
+    else if(func == nn_value_isarray)
+    {
+        return "array";
+    }
+    else if(func == nn_value_isdict)
+    {
+        return "dictionary";
+    }
+    else if(func == nn_value_isfile)
+    {
+        return "file";
+    }
+    else if(func == nn_value_isrange)
+    {
+        return "range";
+    }
+    else if(func == nn_value_ismodule)
+    {
+        return "module";
+    }
+    return "?unknown?";
+}
+
 
 NEON_FORCEINLINE NNObjType nn_value_objtype(NNValue v)
 {

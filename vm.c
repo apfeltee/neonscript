@@ -174,14 +174,14 @@ void nn_state_resetvmstate(NNState* state)
     state->vmstate.openupvalues = NULL;
 }
 
-bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, int argcount)
+bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, int argcount, bool fromoperator)
 {
     int i;
     int startva;
     NNCallFrame* frame;
     NNObjArray* argslist;
-    (void)thisval;
-    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
+    //closure->clsthisval = thisval;
+    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
     /* fill empty parameters if not variadic */
     for(; !closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && argcount < closure->fnclosure.scriptfunc->fnscriptfunc.arity; argcount++)
     {
@@ -220,6 +220,21 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
             nn_vm_stackpopn(state, argcount);
         #endif
     }
+    if(fromoperator)
+    {
+        #if 0
+            nn_vm_stackpop(state);
+            nn_vm_stackpush(state, thisval);
+        #else
+            int spos;
+            spos = (state->vmstate.stackidx + (-argcount - 1));
+            #if 0
+                state->vmstate.stackvalues[spos] = closure->clsthisval;
+            #else
+                state->vmstate.stackvalues[spos] = thisval;
+            #endif
+        #endif
+    }
     frame = &state->vmstate.framevalues[state->vmstate.framecount++];
     frame->closure = closure;
     frame->inscode = closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs;
@@ -227,12 +242,12 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
     return true;
 }
 
-bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, int argcount)
+NEON_INLINE bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, int argcount)
 {
     size_t spos;
     NNValue r;
     NNValue* vargs;
-    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
+    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
     spos = state->vmstate.stackidx + (-argcount);
     vargs = &state->vmstate.stackvalues[spos];
     r = native->fnnativefunc.natfunc(state, thisval, vargs, argcount);
@@ -244,21 +259,37 @@ bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, in
     return true;
 }
 
-bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval, int argcount)
+bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval, int argcount, bool fromoper)
 {
     size_t spos;
-    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
+    #if 0
+        #define NEON_APIPRINT(state, ...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n");
+    #else
+        #define NEON_APIPRINT(state, ...)
+    #endif
+    NEON_APIPRINT(state, "*callvaluewithobject*: thisval.type=%s, callable.type=%s, argcount=%d", nn_value_typename(thisval, true), nn_value_typename(callable, true), argcount);
+
     if(nn_value_isobject(callable))
     {
         switch(nn_value_objtype(callable))
         {
+            case NEON_OBJTYPE_FUNCCLOSURE:
+                {
+                    return nn_vm_callclosure(state, nn_value_asfunction(callable), thisval, argcount, fromoper);
+                }
+                break;
+            case NEON_OBJTYPE_FUNCNATIVE:
+                {
+                    return nn_vm_callnative(state, nn_value_asfunction(callable), thisval, argcount);
+                }
+                break;
             case NEON_OBJTYPE_FUNCBOUND:
                 {
                     NNObjFunction* bound;
                     bound = nn_value_asfunction(callable);
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
-                    return nn_vm_callclosure(state, bound->fnmethod.method, thisval, argcount);
+                    return nn_vm_callclosure(state, bound->fnmethod.method, thisval, argcount, fromoper);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -269,11 +300,11 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     state->vmstate.stackvalues[spos] = thisval;
                     if(!nn_value_isnull(klass->constructor))
                     {
-                        return nn_vm_callvaluewithobject(state, klass->constructor, thisval, argcount);
+                        return nn_vm_callvaluewithobject(state, klass->constructor, thisval, argcount, false);
                     }
                     else if(klass->superclass != NULL && !nn_value_isnull(klass->superclass->constructor))
                     {
-                        return nn_vm_callvaluewithobject(state, klass->superclass->constructor, thisval, argcount);
+                        return nn_vm_callvaluewithobject(state, klass->superclass->constructor, thisval, argcount, false);
                     }
                     else if(argcount != 0)
                     {
@@ -290,29 +321,19 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     field = nn_valtable_getfieldbyostr(&module->deftable, module->name);
                     if(field != NULL)
                     {
-                        return nn_vm_callvalue(state, field->value, thisval, argcount);
+                        return nn_vm_callvalue(state, field->value, thisval, argcount, false);
                     }
                     return nn_except_throw(state, "module %s does not export a default function", module->name);
-                }
-                break;
-            case NEON_OBJTYPE_FUNCCLOSURE:
-                {
-                    return nn_vm_callclosure(state, nn_value_asfunction(callable), thisval, argcount);
-                }
-                break;
-            case NEON_OBJTYPE_FUNCNATIVE:
-                {
-                    return nn_vm_callnative(state, nn_value_asfunction(callable), thisval, argcount);
                 }
                 break;
             default:
                 break;
         }
     }
-    return nn_except_throw(state, "object of type %s is not callable", nn_value_typename(callable));
+    return nn_except_throw(state, "object of type %s is not callable", nn_value_typename(callable, false));
 }
 
-bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argcount)
+bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argcount, bool fromoperator)
 {
     NNValue actualthisval;
     if(nn_value_isobject(callable))
@@ -328,8 +349,8 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                     {
                         actualthisval = thisval;
                     }
-                    NEON_APIDEBUG(state, "actualthisval.type=%s, argcount=%d", nn_value_typename(actualthisval), argcount);
-                    return nn_vm_callvaluewithobject(state, callable, actualthisval, argcount);
+                    NEON_APIDEBUG(state, "actualthisval.type=%s, argcount=%d", nn_value_typename(actualthisval, true), argcount);
+                    return nn_vm_callvaluewithobject(state, callable, actualthisval, argcount, fromoperator);
                 }
                 break;
             case NEON_OBJTYPE_CLASS:
@@ -343,8 +364,8 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                     {
                         actualthisval = thisval;
                     }
-                    NEON_APIDEBUG(state, "actualthisval.type=%s, argcount=%d", nn_value_typename(actualthisval), argcount);
-                    return nn_vm_callvaluewithobject(state, callable, actualthisval, argcount);
+                    NEON_APIDEBUG(state, "actualthisval.type=%s, argcount=%d", nn_value_typename(actualthisval, true), argcount);
+                    return nn_vm_callvaluewithobject(state, callable, actualthisval, argcount, fromoperator);
                 }
                 break;
             default:
@@ -353,11 +374,11 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                 break;
         }
     }
-    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval), argcount);
-    return nn_vm_callvaluewithobject(state, callable, thisval, argcount);
+    NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
+    return nn_vm_callvaluewithobject(state, callable, thisval, argcount, fromoperator);
 }
 
-NNFuncContextType nn_value_getmethodtype(NNValue method)
+NEON_INLINE NNFuncContextType nn_value_getmethodtype(NNValue method)
 {
     switch(nn_value_objtype(method))
     {
@@ -406,6 +427,11 @@ NNObjClass* nn_value_getclassfor(NNState* state, NNValue receiver)
     }
     return NULL;
 }
+
+/*
+* the inlined variants of (push|pop(n)|peek) should be
+* used in the main VM engine.
+*/
 
 NEON_FORCEINLINE void nn_vmbits_stackpush(NNState* state, NNValue value)
 {
@@ -466,6 +492,11 @@ NNValue nn_vm_stackpeek(NNState* state, int distance)
     return nn_vmbits_stackpeek(state, distance);
 }
 
+/*
+* this macro cannot (rather, should not) be used outside of nn_vm_runvm().
+* if you need to halt the vm, throw an exception instead.
+* this macro is EXCLUSIVELY for non-recoverable errors!
+*/
 #define nn_vmmac_exitvm(state) \
     { \
         (void)you_are_calling_exit_vm_outside_of_runvm; \
@@ -477,6 +508,13 @@ NNValue nn_vm_stackpeek(NNState* state, int distance)
     { \
         return rtval; \
     }
+
+
+/*
+* don't try to further optimize vmbits functions, unless you *really* know what you are doing.
+* they were initially macros; but for better debugging, and better type-enforcement, they
+* are now inlined functions.
+*/
 
 NEON_FORCEINLINE uint8_t nn_vmbits_readbyte(NNState* state)
 {
@@ -527,7 +565,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
         {
             return nn_except_throw(state, "cannot call private method '%s' from instance of %s", name->sbuf.data, klass->name->sbuf.data);
         }
-        return nn_vm_callvaluewithobject(state, field->value, nn_value_fromobject(klass), argcount);
+        return nn_vm_callvaluewithobject(state, field->value, nn_value_fromobject(klass), argcount, false);
     }
     return nn_except_throw(state, "undefined method '%s' in %s", name->sbuf.data, klass->name->sbuf.data);
 }
@@ -546,14 +584,14 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
         field = nn_valtable_getfieldbyostr(&instance->klass->instmethods, name);
         if(field != NULL)
         {
-            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
         }
         field = nn_valtable_getfieldbyostr(&instance->properties, name);
         if(field != NULL)
         {
             spos = (state->vmstate.stackidx + (-argcount - 1));
             state->vmstate.stackvalues[spos] = receiver;
-            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
         }
     }
     else if(nn_value_isclass(receiver))
@@ -563,12 +601,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
         {
             if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
             {
-                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
             }
             return nn_except_throw(state, "cannot call non-static method %s() on non instance", name->sbuf.data);
         }
     }
-    return nn_except_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf.data, nn_value_typename(receiver));
+    return nn_except_throw(state, "cannot call method '%s' on object of type '%s'", name->sbuf.data, nn_value_typename(receiver, false));
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* name, int argcount)
@@ -579,7 +617,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     NNProperty* field;
     NNObjClass* klass;
     receiver = nn_vmbits_stackpeek(state, argcount);
-    NEON_APIDEBUG(state, "receiver.type=%s, argcount=%d", nn_value_typename(receiver), argcount);
+    NEON_APIDEBUG(state, "receiver.type=%s, argcount=%d", nn_value_typename(receiver, true), argcount);
     if(nn_value_isobject(receiver))
     {
         rectype = nn_value_asobject(receiver)->type;
@@ -597,7 +635,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         {
                             return nn_except_throw(state, "cannot call private module method '%s'", name->sbuf.data);
                         }
-                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     return nn_except_throw(state, "module '%s' does not have a field named '%s'", module->name->sbuf.data, name->sbuf.data);
                 }
@@ -609,12 +647,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     field = nn_class_getstaticproperty(klass, name);
                     if(field != NULL)
                     {
-                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     field = nn_class_getstaticmethodfield(klass, name);
                     if(field != NULL)
                     {
-                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     /*
                     * TODO:
@@ -636,7 +674,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             }
                             if(fntyp == NEON_FNCONTEXTTYPE_STATIC)
                             {
-                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                             }
                         }
                     }
@@ -653,7 +691,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     {
                         spos = (state->vmstate.stackidx + (-argcount - 1));
                         state->vmstate.stackvalues[spos] = receiver;
-                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     return nn_vmutil_invokemethodfromclass(state, instance->klass, name, argcount);
                 }
@@ -674,7 +712,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         {
                             if(nn_value_iscallable(field->value))
                             {
-                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                             }
                         }
                     }
@@ -690,12 +728,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     if(klass == NULL)
     {
         /* @TODO: have methods for non objects as well. */
-        return nn_except_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver), name->sbuf.data);
+        return nn_except_throw(state, "non-object %s has no method named '%s'", nn_value_typename(receiver, false), name->sbuf.data);
     }
     field = nn_class_getmethodfield(klass, name);
     if(field != NULL)
     {
-        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount);
+        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
     }
     return nn_except_throw(state, "'%s' has no method %s()", klass->name->sbuf.data, name->sbuf.data);
 }
@@ -833,6 +871,13 @@ bool nn_value_isfalse(NNValue value)
     return false;
 }
 
+/*
+* TODO: this is somewhat basic instanceof checking;
+* it does not account for namespacing, which could spell issues in the future.
+* maybe classes should be given a distinct, unique, internal name, which would
+* incidentally remove the need to walk namespaces.
+* something like `class Foo{...}` -> 'Foo@<filename>:<lineno>', i.e., "Foo.class@path/to/somefile.nn:42".
+*/
 bool nn_util_isinstanceof(NNObjClass* klass1, NNObjClass* expected)
 {
     size_t klen;
@@ -854,7 +899,11 @@ bool nn_util_isinstanceof(NNObjClass* klass1, NNObjClass* expected)
     return false;
 }
 
-
+/*
+* don' try to optimize too much here, since its largely irrelevant how big or small
+* the strings are; inevitably it will always be <length-of-string> * number.
+* not preallocating also means that the allocator only allocates as much as actually needed.
+*/
 NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjString* str, double number)
 {
     size_t i;
@@ -927,7 +976,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
     if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
     {
         nn_vmbits_stackpopn(state, 2);
-        return nn_except_throw(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
+        return nn_except_throw(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower, false), nn_value_typename(valupper, false));
     }
     idxlower = 0;
     if(nn_value_isnumber(vallower))
@@ -992,7 +1041,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
     if(!(nn_value_isnull(vallower) || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || nn_value_isnull(valupper)))
     {
         nn_vmbits_stackpopn(state, 2);
-        return nn_except_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower), nn_value_typename(valupper));
+        return nn_except_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower, false), nn_value_typename(valupper, false));
     }
     length = string->sbuf.length;
     idxlower = 0;
@@ -1079,7 +1128,7 @@ NEON_FORCEINLINE bool nn_vmdo_getrangedindex(NNState* state)
     }
     if(!isgotten)
     {
-        return nn_except_throw(state, "cannot range index object of type %s", nn_value_typename(vfrom));
+        return nn_except_throw(state, "cannot range index object of type %s", nn_value_typename(vfrom, false));
     }
     return true;
 }
@@ -1224,21 +1273,111 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     return true;
 }
 
+NEON_FORCEINLINE bool nn_vmutil_checkoverloadwithargs(NNState* state, NNValue target, const char* name, NNValue right, bool willassign)
+{
+    NNValue finalval;
+    NNValue vindex;
+    NNProperty* field;
+    NNValue scrargv[3];
+    if(!nn_value_isinstance(target))
+    {
+        fprintf(stderr, "checkoverloadwithargs: not an instance\n");
+        return false;
+    }
+    field = nn_instance_getmethodcstr(nn_value_asinstance(target), name);
+    if(field == NULL)
+    {
+        fprintf(stderr, "checkoverloadwithargs: failed to get '%s'\n", name);
+        return false;
+    }
+    if(!nn_value_iscallable(field->value))
+    {
+        fprintf(stderr, "checkoverloadwithargs: field not callable\n");
+        return false;
+    }
+    //bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest);
+    scrargv[0] = right;
+    if(nn_nestcall_callfunction(state, field->value, target, scrargv, 1, &finalval, true))
+    {
+        #if 1
+        if(!willassign)
+        {
+            /*
+            // we can safely get rid of the index from the stack
+            // +1 for the list itself
+            */
+            nn_vmbits_stackpopn(state, 2);
+        }
+        #endif
+        nn_vmbits_stackpush(state, finalval);
+        return true;
+    }
+    return false;
+}
+
+NEON_FORCEINLINE bool nn_vmutil_checkoverload(NNState* state, NNValue target, const char* name, bool willassign)
+{
+    NNValue finalval;
+    NNValue vindex;
+    NNProperty* field;
+    NNValue scrargv[3];
+    vindex = nn_vmbits_stackpeek(state, 0);
+    if(!nn_value_isinstance(target))
+    {
+        fprintf(stderr, "checkoverload: not an instance\n");
+        return false;
+    }
+    field = nn_instance_getmethodcstr(nn_value_asinstance(target), name);
+    if(field == NULL)
+    {
+        fprintf(stderr, "checkoverload: failed to find '%s'\n", name);
+        return false;
+    }
+    if(!nn_value_iscallable(field->value))
+    {
+        fprintf(stderr, "checkoverload: field not callable\n");
+        return false;
+    }
+    //bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest);
+    scrargv[0] = vindex;
+    if(nn_nestcall_callfunction(state, field->value, target, scrargv, 1, &finalval, true))
+    {
+        if(!willassign)
+        {
+            /*
+            // we can safely get rid of the index from the stack
+            // +1 for the list itself
+            */
+            nn_vmbits_stackpopn(state, 2);
+        }
+        nn_vmbits_stackpush(state, finalval);
+        return true;
+    }
+    return false;
+}
+
 NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
 {
     bool isgotten;
     uint8_t willassign;
-    NNValue peeked;
+    NNValue thisval;
     willassign = nn_vmbits_readbyte(state);
     isgotten = true;
-    peeked = nn_vmbits_stackpeek(state, 1);
-    if(nn_util_likely(nn_value_isobject(peeked)))
+    thisval = nn_vmbits_stackpeek(state, 1);
+    if(nn_util_unlikely(nn_value_isinstance(thisval)))
     {
-        switch(nn_value_asobject(peeked)->type)
+        if(nn_vmutil_checkoverload(state, thisval, "__indexget__", willassign))
+        {
+            return true;
+        }
+    }
+    if(nn_util_likely(nn_value_isobject(thisval)))
+    {
+        switch(nn_value_asobject(thisval)->type)
         {
             case NEON_OBJTYPE_STRING:
             {
-                if(!nn_vmutil_doindexgetstring(state, nn_value_asstring(peeked), willassign))
+                if(!nn_vmutil_doindexgetstring(state, nn_value_asstring(thisval), willassign))
                 {
                     return false;
                 }
@@ -1246,7 +1385,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
             }
             case NEON_OBJTYPE_ARRAY:
             {
-                if(!nn_vmutil_doindexgetarray(state, nn_value_asarray(peeked), willassign))
+                if(!nn_vmutil_doindexgetarray(state, nn_value_asarray(thisval), willassign))
                 {
                     return false;
                 }
@@ -1254,7 +1393,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
             }
             case NEON_OBJTYPE_DICT:
             {
-                if(!nn_vmutil_doindexgetdict(state, nn_value_asdict(peeked), willassign))
+                if(!nn_vmutil_doindexgetdict(state, nn_value_asdict(thisval), willassign))
                 {
                     return false;
                 }
@@ -1262,7 +1401,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
             }
             case NEON_OBJTYPE_MODULE:
             {
-                if(!nn_vmutil_doindexgetmodule(state, nn_value_asmodule(peeked), willassign))
+                if(!nn_vmutil_doindexgetmodule(state, nn_value_asmodule(thisval), willassign))
                 {
                     return false;
                 }
@@ -1281,7 +1420,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
     }
     if(!isgotten)
     {
-        nn_except_throw(state, "cannot index object of type %s", nn_value_typename(peeked));
+        nn_except_throw(state, "cannot index object of type %s", nn_value_typename(thisval, false));
     }
     return true;
 }
@@ -1434,18 +1573,25 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     bool isset;
     NNValue value;
     NNValue index;
-    NNValue target;
+    NNValue thisval;
     isset = true;
-    target = nn_vmbits_stackpeek(state, 2);
-    if(nn_util_likely(nn_value_isobject(target)))
+    thisval = nn_vmbits_stackpeek(state, 2);
+    if(nn_util_unlikely(nn_value_isinstance(thisval)))
+    {
+        if(nn_vmutil_checkoverload(state, thisval, "__indexset__", true))
+        {
+            return true;
+        }
+    }
+    if(nn_util_likely(nn_value_isobject(thisval)))
     {
         value = nn_vmbits_stackpeek(state, 0);
         index = nn_vmbits_stackpeek(state, 1);
-        switch(nn_value_asobject(target)->type)
+        switch(nn_value_asobject(thisval)->type)
         {
             case NEON_OBJTYPE_ARRAY:
                 {
-                    if(!nn_vmutil_doindexsetarray(state, nn_value_asarray(target), index, value))
+                    if(!nn_vmutil_doindexsetarray(state, nn_value_asarray(thisval), index, value))
                     {
                         return false;
                     }
@@ -1453,7 +1599,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
                 break;
             case NEON_OBJTYPE_STRING:
                 {
-                    if(!nn_vmutil_dosetindexstring(state, nn_value_asstring(target), index, value))
+                    if(!nn_vmutil_dosetindexstring(state, nn_value_asstring(thisval), index, value))
                     {
                         return false;
                     }
@@ -1461,12 +1607,12 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
                 break;
             case NEON_OBJTYPE_DICT:
                 {
-                    return nn_vmutil_dosetindexdict(state, nn_value_asdict(target), index, value);
+                    return nn_vmutil_dosetindexdict(state, nn_value_asdict(thisval), index, value);
                 }
                 break;
             case NEON_OBJTYPE_MODULE:
                 {
-                    return nn_vmutil_dosetindexmodule(state, nn_value_asmodule(target), index, value);
+                    return nn_vmutil_dosetindexmodule(state, nn_value_asmodule(thisval), index, value);
                 }
                 break;
             default:
@@ -1482,7 +1628,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     }
     if(!isset)
     {
-        return nn_except_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vmbits_stackpeek(state, 3)));
+        return nn_except_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vmbits_stackpeek(state, 3), false));
     }
     return true;
 }
@@ -1505,14 +1651,14 @@ NEON_FORCEINLINE bool nn_vmutil_concatenate(NNState* state)
     return true;
 }
 
-NEON_FORCEINLINE double nn_vmutil_floordiv(double a, double b)
+NEON_INLINE double nn_vmutil_floordiv(double a, double b)
 {
     int d;
     d = (int)a / (int)b;
     return d - ((d * b == a) & ((a < 0) ^ (b < 0)));
 }
 
-NEON_FORCEINLINE double nn_vmutil_modulo(double a, double b)
+NEON_INLINE double nn_vmutil_modulo(double a, double b)
 {
     double r;
     r = fmod(a, b);
@@ -1692,7 +1838,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             break;
         default:
             {
-                nn_except_throw(state, "object of type %s does not carry properties", nn_value_typename(peeked));
+                nn_except_throw(state, "object of type %s does not carry properties", nn_value_typename(peeked, false));
                 return NULL;
             }
             break;
@@ -1718,7 +1864,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
         {
             if(field->type == NEON_PROPTYPE_FUNCTION)
             {
-                nn_vm_callvaluewithobject(state, field->value, peeked, 0);
+                nn_vm_callvaluewithobject(state, field->value, peeked, 0, false);
             }
             else
             {
@@ -1731,7 +1877,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
     else
     {
         nn_except_throw(state, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf.data,
-            nn_value_typename(peeked));
+            nn_value_typename(peeked, false));
     }
     return false;
 }
@@ -1808,7 +1954,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
         return false;
     }
     nn_vmmac_tryraise(state, false, "'%s' of type %s does not have properties", nn_value_tostring(state, peeked)->sbuf.data,
-        nn_value_typename(peeked));
+        nn_value_typename(peeked, false));
     return false;
 }
 
@@ -1860,7 +2006,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
             /* still no class found? then it cannot carry properties */
             if(klass == NULL)
             {
-                nn_except_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget));
+                nn_except_throw(state, "object of type %s cannot carry properties", nn_value_typename(vtarget, false));
                 return false;
             }
         }
@@ -1924,6 +2070,7 @@ NEON_FORCEINLINE long nn_vmutil_valtoint(NNValue v)
 NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
 {
     bool isfail;
+    bool willassign;
     long ibinright;
     long ibinleft;
     uint32_t ubinright;
@@ -1934,16 +2081,83 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
     NNValue res;
     NNValue binvalleft;
     NNValue binvalright;
+    willassign = false;
     instruction = (NNOpCode)state->vmstate.currentinstr.code;
     binvalright = nn_vmbits_stackpeek(state, 0);
     binvalleft = nn_vmbits_stackpeek(state, 1);
+    if(nn_util_unlikely(nn_value_isinstance(binvalleft)))
+    {
+        switch(instruction)
+        {
+            case NEON_OP_PRIMADD:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__add__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMSUBTRACT:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__sub__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMDIVIDE:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__div__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMMULTIPLY:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__mul__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMAND:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__band__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMOR:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__bor__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            case NEON_OP_PRIMBITXOR:
+                {
+                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__bxor__", binvalright, willassign))
+                    {
+                        return true;
+                    }
+                }
+                break;
+            default:
+                {
+                }
+                break;
+        }
+    }
     isfail = (
         (!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright) && !nn_value_isnull(binvalright)) ||
         (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft) && !nn_value_isnull(binvalleft))
     );
     if(isfail)
     {
-        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", nn_dbg_op2str(instruction), nn_value_typename(binvalleft), nn_value_typename(binvalright));
+        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", nn_dbg_op2str(instruction), nn_value_typename(binvalleft, false), nn_value_typename(binvalright, false));
         return false;
     }
     binvalright = nn_vmbits_stackpop(state);
@@ -2207,7 +2421,7 @@ NEON_FORCEINLINE bool nn_vmdo_funcargset(NNState* state)
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state, NNValue thisval)
 {
     size_t i;
     int index;
@@ -2217,7 +2431,7 @@ NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
     NNObjFunction* function;
     NNObjFunction* closure;
     function = nn_value_asfunction(nn_vmbits_readconst(state));
-    closure = nn_object_makefuncclosure(state, function);
+    closure = nn_object_makefuncclosure(state, function, thisval);
     nn_vmbits_stackpush(state, nn_value_fromobject(closure));
     for(i = 0; i < (size_t)closure->upvalcount; i++)
     {
@@ -2292,7 +2506,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, n
     if((!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright))
     || (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft)))
     {
-        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", opname, nn_value_typename(binvalleft), nn_value_typename(binvalright));
+        nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", opname, nn_value_typename(binvalleft, false), nn_value_typename(binvalright, false));
         return false;
     }
     binvalright = nn_vmbits_stackpop(state);
@@ -2559,7 +2773,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     {
                         if(nn_util_unlikely(!nn_vmutil_concatenate(state)))
                         {
-                            nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand + for %s and %s", nn_value_typename(valleft), nn_value_typename(valright));
+                            nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand + for %s and %s", nn_value_typename(valleft, false), nn_value_typename(valright, false));
                             VM_DISPATCH();
                         }
                     }
@@ -2648,7 +2862,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     peeked = nn_vmbits_stackpeek(state, 0);
                     if(!nn_value_isnumber(peeked))
                     {
-                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator - not defined for object of type %s", nn_value_typename(peeked));
+                        nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator - not defined for object of type %s", nn_value_typename(peeked, false));
                         VM_DISPATCH();
                     }
                     nn_vmbits_stackpush(state, nn_value_makenumber(-nn_value_asnumber(nn_vmbits_stackpop(state))));
@@ -2660,7 +2874,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 peeked = nn_vmbits_stackpeek(state, 0);
                 if(!nn_value_isnumber(peeked))
                 {
-                    nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator ~ not defined for object of type %s", nn_value_typename(peeked));
+                    nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator ~ not defined for object of type %s", nn_value_typename(peeked, false));
                     VM_DISPATCH();
                 }
                 nn_vmbits_stackpush(state, nn_value_makeint(~((int)nn_value_asnumber(nn_vmbits_stackpop(state)))));
@@ -2936,7 +3150,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 VM_DISPATCH();
             VM_CASE(NEON_OP_MAKECLOSURE)
                 {
-                    if(!nn_vmdo_makeclosure(state))
+                    if(!nn_vmdo_makeclosure(state, nn_vmbits_stackpeek(state, 3)))
                     {
                         nn_vmmac_exitvm(state);
                     }
@@ -2954,7 +3168,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                     else
                     {
-                        nn_vmbits_stackpush(state, nn_value_makenull());
+                        nn_vmbits_stackpush(state, closure->clsthisval);
                     }
                 }
                 VM_DISPATCH();
@@ -2968,8 +3182,16 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
             VM_CASE(NEON_OP_CALLFUNCTION)
                 {
                     int argcount;
+                    NNValue callee;
+                    NNValue thisval;
+                    thisval = nn_value_makenull();
                     argcount = nn_vmbits_readbyte(state);
-                    if(!nn_vm_callvalue(state, nn_vmbits_stackpeek(state, argcount), nn_value_makenull(), argcount))
+                    callee = nn_vmbits_stackpeek(state, argcount);
+                    if(nn_value_isfuncclosure(callee))
+                    {
+                        thisval = nn_value_asfunction(callee)->clsthisval;
+                    }
+                    if(!nn_vm_callvalue(state, callee, thisval, argcount, false))
                     {
                         nn_vmmac_exitvm(state);
                     }
@@ -3205,7 +3427,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNValue thing;
                     const char* result;
                     thing = nn_vmbits_stackpop(state);
-                    result = nn_value_typename(thing);
+                    result = nn_value_typename(thing, false);
                     res = nn_value_fromobject(nn_string_copycstr(state, result));
                     nn_vmbits_stackpush(state, res);
                 }
@@ -3389,7 +3611,7 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNValu
 }
 
 /* helper function to access call outside the state file. */
-bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval, NNValue* argv, size_t argc, NNValue* dest)
+bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval, NNValue* argv, size_t argc, NNValue* dest, bool fromoper)
 {
     size_t i;
     size_t pidx;
@@ -3404,7 +3626,7 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
             nn_vm_stackpush(state, argv[i]);
         }
     }
-    if(!nn_vm_callvaluewithobject(state, callable, thisval, argc))
+    if(!nn_vm_callvaluewithobject(state, callable, thisval, argc, fromoper))
     {
         fprintf(stderr, "nestcall: nn_vm_callvalue() failed\n");
         abort();

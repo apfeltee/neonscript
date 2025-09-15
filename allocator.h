@@ -569,15 +569,18 @@ NNALLOC_CONF_DEFAULTMMAPTHRESHOLD       default: 256K
     #define NNALLOC_CONF_USEDEVRANDOM 0
 #endif
 
-/*
-* disable mmap() on linux, for now.
-* nothing wrong with it, but it throws off valgrind, and
-* makes it tricky to detect issues.
-* NOTE: **MUST** be enabled on windows, or allocation will fail!
-*/
-#if !defined(NNALLOC_CONF_ISWIN32)
-    #undef NNALLOC_CONF_HAVEMMAP
-    #define NNALLOC_CONF_HAVEMMAP 0
+#if defined(__mucc__) || defined(__linux__)
+    /*
+    * disable mmap() when compiling with mucc.
+    * might be wise to disable on linux as well...
+    * nothing wrong with it, but it throws off valgrind, and
+    * makes it tricky to detect issues.
+    * NOTE: **MUST** be enabled on windows, or allocation will fail!
+    */
+    #if !defined(NNALLOC_CONF_ISWIN32)
+        #undef NNALLOC_CONF_HAVEMMAP
+        #define NNALLOC_CONF_HAVEMMAP 0
+    #endif
 #endif
 
 /*

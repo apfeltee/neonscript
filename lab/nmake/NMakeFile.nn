@@ -1,0 +1,35 @@
+
+// initiates the project name.
+// this would be necessary for IDE projects, such as visual studio, et cetera.
+// make, ninja, etc, typically don't need it.
+// but it will also be used as the subdirectory name for building.
+project("myproject")
+add_tags({
+    "version": "1.01",
+    "homepage": "https://example.com/",
+})
+
+
+var neon = findpackage("neon")
+
+var mylib = add_library("softshell")
+mylib.add_sources("softshell.c")
+
+// like cmake, will be either libsoftshell.(so|a), or softshell.(lib|dll)
+mylib.set_outputfile("softshell")
+
+var myprog = add_program("run")
+myprog.set_outputfile("run.exe")
+myprog.add_sources("main.c", "blah.c")
+
+// add_(include|linker)_paths([<string|array>] ...)
+// array args will be flattened
+myprog.add_include_paths(".", "deps", neon.include_paths)
+myprog.add_linker_paths(neon.linker_path)
+myprog.add_linker_libs(neon.linker_libraries, mylib)
+if(NMake.compiler.is_gcc_compatible())
+{
+    myprog.add_linker_flags("-Wl,-rpath=.")
+}
+
+compile_projects(mylib, myprog)

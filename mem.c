@@ -76,7 +76,7 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        p = (void*)nn_allocuser_malloc(count * typsize);
+        p = (void*)nn_allocuser_calloc(count, typsize);
     #else
         p = (void*)calloc(count, typsize);
     #endif

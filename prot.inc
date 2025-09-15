@@ -82,6 +82,35 @@ int nn_dbg_printinvokeinstr(NNPrinter *pr, const char *name, NNBlob *blob, int o
 const char *nn_dbg_op2str(uint8_t instruc);
 int nn_dbg_printclosureinstr(NNPrinter *pr, const char *name, NNBlob *blob, int offset);
 int nn_dbg_printinstructionat(NNPrinter *pr, NNBlob *blob, int offset);
+/* ioprinter.c */
+void nn_valtable_print(NNState *state, NNPrinter *pr, NNHashValTable *table, const char *name);
+void nn_printer_initvars(NNState *state, NNPrinter *pr, NNPrMode mode);
+NNPrinter *nn_printer_makeundefined(NNState *state, NNPrMode mode);
+NNPrinter *nn_printer_makeio(NNState *state, FILE *fh, bool shouldclose);
+NNPrinter *nn_printer_makestring(NNState *state);
+void nn_printer_makestackio(NNState *state, NNPrinter *pr, FILE *fh, bool shouldclose);
+void nn_printer_makestackstring(NNState *state, NNPrinter *pr);
+void nn_printer_destroy(NNPrinter *pr);
+NNObjString *nn_printer_takestring(NNPrinter *pr);
+NNObjString *nn_printer_copystring(NNPrinter *pr);
+bool nn_printer_writestringl(NNPrinter *pr, const char *estr, size_t elen);
+bool nn_printer_writestring(NNPrinter *pr, const char *estr);
+bool nn_printer_writechar(NNPrinter *pr, int b);
+bool nn_printer_writeescapedchar(NNPrinter *pr, int ch);
+bool nn_printer_writequotedstring(NNPrinter *pr, const char *str, size_t len, bool withquot);
+bool nn_printer_vwritefmttostring(NNPrinter *pr, const char *fmt, va_list va);
+bool nn_printer_vwritefmt(NNPrinter *pr, const char *fmt, va_list va);
+bool nn_printer_printf(NNPrinter *pr, const char *fmt, ...);
+void nn_printer_printfunction(NNPrinter *pr, NNObjFunction *func);
+void nn_printer_printarray(NNPrinter *pr, NNObjArray *list);
+void nn_printer_printdict(NNPrinter *pr, NNObjDict *dict);
+void nn_printer_printfile(NNPrinter *pr, NNObjFile *file);
+void nn_printer_printinstance(NNPrinter *pr, NNObjInstance *instance, bool invmethod);
+void nn_printer_printtable(NNPrinter *pr, NNHashValTable *table);
+void nn_printer_printobjclass(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
+void nn_printer_printobject(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
+void nn_printer_printnumber(NNPrinter *pr, NNValue value);
+void nn_printer_printvalue(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
 /* libarray.c */
 NNObjArray *nn_array_makefilled(NNState *state, size_t cnt, NNValue filler);
 NNObjArray *nn_array_make(NNState *state);
@@ -152,6 +181,10 @@ NNObjInstance *nn_object_makeinstance(NNState *state, NNObjClass *klass);
 void nn_instance_mark(NNObjInstance *instance);
 void nn_instance_destroy(NNObjInstance *instance);
 bool nn_instance_defproperty(NNObjInstance *instance, NNObjString *name, NNValue val);
+NNProperty *nn_instance_getvar(NNObjInstance *inst, NNObjString *name);
+NNProperty *nn_instance_getvarcstr(NNObjInstance *inst, const char *name);
+NNProperty *nn_instance_getmethod(NNObjInstance *inst, NNObjString *name);
+NNProperty *nn_instance_getmethodcstr(NNObjInstance *inst, const char *name);
 /* libdict.c */
 NNObjDict *nn_object_makedict(NNState *state);
 bool nn_dict_setentry(NNObjDict *dict, NNValue key, NNValue value);
@@ -219,11 +252,12 @@ NNValue nn_objfnfile_seek(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_objfnfile_tell(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_installobjectfile(NNState *state);
 /* libfunc.c */
+NNObjFunction *nn_object_makefuncgeneric(NNState *state, NNObjType fntype, NNValue thisval);
 NNObjFunction *nn_object_makefuncbound(NNState *state, NNValue receiver, NNObjFunction *method);
 NNObjFunction *nn_object_makefuncscript(NNState *state, NNObjModule *module, NNFuncContextType type);
 void nn_funcscript_destroy(NNObjFunction *function);
 NNObjFunction *nn_object_makefuncnative(NNState *state, NNNativeFN function, const char *name, void *uptr);
-NNObjFunction *nn_object_makefuncclosure(NNState *state, NNObjFunction *function);
+NNObjFunction *nn_object_makefuncclosure(NNState *state, NNObjFunction *function, NNValue thisval);
 /* libmodule.c */
 void nn_import_loadbuiltinmodules(NNState *state);
 bool nn_state_addmodulesearchpathobj(NNState *state, NNObjString *os);
@@ -454,7 +488,7 @@ void nn_gcmem_collectgarbage(NNState *state);
 void nn_gcmem_markcompilerroots(NNState *state);
 /* modast.c */
 NNValue nn_modfn_astscan_scan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNRegModule *nn_natmodule_load_astscan(NNState *state);
+NNDefModule *nn_natmodule_load_astscan(NNState *state);
 /* modglobal.c */
 NNValue nn_nativefn_time(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_microtime(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -476,7 +510,7 @@ NNValue nn_nativefn_isnan(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_objfnjson_stringify(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_initbuiltinfunctions(NNState *state);
 /* modnull.c */
-NNRegModule *nn_natmodule_load_null(NNState *state);
+NNDefModule *nn_natmodule_load_null(NNState *state);
 /* modos.c */
 char *osfn_utilstrndup(const char *src, size_t len);
 char *osfn_utilstrdup(const char *src);
@@ -520,7 +554,13 @@ NNValue nn_modfn_os_rmdir(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_modfn_os_unlink(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_modfn_os_getenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_modfn_os_setenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNRegModule *nn_natmodule_load_os(NNState *state);
+NNValue nn_modfn_os_cwdhelper(NNState *state, NNValue thisval, NNValue *argv, size_t argc, const char *name);
+NNValue nn_modfn_os_cwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_pwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_basename(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_dirname(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_touch(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNDefModule *nn_natmodule_load_os(NNState *state);
 /* object.c */
 NNObject *nn_object_allocobject(NNState *state, size_t size, NNObjType type, bool retain);
 NNObjUpvalue *nn_object_makeupvalue(NNState *state, NNValue *slot, int stackpos);
@@ -683,35 +723,6 @@ void nn_astparser_parsecontinuestmt(NNAstParser *prs);
 void nn_astparser_parsebreakstmt(NNAstParser *prs);
 void nn_astparser_synchronize(NNAstParser *prs);
 NNObjFunction *nn_astparser_compilesource(NNState *state, NNObjModule *module, const char *source, NNBlob *blob, bool fromimport, bool keeplast);
-/* printer.c */
-void nn_valtable_print(NNState *state, NNPrinter *pr, NNHashValTable *table, const char *name);
-void nn_printer_initvars(NNState *state, NNPrinter *pr, NNPrMode mode);
-NNPrinter *nn_printer_makeundefined(NNState *state, NNPrMode mode);
-NNPrinter *nn_printer_makeio(NNState *state, FILE *fh, bool shouldclose);
-NNPrinter *nn_printer_makestring(NNState *state);
-void nn_printer_makestackio(NNState *state, NNPrinter *pr, FILE *fh, bool shouldclose);
-void nn_printer_makestackstring(NNState *state, NNPrinter *pr);
-void nn_printer_destroy(NNPrinter *pr);
-NNObjString *nn_printer_takestring(NNPrinter *pr);
-NNObjString *nn_printer_copystring(NNPrinter *pr);
-bool nn_printer_writestringl(NNPrinter *pr, const char *estr, size_t elen);
-bool nn_printer_writestring(NNPrinter *pr, const char *estr);
-bool nn_printer_writechar(NNPrinter *pr, int b);
-bool nn_printer_writeescapedchar(NNPrinter *pr, int ch);
-bool nn_printer_writequotedstring(NNPrinter *pr, const char *str, size_t len, bool withquot);
-bool nn_printer_vwritefmttostring(NNPrinter *pr, const char *fmt, va_list va);
-bool nn_printer_vwritefmt(NNPrinter *pr, const char *fmt, va_list va);
-bool nn_printer_printf(NNPrinter *pr, const char *fmt, ...);
-void nn_printer_printfunction(NNPrinter *pr, NNObjFunction *func);
-void nn_printer_printarray(NNPrinter *pr, NNObjArray *list);
-void nn_printer_printdict(NNPrinter *pr, NNObjDict *dict);
-void nn_printer_printfile(NNPrinter *pr, NNObjFile *file);
-void nn_printer_printinstance(NNPrinter *pr, NNObjInstance *instance, bool invmethod);
-void nn_printer_printtable(NNPrinter *pr, NNHashValTable *table);
-void nn_printer_printobjclass(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
-void nn_printer_printobject(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
-void nn_printer_printnumber(NNPrinter *pr, NNValue value);
-void nn_printer_printvalue(NNPrinter *pr, NNValue value, bool fixstring, bool invmethod);
 /* utf.c */
 void nn_utf8iter_init(utf8iterator_t *iter, const char *ptr, uint32_t length);
 uint8_t nn_utf8iter_charsize(const char *character);
@@ -779,9 +790,8 @@ uint32_t nn_value_hashvalue(NNValue value);
 NNValue nn_value_copystrlen(NNState *state, const char *str, size_t len);
 NNValue nn_value_copystr(NNState *state, const char *str);
 NNObjString *nn_value_tostring(NNState *state, NNValue value);
-const char *nn_value_objecttypename(NNObject *object);
-const char *nn_value_typename(NNValue value);
-const char *nn_value_typefromfunction(NNValIsFuncFN func);
+const char *nn_value_objecttypename(NNObject *object, bool detailed);
+const char *nn_value_typename(NNValue value, bool detailed);
 bool nn_value_compobject(NNState *state, NNValue a, NNValue b);
 bool nn_value_compare_actual(NNState *state, NNValue a, NNValue b);
 bool nn_value_compare(NNState *state, NNValue a, NNValue b);
@@ -791,11 +801,9 @@ NNValue nn_value_copyvalue(NNState *state, NNValue value);
 /* vm.c */
 void nn_vm_initvmstate(NNState *state);
 void nn_state_resetvmstate(NNState *state);
-bool nn_vm_callclosure(NNState *state, NNObjFunction *closure, NNValue thisval, int argcount);
-bool nn_vm_callnative(NNState *state, NNObjFunction *native, NNValue thisval, int argcount);
-bool nn_vm_callvaluewithobject(NNState *state, NNValue callable, NNValue thisval, int argcount);
-bool nn_vm_callvalue(NNState *state, NNValue callable, NNValue thisval, int argcount);
-NNFuncContextType nn_value_getmethodtype(NNValue method);
+bool nn_vm_callclosure(NNState *state, NNObjFunction *closure, NNValue thisval, int argcount, bool fromoperator);
+bool nn_vm_callvaluewithobject(NNState *state, NNValue callable, NNValue thisval, int argcount, bool fromoper);
+bool nn_vm_callvalue(NNState *state, NNValue callable, NNValue thisval, int argcount, bool fromoperator);
 NNObjClass *nn_value_getclassfor(NNState *state, NNValue receiver);
 void nn_vm_stackpush(NNState *state, NNValue value);
 NNValue nn_vm_stackpop(NNState *state);
@@ -806,7 +814,7 @@ bool nn_util_isinstanceof(NNObjClass *klass1, NNObjClass *expected);
 void nn_vmdebug_printvalue(NNState *state, NNValue val, const char *fmt, ...);
 NNStatus nn_vm_runvm(NNState *state, int exitframe, NNValue *rv);
 int nn_nestcall_prepare(NNState *state, NNValue callable, NNValue mthobj, NNValue *callarr, int maxcallarr);
-bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest);
+bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest, bool fromoper);
 /* allocator.h */
 /* lino.h */
 /* mrx.h */

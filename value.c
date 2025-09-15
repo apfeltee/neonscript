@@ -24,8 +24,25 @@ NNObjString* nn_value_tostring(NNState* state, NNValue value)
     return s;
 }
 
-const char* nn_value_objecttypename(NNObject* object)
+const char* nn_value_objecttypename(NNObject* object, bool detailed)
 {
+    static char buf[60];
+    if(detailed)
+    {
+        switch(object->type)
+        {
+            case NEON_OBJTYPE_FUNCSCRIPT:
+                return "funcscript";
+            case NEON_OBJTYPE_FUNCNATIVE:
+                return "funcnative";
+            case NEON_OBJTYPE_FUNCCLOSURE:
+                return "funcclosure";
+            case NEON_OBJTYPE_FUNCBOUND:
+                return "funcbound";
+            default:
+                break;
+        }
+    }
     switch(object->type)
     {
         case NEON_OBJTYPE_MODULE:
@@ -46,7 +63,15 @@ const char* nn_value_objecttypename(NNObject* object)
         case NEON_OBJTYPE_FUNCBOUND:
             return "function";
         case NEON_OBJTYPE_INSTANCE:
-            return ((NNObjInstance*)object)->klass->name->sbuf.data;
+            {
+                const char* klassname;
+                NNObjInstance* inst;
+                inst = ((NNObjInstance*)object);
+                klassname = inst->klass->name->sbuf.data;
+                sprintf(buf, "instance@%s", klassname);
+                return buf;
+            }
+            break;
         case NEON_OBJTYPE_STRING:
             return "string";
         case NEON_OBJTYPE_USERDATA:
@@ -59,12 +84,8 @@ const char* nn_value_objecttypename(NNObject* object)
     return "unknown";
 }
 
-const char* nn_value_typename(NNValue value)
+const char* nn_value_typename(NNValue value, bool detailed)
 {
-    if(nn_value_isnull(value))
-    {
-        return "empty";
-    }
     if(nn_value_isnull(value))
     {
         return "null";
@@ -79,67 +100,11 @@ const char* nn_value_typename(NNValue value)
     }
     else if(nn_value_isobject(value))
     {
-        return nn_value_objecttypename(nn_value_asobject(value));
+        return nn_value_objecttypename(nn_value_asobject(value), detailed);
     }
     return "?unknown?";
 }
 
-const char* nn_value_typefromfunction(NNValIsFuncFN func)
-{
-    if(func == nn_value_isstring)
-    {
-        return "string";
-    }
-    else if(func == nn_value_isnull)
-    {
-        return "null";
-    }        
-    else if(func == nn_value_isbool)
-    {
-        return "bool";
-    }        
-    else if(func == nn_value_isnumber)
-    {
-        return "number";
-    }
-    else if(func == nn_value_isstring)
-    {
-        return "string";
-    }
-    else if((func == nn_value_isfuncnative) || (func == nn_value_isfuncbound) || (func == nn_value_isfuncscript) || (func == nn_value_isfuncclosure) || (func == nn_value_iscallable))
-    {
-        return "function";
-    }
-    else if(func == nn_value_isclass)
-    {
-        return "class";
-    }
-    else if(func == nn_value_isinstance)
-    {
-        return "instance";
-    }
-    else if(func == nn_value_isarray)
-    {
-        return "array";
-    }
-    else if(func == nn_value_isdict)
-    {
-        return "dictionary";
-    }
-    else if(func == nn_value_isfile)
-    {
-        return "file";
-    }
-    else if(func == nn_value_isrange)
-    {
-        return "range";
-    }
-    else if(func == nn_value_ismodule)
-    {
-        return "module";
-    }
-    return "?unknown?";
-}
 
 
 bool nn_value_compobject(NNState* state, NNValue a, NNValue b)
@@ -317,7 +282,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isclass(a) && nn_value_isclass(b))
         {
-            if(nn_value_asclass(a)->instmethods.count >= nn_value_asclass(b)->instmethods.count)
+            if(nn_valtable_count(&nn_value_asclass(a)->instmethods) >= nn_valtable_count(&nn_value_asclass(b)->instmethods))
             {
                 return a;
             }

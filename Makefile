@@ -56,12 +56,8 @@ CFLAGS = $(INCFLAGS) $(OPTFLAGS) -g3 -ggdb3
 LDFLAGS = -ldl -lm
 target = run
 
-srcfiles_all = \
-	$(wildcard *.c) \
-	$(wildcard modules/*.c)
-
+srcfiles_all = $(wildcard *.c)
 headerfiles_all = $(wildcard *.h)
-
 
 objfiles_all = $(srcfiles_all:.c=.o)
 depfiles_all = $(objfiles_all:.o=.d)

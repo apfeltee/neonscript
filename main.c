@@ -317,10 +317,10 @@ static void nn_cli_printtypesizes()
     ptyp(NNAstClassCompiler);
     ptyp(NNAstParser);
     ptyp(NNAstRule);
-    ptyp(NNRegFunc);
-    ptyp(NNRegField);
-    ptyp(NNRegClass);
-    ptyp(NNRegModule);
+    ptyp(NNDefFunc);
+    ptyp(NNDefField);
+    ptyp(NNDefClass);
+    ptyp(NNDefModule);
     ptyp(NNInstruction)
     #undef ptyp
 }

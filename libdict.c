@@ -415,7 +415,7 @@ NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t
                 nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused, false);
     }
     return nn_value_makenull();
 }
@@ -454,7 +454,7 @@ NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size
                 nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
         if(!nn_value_isfalse(result))
         {
             nn_dict_addentry(resultdict, nn_valarray_get(&dict->names, i), value);
@@ -496,7 +496,7 @@ NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t
                 nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
         if(!nn_value_isfalse(result))
         {
             /* pop the call list */
@@ -539,7 +539,7 @@ NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_
                 nestargs[1] = nn_valarray_get(&dict->names, i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
         if(nn_value_isfalse(result))
         {
             /* pop the call list */
@@ -606,7 +606,7 @@ NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size
                     }
                 }
             }
-            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator);
+            nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &accumulator, false);
         }
     }
     return accumulator;

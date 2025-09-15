@@ -382,6 +382,4 @@ uint32_t nn_value_hashvalue(NNValue value)
     }
     return 0;
 }
-
-
  

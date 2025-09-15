@@ -78,7 +78,11 @@
 #if NNALLOC_CONF_HAVEMMAP
     #ifndef NNALLOC_CONF_LACKSSYSMMANH
         /* for mmap */
+        #if !defined(_GNU_SOURCE)
+            #define _GNU_SOURCE
+        #endif
         #include <sys/mman.h>
+        extern void *mremap(void *old_address, size_t old_size, size_t new_size, int flags, ...);
     #endif
     #ifndef NNALLOC_CONF_LACKSFCNTLH
         #include <fcntl.h>

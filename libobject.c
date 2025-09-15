@@ -38,7 +38,7 @@ NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, 
     (void)thisval;
     (void)argc;
     v = argv[0];
-    os = nn_string_copycstr(state, nn_value_typename(v));
+    os = nn_string_copycstr(state, nn_value_typename(v, false));
     return nn_value_fromobject(os);
 }
 

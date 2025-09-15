@@ -438,7 +438,7 @@ bool nn_strbuf_makebasicemptystack(NNStringBuffer* sbuf, size_t len)
 NNStringBuffer* nn_strbuf_makebasicempty(size_t len)
 {
     NNStringBuffer* sbuf;
-    sbuf = (NNStringBuffer*)nn_memory_calloc(1, sizeof(NNStringBuffer));
+    sbuf = (NNStringBuffer*)nn_memory_malloc(sizeof(NNStringBuffer));
     if(!sbuf)
     {
         return NULL;
@@ -643,7 +643,7 @@ size_t nn_strutil_strreplace1(char **str, size_t selflen, const char* findstr, s
             i += findlen - 1;
         }
     }
-    buff = (char*)nn_memory_calloc((i + oldcount * (sublen - findlen) + 1), sizeof(char));
+    buff = (char*)nn_memory_malloc((i + oldcount * (sublen - findlen) + 1) * sizeof(char));
     if (!buff)
     {
         perror("bad allocation\n");
@@ -665,7 +665,7 @@ size_t nn_strutil_strreplace1(char **str, size_t selflen, const char* findstr, s
         }
     }
     nn_memory_free(*str);
-    *str = (char*)nn_memory_calloc(i + 1, sizeof(char));
+    *str = (char*)nn_memory_malloc((i + 1) * sizeof(char));
     if (!(*str))
     {
         perror("bad allocation\n");
@@ -2751,7 +2751,7 @@ NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size
                 nestargs[1] = nn_value_makenumber(i);
             }
         }
-        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused);
+        nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused, false);
     }
     /* pop the argument list */
     return nn_value_makenull();

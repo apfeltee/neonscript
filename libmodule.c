@@ -123,10 +123,10 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     nn_memory_free(physpath);
     function = nn_astparser_compilesource(state, module, source, &blob, true, false);
     nn_memory_free(source);
-    closure = nn_object_makefuncclosure(state, function);
+    closure = nn_object_makefuncclosure(state, function, nn_value_makenull());
     callable = nn_value_fromobject(closure);
     nn_nestcall_prepare(state, callable, nn_value_makenull(), NULL, 0);     
-    if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), NULL, 0, &retv))
+    if(!nn_nestcall_callfunction(state, callable, nn_value_makenull(), NULL, 0, &retv, false))
     {
         nn_blob_destroy(&blob);
         nn_except_throwclass(state, state->exceptions.importerror, "failed to call compiled import closure");
@@ -244,57 +244,57 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     NNValue fieldname;
     NNValue funcname;
     NNValue funcrealvalue;
-    NNRegFunc func;
-    NNRegField field;
-    NNRegModule* module;
-    NNObjModule* themodule;
-    NNRegClass klassreg;
+    NNDefFunc func;
+    NNDefField field;
+    NNDefModule* defmod;
+    NNObjModule* targetmod;
+    NNDefClass klassreg;
     NNObjString* classname;
     NNObjFunction* native;
     NNObjClass* klass;
     NNHashValTable* tabdest;
-    module = init_fn(state);
-    if(module != NULL)
+    defmod = init_fn(state);
+    if(defmod != NULL)
     {
-        themodule = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make(state, (char*)module->name, source, false, true));
-        themodule->fnpreloaderptr = (void*)module->fnpreloaderfunc;
-        themodule->fnunloaderptr = (void*)module->fnunloaderfunc;
-        if(module->fields != NULL)
+        targetmod = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make(state, (char*)defmod->name, source, false, true));
+        targetmod->fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
+        targetmod->fnunloaderptr = (void*)defmod->fnunloaderfunc;
+        if(defmod->definedfields != NULL)
         {
-            for(j = 0; module->fields[j].name != NULL; j++)
+            for(j = 0; defmod->definedfields[j].name != NULL; j++)
             {
-                field = module->fields[j];
+                field = defmod->definedfields[j];
                 fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
                 v = field.fieldvalfn(state);
                 nn_vm_stackpush(state, v);
-                nn_valtable_set(&themodule->deftable, fieldname, v);
+                nn_valtable_set(&targetmod->deftable, fieldname, v);
                 nn_vm_stackpop(state);
             }
         }
-        if(module->functions != NULL)
+        if(defmod->definedfunctions != NULL)
         {
-            for(j = 0; module->functions[j].name != NULL; j++)
+            for(j = 0; defmod->definedfunctions[j].name != NULL; j++)
             {
-                func = module->functions[j];
+                func = defmod->definedfunctions[j];
                 funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
                 funcrealvalue = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL)));
                 nn_vm_stackpush(state, funcrealvalue);
-                nn_valtable_set(&themodule->deftable, funcname, funcrealvalue);
+                nn_valtable_set(&targetmod->deftable, funcname, funcrealvalue);
                 nn_vm_stackpop(state);
             }
         }
-        if(module->classes != NULL)
+        if(defmod->definedclasses != NULL)
         {
-            for(j = 0; module->classes[j].name != NULL; j++)
+            for(j = 0; defmod->definedclasses[j].name != NULL; j++)
             {
-                klassreg = module->classes[j];
+                klassreg = defmod->definedclasses[j];
                 classname = (NNObjString*)nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, klassreg.name));
                 klass = (NNObjClass*)nn_gcmem_protect(state, (NNObject*)nn_object_makeclass(state, classname, state->classprimobject));
-                if(klassreg.functions != NULL)
+                if(klassreg.defpubfunctions != NULL)
                 {
-                    for(k = 0; klassreg.functions[k].name != NULL; k++)
+                    for(k = 0; klassreg.defpubfunctions[k].name != NULL; k++)
                     {
-                        func = klassreg.functions[k];
+                        func = klassreg.defpubfunctions[k];
                         funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
                         native = (NNObjFunction*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
                         if(func.isstatic)
@@ -308,11 +308,11 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         nn_valtable_set(&klass->instmethods, funcname, nn_value_fromobject(native));
                     }
                 }
-                if(klassreg.fields != NULL)
+                if(klassreg.defpubfields != NULL)
                 {
-                    for(k = 0; klassreg.fields[k].name != NULL; k++)
+                    for(k = 0; klassreg.defpubfields[k].name != NULL; k++)
                     {
-                        field = klassreg.fields[k];
+                        field = klassreg.defpubfields[k];
                         fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
                         v = field.fieldvalfn(state);
                         nn_vm_stackpush(state, v);
@@ -325,14 +325,14 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         nn_vm_stackpop(state);
                     }
                 }
-                nn_valtable_set(&themodule->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));
+                nn_valtable_set(&targetmod->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));
             }
         }
         if(dlw != NULL)
         {
-            themodule->handle = dlw;
+            targetmod->handle = dlw;
         }
-        nn_import_addnativemodule(state, themodule, themodule->name->sbuf.data);
+        nn_import_addnativemodule(state, targetmod, targetmod->name->sbuf.data);
         nn_gcmem_clearprotect(state);
         return true;
     }
