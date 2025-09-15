@@ -8,6 +8,16 @@ NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* arg
     return nn_value_fromobject(nn_util_numbertohexstring(state, nn_value_asnumber(thisval), false));
 }
 
+
+NNValue nn_objfnmath_hypot(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    (void)state;
+    (void)thisval;
+    (void)argc;
+    return nn_value_makenumber(hypot(nn_value_asnumber(argv[0]), nn_value_asnumber(argv[1])));
+}
+
+
 NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
@@ -125,6 +135,7 @@ void nn_state_installmodmath(NNState* state)
 {
     NNObjClass* klass;
     klass = nn_util_makeclass(state, "Math", state->classprimobject);
+    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "hypot"), nn_objfnmath_hypot);
     nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "abs"), nn_objfnmath_abs);
     nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "round"), nn_objfnmath_round);
     nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "sqrt"), nn_objfnmath_sqrt);

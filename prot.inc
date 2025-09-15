@@ -252,12 +252,12 @@ NNValue nn_objfnfile_seek(NNState *state, NNValue thisval, NNValue *argv, size_t
 NNValue nn_objfnfile_tell(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_installobjectfile(NNState *state);
 /* libfunc.c */
-NNObjFunction *nn_object_makefuncgeneric(NNState *state, NNObjType fntype, NNValue thisval);
+NNObjFunction *nn_object_makefuncgeneric(NNState *state, NNObjString *name, NNObjType fntype, NNValue thisval);
 NNObjFunction *nn_object_makefuncbound(NNState *state, NNValue receiver, NNObjFunction *method);
 NNObjFunction *nn_object_makefuncscript(NNState *state, NNObjModule *module, NNFuncContextType type);
-void nn_funcscript_destroy(NNObjFunction *function);
-NNObjFunction *nn_object_makefuncnative(NNState *state, NNNativeFN function, const char *name, void *uptr);
-NNObjFunction *nn_object_makefuncclosure(NNState *state, NNObjFunction *function, NNValue thisval);
+void nn_funcscript_destroy(NNObjFunction *ofn);
+NNObjFunction *nn_object_makefuncnative(NNState *state, NNNativeFN natfn, const char *name, void *uptr);
+NNObjFunction *nn_object_makefuncclosure(NNState *state, NNObjFunction *innerfn, NNValue thisval);
 /* libmodule.c */
 void nn_import_loadbuiltinmodules(NNState *state);
 bool nn_state_addmodulesearchpathobj(NNState *state, NNObjString *os);
@@ -272,6 +272,7 @@ void nn_import_addnativemodule(NNState *state, NNObjModule *module, const char *
 void nn_import_closemodule(void *hnd);
 /* libnumber.c */
 NNValue nn_objfnnumber_tohexstring(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnmath_hypot(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnmath_abs(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnmath_round(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnmath_sqrt(NNState *state, NNValue thisval, NNValue *argv, size_t argc);

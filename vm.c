@@ -178,6 +178,7 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
 {
     int i;
     int startva;
+    const char* name;
     NNCallFrame* frame;
     NNObjArray* argslist;
     //closure->clsthisval = thisval;
@@ -207,11 +208,11 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
         nn_vm_stackpopn(state, argcount);
         if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic)
         {
-            return nn_except_throw(state, "expected at least %d arguments but got %d", closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1, argcount);
+            return nn_except_throw(state, "function '%s' expected at least %d arguments but got %d", closure->name->sbuf.data, closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1, argcount);
         }
         else
         {
-            return nn_except_throw(state, "expected %d arguments but got %d", closure->fnclosure.scriptfunc->fnscriptfunc.arity, argcount);
+            return nn_except_throw(state, "function '%s' expected %d arguments but got %d", closure->name->sbuf.data, closure->fnclosure.scriptfunc->fnscriptfunc.arity, argcount);
         }
     }
     if(nn_vm_checkmayberesize(state))
