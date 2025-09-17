@@ -227,7 +227,7 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
             nn_vm_stackpop(state);
             nn_vm_stackpush(state, thisval);
         #else
-            int spos;
+            int64_t spos;
             spos = (state->vmstate.stackidx + (-argcount - 1));
             #if 0
                 state->vmstate.stackvalues[spos] = closure->clsthisval;
@@ -245,7 +245,7 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
 
 NEON_INLINE bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue thisval, int argcount)
 {
-    size_t spos;
+    int64_t spos;
     NNValue r;
     NNValue* vargs;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
@@ -262,7 +262,7 @@ NEON_INLINE bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue
 
 bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval, int argcount, bool fromoper)
 {
-    size_t spos;
+    int64_t spos;
     #if 0
         #define NEON_APIPRINT(state, ...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n");
     #else
@@ -573,7 +573,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* name, int argcount)
 {
-    size_t spos;
+    int64_t spos;
     NNValue receiver;
     NNObjInstance* instance;
     NNProperty* field;
@@ -3614,9 +3614,12 @@ int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNValu
 /* helper function to access call outside the state file. */
 bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval, NNValue* argv, size_t argc, NNValue* dest, bool fromoper)
 {
+    bool needvm;
     size_t i;
-    size_t pidx;
+    int64_t pidx;
     NNStatus status;
+    NNValue rtv;
+    NNObjFunction* ofn;
     pidx = state->vmstate.stackidx;
     /* set the closure before the args */
     nn_vm_stackpush(state, callable);
@@ -3632,13 +3635,37 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
         fprintf(stderr, "nestcall: nn_vm_callvalue() failed\n");
         abort();
     }
-    status = nn_vm_runvm(state, state->vmstate.framecount - 1, NULL);
-    if(status != NEON_STATUS_OK)
+    needvm = true;
+    ofn = nn_value_asfunction(callable);
+    #if 0
+        if(nn_value_asfunction(callable)->contexttype == NEON_FNCONTEXTTYPE_SCRIPT)
+        {
+            needvm = true;
+        }
+        else
+        {
+            if(nn_value_isfuncclosure(callable))
+            {
+                needvm = true;
+            }
+        }
+    #else
+        if(nn_value_isfuncnative(callable))
+        {
+            needvm = false;
+        }
+    #endif
+    if(needvm)
     {
-        fprintf(stderr, "nestcall: call to runvm failed\n");
-        abort();
+        status = nn_vm_runvm(state, state->vmstate.framecount - 1, NULL);
+        if(status != NEON_STATUS_OK)
+        {
+            fprintf(stderr, "nestcall: call to runvm failed\n");
+            abort();
+        }
     }
-    *dest = state->vmstate.stackvalues[state->vmstate.stackidx - 1];
+    rtv = state->vmstate.stackvalues[state->vmstate.stackidx - 1];
+    *dest = rtv;
     nn_vm_stackpopn(state, argc + 0);
     state->vmstate.stackidx = pidx;
     return true;

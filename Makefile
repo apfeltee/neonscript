@@ -32,13 +32,20 @@ WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self -Wma
 #WFLAGS = -w
 
 
-OPTFLAGS = -O0
+OPTFLAGS = -O3
 #OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
 
 ## empty by default
 EXTRAFLAGS =
 ## might be needed for -fsanitize* to work properly, but that's just a theory.
 #EXTRAFLAGS =  -mno-red-zone -fno-omit-frame-pointer
+
+#EXTRAFLAGS += -fno-stack-protector
+
+#*** WARNING ***
+# causes quite a steep use of memory!
+#EXTRAFLAGS += -fsanitize=undefined
+
 #EXTRAFLAGS += -fsanitize=memory
 #EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
 
@@ -64,7 +71,7 @@ depfiles_all = $(objfiles_all:.o=.d)
 protofile = prot.inc
 
 # janky mess
-havecproto = 1
+havecproto = 0
 ifeq (, $(shell which cproto))
 havecproto = 0
 endif

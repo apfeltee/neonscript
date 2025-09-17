@@ -185,12 +185,12 @@ NNProperty* nn_class_getstaticmethodfield(NNObjClass* klass, NNObjString* name)
 
 }
 
-NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
+NNObjInstance* nn_object_makeinstancesize(NNState* state, NNObjClass* klass, size_t sz)
 {
     NNObjInstance* oinst;
     NNObjInstance* instance;
     oinst = NULL;
-    instance = (NNObjInstance*)nn_object_allocobject(state, sizeof(NNObjInstance), NEON_OBJTYPE_INSTANCE, false);
+    instance = (NNObjInstance*)nn_object_allocobject(state, sz, NEON_OBJTYPE_INSTANCE, false);
     /* gc fix */
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     instance->active = true;
@@ -209,6 +209,11 @@ NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
     /* gc fix */
     nn_vm_stackpop(state);
     return instance;
+}
+
+NNObjInstance* nn_object_makeinstance(NNState* state, NNObjClass* klass)
+{
+    return nn_object_makeinstancesize(state, klass, sizeof(NNObjInstance));
 }
 
 void nn_instance_mark(NNObjInstance* instance)

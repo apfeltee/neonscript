@@ -177,6 +177,7 @@ NNProperty *nn_class_getmethodfield(NNObjClass *klass, NNObjString *name);
 NNProperty *nn_class_getpropertyfield(NNObjClass *klass, NNObjString *name);
 NNProperty *nn_class_getstaticproperty(NNObjClass *klass, NNObjString *name);
 NNProperty *nn_class_getstaticmethodfield(NNObjClass *klass, NNObjString *name);
+NNObjInstance *nn_object_makeinstancesize(NNState *state, NNObjClass *klass, size_t sz);
 NNObjInstance *nn_object_makeinstance(NNState *state, NNObjClass *klass);
 void nn_instance_mark(NNObjInstance *instance);
 void nn_instance_destroy(NNObjInstance *instance);
@@ -490,6 +491,8 @@ void nn_gcmem_markcompilerroots(NNState *state);
 /* modast.c */
 NNValue nn_modfn_astscan_scan(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNDefModule *nn_natmodule_load_astscan(NNState *state);
+/* modcplx.c */
+NNDefModule *nn_natmodule_load_complex(NNState *state);
 /* modglobal.c */
 NNValue nn_nativefn_time(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_microtime(NNState *state, NNValue thisval, NNValue *argv, size_t argc);

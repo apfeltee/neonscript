@@ -20,6 +20,7 @@ void nn_import_loadbuiltinmodules(NNState* state)
         nn_natmodule_load_null,
         nn_natmodule_load_os,
         nn_natmodule_load_astscan,
+        nn_natmodule_load_complex,
         NULL,
     };
     for(i = 0; g_builtinmodules[i] != NULL; i++)
@@ -238,8 +239,9 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
 
 bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* importname, const char* source, void* dlw)
 {
-    int j;
-    int k;
+    size_t j;
+    size_t k;
+    size_t slen;
     NNValue v;
     NNValue fieldname;
     NNValue funcname;
@@ -265,7 +267,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
             {
                 field = defmod->definedfields[j];
                 fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
-                v = field.fieldvalfn(state);
+                v = field.fieldvalfn(state, nn_value_makenull(), NULL, 0);
                 nn_vm_stackpush(state, v);
                 nn_valtable_set(&targetmod->deftable, fieldname, v);
                 nn_vm_stackpop(state);
@@ -285,7 +287,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
         }
         if(defmod->definedclasses != NULL)
         {
-            for(j = 0; defmod->definedclasses[j].name != NULL; j++)
+            for(j = 0; ((defmod->definedclasses[j].name != NULL) && (defmod->definedclasses[j].defpubfunctions != NULL)); j++)
             {
                 klassreg = defmod->definedclasses[j];
                 classname = (NNObjString*)nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, klassreg.name));
@@ -295,34 +297,55 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                     for(k = 0; klassreg.defpubfunctions[k].name != NULL; k++)
                     {
                         func = klassreg.defpubfunctions[k];
+                        slen = strlen(func.name);
                         funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, func.name)));
                         native = (NNObjFunction*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(state, func.function, func.name, NULL));
                         if(func.isstatic)
                         {
                             native->contexttype = NEON_FNCONTEXTTYPE_STATIC;
                         }
-                        else if(strlen(func.name) > 0 && func.name[0] == '_')
+                        else if(slen > 0 && func.name[0] == '_')
                         {
                             native->contexttype = NEON_FNCONTEXTTYPE_PRIVATE;
                         }
-                        nn_valtable_set(&klass->instmethods, funcname, nn_value_fromobject(native));
+                        if(strncmp(func.name, "constructor", slen) == 0)
+                        {
+                            klass->constructor = nn_value_fromobject(native);
+                        }
+                        else
+                        {
+                            nn_valtable_set(&klass->instmethods, funcname, nn_value_fromobject(native));
+                        }
                     }
                 }
                 if(klassreg.defpubfields != NULL)
                 {
-                    for(k = 0; klassreg.defpubfields[k].name != NULL; k++)
+                    k = 0;
+                    while(true)
                     {
-                        field = klassreg.defpubfields[k];
-                        fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
-                        v = field.fieldvalfn(state);
-                        nn_vm_stackpush(state, v);
-                        tabdest = &klass->instproperties;
-                        if(field.isstatic)
+                        if(klassreg.defpubfields[k].name == NULL)
                         {
-                            tabdest = &klass->staticproperties;
+                            break;
                         }
-                        nn_valtable_set(tabdest, fieldname, v);
-                        nn_vm_stackpop(state);
+                        field = klassreg.defpubfields[k];
+                        if(field.name != NULL)
+                        {
+                            #if 0
+                                fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
+                                v = field.fieldvalfn(state, );
+                                nn_vm_stackpush(state, v);
+                                tabdest = &klass->instproperties;
+                                if(field.isstatic)
+                                {
+                                    tabdest = &klass->staticproperties;
+                                }
+                                nn_valtable_set(tabdest, fieldname, v);
+                                nn_vm_stackpop(state);
+                            #else
+                                nn_class_defcallablefield(klass, nn_string_copycstr(state, field.name), field.fieldvalfn);
+                            #endif
+                        }
+                        k++;
                     }
                 }
                 nn_valtable_set(&targetmod->deftable, nn_value_fromobject(classname), nn_value_fromobject(klass));

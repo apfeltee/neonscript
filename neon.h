@@ -1329,7 +1329,7 @@ struct NNDefField
 {
     const char* name;
     bool isstatic;
-    NNClassFieldFN fieldvalfn;
+    NNNativeFN fieldvalfn;
 };
 
 struct NNDefClass
