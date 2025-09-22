@@ -1,4 +1,5 @@
 
+#include <time.h>
 #include <signal.h>
 #include "neon.h"
 
@@ -207,12 +208,14 @@ char* osfn_realpath(const char* path, char* respath)
 
 char* osfn_dirname(const char *fname)
 {
-    const char *p  = fname;
-    const char *slash = NULL;
+    size_t dirlen;
+    char * dirpart;
+    const char *p;
+    const char *slash;
+    p = fname;
+    slash = NULL;
     if(fname)
     {
-        size_t dirlen;
-        char * dirpart;
         if(*fname && fname[1] == ':')
         {
             slash = fname + 1;
@@ -249,7 +252,7 @@ char* osfn_dirname(const char *fname)
         dirpart = (char *)nn_memory_malloc(dirlen + 1);
         if(dirpart != NULL)
         {
-            strncpy (dirpart, fname, dirlen);
+            strncpy(dirpart, fname, dirlen);
             if (slash && *slash == ':' && dirlen == 3)
             {
                 dirpart[2] = '.';	/* for "x:foo" return "x:." */
@@ -267,16 +270,16 @@ char* osfn_fallbackbasename(const char* opath)
     char* strend;
     char* cpath;
     strend = cpath = (char*)opath;
-    while (*strend)
+    while(*strend)
     {
         strend++;
     }
-    while (strend > cpath && strend[-1] == '/')
+    while(strend > cpath && strend[-1] == '/')
     {
         strend--;
     }
     strbeg = strend;
-    while (strbeg > cpath && strbeg[-1] != '/')
+    while(strbeg > cpath && strbeg[-1] != '/')
     {
         strbeg--;
     }
@@ -414,7 +417,24 @@ const char* osfn_getenv(const char* key)
 
 bool osfn_setenv(const char* key, const char* value, bool replace)
 {
-    return (setenv(key, value, replace) == 0);
+    #if defined(OSFN_ISUNIXLIKE)
+        return (setenv(key, value, replace) == 0);
+    #else
+        int errcode;
+        size_t envsize;
+        errcode = 0;
+        if(!replace)
+        {
+            envsize = 0;
+            errcode = getenv_s(&envsize, NULL, 0, key);
+            if(errcode || envsize) return errcode;
+        }
+        if(_putenv_s(key, value) == -1)
+        {
+            return false;
+        }
+        return true;
+    #endif
 }
 
 int osfn_chdir(const char* path)
@@ -449,8 +469,8 @@ bool nn_util_fsfileexists(NNState* state, const char* filepath)
     #if !defined(NEON_PLAT_ISWINDOWS)
         return access(filepath, F_OK) == 0;
     #else
-        struct stat sb;
-        if(stat(filepath, &sb) == -1)
+        struct stat st;
+        if(stat(filepath, &st) == -1)
         {
             return false;
         }
@@ -742,6 +762,117 @@ NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makebool(true);
 }
 
+
+static const char* modetoname(int t)
+{
+    switch(t)
+    {
+        #if defined(S_IFBLK)
+            case S_IFBLK:
+                return "blockdevice";
+                break;
+        #endif
+        #if defined(S_IFCHR)
+            case S_IFCHR:
+                return "characterdevice";
+                break;
+        #endif
+        #if defined(S_IFDIR)
+            case S_IFDIR:
+                return "directory";
+                break;
+        #endif
+        #if defined(S_IFIFO)
+            case S_IFIFO:
+                return "pipe";
+                break;
+        #endif
+        #if defined(S_IFLNK)
+            case S_IFLNK:
+                return "symlink";
+                break;
+        #endif
+        #if defined(S_IFREG)
+            case S_IFREG:
+                return "file";
+                break;
+        #endif
+        #if defined(S_IFSOCK)
+            case S_IFSOCK:
+                return "socket";
+                break;
+        #endif
+            default:
+                break;
+    }
+    return "unknown";
+}
+
+static const char* ctime_helper(const time_t *timep)
+{
+    size_t len;
+    char* r;
+    r = ctime(timep);
+    len = strlen(r);
+    if(r[len - 1] == '\n')
+    {
+        r[len - 1] = 0;
+    }
+    return r;
+}
+
+
+NNValue nn_modfn_os_stat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    int imode;
+    int blksize;
+    int blocks;
+    NNObjString* path;
+    NNArgCheck check;
+    NNObjDict* md;
+
+    const char* strp;
+    struct stat st;
+    (void)thisval;
+    nn_argcheck_init(state, &check, "stat", argv, argc);
+    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
+    path = nn_value_asstring(argv[0]);
+    strp = nn_string_getdata(path);
+    if(stat(nn_string_getdata(path), &st) == -1)
+    {
+        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", strp, strerror(errno));
+        return nn_value_makenull();
+    }
+    md = nn_object_makedict(state);
+    nn_dict_addentrycstr(md, "path", nn_value_fromobject(path));
+    imode = (st.st_mode & S_IFMT);
+    #if !defined(_WIN32) && !defined(_WIN64)
+        blksize = st.st_blksize;
+        blocks = st.st_blocks;
+    #else
+        blksize = 8;
+        blocks = (1024 * 4);
+    #endif
+    #if 0
+        nn_dict_addentrycstr(md, "id", major(st.st_dev) & minor(st.st_dev));
+    #endif
+
+    nn_dict_addentrycstr(md, "type", nn_value_fromobject(nn_string_copycstr(state, modetoname(imode))));
+    nn_dict_addentrycstr(md, "inode", nn_value_makenumber((uintmax_t) st.st_ino));
+    nn_dict_addentrycstr(md, "mode", nn_value_makenumber((uintmax_t) st.st_mode));
+    nn_dict_addentrycstr(md, "links", nn_value_makenumber((uintmax_t) st.st_nlink));
+    nn_dict_addentrycstr(md, "uid", nn_value_makenumber((uintmax_t) st.st_uid)),
+    nn_dict_addentrycstr(md, "gid", nn_value_makenumber((uintmax_t) st.st_gid));
+    nn_dict_addentrycstr(md, "blocksize", nn_value_makenumber(blksize));
+    nn_dict_addentrycstr(md, "blocks", nn_value_makenumber(blocks));
+
+    nn_dict_addentrycstr(md, "filesize", nn_value_makenumber((intmax_t) st.st_size));
+    nn_dict_addentrycstr(md, "lastchanged", nn_value_fromobject(nn_string_copycstr(state, ctime_helper(&st.st_ctime))));
+    nn_dict_addentrycstr(md, "lastaccess", nn_value_fromobject(nn_string_copycstr(state, ctime_helper(&st.st_atime))));
+    nn_dict_addentrycstr(md, "lastmodified", nn_value_fromobject(nn_string_copycstr(state, ctime_helper(&st.st_mtime))));
+    return nn_value_fromobject(md);
+}
+
 NNDefModule* nn_natmodule_load_os(NNState* state)
 {
     static NNDefFunc modfuncs[] =
@@ -759,10 +890,10 @@ NNDefModule* nn_natmodule_load_os(NNState* state)
         {"basename",   true,  nn_modfn_os_basename},
         {"dirname",   true,  nn_modfn_os_dirname},
         {"touch",   true,  nn_modfn_os_touch},
+        {"stat",   true,  nn_modfn_os_stat},
 
         /* todo: implement these! */
         #if 0
-        {"stat",   true,  nn_modfn_os_stat},
         /* shell-like directory state - might be trickier */
         #endif
         {NULL,     false, NULL},

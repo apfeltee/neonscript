@@ -1,10 +1,11 @@
-const Clx=import("complex")
-const Complex = Clx.Complex
-a=Complex(1.5, 4.5)
-print("func = ", [a.re], "\n")
-b = Complex(7.2, 8.0)
-c = a * b;
-print("c.re=", c.re, ", c.im=", c.im, "\n")
 
 
+function foo(str, name="john", lastname="doe")
+{
+    printf("foo(str=%p, name=%p, lastname=%p)\n", str, name, lastname);
+}
+
+foo("hello world");
+foo("goodbye world", "jim");
+foo("seeya world", "petey", "dane");
 

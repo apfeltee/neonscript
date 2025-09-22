@@ -3295,7 +3295,7 @@ uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
     return argcount;
 }
 
-void nn_astparser_parsefuncparamlist(NNAstParser* prs)
+void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
 {
     int defvalconst;
     int paramconst;
@@ -3332,7 +3332,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
             {
                 nn_astparser_raiseerror(prs, "failed to parse function default paramter value");
             }
-            #if 1
+            #if 0
                 defvalconst = nn_astparser_addlocal(prs, paramname);
             #else
                 defvalconst = paramconst;
@@ -3344,6 +3344,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs)
                     nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, defvalconst);
                 #endif
             #endif
+            nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
         }
         #endif
         nn_astparser_ignorewhitespace(prs);
@@ -3387,7 +3388,7 @@ void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool i
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after function name");
     if(!nn_astparser_check(prs, NEON_ASTTOK_PARENCLOSE))
     {
-        nn_astparser_parsefuncparamlist(prs);
+        nn_astparser_parsefuncparamlist(prs, &fnc);
     }
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after function parameters");
     nn_astfunccompiler_compilebody(prs, &fnc, false, isanon);
@@ -3446,7 +3447,7 @@ bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' at start of anonymous function");
     if(!nn_astparser_check(prs, NEON_ASTTOK_PARENCLOSE))
     {
-        nn_astparser_parsefuncparamlist(prs);
+        nn_astparser_parsefuncparamlist(prs, &fnc);
     }
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after anonymous function parameters");
     nn_astfunccompiler_compilebody(prs, &fnc, true, true);

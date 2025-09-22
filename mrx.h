@@ -305,7 +305,7 @@ NEON_INLINE void mrx_context_initstack(RegexContext* ctx, RegexToken* tokens, si
 NEON_INLINE RegexContext* mrx_context_initalloc(RegexToken* tokens, size_t maxtokens)
 {
     RegexContext* ctx;
-    ctx = (RegexContext*)malloc(sizeof(RegexContext));
+    ctx = (RegexContext*)nn_memory_malloc(sizeof(RegexContext));
     if(ctx == NULL)
     {
         return NULL;
@@ -321,7 +321,7 @@ NEON_INLINE void mrx_context_destroy(RegexContext* ctx)
     {
         return;
     }
-    free(ctx);
+    nn_memory_free(ctx);
 }
 
 NEON_INLINE void mrx_context_seterror(RegexContext* ctx, const char* fmt, ...)

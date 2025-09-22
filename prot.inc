@@ -323,9 +323,6 @@ NNValue nn_objfnrange_expand(NNState *state, NNValue thisval, NNValue *argv, siz
 NNValue nn_objfnrange_constructor(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_installobjectrange(NNState *state);
 /* libstring.c */
-void nn_strformat_init(NNState *state, NNFormatInfo *nfi, NNPrinter *writer, const char *fmtstr, size_t fmtlen);
-void nn_strformat_destroy(NNFormatInfo *nfi);
-bool nn_strformat_format(NNFormatInfo *nfi, int argc, int argbegin, NNValue *argv);
 size_t nn_strutil_rndup2pow64(uint64_t x);
 size_t nn_strutil_splitstr(char *str, char sep, char **ptrs, size_t nptrs);
 size_t nn_strutil_charreplace(char *str, char from, char to);
@@ -500,9 +497,6 @@ NNValue nn_nativefn_id(NNState *state, NNValue thisval, NNValue *argv, size_t ar
 NNValue nn_nativefn_int(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_chr(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_ord(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-void nn_util_mtseed(uint32_t seed, uint32_t *binst, uint32_t *index);
-uint32_t nn_util_mtgenerate(uint32_t *binst, uint32_t *index);
-double nn_util_mtrand(double lowerlimit, double upperlimit);
 NNValue nn_nativefn_rand(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_eval(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_nativefn_instanceof(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -701,7 +695,7 @@ bool nn_astparser_parseblock(NNAstParser *prs);
 void nn_astparser_declarefuncargvar(NNAstParser *prs);
 int nn_astparser_parsefuncparamvar(NNAstParser *prs, const char *message);
 uint8_t nn_astparser_parsefunccallargs(NNAstParser *prs);
-void nn_astparser_parsefuncparamlist(NNAstParser *prs);
+void nn_astparser_parsefuncparamlist(NNAstParser *prs, NNAstFuncCompiler *fnc);
 void nn_astfunccompiler_compilebody(NNAstParser *prs, NNAstFuncCompiler *fnc, bool closescope, bool isanon);
 void nn_astparser_parsefuncfull(NNAstParser *prs, NNFuncContextType type, bool isanon);
 void nn_astparser_parsemethod(NNAstParser *prs, NNAstToken classname, NNAstToken methodname, bool havenametoken, bool isstatic);
@@ -752,6 +746,10 @@ bool nn_valarray_removeat(NNValArray *list, unsigned int ix);
 bool nn_valarray_ensurecapacity(NNValArray *list, size_t needsize, NNValue fillval, bool first);
 NNValArray *nn_valarray_copy(NNValArray *list);
 void nn_valarray_setempty(NNValArray *list);
+/* utilfmt.c */
+void nn_strformat_init(NNState *state, NNFormatInfo *nfi, NNPrinter *writer, const char *fmtstr, size_t fmtlen);
+void nn_strformat_destroy(NNFormatInfo *nfi);
+bool nn_strformat_format(NNFormatInfo *nfi, int argc, int argbegin, NNValue *argv);
 /* utilhmap.c */
 void nn_valtable_init(NNState *state, NNHashValTable *tab);
 void nn_valtable_destroy(NNHashValTable *table);
@@ -779,6 +777,9 @@ void nn_valtable_removewhites(NNState *state, NNHashValTable *table);
 const char *nn_util_color(NNColor tc);
 char *nn_util_strndup(const char *src, size_t len);
 char *nn_util_strdup(const char *src);
+void nn_util_mtseed(uint32_t seed, uint32_t *binst, uint32_t *index);
+uint32_t nn_util_mtgenerate(uint32_t *binst, uint32_t *index);
+double nn_util_mtrand(double lowerlimit, double upperlimit);
 char *nn_util_filereadhandle(NNState *state, FILE *hnd, size_t *dlen, bool havemaxsz, size_t maxsize);
 char *nn_util_filereadfile(NNState *state, const char *filename, size_t *dlen, bool havemaxsz, size_t maxsize);
 char *nn_util_filegetshandle(char *s, int size, FILE *f, size_t *lendest);
@@ -815,6 +816,7 @@ NNValue nn_vm_stackpopn(NNState *state, int n);
 NNValue nn_vm_stackpeek(NNState *state, int distance);
 bool nn_value_isfalse(NNValue value);
 bool nn_util_isinstanceof(NNObjClass *klass1, NNObjClass *expected);
+NNProperty *nn_vmutil_checkoverloadrequirements(NNState *state, const char *ccallername, NNValue target, const char *name);
 void nn_vmdebug_printvalue(NNState *state, NNValue val, const char *fmt, ...);
 NNStatus nn_vm_runvm(NNState *state, int exitframe, NNValue *rv);
 int nn_nestcall_prepare(NNState *state, NNValue callable, NNValue mthobj, NNValue *callarr, int maxcallarr);

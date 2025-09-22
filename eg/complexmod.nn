@@ -4,7 +4,7 @@ const Complex = CplxMod.Complex
 
 function dump_num(name, n)
 {
-    //printf("%s: real=%g imag=%g\n", name, n.re, n.im);
+    printf("%s: real=%g imag=%g\n", name, n.re, n.im);
 }
 
 const image_width = 150;

@@ -7,6 +7,7 @@ NNObjFunction* nn_object_makefuncgeneric(NNState* state, NNObjString* name, NNOb
     ofn = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), fntype, false);
     ofn->clsthisval = thisval;
     ofn->name = name;
+    nn_valtable_init(state, &ofn->defaultargvalues);
     return ofn;
 
 }
@@ -30,9 +31,6 @@ NNObjFunction* nn_object_makefuncscript(NNState* state, NNObjModule* module, NNF
     ofn->name = NULL;
     ofn->contexttype = type;
     ofn->fnscriptfunc.module = module;
-    #if 0
-        nn_valarray_init(state, &ofn->funcargdefaults);
-    #endif
     nn_blob_init(state, &ofn->fnscriptfunc.blob);
     return ofn;
 }

@@ -1156,7 +1156,7 @@ NEON_FORCEINLINE int nn_alloccheck_binfind(NNAllocState* m, NNAllocChunkItem* x)
 NEON_FORCEINLINE size_t nn_alloccheck_traverseandcheck(NNAllocState* m);
 #endif
 
-/* index corresponding to given bit */
+
 
 void nn_allocator_init()
 {

@@ -254,7 +254,6 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     NNObjString* classname;
     NNObjFunction* native;
     NNObjClass* klass;
-    NNHashValTable* tabdest;
     defmod = init_fn(state);
     if(defmod != NULL)
     {
@@ -330,20 +329,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
                         field = klassreg.defpubfields[k];
                         if(field.name != NULL)
                         {
-                            #if 0
-                                fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(state, field.name)));
-                                v = field.fieldvalfn(state, );
-                                nn_vm_stackpush(state, v);
-                                tabdest = &klass->instproperties;
-                                if(field.isstatic)
-                                {
-                                    tabdest = &klass->staticproperties;
-                                }
-                                nn_valtable_set(tabdest, fieldname, v);
-                                nn_vm_stackpop(state);
-                            #else
-                                nn_class_defcallablefield(klass, nn_string_copycstr(state, field.name), field.fieldvalfn);
-                            #endif
+                            nn_class_defcallablefield(klass, nn_string_copycstr(state, field.name), field.fieldvalfn);
                         }
                         k++;
                     }

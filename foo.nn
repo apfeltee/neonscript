@@ -17,6 +17,13 @@ class Foo
         return this.g_items[idx];
     }
 
+    __indexset__(idx, val)
+    {
+        println("in __indexset__(): idx=", idx, ", val=", val, "")
+        this.g_items[idx] = val
+        return this
+    }
+
     __add__(a)
     {
         println("println=", println);
@@ -27,6 +34,8 @@ class Foo
 }
 
 f = Foo()
-println(f["color"])
+println("color before: ", f["color"])
+f["color"] = "blue"
+println("color after: ", f["color"])
 println(f + 5 + 10)
 println(f.g_number)

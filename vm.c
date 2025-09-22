@@ -1,4 +1,5 @@
 
+#include <assert.h>
 #include "neon.h"
 
 void nn_vm_initvmstate(NNState* state)
@@ -178,7 +179,6 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
 {
     int i;
     int startva;
-    const char* name;
     NNCallFrame* frame;
     NNObjArray* argslist;
     //closure->clsthisval = thisval;
@@ -263,6 +263,8 @@ NEON_INLINE bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue
 bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval, int argcount, bool fromoper)
 {
     int64_t spos;
+    NNObjFunction* ofn;
+    ofn = nn_value_asfunction(callable);
     #if 0
         #define NEON_APIPRINT(state, ...) fprintf(stderr, __VA_ARGS__), fprintf(stderr, "\n");
     #else
@@ -276,18 +278,18 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
         {
             case NEON_OBJTYPE_FUNCCLOSURE:
                 {
-                    return nn_vm_callclosure(state, nn_value_asfunction(callable), thisval, argcount, fromoper);
+                    return nn_vm_callclosure(state, ofn, thisval, argcount, fromoper);
                 }
                 break;
             case NEON_OBJTYPE_FUNCNATIVE:
                 {
-                    return nn_vm_callnative(state, nn_value_asfunction(callable), thisval, argcount);
+                    return nn_vm_callnative(state, ofn, thisval, argcount);
                 }
                 break;
             case NEON_OBJTYPE_FUNCBOUND:
                 {
                     NNObjFunction* bound;
-                    bound = nn_value_asfunction(callable);
+                    bound = ofn;
                     spos = (state->vmstate.stackidx + (-argcount - 1));
                     state->vmstate.stackvalues[spos] = thisval;
                     return nn_vm_callclosure(state, bound->fnmethod.method, thisval, argcount, fromoper);
@@ -337,14 +339,16 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
 bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argcount, bool fromoperator)
 {
     NNValue actualthisval;
+    NNObjFunction* ofn;
     if(nn_value_isobject(callable))
     {
+        ofn = nn_value_asfunction(callable);
         switch(nn_value_objtype(callable))
         {
             case NEON_OBJTYPE_FUNCBOUND:
                 {
                     NNObjFunction* bound;
-                    bound = nn_value_asfunction(callable);
+                    bound = ofn;
                     actualthisval = bound->fnmethod.receiver;
                     if(!nn_value_isnull(thisval))
                     {
@@ -381,12 +385,14 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
 
 NEON_INLINE NNFuncContextType nn_value_getmethodtype(NNValue method)
 {
+    NNObjFunction* ofn;
+    ofn = nn_value_asfunction(method);
     switch(nn_value_objtype(method))
     {
         case NEON_OBJTYPE_FUNCNATIVE:
-            return nn_value_asfunction(method)->contexttype;
+            return ofn->contexttype;
         case NEON_OBJTYPE_FUNCCLOSURE:
-            return nn_value_asfunction(method)->fnclosure.scriptfunc->contexttype;
+            return ofn->fnclosure.scriptfunc->contexttype;
         default:
             break;
     }
@@ -434,7 +440,7 @@ NNObjClass* nn_value_getclassfor(NNState* state, NNValue receiver)
 * used in the main VM engine.
 */
 
-NEON_FORCEINLINE void nn_vmbits_stackpush(NNState* state, NNValue value)
+NEON_INLINE void nn_vmbits_stackpush(NNState* state, NNValue value)
 {
     nn_vm_checkmayberesize(state);
     state->vmstate.stackvalues[state->vmstate.stackidx] = value;
@@ -446,7 +452,7 @@ void nn_vm_stackpush(NNState* state, NNValue value)
     nn_vmbits_stackpush(state, value);
 }
 
-NEON_FORCEINLINE NNValue nn_vmbits_stackpop(NNState* state)
+NEON_INLINE NNValue nn_vmbits_stackpop(NNState* state)
 {
     NNValue v;
     state->vmstate.stackidx--;
@@ -463,7 +469,7 @@ NNValue nn_vm_stackpop(NNState* state)
     return nn_vmbits_stackpop(state);
 }
 
-NEON_FORCEINLINE NNValue nn_vmbits_stackpopn(NNState* state, int n)
+NEON_INLINE NNValue nn_vmbits_stackpopn(NNState* state, int n)
 {
     NNValue v;
     state->vmstate.stackidx -= n;
@@ -480,7 +486,7 @@ NNValue nn_vm_stackpopn(NNState* state, int n)
     return nn_vmbits_stackpopn(state, n);
 }
 
-NEON_FORCEINLINE NNValue nn_vmbits_stackpeek(NNState* state, int distance)
+NEON_INLINE NNValue nn_vmbits_stackpeek(NNState* state, int distance)
 {
     NNValue v;
     v = state->vmstate.stackvalues[state->vmstate.stackidx + (-1 - distance)];
@@ -1274,88 +1280,70 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_checkoverloadwithargs(NNState* state, NNValue target, const char* name, NNValue right, bool willassign)
+NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccallername, NNValue target, const char* name)
 {
-    NNValue finalval;
-    NNValue vindex;
     NNProperty* field;
-    NNValue scrargv[3];
+    (void)state;
     if(!nn_value_isinstance(target))
     {
-        fprintf(stderr, "checkoverloadwithargs: not an instance\n");
-        return false;
+        fprintf(stderr, "%s: not an instance\n", ccallername);
+        return NULL;
     }
     field = nn_instance_getmethodcstr(nn_value_asinstance(target), name);
     if(field == NULL)
     {
-        fprintf(stderr, "checkoverloadwithargs: failed to get '%s'\n", name);
-        return false;
+        fprintf(stderr, "%s: failed to get '%s'\n", ccallername, name);
+        return NULL;
     }
     if(!nn_value_iscallable(field->value))
     {
-        fprintf(stderr, "checkoverloadwithargs: field not callable\n");
-        return false;
+        fprintf(stderr, "%s: field not callable\n", ccallername);
+        return NULL;
     }
-    //bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest);
-    scrargv[0] = right;
-    if(nn_nestcall_callfunction(state, field->value, target, scrargv, 1, &finalval, true))
+    return field;
+}
+
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadbasic(NNState* state, const char* name, NNValue target, NNValue firstargvval, NNValue setvalue, bool willassign)
+{
+    size_t nargc;
+    NNValue finalval;
+    NNProperty* field;
+    NNValue scrargv[3];
+    nargc = 1;
+    field = nn_vmutil_checkoverloadrequirements(state, "tryoverloadgeneric", target, name); 
+    scrargv[0] = firstargvval;
+    if(willassign)
     {
-        #if 1
+        scrargv[0] = setvalue;
+        scrargv[1] = firstargvval;
+        nargc = 2;
+    }
+    if(nn_nestcall_callfunction(state, field->value, target, scrargv, nargc, &finalval, true))
+    {
         if(!willassign)
         {
-            /*
-            // we can safely get rid of the index from the stack
-            // +1 for the list itself
-            */
             nn_vmbits_stackpopn(state, 2);
         }
-        #endif
         nn_vmbits_stackpush(state, finalval);
         return true;
     }
     return false;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_checkoverload(NNState* state, NNValue target, const char* name, bool willassign)
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadmath(NNState* state, const char* name, NNValue target, NNValue right, bool willassign)
 {
-    NNValue finalval;
-    NNValue vindex;
-    NNProperty* field;
-    NNValue scrargv[3];
-    vindex = nn_vmbits_stackpeek(state, 0);
-    if(!nn_value_isinstance(target))
-    {
-        fprintf(stderr, "checkoverload: not an instance\n");
-        return false;
-    }
-    field = nn_instance_getmethodcstr(nn_value_asinstance(target), name);
-    if(field == NULL)
-    {
-        fprintf(stderr, "checkoverload: failed to find '%s'\n", name);
-        return false;
-    }
-    if(!nn_value_iscallable(field->value))
-    {
-        fprintf(stderr, "checkoverload: field not callable\n");
-        return false;
-    }
-    //bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest);
-    scrargv[0] = vindex;
-    if(nn_nestcall_callfunction(state, field->value, target, scrargv, 1, &finalval, true))
-    {
-        if(!willassign)
-        {
-            /*
-            // we can safely get rid of the index from the stack
-            // +1 for the list itself
-            */
-            nn_vmbits_stackpopn(state, 2);
-        }
-        nn_vmbits_stackpush(state, finalval);
-        return true;
-    }
-    return false;
+    return nn_vmutil_tryoverloadbasic(state, name, target, right, nn_value_makenull(), willassign);
 }
+
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadgeneric(NNState* state, const char* name, NNValue target, bool willassign)
+{
+    NNValue setval;
+    NNValue firstargval;
+    firstargval = nn_vmbits_stackpeek(state, 0);
+    setval = nn_vmbits_stackpeek(state, 1);
+    return nn_vmutil_tryoverloadbasic(state, name, target, firstargval, setval, willassign);
+}
+
 
 NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
 {
@@ -1367,7 +1355,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
     thisval = nn_vmbits_stackpeek(state, 1);
     if(nn_util_unlikely(nn_value_isinstance(thisval)))
     {
-        if(nn_vmutil_checkoverload(state, thisval, "__indexget__", willassign))
+        if(nn_vmutil_tryoverloadgeneric(state, "__indexget__", thisval, willassign))
         {
             return true;
         }
@@ -1579,7 +1567,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     thisval = nn_vmbits_stackpeek(state, 2);
     if(nn_util_unlikely(nn_value_isinstance(thisval)))
     {
-        if(nn_vmutil_checkoverload(state, thisval, "__indexset__", true))
+        if(nn_vmutil_tryoverloadgeneric(state, "__indexset__", thisval, true))
         {
             return true;
         }
@@ -2092,7 +2080,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
         {
             case NEON_OP_PRIMADD:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__add__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__add__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2100,7 +2088,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMSUBTRACT:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__sub__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__sub__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2108,7 +2096,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMDIVIDE:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__div__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__div__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2116,7 +2104,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMMULTIPLY:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__mul__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__mul__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2124,7 +2112,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMAND:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__band__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__band__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2132,7 +2120,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMOR:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__bor__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__bor__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2140,7 +2128,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMBITXOR:
                 {
-                    if(nn_vmutil_checkoverloadwithargs(state, binvalleft, "__bxor__", binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, "__bxor__", binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2350,21 +2338,41 @@ NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
     peeked = nn_vmbits_stackpeek(state, 0);
     ssp = state->vmstate.currentframe->stackslotpos;
     state->vmstate.stackvalues[ssp + slot] = peeked;
+
     return true;
 }
 
 /*NEON_OP_FUNCARGOPTIONAL*/
 NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
 {
-    size_t putpos;
+    //nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
+
+    size_t ssp;
     uint16_t slot;
+    uint64_t pos;
+    NNValue vfn;
+    NNValue vpos;
     NNValue peeked;
+    NNObjFunction* ofn;
+    slot = nn_vmbits_readshort(state);
+    peeked = nn_vmbits_stackpeek(state, 0);
+    //vfn = state->vmstate.stackvalues[1];
+    vfn = nn_vmbits_stackpeek(state, 1);
+    ofn = nn_value_asfunction(vfn);
+    assert(nn_valtable_get(&ofn->defaultargvalues, nn_value_makenumber(slot), &vpos));
+    pos = nn_value_asnumber(vpos);
+    ssp = state->vmstate.currentframe->stackslotpos;
+    state->vmstate.stackvalues[ssp + pos] = peeked;
+    return true;
+
+    size_t putpos;
+
     NNValue cval;
     slot = 0;
     slot = nn_vmbits_readshort(state);
     cval = nn_vmbits_stackpeek(state, 0);
     peeked = nn_vmbits_stackpeek(state, 1);
-
+    
     #if 1
         putpos = (state->vmstate.stackidx + (-1 - 1)) ;
     #else
@@ -2374,7 +2382,7 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
             putpos = state->vmstate.stackidx + (-1 - slot);
         #endif
     #endif
-
+    
     #if 1
     {
         NNPrinter* pr = state->stderrprinter;
@@ -3577,23 +3585,23 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
 int nn_nestcall_prepare(NNState* state, NNValue callable, NNValue mthobj, NNValue* callarr, int maxcallarr)
 {
     int arity;
-    NNObjFunction* closure;
+    NNObjFunction* ofn;
     (void)state;
     (void)maxcallarr;
     arity = 0;
+    ofn = nn_value_asfunction(callable);
     if(nn_value_isfuncclosure(callable))
     {
-        closure = nn_value_asfunction(callable);
-        arity = closure->fnclosure.scriptfunc->fnscriptfunc.arity;
+        arity = ofn->fnclosure.scriptfunc->fnscriptfunc.arity;
     }
     else if(nn_value_isfuncscript(callable))
     {
-        arity = nn_value_asfunction(callable)->fnscriptfunc.arity;
+        arity = ofn->fnscriptfunc.arity;
     }
     else if(nn_value_isfuncnative(callable))
     {
         #if 0
-            arity = nn_value_asfunction(callable);
+            arity = ofn;
         #endif
     }
     if(arity > 0)
@@ -3619,7 +3627,6 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
     int64_t pidx;
     NNStatus status;
     NNValue rtv;
-    NNObjFunction* ofn;
     pidx = state->vmstate.stackidx;
     /* set the closure before the args */
     nn_vm_stackpush(state, callable);
@@ -3636,25 +3643,10 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
         abort();
     }
     needvm = true;
-    ofn = nn_value_asfunction(callable);
-    #if 0
-        if(nn_value_asfunction(callable)->contexttype == NEON_FNCONTEXTTYPE_SCRIPT)
-        {
-            needvm = true;
-        }
-        else
-        {
-            if(nn_value_isfuncclosure(callable))
-            {
-                needvm = true;
-            }
-        }
-    #else
-        if(nn_value_isfuncnative(callable))
-        {
-            needvm = false;
-        }
-    #endif
+    if(nn_value_isfuncnative(callable))
+    {
+        needvm = false;
+    }
     if(needvm)
     {
         status = nn_vm_runvm(state, state->vmstate.framecount - 1, NULL);

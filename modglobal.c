@@ -94,63 +94,6 @@ NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t a
     return nn_value_makenumber(ord);
 }
 
-void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index)
-{
-    uint32_t i;
-    binst[0] = seed;
-    for(i = 1; i < NEON_CONFIG_MTSTATESIZE; i++)
-    {
-        binst[i] = (uint32_t)(1812433253UL * (binst[i - 1] ^ (binst[i - 1] >> 30)) + i);
-    }
-    *index = NEON_CONFIG_MTSTATESIZE;
-}
-
-uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index)
-{
-    uint32_t i;
-    uint32_t y;
-    if(*index >= NEON_CONFIG_MTSTATESIZE)
-    {
-        for(i = 0; i < NEON_CONFIG_MTSTATESIZE - 397; i++)
-        {
-            y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-            binst[i] = binst[i + 397] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        }
-        for(; i < NEON_CONFIG_MTSTATESIZE - 1; i++)
-        {
-            y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-            binst[i] = binst[i + (397 - NEON_CONFIG_MTSTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        }
-        y = (binst[NEON_CONFIG_MTSTATESIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
-        binst[NEON_CONFIG_MTSTATESIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-        *index = 0;
-    }
-    y = binst[*index];
-    *index = *index + 1;
-    y = y ^ (y >> 11);
-    y = y ^ ((y << 7) & 0x9d2c5680);
-    y = y ^ ((y << 15) & 0xefc60000);
-    y = y ^ (y >> 18);
-    return y;
-}
-
-double nn_util_mtrand(double lowerlimit, double upperlimit)
-{
-    double randnum;
-    uint32_t randval;
-    struct timeval tv;
-    static uint32_t mtstate[NEON_CONFIG_MTSTATESIZE];
-    static uint32_t mtindex = NEON_CONFIG_MTSTATESIZE + 1;
-    if(mtindex >= NEON_CONFIG_MTSTATESIZE)
-    {
-        osfn_gettimeofday(&tv, NULL);
-        nn_util_mtseed((uint32_t)(1000000 * tv.tv_sec + tv.tv_usec), mtstate, &mtindex);
-    }
-    randval = nn_util_mtgenerate(mtstate, &mtindex);
-    randnum = lowerlimit + ((double)randval / UINT32_MAX) * (upperlimit - lowerlimit);
-    return randnum;
-}
-
 NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int tmp;
