@@ -2346,63 +2346,58 @@ NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
 NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
 {
     //nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
-
     size_t ssp;
+    size_t putpos;
     uint16_t slot;
     uint64_t pos;
     NNValue vfn;
     NNValue vpos;
+    NNValue cval;
     NNValue peeked;
     NNObjFunction* ofn;
     slot = nn_vmbits_readshort(state);
-    peeked = nn_vmbits_stackpeek(state, 0);
-    //vfn = state->vmstate.stackvalues[1];
-    vfn = nn_vmbits_stackpeek(state, 1);
-    ofn = nn_value_asfunction(vfn);
-    assert(nn_valtable_get(&ofn->defaultargvalues, nn_value_makenumber(slot), &vpos));
-    pos = nn_value_asnumber(vpos);
-    ssp = state->vmstate.currentframe->stackslotpos;
-    state->vmstate.stackvalues[ssp + pos] = peeked;
-    return true;
-
-    size_t putpos;
-
-    NNValue cval;
-    slot = 0;
-    slot = nn_vmbits_readshort(state);
-    cval = nn_vmbits_stackpeek(state, 0);
     peeked = nn_vmbits_stackpeek(state, 1);
-    
-    #if 1
-        putpos = (state->vmstate.stackidx + (-1 - 1)) ;
-    #else
-        #if 1
-            putpos = state->vmstate.stackidx + (slot - 0);
+    cval = nn_vmbits_stackpeek(state, 2);
+
+        ssp = state->vmstate.currentframe->stackslotpos;
+
+        #if 0
+            putpos = (state->vmstate.stackidx + (-1 - 1)) ;
         #else
-            putpos = state->vmstate.stackidx + (-1 - slot);
+            #if 0
+                putpos = state->vmstate.stackidx + (slot - 0);
+            #else
+                #if 0
+                    putpos = state->vmstate.stackidx + (slot);
+                #else
+                    putpos = (ssp + slot) + 0;
+                #endif
+            #endif
         #endif
-    #endif
-    
     #if 1
     {
         NNPrinter* pr = state->stderrprinter;
         nn_printer_printf(pr, "funcargoptional: slot=%d putpos=%ld cval=<", slot, putpos);
         nn_printer_printvalue(pr, cval, true, false);
-        nn_printer_printf(pr, "> peeked=<");
+        nn_printer_printf(pr, ">, peeked=<");
         nn_printer_printvalue(pr, peeked, true, false);
         nn_printer_printf(pr, ">\n");
     }
     #endif
-    if(nn_value_isnull(peeked))
+    if(nn_value_isnull(cval))
     {
-        state->vmstate.stackvalues[putpos] = cval;
+        state->vmstate.stackvalues[putpos] = peeked;
     }
+    /*
     else
     {
         #if 0
             nn_vmbits_stackpop(state);
         #endif
     }
+    */
+    nn_vmbits_stackpop(state);
+
     return true;
 }
 

@@ -105,53 +105,112 @@ const char* nn_value_typename(NNValue value, bool detailed)
     return "?unknown?";
 }
 
+bool nn_value_compobjarray(NNState* state, NNObject* oa, NNObject* ob)
+{
+    size_t i;
+    NNObjArray* arra;
+    NNObjArray* arrb;
+    arra = (NNObjArray*)oa;
+    arrb = (NNObjArray*)ob;
+    /* unlike NNObjDict, array order matters */
+    if(nn_valarray_count(&arra->varray) != nn_valarray_count(&arrb->varray))
+    {
+        return false;
+    }
+    for(i=0; i<(size_t)nn_valarray_count(&arra->varray); i++)
+    {
+        if(!nn_value_compare(state, nn_valarray_get(&arra->varray, i), nn_valarray_get(&arrb->varray, i)))
+        {
+            return false;
+        }
+    }
+    return true;
+}
 
+bool nn_value_compobjstring(NNState* state, NNObject* oa, NNObject* ob)
+{
+    NNObjString* stra;
+    NNObjString* strb;
+    (void)state;
+    stra = (NNObjString*)oa;
+    strb = (NNObjString*)ob;
+    if(stra->sbuf.length != strb->sbuf.length)
+    {
+        return false;
+    }
+    return (memcmp(stra->sbuf.data, strb->sbuf.data, stra->sbuf.length) == 0);
+}
+
+bool nn_value_compobjdict(NNState* state, NNObject* oa, NNObject* ob)
+{
+    NNObjDict* dicta;
+    NNObjDict* dictb;
+    NNProperty* fielda;
+    NNProperty* fieldb;
+    size_t ai;
+    size_t lena;
+    size_t lenb;
+    NNValue keya;
+    dicta = (NNObjDict*)oa;
+    dictb = (NNObjDict*)ob;
+    lena = nn_valarray_count(&dicta->names);
+    lenb = nn_valarray_count(&dictb->names);
+    if(lena != lenb)
+    {
+        return false;
+    }
+    ai = 0;
+    while(ai < lena)
+    {
+        /* first, get the key name off of dicta ... */
+        keya = nn_valarray_get(&dicta->names, ai);
+        fielda = nn_valtable_getfield(&dicta->htab, nn_valarray_get(&dicta->names, ai));
+        if(fielda != NULL)
+        {
+            /* then look up that key in dictb ... */
+            fieldb = nn_dict_getentry(dictb, keya);
+            if((fielda != NULL) && (fieldb != NULL))
+            {
+                /* if it exists, compare their values */
+                if(!nn_value_compare(state, fielda->value, fieldb->value))
+                {
+                    return false;
+                }
+            }
+        }
+        ai++;
+    }
+    return true;
+}
 
 bool nn_value_compobject(NNState* state, NNValue a, NNValue b)
 {
-    size_t i;
     NNObjType ta;
     NNObjType tb;
     NNObject* oa;
     NNObject* ob;
-    NNObjString* stra;
-    NNObjString* strb;
-    NNObjArray* arra;
-    NNObjArray* arrb;
     oa = nn_value_asobject(a);
     ob = nn_value_asobject(b);
     ta = oa->type;
     tb = ob->type;
     if(ta == tb)
     {
-        if(ta == NEON_OBJTYPE_STRING)
+        /* we might not need to do a deep comparison if its the same object */
+        if(oa == ob)
         {
-            stra = (NNObjString*)oa;
-            strb = (NNObjString*)ob;
-            if(stra->sbuf.length == strb->sbuf.length)
-            {
-                if(memcmp(stra->sbuf.data, strb->sbuf.data, stra->sbuf.length) == 0)
-                {
-                    return true;
-                }
-                return false;
-            }
+            return true;
         }
-        if(ta == NEON_OBJTYPE_ARRAY)
+        else if(ta == NEON_OBJTYPE_STRING)
         {
-            arra = (NNObjArray*)oa;
-            arrb = (NNObjArray*)ob;
-            if(nn_valarray_count(&arra->varray) == nn_valarray_count(&arrb->varray))
-            {
-                for(i=0; i<(size_t)nn_valarray_count(&arra->varray); i++)
-                {
-                    if(!nn_value_compare(state, nn_valarray_get(&arra->varray, i), nn_valarray_get(&arrb->varray, i)))
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
+            return nn_value_compobjstring(state, oa, ob);
+        }
+        else if(ta == NEON_OBJTYPE_ARRAY)
+        {
+            return nn_value_compobjarray(state, oa, ob);
+        }
+        else if(ta == NEON_OBJTYPE_DICT)
+        {
+            return nn_value_compobjdict(state, oa, ob);
         }
     }
     return false;

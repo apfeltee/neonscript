@@ -3340,11 +3340,16 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
             #if 1
                 #if 1
                     nn_astemit_emitbyteandshort(prs, NEON_OP_FUNCARGOPTIONAL, defvalconst);
+                    //nn_astemit_emit1short(prs, paramid);
                 #else
                     nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, defvalconst);
                 #endif
             #endif
-            nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
+            #if 1
+                nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
+            #else
+                nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(paramid), nn_value_makenumber(defvalconst));
+            #endif
         }
         #endif
         nn_astparser_ignorewhitespace(prs);

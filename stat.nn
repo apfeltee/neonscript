@@ -1,0 +1,8 @@
+
+
+st = File.stat("Makefile");
+ost = File.stat("Makefile")
+println("st: ", st)
+println("ost: ", ost)
+println(st == ost)
+

@@ -229,7 +229,6 @@ NNValue nn_objfnfile_isfile(NNState *state, NNValue thisval, NNValue *argv, size
 NNValue nn_objfnfile_isdirectory(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_readstatic(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_writestatic(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_objfnfile_statstatic(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_close(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_open(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_isopen(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -244,8 +243,6 @@ NNValue nn_objfnfile_printf(NNState *state, NNValue thisval, NNValue *argv, size
 NNValue nn_objfnfile_number(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_istty(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_flush(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-void nn_util_statfilldictphysfile(NNObjDict *dict, struct stat *st);
-NNValue nn_objfnfile_statmethod(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_path(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_mode(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnfile_name(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -510,6 +507,31 @@ void nn_state_initbuiltinfunctions(NNState *state);
 /* modnull.c */
 NNDefModule *nn_natmodule_load_null(NNState *state);
 /* modos.c */
+void nn_modfn_os_preloader(NNState *state);
+NNValue nn_modfn_os_readdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_chmod(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_mkdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_chdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_rmdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_unlink(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_getenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_setenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_cwdhelper(NNState *state, NNValue thisval, NNValue *argv, size_t argc, const char *name);
+NNValue nn_modfn_os_cwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_pwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_basename(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_dirname(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_touch(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_modfn_os_stat(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNDefModule *nn_natmodule_load_os(NNState *state);
+/* object.c */
+NNObject *nn_object_allocobject(NNState *state, size_t size, NNObjType type, bool retain);
+NNObjUpvalue *nn_object_makeupvalue(NNState *state, NNValue *slot, int stackpos);
+NNObjUserdata *nn_object_makeuserdata(NNState *state, void *pointer, const char *name);
+NNObjModule *nn_module_make(NNState *state, const char *name, const char *file, bool imported, bool retain);
+NNObjSwitch *nn_object_makeswitch(NNState *state);
+NNObjRange *nn_object_makerange(NNState *state, int lower, int upper);
+/* oslib.c */
 char *osfn_utilstrndup(const char *src, size_t len);
 char *osfn_utilstrdup(const char *src);
 bool fslib_diropen(FSDirReader *rd, const char *path);
@@ -543,29 +565,10 @@ bool nn_util_fsfileistype(NNState *state, const char *filepath, int typ);
 bool nn_util_fsfileisfile(NNState *state, const char *filepath);
 bool nn_util_fsfileisdirectory(NNState *state, const char *filepath);
 char *nn_util_fsgetbasename(NNState *state, char *path);
-void nn_modfn_os_preloader(NNState *state);
-NNValue nn_modfn_os_readdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_chmod(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_mkdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_chdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_rmdir(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_unlink(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_getenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_setenv(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_cwdhelper(NNState *state, NNValue thisval, NNValue *argv, size_t argc, const char *name);
-NNValue nn_modfn_os_cwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_pwd(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_basename(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_dirname(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNValue nn_modfn_os_touch(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
-NNDefModule *nn_natmodule_load_os(NNState *state);
-/* object.c */
-NNObject *nn_object_allocobject(NNState *state, size_t size, NNObjType type, bool retain);
-NNObjUpvalue *nn_object_makeupvalue(NNState *state, NNValue *slot, int stackpos);
-NNObjUserdata *nn_object_makeuserdata(NNState *state, void *pointer, const char *name);
-NNObjModule *nn_module_make(NNState *state, const char *name, const char *file, bool imported, bool retain);
-NNObjSwitch *nn_object_makeswitch(NNState *state);
-NNObjRange *nn_object_makerange(NNState *state, int lower, int upper);
+const char *nn_filestat_ctimetostring(const time_t *timep);
+bool nn_filestat_initempty(NNFSStat *nfs);
+bool nn_filestat_setup(NNFSStat *nfs);
+bool nn_filestat_initfrompath(NNFSStat *nfs, const char *path);
 /* parsercc.c */
 void nn_blob_init(NNState *state, NNBlob *blob);
 void nn_blob_push(NNBlob *blob, NNInstruction ins);
@@ -826,6 +829,7 @@ bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval,
 /* mrx.h */
 /* neon.h */
 /* optparse.h */
+/* oslib.h */
 /* replinc.h */
 int main(int argc, char *argv[], char **envp);
 int replmain(const char *file);

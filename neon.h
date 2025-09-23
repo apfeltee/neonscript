@@ -680,6 +680,8 @@ typedef struct utf8iterator_t utf8iterator_t;
 typedef struct NNBoxedString NNBoxedString;
 typedef struct NNConstClassMethodItem NNConstClassMethodItem;
 typedef struct NNStringBuffer NNStringBuffer;
+typedef struct NNFSStat NNFSStat;
+
 typedef union NNUtilDblUnion NNUtilDblUnion;
 
 /* fwd from os.h */
@@ -730,17 +732,7 @@ struct NNStringBuffer
 typedef struct FSDirReader FSDirReader;
 typedef struct FSDirItem FSDirItem;
 
-struct FSDirReader
-{
-    void* handle;
-};
 
-struct FSDirItem
-{
-    char name[NEON_CONF_OSPATHSIZE + 1];
-    bool isdir;
-    bool isfile;
-};
 
 struct NNConstClassMethodItem
 {
