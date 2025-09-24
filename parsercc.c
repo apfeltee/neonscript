@@ -3537,7 +3537,10 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
     }
     nameconst = nn_astparser_makeidentconst(prs, &classname);
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLASS, nameconst);
-    nn_astparser_definevariable(prs, nameconst);
+    if(named)
+    {
+        nn_astparser_definevariable(prs, nameconst);
+    }
     classcompiler.name = prs->prevtoken;
     classcompiler.hassuperclass = false;
     classcompiler.enclosing = prs->currentclasscompiler;
@@ -3559,7 +3562,10 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
         nn_astemit_emitinstruc(prs, NEON_OP_CLASSINHERIT);
         classcompiler.hassuperclass = true;
     }
-    nn_astparser_namedvar(prs, classname, false);
+    if(named)
+    {
+        nn_astparser_namedvar(prs, classname, false);
+    }
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_BRACEOPEN, "expected '{' before class body");
     nn_astparser_ignorewhitespace(prs);
@@ -3580,7 +3586,10 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
     if(nn_astparser_match(prs, NEON_ASTTOK_SEMICOLON))
     {
     }
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    if(named)
+    {
+        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    }
     if(classcompiler.hassuperclass)
     {
         nn_astparser_scopeend(prs);

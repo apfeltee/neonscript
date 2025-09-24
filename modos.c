@@ -251,37 +251,68 @@ NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makebool(true);
 }
 
+#define putorgetkey(md, name, value) \
+    { \
+        if(havekey && (keywanted != NULL)) \
+        { \
+            if(strcmp(name, nn_string_getdata(keywanted)) == 0) \
+            { \
+                return value; \
+            } \
+        } \
+        else \
+        { \
+           nn_dict_addentrycstr(md, name, value); \
+        } \
+    }
+
+
 NNValue nn_modfn_os_stat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    bool havekey;
+    NNObjString* keywanted;
     NNObjString* path;
     NNArgCheck check;
     NNObjDict* md;
     NNFSStat nfs;
     const char* strp;
     (void)thisval;
+    havekey = false;
+    keywanted = NULL;
+    md = NULL;
     nn_argcheck_init(state, &check, "stat", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     path = nn_value_asstring(argv[0]);
+    if(argc > 1)
+    {
+        NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
+        keywanted = nn_value_asstring(argv[1]);
+        havekey = true;
+    }
     strp = nn_string_getdata(path);
     if(!nn_filestat_initfrompath(&nfs, strp))
     {
         nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", strp, strerror(errno));
         return nn_value_makenull();
     }
-    md = nn_object_makedict(state);
-    nn_dict_addentrycstr(md, "path", nn_value_fromobject(path));
-    nn_dict_addentrycstr(md, "mode", nn_value_makenumber(nfs.mode));
-    nn_dict_addentrycstr(md, "modename", nn_value_fromobject(nn_string_copycstr(state, nfs.modename)));
-    nn_dict_addentrycstr(md, "inode", nn_value_makenumber(nfs.inode));
-    nn_dict_addentrycstr(md, "links", nn_value_makenumber(nfs.numlinks));
-    nn_dict_addentrycstr(md, "uid", nn_value_makenumber(nfs.owneruid)),
-    nn_dict_addentrycstr(md, "gid", nn_value_makenumber(nfs.ownergid));
-    nn_dict_addentrycstr(md, "blocksize", nn_value_makenumber(nfs.blocksize));
-    nn_dict_addentrycstr(md, "blocks", nn_value_makenumber(nfs.blockcount));
-    nn_dict_addentrycstr(md, "filesize", nn_value_makenumber(nfs.filesize));
-    nn_dict_addentrycstr(md, "lastchanged", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastchanged))));
-    nn_dict_addentrycstr(md, "lastaccess", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastaccessed))));
-    nn_dict_addentrycstr(md, "lastmodified", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastmodified))));
+    md = NULL;
+    if(!havekey)
+    {
+        md = nn_object_makedict(state);
+    }
+    putorgetkey(md, "path", nn_value_fromobject(path));
+    putorgetkey(md, "mode", nn_value_makenumber(nfs.mode));
+    putorgetkey(md, "modename", nn_value_fromobject(nn_string_copycstr(state, nfs.modename)));
+    putorgetkey(md, "inode", nn_value_makenumber(nfs.inode));
+    putorgetkey(md, "links", nn_value_makenumber(nfs.numlinks));
+    putorgetkey(md, "uid", nn_value_makenumber(nfs.owneruid));
+    putorgetkey(md, "gid", nn_value_makenumber(nfs.ownergid));
+    putorgetkey(md, "blocksize", nn_value_makenumber(nfs.blocksize));
+    putorgetkey(md, "blocks", nn_value_makenumber(nfs.blockcount));
+    putorgetkey(md, "filesize", nn_value_makenumber(nfs.filesize));
+    putorgetkey(md, "lastchanged", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastchanged))));
+    putorgetkey(md, "lastaccess", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastaccessed))));
+    putorgetkey(md, "lastmodified", nn_value_fromobject(nn_string_copycstr(state, nn_filestat_ctimetostring(nfs.tmlastmodified))));
     return nn_value_fromobject(md);
 }
 
