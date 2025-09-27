@@ -86,7 +86,7 @@ NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t 
     dict = nn_value_asdict(thisval);
     if(nn_valtable_get(&dict->htab, argv[0], &tempvalue))
     {
-        NEON_RETURNERROR("duplicate key %s at add()", nn_value_tostring(state, argv[0])->sbuf.data);
+        NEON_RETURNERROR("duplicate key %s at add()", nn_string_getdata(nn_value_tostring(state, argv[0])));
     }
     nn_dict_addentry(dict, argv[0], argv[1]);
     return nn_value_makenull();

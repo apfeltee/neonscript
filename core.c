@@ -144,12 +144,12 @@ NNValue nn_except_getstacktrace(NNState* state)
             physfile = "(unknown)";
             if(function->fnscriptfunc.module->physicalpath != NULL)
             {
-                physfile = function->fnscriptfunc.module->physicalpath->sbuf.data;
+                physfile = nn_string_getdata(function->fnscriptfunc.module->physicalpath);
             }
             fnname = "<script>";
             if(function->name != NULL)
             {
-                fnname = function->name->sbuf.data;
+                fnname = nn_string_getdata(function->name);
             }
             nn_printer_printf(&pr, "from %s() in %s:%d", fnname, physfile, line);
             os = nn_printer_takestring(&pr);
@@ -220,7 +220,7 @@ bool nn_except_propagate(NNState* state)
     colblue = nn_util_color(NEON_COLOR_BLUE);
     colreset = nn_util_color(NEON_COLOR_RESET);
     colyellow = nn_util_color(NEON_COLOR_YELLOW);
-    nn_printer_printf(state->debugwriter, "%sunhandled %s%s", colred, exception->klass->name->sbuf.data, colreset);
+    nn_printer_printf(state->debugwriter, "%sunhandled %s%s", colred, nn_string_getdata(exception->klass->name), colreset);
     srcfile = "none";
     srcline = 0;
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcline");
@@ -238,7 +238,7 @@ bool nn_except_propagate(NNState* state)
         if(nn_value_isstring(field->value))
         {
             tmp = nn_value_asstring(field->value);
-            srcfile = tmp->sbuf.data;
+            srcfile = nn_string_getdata(tmp);
         }
     }
     nn_printer_printf(state->debugwriter, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
@@ -246,9 +246,9 @@ bool nn_except_propagate(NNState* state)
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
-        if(emsg->sbuf.length > 0)
+        if(nn_string_getlength(emsg) > 0)
         {
-            nn_printer_printf(state->debugwriter, ": %s", emsg->sbuf.data);
+            nn_printer_printf(state->debugwriter, ": %s", nn_string_getdata(emsg));
         }
         else
         {
@@ -487,7 +487,7 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
     va_start(args, format);
     vfprintf(stderr, format, args);
     va_end(args);
-    fprintf(stderr, " -> %s:%d ", function->fnscriptfunc.module->physicalpath->sbuf.data, line);
+    fprintf(stderr, " -> %s:%d ", nn_string_getdata(function->fnscriptfunc.module->physicalpath), line);
     fputs("\n", stderr);
     if(state->vmstate.framecount > 1)
     {
@@ -498,14 +498,14 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-            fprintf(stderr, "    %s:%d -> ", function->fnscriptfunc.module->physicalpath->sbuf.data, function->fnscriptfunc.blob.instrucs[instruction].srcline);
+            fprintf(stderr, "    %s:%d -> ", nn_string_getdata(function->fnscriptfunc.module->physicalpath), function->fnscriptfunc.blob.instrucs[instruction].srcline);
             if(function->name == NULL)
             {
                 fprintf(stderr, "<script>");
             }
             else
             {
-                fprintf(stderr, "%s()", function->name->sbuf.data);
+                fprintf(stderr, "%s()", nn_string_getdata(function->name));
             }
             fprintf(stderr, "\n");
         }
@@ -784,7 +784,7 @@ void nn_state_destroy(NNState* state, bool onstack)
 
 bool nn_util_methodisprivate(NNObjString* name)
 {
-    return name->sbuf.length > 0 && name->sbuf.data[0] == '_';
+    return nn_string_getlength(name) > 0 && nn_string_getdata(name)[0] == '_';
 }
 
 

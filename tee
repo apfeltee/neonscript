@@ -1,0 +1,1362 @@
+==89293== Memcheck, a memory error detector
+==89293== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89293== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89293== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/arr1.nn
+==89293== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89293== 
+==89293== HEAP SUMMARY:
+==89293==     in use at exit: 1,304 bytes in 41 blocks
+==89293==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89293== 
+==89293== LEAK SUMMARY:
+==89293==    definitely lost: 0 bytes in 0 blocks
+==89293==    indirectly lost: 0 bytes in 0 blocks
+==89293==      possibly lost: 0 bytes in 0 blocks
+==89293==    still reachable: 1,304 bytes in 41 blocks
+==89293==         suppressed: 0 bytes in 0 blocks
+==89293== Rerun with --leak-check=full to see details of leaked memory
+==89293== 
+==89293== For lists of detected and suppressed errors, rerun with: -s
+==89293== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/arr1.nn"
+==89294== Memcheck, a memory error detector
+==89294== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89294== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89294== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/arr2.nn
+==89294== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89294== 
+==89294== HEAP SUMMARY:
+==89294==     in use at exit: 1,304 bytes in 41 blocks
+==89294==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89294== 
+==89294== LEAK SUMMARY:
+==89294==    definitely lost: 0 bytes in 0 blocks
+==89294==    indirectly lost: 0 bytes in 0 blocks
+==89294==      possibly lost: 0 bytes in 0 blocks
+==89294==    still reachable: 1,304 bytes in 41 blocks
+==89294==         suppressed: 0 bytes in 0 blocks
+==89294== Rerun with --leak-check=full to see details of leaked memory
+==89294== 
+==89294== For lists of detected and suppressed errors, rerun with: -s
+==89294== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/arr2.nn"
+==89295== Memcheck, a memory error detector
+==89295== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89295== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89295== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/base64.nn
+==89295== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89295== 
+==89295== HEAP SUMMARY:
+==89295==     in use at exit: 1,304 bytes in 41 blocks
+==89295==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89295== 
+==89295== LEAK SUMMARY:
+==89295==    definitely lost: 0 bytes in 0 blocks
+==89295==    indirectly lost: 0 bytes in 0 blocks
+==89295==      possibly lost: 0 bytes in 0 blocks
+==89295==    still reachable: 1,304 bytes in 41 blocks
+==89295==         suppressed: 0 bytes in 0 blocks
+==89295== Rerun with --leak-check=full to see details of leaked memory
+==89295== 
+==89295== For lists of detected and suppressed errors, rerun with: -s
+==89295== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/base64.nn"
+==89296== Memcheck, a memory error detector
+==89296== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89296== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89296== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/bf.nn
+==89296== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89296== 
+==89296== HEAP SUMMARY:
+==89296==     in use at exit: 1,304 bytes in 41 blocks
+==89296==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89296== 
+==89296== LEAK SUMMARY:
+==89296==    definitely lost: 0 bytes in 0 blocks
+==89296==    indirectly lost: 0 bytes in 0 blocks
+==89296==      possibly lost: 0 bytes in 0 blocks
+==89296==    still reachable: 1,304 bytes in 41 blocks
+==89296==         suppressed: 0 bytes in 0 blocks
+==89296== Rerun with --leak-check=full to see details of leaked memory
+==89296== 
+==89296== For lists of detected and suppressed errors, rerun with: -s
+==89296== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/bf.nn"
+==89297== Memcheck, a memory error detector
+==89297== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89297== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89297== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/bfc.nn
+==89297== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89297== 
+==89297== HEAP SUMMARY:
+==89297==     in use at exit: 1,304 bytes in 41 blocks
+==89297==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89297== 
+==89297== LEAK SUMMARY:
+==89297==    definitely lost: 0 bytes in 0 blocks
+==89297==    indirectly lost: 0 bytes in 0 blocks
+==89297==      possibly lost: 0 bytes in 0 blocks
+==89297==    still reachable: 1,304 bytes in 41 blocks
+==89297==         suppressed: 0 bytes in 0 blocks
+==89297== Rerun with --leak-check=full to see details of leaked memory
+==89297== 
+==89297== For lists of detected and suppressed errors, rerun with: -s
+==89297== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/bfc.nn"
+==89298== Memcheck, a memory error detector
+==89298== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89298== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89298== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/bintrees1.nn
+==89298== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89298== 
+==89298== HEAP SUMMARY:
+==89298==     in use at exit: 1,304 bytes in 41 blocks
+==89298==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89298== 
+==89298== LEAK SUMMARY:
+==89298==    definitely lost: 0 bytes in 0 blocks
+==89298==    indirectly lost: 0 bytes in 0 blocks
+==89298==      possibly lost: 0 bytes in 0 blocks
+==89298==    still reachable: 1,304 bytes in 41 blocks
+==89298==         suppressed: 0 bytes in 0 blocks
+==89298== Rerun with --leak-check=full to see details of leaked memory
+==89298== 
+==89298== For lists of detected and suppressed errors, rerun with: -s
+==89298== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees1.nn"
+==89299== Memcheck, a memory error detector
+==89299== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89299== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89299== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/bintrees2.nn
+==89299== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89299== 
+==89299== HEAP SUMMARY:
+==89299==     in use at exit: 1,304 bytes in 41 blocks
+==89299==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89299== 
+==89299== LEAK SUMMARY:
+==89299==    definitely lost: 0 bytes in 0 blocks
+==89299==    indirectly lost: 0 bytes in 0 blocks
+==89299==      possibly lost: 0 bytes in 0 blocks
+==89299==    still reachable: 1,304 bytes in 41 blocks
+==89299==         suppressed: 0 bytes in 0 blocks
+==89299== Rerun with --leak-check=full to see details of leaked memory
+==89299== 
+==89299== For lists of detected and suppressed errors, rerun with: -s
+==89299== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees2.nn"
+==89300== Memcheck, a memory error detector
+==89300== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89300== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89300== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/bogus.nn
+==89300== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89300== 
+==89300== HEAP SUMMARY:
+==89300==     in use at exit: 1,304 bytes in 41 blocks
+==89300==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89300== 
+==89300== LEAK SUMMARY:
+==89300==    definitely lost: 0 bytes in 0 blocks
+==89300==    indirectly lost: 0 bytes in 0 blocks
+==89300==      possibly lost: 0 bytes in 0 blocks
+==89300==    still reachable: 1,304 bytes in 41 blocks
+==89300==         suppressed: 0 bytes in 0 blocks
+==89300== Rerun with --leak-check=full to see details of leaked memory
+==89300== 
+==89300== For lists of detected and suppressed errors, rerun with: -s
+==89300== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/bogus.nn"
+==89301== Memcheck, a memory error detector
+==89301== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89301== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89301== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/breakfor.nn
+==89301== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89301== 
+==89301== HEAP SUMMARY:
+==89301==     in use at exit: 1,304 bytes in 41 blocks
+==89301==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89301== 
+==89301== LEAK SUMMARY:
+==89301==    definitely lost: 0 bytes in 0 blocks
+==89301==    indirectly lost: 0 bytes in 0 blocks
+==89301==      possibly lost: 0 bytes in 0 blocks
+==89301==    still reachable: 1,304 bytes in 41 blocks
+==89301==         suppressed: 0 bytes in 0 blocks
+==89301== Rerun with --leak-check=full to see details of leaked memory
+==89301== 
+==89301== For lists of detected and suppressed errors, rerun with: -s
+==89301== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/breakfor.nn"
+==89302== Memcheck, a memory error detector
+==89302== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89302== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89302== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/cbf.nn
+==89302== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89302== 
+==89302== HEAP SUMMARY:
+==89302==     in use at exit: 1,304 bytes in 41 blocks
+==89302==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89302== 
+==89302== LEAK SUMMARY:
+==89302==    definitely lost: 0 bytes in 0 blocks
+==89302==    indirectly lost: 0 bytes in 0 blocks
+==89302==      possibly lost: 0 bytes in 0 blocks
+==89302==    still reachable: 1,304 bytes in 41 blocks
+==89302==         suppressed: 0 bytes in 0 blocks
+==89302== Rerun with --leak-check=full to see details of leaked memory
+==89302== 
+==89302== For lists of detected and suppressed errors, rerun with: -s
+==89302== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/cbf.nn"
+==89303== Memcheck, a memory error detector
+==89303== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89303== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89303== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/ceval.nn
+==89303== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89303== 
+==89303== HEAP SUMMARY:
+==89303==     in use at exit: 1,304 bytes in 41 blocks
+==89303==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89303== 
+==89303== LEAK SUMMARY:
+==89303==    definitely lost: 0 bytes in 0 blocks
+==89303==    indirectly lost: 0 bytes in 0 blocks
+==89303==      possibly lost: 0 bytes in 0 blocks
+==89303==    still reachable: 1,304 bytes in 41 blocks
+==89303==         suppressed: 0 bytes in 0 blocks
+==89303== Rerun with --leak-check=full to see details of leaked memory
+==89303== 
+==89303== For lists of detected and suppressed errors, rerun with: -s
+==89303== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/ceval.nn"
+==89304== Memcheck, a memory error detector
+==89304== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89304== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89304== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/class.nn
+==89304== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89304== 
+==89304== HEAP SUMMARY:
+==89304==     in use at exit: 1,304 bytes in 41 blocks
+==89304==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89304== 
+==89304== LEAK SUMMARY:
+==89304==    definitely lost: 0 bytes in 0 blocks
+==89304==    indirectly lost: 0 bytes in 0 blocks
+==89304==      possibly lost: 0 bytes in 0 blocks
+==89304==    still reachable: 1,304 bytes in 41 blocks
+==89304==         suppressed: 0 bytes in 0 blocks
+==89304== Rerun with --leak-check=full to see details of leaked memory
+==89304== 
+==89304== For lists of detected and suppressed errors, rerun with: -s
+==89304== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/class.nn"
+==89305== Memcheck, a memory error detector
+==89305== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89305== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89305== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/complexfunctional.nn
+==89305== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89305== 
+==89305== HEAP SUMMARY:
+==89305==     in use at exit: 1,304 bytes in 41 blocks
+==89305==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89305== 
+==89305== LEAK SUMMARY:
+==89305==    definitely lost: 0 bytes in 0 blocks
+==89305==    indirectly lost: 0 bytes in 0 blocks
+==89305==      possibly lost: 0 bytes in 0 blocks
+==89305==    still reachable: 1,304 bytes in 41 blocks
+==89305==         suppressed: 0 bytes in 0 blocks
+==89305== Rerun with --leak-check=full to see details of leaked memory
+==89305== 
+==89305== For lists of detected and suppressed errors, rerun with: -s
+==89305== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/complexfunctional.nn"
+==89306== Memcheck, a memory error detector
+==89306== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89306== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89306== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/complexmod.nn
+==89306== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89306== 
+==89306== HEAP SUMMARY:
+==89306==     in use at exit: 1,304 bytes in 41 blocks
+==89306==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89306== 
+==89306== LEAK SUMMARY:
+==89306==    definitely lost: 0 bytes in 0 blocks
+==89306==    indirectly lost: 0 bytes in 0 blocks
+==89306==      possibly lost: 0 bytes in 0 blocks
+==89306==    still reachable: 1,304 bytes in 41 blocks
+==89306==         suppressed: 0 bytes in 0 blocks
+==89306== Rerun with --leak-check=full to see details of leaked memory
+==89306== 
+==89306== For lists of detected and suppressed errors, rerun with: -s
+==89306== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/complexmod.nn"
+==89307== Memcheck, a memory error detector
+==89307== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89307== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89307== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/complexpure.nn
+==89307== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89307== 
+==89307== HEAP SUMMARY:
+==89307==     in use at exit: 1,304 bytes in 41 blocks
+==89307==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89307== 
+==89307== LEAK SUMMARY:
+==89307==    definitely lost: 0 bytes in 0 blocks
+==89307==    indirectly lost: 0 bytes in 0 blocks
+==89307==      possibly lost: 0 bytes in 0 blocks
+==89307==    still reachable: 1,304 bytes in 41 blocks
+==89307==         suppressed: 0 bytes in 0 blocks
+==89307== Rerun with --leak-check=full to see details of leaked memory
+==89307== 
+==89307== For lists of detected and suppressed errors, rerun with: -s
+==89307== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/complexpure.nn"
+==89308== Memcheck, a memory error detector
+==89308== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89308== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89308== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/continue.nn
+==89308== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89308== 
+==89308== HEAP SUMMARY:
+==89308==     in use at exit: 1,304 bytes in 41 blocks
+==89308==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89308== 
+==89308== LEAK SUMMARY:
+==89308==    definitely lost: 0 bytes in 0 blocks
+==89308==    indirectly lost: 0 bytes in 0 blocks
+==89308==      possibly lost: 0 bytes in 0 blocks
+==89308==    still reachable: 1,304 bytes in 41 blocks
+==89308==         suppressed: 0 bytes in 0 blocks
+==89308== Rerun with --leak-check=full to see details of leaked memory
+==89308== 
+==89308== For lists of detected and suppressed errors, rerun with: -s
+==89308== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/continue.nn"
+==89309== Memcheck, a memory error detector
+==89309== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89309== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89309== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/ctest.nn
+==89309== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89309== 
+==89309== HEAP SUMMARY:
+==89309==     in use at exit: 1,304 bytes in 41 blocks
+==89309==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89309== 
+==89309== LEAK SUMMARY:
+==89309==    definitely lost: 0 bytes in 0 blocks
+==89309==    indirectly lost: 0 bytes in 0 blocks
+==89309==      possibly lost: 0 bytes in 0 blocks
+==89309==    still reachable: 1,304 bytes in 41 blocks
+==89309==         suppressed: 0 bytes in 0 blocks
+==89309== Rerun with --leak-check=full to see details of leaked memory
+==89309== 
+==89309== For lists of detected and suppressed errors, rerun with: -s
+==89309== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/ctest.nn"
+==89310== Memcheck, a memory error detector
+==89310== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89310== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89310== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/dir.nn
+==89310== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89310== 
+==89310== HEAP SUMMARY:
+==89310==     in use at exit: 1,304 bytes in 41 blocks
+==89310==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89310== 
+==89310== LEAK SUMMARY:
+==89310==    definitely lost: 0 bytes in 0 blocks
+==89310==    indirectly lost: 0 bytes in 0 blocks
+==89310==      possibly lost: 0 bytes in 0 blocks
+==89310==    still reachable: 1,304 bytes in 41 blocks
+==89310==         suppressed: 0 bytes in 0 blocks
+==89310== Rerun with --leak-check=full to see details of leaked memory
+==89310== 
+==89310== For lists of detected and suppressed errors, rerun with: -s
+==89310== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/dir.nn"
+==89311== Memcheck, a memory error detector
+==89311== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89311== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89311== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/expr.nn
+==89311== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89311== 
+==89311== HEAP SUMMARY:
+==89311==     in use at exit: 1,304 bytes in 41 blocks
+==89311==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89311== 
+==89311== LEAK SUMMARY:
+==89311==    definitely lost: 0 bytes in 0 blocks
+==89311==    indirectly lost: 0 bytes in 0 blocks
+==89311==      possibly lost: 0 bytes in 0 blocks
+==89311==    still reachable: 1,304 bytes in 41 blocks
+==89311==         suppressed: 0 bytes in 0 blocks
+==89311== Rerun with --leak-check=full to see details of leaked memory
+==89311== 
+==89311== For lists of detected and suppressed errors, rerun with: -s
+==89311== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/expr.nn"
+==89312== Memcheck, a memory error detector
+==89312== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89312== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89312== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/extclass.nn
+==89312== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89312== 
+==89312== HEAP SUMMARY:
+==89312==     in use at exit: 1,304 bytes in 41 blocks
+==89312==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89312== 
+==89312== LEAK SUMMARY:
+==89312==    definitely lost: 0 bytes in 0 blocks
+==89312==    indirectly lost: 0 bytes in 0 blocks
+==89312==      possibly lost: 0 bytes in 0 blocks
+==89312==    still reachable: 1,304 bytes in 41 blocks
+==89312==         suppressed: 0 bytes in 0 blocks
+==89312== Rerun with --leak-check=full to see details of leaked memory
+==89312== 
+==89312== For lists of detected and suppressed errors, rerun with: -s
+==89312== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/extclass.nn"
+==89313== Memcheck, a memory error detector
+==89313== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89313== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89313== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/fib.nn
+==89313== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89313== 
+==89313== HEAP SUMMARY:
+==89313==     in use at exit: 1,304 bytes in 41 blocks
+==89313==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89313== 
+==89313== LEAK SUMMARY:
+==89313==    definitely lost: 0 bytes in 0 blocks
+==89313==    indirectly lost: 0 bytes in 0 blocks
+==89313==      possibly lost: 0 bytes in 0 blocks
+==89313==    still reachable: 1,304 bytes in 41 blocks
+==89313==         suppressed: 0 bytes in 0 blocks
+==89313== Rerun with --leak-check=full to see details of leaked memory
+==89313== 
+==89313== For lists of detected and suppressed errors, rerun with: -s
+==89313== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/fib.nn"
+==89314== Memcheck, a memory error detector
+==89314== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89314== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89314== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/foo.nn
+==89314== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89314== 
+==89314== HEAP SUMMARY:
+==89314==     in use at exit: 1,304 bytes in 41 blocks
+==89314==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89314== 
+==89314== LEAK SUMMARY:
+==89314==    definitely lost: 0 bytes in 0 blocks
+==89314==    indirectly lost: 0 bytes in 0 blocks
+==89314==      possibly lost: 0 bytes in 0 blocks
+==89314==    still reachable: 1,304 bytes in 41 blocks
+==89314==         suppressed: 0 bytes in 0 blocks
+==89314== Rerun with --leak-check=full to see details of leaked memory
+==89314== 
+==89314== For lists of detected and suppressed errors, rerun with: -s
+==89314== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/foo.nn"
+==89315== Memcheck, a memory error detector
+==89315== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89315== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89315== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/fplisp.nn
+==89315== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89315== 
+==89315== HEAP SUMMARY:
+==89315==     in use at exit: 1,304 bytes in 41 blocks
+==89315==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89315== 
+==89315== LEAK SUMMARY:
+==89315==    definitely lost: 0 bytes in 0 blocks
+==89315==    indirectly lost: 0 bytes in 0 blocks
+==89315==      possibly lost: 0 bytes in 0 blocks
+==89315==    still reachable: 1,304 bytes in 41 blocks
+==89315==         suppressed: 0 bytes in 0 blocks
+==89315== Rerun with --leak-check=full to see details of leaked memory
+==89315== 
+==89315== For lists of detected and suppressed errors, rerun with: -s
+==89315== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/fplisp.nn"
+==89316== Memcheck, a memory error detector
+==89316== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89316== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89316== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/gencolors.nn
+==89316== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89316== 
+==89316== HEAP SUMMARY:
+==89316==     in use at exit: 1,304 bytes in 41 blocks
+==89316==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89316== 
+==89316== LEAK SUMMARY:
+==89316==    definitely lost: 0 bytes in 0 blocks
+==89316==    indirectly lost: 0 bytes in 0 blocks
+==89316==      possibly lost: 0 bytes in 0 blocks
+==89316==    still reachable: 1,304 bytes in 41 blocks
+==89316==         suppressed: 0 bytes in 0 blocks
+==89316== Rerun with --leak-check=full to see details of leaked memory
+==89316== 
+==89316== For lists of detected and suppressed errors, rerun with: -s
+==89316== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/gencolors.nn"
+==89317== Memcheck, a memory error detector
+==89317== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89317== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89317== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/heart.nn
+==89317== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89317== 
+==89317== HEAP SUMMARY:
+==89317==     in use at exit: 1,304 bytes in 41 blocks
+==89317==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89317== 
+==89317== LEAK SUMMARY:
+==89317==    definitely lost: 0 bytes in 0 blocks
+==89317==    indirectly lost: 0 bytes in 0 blocks
+==89317==      possibly lost: 0 bytes in 0 blocks
+==89317==    still reachable: 1,304 bytes in 41 blocks
+==89317==         suppressed: 0 bytes in 0 blocks
+==89317== Rerun with --leak-check=full to see details of leaked memory
+==89317== 
+==89317== For lists of detected and suppressed errors, rerun with: -s
+==89317== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/heart.nn"
+==89318== Memcheck, a memory error detector
+==89318== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89318== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89318== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/hello.nn
+==89318== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89318== 
+==89318== HEAP SUMMARY:
+==89318==     in use at exit: 1,304 bytes in 41 blocks
+==89318==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89318== 
+==89318== LEAK SUMMARY:
+==89318==    definitely lost: 0 bytes in 0 blocks
+==89318==    indirectly lost: 0 bytes in 0 blocks
+==89318==      possibly lost: 0 bytes in 0 blocks
+==89318==    still reachable: 1,304 bytes in 41 blocks
+==89318==         suppressed: 0 bytes in 0 blocks
+==89318== Rerun with --leak-check=full to see details of leaked memory
+==89318== 
+==89318== For lists of detected and suppressed errors, rerun with: -s
+==89318== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/hello.nn"
+==89319== Memcheck, a memory error detector
+==89319== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89319== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89319== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/html.nn
+==89319== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89319== 
+==89319== HEAP SUMMARY:
+==89319==     in use at exit: 1,304 bytes in 41 blocks
+==89319==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89319== 
+==89319== LEAK SUMMARY:
+==89319==    definitely lost: 0 bytes in 0 blocks
+==89319==    indirectly lost: 0 bytes in 0 blocks
+==89319==      possibly lost: 0 bytes in 0 blocks
+==89319==    still reachable: 1,304 bytes in 41 blocks
+==89319==         suppressed: 0 bytes in 0 blocks
+==89319== Rerun with --leak-check=full to see details of leaked memory
+==89319== 
+==89319== For lists of detected and suppressed errors, rerun with: -s
+==89319== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/html.nn"
+==89321== Memcheck, a memory error detector
+==89321== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89321== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89321== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/io.nn
+==89321== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89321== 
+==89321== HEAP SUMMARY:
+==89321==     in use at exit: 1,304 bytes in 41 blocks
+==89321==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89321== 
+==89321== LEAK SUMMARY:
+==89321==    definitely lost: 0 bytes in 0 blocks
+==89321==    indirectly lost: 0 bytes in 0 blocks
+==89321==      possibly lost: 0 bytes in 0 blocks
+==89321==    still reachable: 1,304 bytes in 41 blocks
+==89321==         suppressed: 0 bytes in 0 blocks
+==89321== Rerun with --leak-check=full to see details of leaked memory
+==89321== 
+==89321== For lists of detected and suppressed errors, rerun with: -s
+==89321== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/io.nn"
+==89322== Memcheck, a memory error detector
+==89322== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89322== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89322== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/iter.nn
+==89322== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89322== 
+==89322== HEAP SUMMARY:
+==89322==     in use at exit: 1,304 bytes in 41 blocks
+==89322==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89322== 
+==89322== LEAK SUMMARY:
+==89322==    definitely lost: 0 bytes in 0 blocks
+==89322==    indirectly lost: 0 bytes in 0 blocks
+==89322==      possibly lost: 0 bytes in 0 blocks
+==89322==    still reachable: 1,304 bytes in 41 blocks
+==89322==         suppressed: 0 bytes in 0 blocks
+==89322== Rerun with --leak-check=full to see details of leaked memory
+==89322== 
+==89322== For lists of detected and suppressed errors, rerun with: -s
+==89322== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/iter.nn"
+==89323== Memcheck, a memory error detector
+==89323== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89323== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89323== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/json.nn
+==89323== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89323== 
+==89323== HEAP SUMMARY:
+==89323==     in use at exit: 1,304 bytes in 41 blocks
+==89323==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89323== 
+==89323== LEAK SUMMARY:
+==89323==    definitely lost: 0 bytes in 0 blocks
+==89323==    indirectly lost: 0 bytes in 0 blocks
+==89323==      possibly lost: 0 bytes in 0 blocks
+==89323==    still reachable: 1,304 bytes in 41 blocks
+==89323==         suppressed: 0 bytes in 0 blocks
+==89323== Rerun with --leak-check=full to see details of leaked memory
+==89323== 
+==89323== For lists of detected and suppressed errors, rerun with: -s
+==89323== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/json.nn"
+==89324== Memcheck, a memory error detector
+==89324== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89324== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89324== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/json2.nn
+==89324== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89324== 
+==89324== HEAP SUMMARY:
+==89324==     in use at exit: 1,304 bytes in 41 blocks
+==89324==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89324== 
+==89324== LEAK SUMMARY:
+==89324==    definitely lost: 0 bytes in 0 blocks
+==89324==    indirectly lost: 0 bytes in 0 blocks
+==89324==      possibly lost: 0 bytes in 0 blocks
+==89324==    still reachable: 1,304 bytes in 41 blocks
+==89324==         suppressed: 0 bytes in 0 blocks
+==89324== Rerun with --leak-check=full to see details of leaked memory
+==89324== 
+==89324== For lists of detected and suppressed errors, rerun with: -s
+==89324== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/json2.nn"
+==89325== Memcheck, a memory error detector
+==89325== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89325== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89325== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/json3.nn
+==89325== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89325== 
+==89325== HEAP SUMMARY:
+==89325==     in use at exit: 1,304 bytes in 41 blocks
+==89325==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89325== 
+==89325== LEAK SUMMARY:
+==89325==    definitely lost: 0 bytes in 0 blocks
+==89325==    indirectly lost: 0 bytes in 0 blocks
+==89325==      possibly lost: 0 bytes in 0 blocks
+==89325==    still reachable: 1,304 bytes in 41 blocks
+==89325==         suppressed: 0 bytes in 0 blocks
+==89325== Rerun with --leak-check=full to see details of leaked memory
+==89325== 
+==89325== For lists of detected and suppressed errors, rerun with: -s
+==89325== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/json3.nn"
+==89326== Memcheck, a memory error detector
+==89326== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89326== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89326== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/lexmanual.nn
+==89326== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89326== 
+==89326== HEAP SUMMARY:
+==89326==     in use at exit: 1,304 bytes in 41 blocks
+==89326==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89326== 
+==89326== LEAK SUMMARY:
+==89326==    definitely lost: 0 bytes in 0 blocks
+==89326==    indirectly lost: 0 bytes in 0 blocks
+==89326==      possibly lost: 0 bytes in 0 blocks
+==89326==    still reachable: 1,304 bytes in 41 blocks
+==89326==         suppressed: 0 bytes in 0 blocks
+==89326== Rerun with --leak-check=full to see details of leaked memory
+==89326== 
+==89326== For lists of detected and suppressed errors, rerun with: -s
+==89326== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/lexmanual.nn"
+==89327== Memcheck, a memory error detector
+==89327== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89327== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89327== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/lexmod.nn
+==89327== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89327== 
+==89327== HEAP SUMMARY:
+==89327==     in use at exit: 1,304 bytes in 41 blocks
+==89327==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89327== 
+==89327== LEAK SUMMARY:
+==89327==    definitely lost: 0 bytes in 0 blocks
+==89327==    indirectly lost: 0 bytes in 0 blocks
+==89327==      possibly lost: 0 bytes in 0 blocks
+==89327==    still reachable: 1,304 bytes in 41 blocks
+==89327==         suppressed: 0 bytes in 0 blocks
+==89327== Rerun with --leak-check=full to see details of leaked memory
+==89327== 
+==89327== For lists of detected and suppressed errors, rerun with: -s
+==89327== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/lexmod.nn"
+==89328== Memcheck, a memory error detector
+==89328== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89328== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89328== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/list.nn
+==89328== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89328== 
+==89328== HEAP SUMMARY:
+==89328==     in use at exit: 1,304 bytes in 41 blocks
+==89328==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89328== 
+==89328== LEAK SUMMARY:
+==89328==    definitely lost: 0 bytes in 0 blocks
+==89328==    indirectly lost: 0 bytes in 0 blocks
+==89328==      possibly lost: 0 bytes in 0 blocks
+==89328==    still reachable: 1,304 bytes in 41 blocks
+==89328==         suppressed: 0 bytes in 0 blocks
+==89328== Rerun with --leak-check=full to see details of leaked memory
+==89328== 
+==89328== For lists of detected and suppressed errors, rerun with: -s
+==89328== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/list.nn"
+==89329== Memcheck, a memory error detector
+==89329== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89329== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89329== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mandel1.nn
+==89329== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89329== 
+==89329== HEAP SUMMARY:
+==89329==     in use at exit: 1,304 bytes in 41 blocks
+==89329==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89329== 
+==89329== LEAK SUMMARY:
+==89329==    definitely lost: 0 bytes in 0 blocks
+==89329==    indirectly lost: 0 bytes in 0 blocks
+==89329==      possibly lost: 0 bytes in 0 blocks
+==89329==    still reachable: 1,304 bytes in 41 blocks
+==89329==         suppressed: 0 bytes in 0 blocks
+==89329== Rerun with --leak-check=full to see details of leaked memory
+==89329== 
+==89329== For lists of detected and suppressed errors, rerun with: -s
+==89329== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mandel1.nn"
+==89330== Memcheck, a memory error detector
+==89330== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89330== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89330== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mandel2.nn
+==89330== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89330== 
+==89330== HEAP SUMMARY:
+==89330==     in use at exit: 1,304 bytes in 41 blocks
+==89330==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89330== 
+==89330== LEAK SUMMARY:
+==89330==    definitely lost: 0 bytes in 0 blocks
+==89330==    indirectly lost: 0 bytes in 0 blocks
+==89330==      possibly lost: 0 bytes in 0 blocks
+==89330==    still reachable: 1,304 bytes in 41 blocks
+==89330==         suppressed: 0 bytes in 0 blocks
+==89330== Rerun with --leak-check=full to see details of leaked memory
+==89330== 
+==89330== For lists of detected and suppressed errors, rerun with: -s
+==89330== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mandel2.nn"
+==89331== Memcheck, a memory error detector
+==89331== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89331== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89331== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mandelawk.nn
+==89331== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89331== 
+==89331== HEAP SUMMARY:
+==89331==     in use at exit: 1,304 bytes in 41 blocks
+==89331==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89331== 
+==89331== LEAK SUMMARY:
+==89331==    definitely lost: 0 bytes in 0 blocks
+==89331==    indirectly lost: 0 bytes in 0 blocks
+==89331==      possibly lost: 0 bytes in 0 blocks
+==89331==    still reachable: 1,304 bytes in 41 blocks
+==89331==         suppressed: 0 bytes in 0 blocks
+==89331== Rerun with --leak-check=full to see details of leaked memory
+==89331== 
+==89331== For lists of detected and suppressed errors, rerun with: -s
+==89331== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mandelawk.nn"
+==89332== Memcheck, a memory error detector
+==89332== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89332== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89332== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mandelcolor.nn
+==89332== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89332== 
+==89332== HEAP SUMMARY:
+==89332==     in use at exit: 1,304 bytes in 41 blocks
+==89332==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89332== 
+==89332== LEAK SUMMARY:
+==89332==    definitely lost: 0 bytes in 0 blocks
+==89332==    indirectly lost: 0 bytes in 0 blocks
+==89332==      possibly lost: 0 bytes in 0 blocks
+==89332==    still reachable: 1,304 bytes in 41 blocks
+==89332==         suppressed: 0 bytes in 0 blocks
+==89332== Rerun with --leak-check=full to see details of leaked memory
+==89332== 
+==89332== For lists of detected and suppressed errors, rerun with: -s
+==89332== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mandelcolor.nn"
+==89333== Memcheck, a memory error detector
+==89333== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89333== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89333== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/map.nn
+==89333== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89333== 
+==89333== HEAP SUMMARY:
+==89333==     in use at exit: 1,304 bytes in 41 blocks
+==89333==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89333== 
+==89333== LEAK SUMMARY:
+==89333==    definitely lost: 0 bytes in 0 blocks
+==89333==    indirectly lost: 0 bytes in 0 blocks
+==89333==      possibly lost: 0 bytes in 0 blocks
+==89333==    still reachable: 1,304 bytes in 41 blocks
+==89333==         suppressed: 0 bytes in 0 blocks
+==89333== Rerun with --leak-check=full to see details of leaked memory
+==89333== 
+==89333== For lists of detected and suppressed errors, rerun with: -s
+==89333== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/map.nn"
+==89334== Memcheck, a memory error detector
+==89334== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89334== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89334== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/map2.nn
+==89334== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89334== 
+==89334== HEAP SUMMARY:
+==89334==     in use at exit: 1,304 bytes in 41 blocks
+==89334==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89334== 
+==89334== LEAK SUMMARY:
+==89334==    definitely lost: 0 bytes in 0 blocks
+==89334==    indirectly lost: 0 bytes in 0 blocks
+==89334==      possibly lost: 0 bytes in 0 blocks
+==89334==    still reachable: 1,304 bytes in 41 blocks
+==89334==         suppressed: 0 bytes in 0 blocks
+==89334== Rerun with --leak-check=full to see details of leaked memory
+==89334== 
+==89334== For lists of detected and suppressed errors, rerun with: -s
+==89334== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/map2.nn"
+==89335== Memcheck, a memory error detector
+==89335== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89335== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89335== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mob1.nn
+==89335== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89335== 
+==89335== HEAP SUMMARY:
+==89335==     in use at exit: 1,304 bytes in 41 blocks
+==89335==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89335== 
+==89335== LEAK SUMMARY:
+==89335==    definitely lost: 0 bytes in 0 blocks
+==89335==    indirectly lost: 0 bytes in 0 blocks
+==89335==      possibly lost: 0 bytes in 0 blocks
+==89335==    still reachable: 1,304 bytes in 41 blocks
+==89335==         suppressed: 0 bytes in 0 blocks
+==89335== Rerun with --leak-check=full to see details of leaked memory
+==89335== 
+==89335== For lists of detected and suppressed errors, rerun with: -s
+==89335== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mob1.nn"
+==89336== Memcheck, a memory error detector
+==89336== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89336== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89336== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mob2.nn
+==89336== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89336== 
+==89336== HEAP SUMMARY:
+==89336==     in use at exit: 1,304 bytes in 41 blocks
+==89336==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89336== 
+==89336== LEAK SUMMARY:
+==89336==    definitely lost: 0 bytes in 0 blocks
+==89336==    indirectly lost: 0 bytes in 0 blocks
+==89336==      possibly lost: 0 bytes in 0 blocks
+==89336==    still reachable: 1,304 bytes in 41 blocks
+==89336==         suppressed: 0 bytes in 0 blocks
+==89336== Rerun with --leak-check=full to see details of leaked memory
+==89336== 
+==89336== For lists of detected and suppressed errors, rerun with: -s
+==89336== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mob2.nn"
+==89337== Memcheck, a memory error detector
+==89337== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89337== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89337== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/mob3.nn
+==89337== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89337== 
+==89337== HEAP SUMMARY:
+==89337==     in use at exit: 1,304 bytes in 41 blocks
+==89337==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89337== 
+==89337== LEAK SUMMARY:
+==89337==    definitely lost: 0 bytes in 0 blocks
+==89337==    indirectly lost: 0 bytes in 0 blocks
+==89337==      possibly lost: 0 bytes in 0 blocks
+==89337==    still reachable: 1,304 bytes in 41 blocks
+==89337==         suppressed: 0 bytes in 0 blocks
+==89337== Rerun with --leak-check=full to see details of leaked memory
+==89337== 
+==89337== For lists of detected and suppressed errors, rerun with: -s
+==89337== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/mob3.nn"
+==89338== Memcheck, a memory error detector
+==89338== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89338== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89338== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/nestfunc.nn
+==89338== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89338== 
+==89338== HEAP SUMMARY:
+==89338==     in use at exit: 1,304 bytes in 41 blocks
+==89338==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89338== 
+==89338== LEAK SUMMARY:
+==89338==    definitely lost: 0 bytes in 0 blocks
+==89338==    indirectly lost: 0 bytes in 0 blocks
+==89338==      possibly lost: 0 bytes in 0 blocks
+==89338==    still reachable: 1,304 bytes in 41 blocks
+==89338==         suppressed: 0 bytes in 0 blocks
+==89338== Rerun with --leak-check=full to see details of leaked memory
+==89338== 
+==89338== For lists of detected and suppressed errors, rerun with: -s
+==89338== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/nestfunc.nn"
+==89339== Memcheck, a memory error detector
+==89339== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89339== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89339== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/perceptron.nn
+==89339== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89339== 
+==89339== HEAP SUMMARY:
+==89339==     in use at exit: 1,304 bytes in 41 blocks
+==89339==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89339== 
+==89339== LEAK SUMMARY:
+==89339==    definitely lost: 0 bytes in 0 blocks
+==89339==    indirectly lost: 0 bytes in 0 blocks
+==89339==      possibly lost: 0 bytes in 0 blocks
+==89339==    still reachable: 1,304 bytes in 41 blocks
+==89339==         suppressed: 0 bytes in 0 blocks
+==89339== Rerun with --leak-check=full to see details of leaked memory
+==89339== 
+==89339== For lists of detected and suppressed errors, rerun with: -s
+==89339== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/perceptron.nn"
+==89340== Memcheck, a memory error detector
+==89340== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89340== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89340== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/person.nn
+==89340== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89340== 
+==89340== HEAP SUMMARY:
+==89340==     in use at exit: 1,304 bytes in 41 blocks
+==89340==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89340== 
+==89340== LEAK SUMMARY:
+==89340==    definitely lost: 0 bytes in 0 blocks
+==89340==    indirectly lost: 0 bytes in 0 blocks
+==89340==      possibly lost: 0 bytes in 0 blocks
+==89340==    still reachable: 1,304 bytes in 41 blocks
+==89340==         suppressed: 0 bytes in 0 blocks
+==89340== Rerun with --leak-check=full to see details of leaked memory
+==89340== 
+==89340== For lists of detected and suppressed errors, rerun with: -s
+==89340== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/person.nn"
+==89341== Memcheck, a memory error detector
+==89341== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89341== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89341== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/rec.nn
+==89341== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89341== 
+==89341== HEAP SUMMARY:
+==89341==     in use at exit: 1,304 bytes in 41 blocks
+==89341==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89341== 
+==89341== LEAK SUMMARY:
+==89341==    definitely lost: 0 bytes in 0 blocks
+==89341==    indirectly lost: 0 bytes in 0 blocks
+==89341==      possibly lost: 0 bytes in 0 blocks
+==89341==    still reachable: 1,304 bytes in 41 blocks
+==89341==         suppressed: 0 bytes in 0 blocks
+==89341== Rerun with --leak-check=full to see details of leaked memory
+==89341== 
+==89341== For lists of detected and suppressed errors, rerun with: -s
+==89341== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/rec.nn"
+==89342== Memcheck, a memory error detector
+==89342== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89342== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89342== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/rtassign.nn
+==89342== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89342== 
+==89342== HEAP SUMMARY:
+==89342==     in use at exit: 1,304 bytes in 41 blocks
+==89342==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89342== 
+==89342== LEAK SUMMARY:
+==89342==    definitely lost: 0 bytes in 0 blocks
+==89342==    indirectly lost: 0 bytes in 0 blocks
+==89342==      possibly lost: 0 bytes in 0 blocks
+==89342==    still reachable: 1,304 bytes in 41 blocks
+==89342==         suppressed: 0 bytes in 0 blocks
+==89342== Rerun with --leak-check=full to see details of leaked memory
+==89342== 
+==89342== For lists of detected and suppressed errors, rerun with: -s
+==89342== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/rtassign.nn"
+==89343== Memcheck, a memory error detector
+==89343== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89343== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89343== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/sanity.nn
+==89343== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89343== 
+==89343== HEAP SUMMARY:
+==89343==     in use at exit: 1,304 bytes in 41 blocks
+==89343==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89343== 
+==89343== LEAK SUMMARY:
+==89343==    definitely lost: 0 bytes in 0 blocks
+==89343==    indirectly lost: 0 bytes in 0 blocks
+==89343==      possibly lost: 0 bytes in 0 blocks
+==89343==    still reachable: 1,304 bytes in 41 blocks
+==89343==         suppressed: 0 bytes in 0 blocks
+==89343== Rerun with --leak-check=full to see details of leaked memory
+==89343== 
+==89343== For lists of detected and suppressed errors, rerun with: -s
+==89343== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/sanity.nn"
+==89344== Memcheck, a memory error detector
+==89344== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89344== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89344== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/searchtree.nn
+==89344== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89344== 
+==89344== HEAP SUMMARY:
+==89344==     in use at exit: 1,304 bytes in 41 blocks
+==89344==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89344== 
+==89344== LEAK SUMMARY:
+==89344==    definitely lost: 0 bytes in 0 blocks
+==89344==    indirectly lost: 0 bytes in 0 blocks
+==89344==      possibly lost: 0 bytes in 0 blocks
+==89344==    still reachable: 1,304 bytes in 41 blocks
+==89344==         suppressed: 0 bytes in 0 blocks
+==89344== Rerun with --leak-check=full to see details of leaked memory
+==89344== 
+==89344== For lists of detected and suppressed errors, rerun with: -s
+==89344== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/searchtree.nn"
+==89345== Memcheck, a memory error detector
+==89345== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89345== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89345== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/self.nn
+==89345== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89345== 
+==89345== HEAP SUMMARY:
+==89345==     in use at exit: 1,304 bytes in 41 blocks
+==89345==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89345== 
+==89345== LEAK SUMMARY:
+==89345==    definitely lost: 0 bytes in 0 blocks
+==89345==    indirectly lost: 0 bytes in 0 blocks
+==89345==      possibly lost: 0 bytes in 0 blocks
+==89345==    still reachable: 1,304 bytes in 41 blocks
+==89345==         suppressed: 0 bytes in 0 blocks
+==89345== Rerun with --leak-check=full to see details of leaked memory
+==89345== 
+==89345== For lists of detected and suppressed errors, rerun with: -s
+==89345== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/self.nn"
+==89346== Memcheck, a memory error detector
+==89346== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89346== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89346== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/sha1.nn
+==89346== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89346== 
+==89346== HEAP SUMMARY:
+==89346==     in use at exit: 1,304 bytes in 41 blocks
+==89346==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89346== 
+==89346== LEAK SUMMARY:
+==89346==    definitely lost: 0 bytes in 0 blocks
+==89346==    indirectly lost: 0 bytes in 0 blocks
+==89346==      possibly lost: 0 bytes in 0 blocks
+==89346==    still reachable: 1,304 bytes in 41 blocks
+==89346==         suppressed: 0 bytes in 0 blocks
+==89346== Rerun with --leak-check=full to see details of leaked memory
+==89346== 
+==89346== For lists of detected and suppressed errors, rerun with: -s
+==89346== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/sha1.nn"
+==89347== Memcheck, a memory error detector
+==89347== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89347== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89347== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/sha256.nn
+==89347== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89347== 
+==89347== HEAP SUMMARY:
+==89347==     in use at exit: 1,304 bytes in 41 blocks
+==89347==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89347== 
+==89347== LEAK SUMMARY:
+==89347==    definitely lost: 0 bytes in 0 blocks
+==89347==    indirectly lost: 0 bytes in 0 blocks
+==89347==      possibly lost: 0 bytes in 0 blocks
+==89347==    still reachable: 1,304 bytes in 41 blocks
+==89347==         suppressed: 0 bytes in 0 blocks
+==89347== Rerun with --leak-check=full to see details of leaked memory
+==89347== 
+==89347== For lists of detected and suppressed errors, rerun with: -s
+==89347== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/sha256.nn"
+==89348== Memcheck, a memory error detector
+==89348== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89348== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89348== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/sierpinski.nn
+==89348== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89348== 
+==89348== HEAP SUMMARY:
+==89348==     in use at exit: 1,304 bytes in 41 blocks
+==89348==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89348== 
+==89348== LEAK SUMMARY:
+==89348==    definitely lost: 0 bytes in 0 blocks
+==89348==    indirectly lost: 0 bytes in 0 blocks
+==89348==      possibly lost: 0 bytes in 0 blocks
+==89348==    still reachable: 1,304 bytes in 41 blocks
+==89348==         suppressed: 0 bytes in 0 blocks
+==89348== Rerun with --leak-check=full to see details of leaked memory
+==89348== 
+==89348== For lists of detected and suppressed errors, rerun with: -s
+==89348== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/sierpinski.nn"
+==89349== Memcheck, a memory error detector
+==89349== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89349== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89349== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/simple.nn
+==89349== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89349== 
+==89349== HEAP SUMMARY:
+==89349==     in use at exit: 1,304 bytes in 41 blocks
+==89349==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89349== 
+==89349== LEAK SUMMARY:
+==89349==    definitely lost: 0 bytes in 0 blocks
+==89349==    indirectly lost: 0 bytes in 0 blocks
+==89349==      possibly lost: 0 bytes in 0 blocks
+==89349==    still reachable: 1,304 bytes in 41 blocks
+==89349==         suppressed: 0 bytes in 0 blocks
+==89349== Rerun with --leak-check=full to see details of leaked memory
+==89349== 
+==89349== For lists of detected and suppressed errors, rerun with: -s
+==89349== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/simple.nn"
+==89350== Memcheck, a memory error detector
+==89350== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89350== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89350== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/slice.nn
+==89350== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89350== 
+==89350== HEAP SUMMARY:
+==89350==     in use at exit: 1,304 bytes in 41 blocks
+==89350==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89350== 
+==89350== LEAK SUMMARY:
+==89350==    definitely lost: 0 bytes in 0 blocks
+==89350==    indirectly lost: 0 bytes in 0 blocks
+==89350==      possibly lost: 0 bytes in 0 blocks
+==89350==    still reachable: 1,304 bytes in 41 blocks
+==89350==         suppressed: 0 bytes in 0 blocks
+==89350== Rerun with --leak-check=full to see details of leaked memory
+==89350== 
+==89350== For lists of detected and suppressed errors, rerun with: -s
+==89350== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/slice.nn"
+==89351== Memcheck, a memory error detector
+==89351== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89351== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89351== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/stack.nn
+==89351== 
+/mnt/c/cloud/local/dev/langs/neon/e.log: 1: ----------------------------: not found
+/mnt/c/cloud/local/dev/langs/neon/e.log: 2: Syntax error: redirection unexpected
+==89351== 
+==89351== HEAP SUMMARY:
+==89351==     in use at exit: 1,304 bytes in 41 blocks
+==89351==   total heap usage: 46 allocs, 5 frees, 3,368 bytes allocated
+==89351== 
+==89351== LEAK SUMMARY:
+==89351==    definitely lost: 0 bytes in 0 blocks
+==89351==    indirectly lost: 0 bytes in 0 blocks
+==89351==      possibly lost: 0 bytes in 0 blocks
+==89351==    still reachable: 1,304 bytes in 41 blocks
+==89351==         suppressed: 0 bytes in 0 blocks
+==89351== Rerun with --leak-check=full to see details of leaked memory
+==89351== 
+==89351== For lists of detected and suppressed errors, rerun with: -s
+==89351== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+**failed** in "/mnt/c/cloud/local/dev/langs/neon/eg/stack.nn"
+==89352== Memcheck, a memory error detector
+==89352== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==89352== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==89352== Command: /mnt/c/cloud/local/dev/langs/neon/e.log /mnt/c/cloud/local/dev/langs/neon/eg/static.nn
+==89352== 
+*** interrupted "/mnt/c/cloud/local/dev/langs/neon/eg/static.nn"
+==89352== 
+==89352== Process terminating with default action of signal 2 (SIGINT)
+==89352==    at 0x49801A3: open (open64.c:41)
+==89352==    by 0x11D090: ??? (in /usr/bin/dash)
+==89352==    by 0x10E95C: ??? (in /usr/bin/dash)
+==89352==    by 0x10CDE7: ??? (in /usr/bin/dash)
+==89352==    by 0x488F1C9: (below main) (libc_start_call_main.h:58)
+==89352== 
+==89352== HEAP SUMMARY:
+==89352==     in use at exit: 1,304 bytes in 41 blocks
+==89352==   total heap usage: 41 allocs, 0 frees, 1,304 bytes allocated
+==89352== 
+==89352== LEAK SUMMARY:
+==89352==    definitely lost: 0 bytes in 0 blocks
+==89352==    indirectly lost: 0 bytes in 0 blocks
+==89352==      possibly lost: 0 bytes in 0 blocks
+==89352==    still reachable: 1,304 bytes in 41 blocks
+==89352==         suppressed: 0 bytes in 0 blocks
+==89352== Rerun with --leak-check=full to see details of leaked memory
+==89352== 
+==89352== For lists of detected and suppressed errors, rerun with: -s
+==89352== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)

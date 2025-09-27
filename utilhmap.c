@@ -121,9 +121,9 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
         if(nn_value_isstring(entry->key))
         {
             entoskey = nn_value_asstring(entry->key);
-            if(entoskey->sbuf.length == klen)
+            if(nn_string_getlength(entoskey) == klen)
             {
-                if(memcmp(kstr, entoskey->sbuf.data, klen) == 0)
+                if(memcmp(kstr, nn_string_getdata(entoskey), klen) == 0)
                 {
                     return entry;
                 }
@@ -198,7 +198,7 @@ NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, con
 
 NNProperty* nn_valtable_getfieldbyostr(NNHashValTable* table, NNObjString* str)
 {
-    return nn_valtable_getfieldbystr(table, nn_value_makenull(), str->sbuf.data, str->sbuf.length, str->hashvalue);
+    return nn_valtable_getfieldbystr(table, nn_value_makenull(), nn_string_getdata(str), nn_string_getlength(str), str->hashvalue);
 }
 
 NNProperty* nn_valtable_getfieldbycstr(NNHashValTable* table, const char* kstr)
@@ -216,7 +216,7 @@ NNProperty* nn_valtable_getfield(NNHashValTable* table, NNValue key)
     if(nn_value_isstring(key))
     {
         oskey = nn_value_asstring(key);
-        return nn_valtable_getfieldbystr(table, key, oskey->sbuf.data, oskey->sbuf.length, oskey->hashvalue);
+        return nn_valtable_getfieldbystr(table, key, nn_string_getdata(oskey), nn_string_getlength(oskey), oskey->hashvalue);
     }
     return nn_valtable_getfieldbyvalue(table, key);
 }
@@ -367,7 +367,7 @@ void nn_valtable_importall(NNHashValTable* from, NNHashValTable* to)
         if(!nn_value_isnull(entry->key) && !nn_value_ismodule(entry->value.value))
         {
             /* Don't import private values */
-            if(nn_value_isstring(entry->key) && nn_value_asstring(entry->key)->sbuf.data[0] == '_')
+            if(nn_value_isstring(entry->key) && nn_string_getdata(nn_value_asstring(entry->key))[0] == '_')
             {
                 continue;
             }
@@ -422,8 +422,8 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
             }
         }
         string = nn_value_asstring(entry->key);
-        slen = string->sbuf.length;
-        sdata = string->sbuf.data;
+        slen = nn_string_getlength(string);
+        sdata = nn_string_getdata(string);
         if(slen == length) 
         {
             if(string->hashvalue == hsv)

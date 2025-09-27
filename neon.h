@@ -43,7 +43,7 @@
 /**
 * if enabled, uses NaN tagging for values.
 */
-#define NEON_CONFIG_USENANTAGGING 0
+#define NEON_CONFIG_USENANTAGGING 1
 
 /**
 * if enabled, most API calls will check for null pointers, and either
@@ -60,7 +60,7 @@
     #define inline
     #define __FUNCTION__ "<here>"
 #else
-    #define NEON_INLINE static inline
+    #define NEON_INLINE static
     #if defined(__GNUC__) || defined(__TINYC__)
         #define NEON_FORCEINLINE static __attribute__((always_inline)) inline
     #else
@@ -711,7 +711,7 @@ typedef bool (*NNAstParseInfixFN)(NNAstParser*, NNAstToken, bool);
 typedef NNValue (*NNClassFieldFN)(NNState*);
 typedef void (*NNModLoaderFN)(NNState*);
 typedef NNDefModule* (*NNModInitFN)(NNState*);
-typedef double(*nnbinopfunc_t)(double, double);
+typedef NNValue(*nnbinopfunc_t)(double, double);
 
 typedef size_t (*mcitemhashfn_t)(void*);
 typedef bool (*mcitemcomparefn_t)(void*, void*);
@@ -1443,20 +1443,6 @@ NEON_INLINE NNHashValEntry* nn_valtable_entryatindex(NNHashValTable* table, size
     return &table->htentries[idx];
 }
 
-NEON_INLINE size_t nn_string_getlength(NNObjString* os)
-{
-    return os->sbuf.length;
-}
-
-NEON_INLINE const char* nn_string_getdata(NNObjString* os)
-{
-    return os->sbuf.data;
-}
-
-NEON_INLINE const char* nn_string_getcstr(NNObjString* os)
-{
-    return nn_string_getdata(os);
-}
 
 NEON_INLINE bool nn_value_isobject(NNValue v)
 {
@@ -1642,6 +1628,17 @@ NEON_INLINE NNObjType nn_value_objtype(NNValue v)
     return nn_value_asobject(v)->type;
 }
 
+NEON_INLINE double nn_value_asnumber(NNValue v)
+{
+    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
+        NNUtilDblUnion data;
+        data.bits = v;
+        return data.num;
+    #else
+        return ((v).valunion.vfltnum);
+    #endif
+}
+
 NEON_INLINE bool nn_value_asbool(NNValue v)
 {
     #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
@@ -1651,18 +1648,11 @@ NEON_INLINE bool nn_value_asbool(NNValue v)
         }
         return false;
     #else
+        if(nn_value_isnumber(v))
+        {
+            return nn_value_asnumber(v);
+        }
         return ((v).valunion.vbool);
-    #endif
-}
-
-NEON_INLINE double nn_value_asnumber(NNValue v)
-{
-    #if defined(NEON_CONFIG_USENANTAGGING) && (NEON_CONFIG_USENANTAGGING == 1)
-        NNUtilDblUnion data;
-        data.bits = v;
-        return data.num;
-    #else
-        return ((v).valunion.vfltnum);
     #endif
 }
 
@@ -1725,6 +1715,7 @@ NEON_INLINE NNObjRange* nn_value_asrange(NNValue v)
     NEON_INLINE NNValue nn_value_makevalue(NNValType type)
     {
         NNValue v;
+        memset(&v, 0, sizeof(NNValue));
         v.type = type;
         return v;
     }
@@ -1771,10 +1762,6 @@ NEON_INLINE NNValue nn_value_makenumber(double d)
     #endif
 }
 
-NEON_INLINE NNValue nn_value_makeint(int i)
-{
-    return nn_value_makenumber(i);
-}
 
 NEON_INLINE NNValue nn_value_fromobject_actual(NNObject* obj)
 {

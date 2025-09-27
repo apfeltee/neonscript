@@ -62,7 +62,7 @@ bool nn_class_defcallablefieldptr(NNObjClass* klass, NNObjString* name, NNNative
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
+    ofn = nn_object_makefuncnative(state, function, nn_string_getdata(name), uptr);
     return nn_valtable_setwithtype(&klass->instproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
@@ -76,7 +76,7 @@ bool nn_class_defstaticcallablefieldptr(NNObjClass* klass, NNObjString* name, NN
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
+    ofn = nn_object_makefuncnative(state, function, nn_string_getdata(name), uptr);
     return nn_valtable_setwithtype(&klass->staticproperties, nn_value_fromobject(name), nn_value_fromobject(ofn), NEON_PROPTYPE_FUNCTION, true);
 }
 
@@ -117,7 +117,7 @@ bool nn_class_defnativemethodptr(NNObjClass* klass, NNObjString* name, NNNativeF
     NNObjFunction* ofn;
     NNState* state;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, ptr);
+    ofn = nn_object_makefuncnative(state, function, nn_string_getdata(name), ptr);
     return nn_class_defmethod(klass, name, nn_value_fromobject(ofn));
 }
 
@@ -131,7 +131,7 @@ bool nn_class_defstaticnativemethodptr(NNObjClass* klass, NNObjString* name, NNN
     NNState* state;
     NNObjFunction* ofn;
     state = ((NNObject*)klass)->pstate;
-    ofn = nn_object_makefuncnative(state, function, name->sbuf.data, uptr);
+    ofn = nn_object_makefuncnative(state, function, nn_string_getdata(name), uptr);
     return nn_valtable_set(&klass->staticmethods, nn_value_fromobject(name), nn_value_fromobject(ofn));
 }
 

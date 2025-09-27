@@ -81,12 +81,12 @@ NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t a
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(argv[0]);
-    length = string->sbuf.length;
+    length = nn_string_getlength(string);
     if(length > 1)
     {
         NEON_RETURNERROR("ord() expects character as argument, string given");
     }
-    ord = (int)string->sbuf.data[0];
+    ord = (int)nn_string_getdata(string)[0];
     if(ord < 0)
     {
         ord += 256;
@@ -133,8 +133,8 @@ NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t 
     nn_argcheck_init(state, &check, "eval", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     os = nn_value_asstring(argv[0]);
-    /*fprintf(stderr, "eval:src=%s\n", os->sbuf.data);*/
-    result = nn_state_evalsource(state, os->sbuf.data);
+    /*fprintf(stderr, "eval:src=%s\n", nn_string_getdata(os));*/
+    result = nn_state_evalsource(state, nn_string_getdata(os));
     return result;
 }
 
@@ -147,8 +147,8 @@ NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, siz
     nn_argcheck_init(state, &check, "loadfile", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     os = nn_value_asstring(argv[0]);
-    fprintf(stderr, "eval:src=%s\n", os->sbuf.data);
-    result = nn_state_evalsource(state, os->sbuf.data);
+    fprintf(stderr, "eval:src=%s\n", nn_string_getdata(os));
+    result = nn_state_evalsource(state, nn_string_getdata(os));
     return result;
 }
 */
@@ -164,8 +164,6 @@ NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_util_isinstanceof(nn_value_asinstance(argv[0])->klass, nn_value_asclass(argv[1])));
 }
 
-
-
 NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
@@ -179,7 +177,7 @@ NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     ofmt = nn_value_asstring(argv[0]);
     nn_printer_makestackstring(state, &pr);
-    nn_strformat_init(state, &nfi, &pr, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
+    nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
         return nn_value_makenull();
@@ -199,7 +197,7 @@ NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     ofmt = nn_value_asstring(argv[0]);
-    nn_strformat_init(state, &nfi, state->stdoutprinter, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
+    nn_strformat_init(state, &nfi, state->stdoutprinter, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
     }

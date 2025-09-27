@@ -410,7 +410,7 @@ bool nn_util_fsfileisdirectory(NNState* state, const char* filepath)
     return nn_util_fsfileistype(state, filepath, 'd');
 }
 
-char* nn_util_fsgetbasename(NNState* state, char* path)
+char* nn_util_fsgetbasename(NNState* state, const char* path)
 {
     (void)state;
     return osfn_basename(path);

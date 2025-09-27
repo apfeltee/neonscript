@@ -106,10 +106,10 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     {
         return nn_value_asmodule(field->value);
     }
-    physpath = nn_import_resolvepath(state, modulename->sbuf.data, intomodule->physicalpath->sbuf.data, NULL, false);
+    physpath = nn_import_resolvepath(state, nn_string_getdata(modulename), nn_string_getdata(intomodule->physicalpath), NULL, false);
     if(physpath == NULL)
     {
-        nn_except_throwclass(state, state->exceptions.importerror, "module not found: '%s'", modulename->sbuf.data);
+        nn_except_throwclass(state, state->exceptions.importerror, "module not found: '%s'", nn_string_getdata(modulename));
         return NULL;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
@@ -120,7 +120,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
         return NULL;
     }
     nn_blob_init(state, &blob);
-    module = nn_module_make(state, modulename->sbuf.data, physpath, true, true);
+    module = nn_module_make(state, nn_string_getdata(modulename), physpath, true, true);
     nn_memory_free(physpath);
     function = nn_astparser_compilesource(state, module, source, &blob, true, false);
     nn_memory_free(source);
@@ -137,7 +137,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     return module;
 }
 
-char* nn_import_resolvepath(NNState* state, char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+char* nn_import_resolvepath(NNState* state, const   char* modulename, const char* currentfile, char* rootfile, bool isrelative)
 {
     size_t i;
     size_t mlen;
@@ -161,7 +161,7 @@ char* nn_import_resolvepath(NNState* state, char* modulename, const char* curren
     {
         pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));
         nn_strbuf_reset(pathbuf);
-        nn_strbuf_appendstrn(pathbuf, pitem->sbuf.data, pitem->sbuf.length);
+        nn_strbuf_appendstrn(pathbuf, nn_string_getdata(pitem), nn_string_getlength(pitem));
         if(nn_strbuf_containschar(pathbuf, '@'))
         {
             nn_strbuf_charreplace(pathbuf, '@', modulename, mlen);
@@ -341,7 +341,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
         {
             targetmod->handle = dlw;
         }
-        nn_import_addnativemodule(state, targetmod, targetmod->name->sbuf.data);
+        nn_import_addnativemodule(state, targetmod, nn_string_getdata(targetmod->name));
         nn_gcmem_clearprotect(state);
         return true;
     }

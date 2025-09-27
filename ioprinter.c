@@ -344,11 +344,11 @@ void nn_printer_printfunction(NNPrinter* pr, NNObjFunction* func)
     {
         if(func->fnscriptfunc.isvariadic)
         {
-            nn_printer_printf(pr, "<function %s(%d...) at %p>", func->name->sbuf.data, func->fnscriptfunc.arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d...) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
         }
         else
         {
-            nn_printer_printf(pr, "<function %s(%d) at %p>", func->name->sbuf.data, func->fnscriptfunc.arity, (void*)func);
+            nn_printer_printf(pr, "<function %s(%d) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
         }
     }
 }
@@ -463,7 +463,7 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
 
 void nn_printer_printfile(NNPrinter* pr, NNObjFile* file)
 {
-    nn_printer_printf(pr, "<file at %s in mode %s>", file->path->sbuf.data, file->mode->sbuf.data);
+    nn_printer_printf(pr, "<file at %s in mode %s>", nn_string_getdata(file->path), nn_string_getdata(file->mode));
 }
 
 void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invmethod)
@@ -495,7 +495,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
                 nn_printer_makestackstring(state, &subw);
                 nn_printer_printvalue(&subw, resv, false, false);
                 os = nn_printer_takestring(&subw);
-                nn_printer_writestringl(pr, os->sbuf.data, os->sbuf.length);
+                nn_printer_writestringl(pr, nn_string_getdata(os), nn_string_getlength(os));
                 #if 0
                     nn_vm_stackpop(state);
                 #endif
@@ -504,7 +504,7 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
         }
     }
     #endif
-    nn_printer_printf(pr, "<instance of %s at %p>", instance->klass->name->sbuf.data, (void*)instance);
+    nn_printer_printf(pr, "<instance of %s at %p>", nn_string_getdata(instance->klass->name), (void*)instance);
 }
 
 void nn_printer_printtable(NNPrinter* pr, NNHashValTable* table)
@@ -591,7 +591,7 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
     }
     else
     {
-        nn_printer_printf(pr, "<class %s at %p>", klass->name->sbuf.data, (void*)klass);
+        nn_printer_printf(pr, "<class %s at %p>", nn_string_getdata(klass->name), (void*)klass);
     }
 }
 
@@ -644,7 +644,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             {
                 NNObjModule* mod;
                 mod = nn_value_asmodule(value);
-                nn_printer_printf(pr, "<module '%s' at '%s'>", mod->name->sbuf.data, mod->physicalpath->sbuf.data);
+                nn_printer_printf(pr, "<module '%s' at '%s'>", nn_string_getdata(mod->name), nn_string_getdata(mod->physicalpath));
             }
             break;
         case NEON_OBJTYPE_CLASS:
@@ -678,7 +678,7 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
             {
                 NNObjFunction* native;
                 native = nn_value_asfunction(value);
-                nn_printer_printf(pr, "<function %s(native) at %p>", native->name->sbuf.data, (void*)native);
+                nn_printer_printf(pr, "<function %s(native) at %p>", nn_string_getdata(native->name), (void*)native);
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
@@ -692,11 +692,11 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
                 string = nn_value_asstring(value);
                 if(fixstring)
                 {
-                    nn_printer_writequotedstring(pr, string->sbuf.data, string->sbuf.length, true);
+                    nn_printer_writequotedstring(pr, nn_string_getdata(string), nn_string_getlength(string), true);
                 }
                 else
                 {
-                    nn_printer_writestringl(pr, string->sbuf.data, string->sbuf.length);
+                    nn_printer_writestringl(pr, nn_string_getdata(string), nn_string_getlength(string));
                 }
             }
             break;

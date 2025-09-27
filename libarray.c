@@ -132,7 +132,7 @@ NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_
         nn_printer_printvalue(&pr, list[i], false, true);
         if((havejoinee && (joinee != NULL)) && ((i+1) < count))
         {
-            nn_printer_writestringl(&pr, joinee->sbuf.data, joinee->sbuf.length);
+            nn_printer_writestringl(&pr, nn_string_getdata(joinee), nn_string_getlength(joinee));
         }
     }
     ret = nn_value_fromobject(nn_printer_takestring(&pr));

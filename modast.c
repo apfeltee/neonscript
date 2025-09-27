@@ -18,7 +18,7 @@ NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, si
     nn_argcheck_init(state, &check, "scan", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     insrc = nn_value_asstring(argv[0]);
-    scn = nn_astlex_make(state, insrc->sbuf.data);
+    scn = nn_astlex_make(state, nn_string_getdata(insrc));
     arr = nn_array_make(state);
     while(!nn_astlex_isatend(scn))
     {

@@ -47,13 +47,13 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
     dest->data = NULL;
     if(!file->isstd)
     {
-        if(!nn_util_fsfileexists(state, file->path->sbuf.data))
+        if(!nn_util_fsfileexists(state, nn_string_getdata(file->path)))
         {
             return false;
         }
         /* file is in write only mode */
         /*
-        else if(strstr(file->mode->sbuf.data, "w") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
+        else if(strstr(nn_string_getdata(file->mode), "w") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot read file in write mode");
         }
@@ -67,7 +67,7 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
         {
             return false;
         }
-        if(osfn_lstat(file->path->sbuf.data, &stats) == 0)
+        if(osfn_lstat(nn_string_getdata(file->path), &stats) == 0)
         {
             filesizereal = (size_t)stats.st_size;
         }
@@ -115,7 +115,7 @@ bool nn_file_read(NNObjFile* file, size_t readhowmuch, NNIOResult* dest)
 
 
 #define FILE_ERROR(type, message) \
-    NEON_RETURNERROR(#type " -> %s", message, file->path->sbuf.data);
+    NEON_RETURNERROR(#type " -> %s", message, nn_string_getdata(file->path));
 
 #define RETURN_STATUS(status) \
     if((status) == 0) \
@@ -155,7 +155,7 @@ bool nn_fileobject_open(NNObjFile* file)
     }
     if(file->handle == NULL && !file->isstd)
     {
-        file->handle = fopen(file->path->sbuf.data, file->mode->sbuf.data);
+        file->handle = fopen(nn_string_getdata(file->path), nn_string_getdata(file->mode));
         if(file->handle != NULL)
         {
             file->isopen = true;
@@ -187,7 +187,7 @@ NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv,
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     opath = nn_value_asstring(argv[0]);
-    if(opath->sbuf.length == 0)
+    if(nn_string_getlength(opath) == 0)
     {
         NEON_RETURNERROR("file path cannot be empty");
     }
@@ -195,9 +195,9 @@ NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv,
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        mode = nn_value_asstring(argv[1])->sbuf.data;
+        mode = nn_string_getdata(nn_value_asstring(argv[1]));
     }
-    path = opath->sbuf.data;
+    path = nn_string_getdata(opath);
     file = (NNObjFile*)nn_gcmem_protect(state, (NNObject*)nn_object_makefile(state, NULL, false, path, mode));
     nn_fileobject_open(file);
     return nn_value_fromobject(file);
@@ -212,7 +212,7 @@ NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(argv[0]);
-    return nn_value_makebool(nn_util_fsfileexists(state, file->sbuf.data));
+    return nn_value_makebool(nn_util_fsfileexists(state, nn_string_getdata(file)));
 }
 
 NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -224,7 +224,7 @@ NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(argv[0]);
-    return nn_value_makebool(nn_util_fsfileisfile(state, file->sbuf.data));
+    return nn_value_makebool(nn_util_fsfileisfile(state, nn_string_getdata(file)));
 }
 
 NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -236,7 +236,7 @@ NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv,
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     file = nn_value_asstring(argv[0]);
-    return nn_value_makebool(nn_util_fsfileisdirectory(state, file->sbuf.data));
+    return nn_value_makebool(nn_util_fsfileisdirectory(state, nn_string_getdata(file)));
 }
 
 
@@ -257,10 +257,10 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue* argv, 
         thismuch = (size_t)nn_value_asnumber(argv[1]);
     }
     filepath = nn_value_asstring(argv[0]);
-    buf = nn_util_filereadfile(state, filepath->sbuf.data, &actualsz, true, thismuch);
+    buf = nn_util_filereadfile(state, nn_string_getdata(filepath), &actualsz, true, thismuch);
     if(buf == NULL)
     {
-        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", filepath->sbuf.data, strerror(errno));
+        nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", nn_string_getdata(filepath), strerror(errno));
         return nn_value_makenull();
     }
     return nn_value_fromobject(nn_string_takelen(state, buf, actualsz));
@@ -293,13 +293,13 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue* argv,
     }
     filepath = nn_value_asstring(argv[0]);
     data = nn_value_asstring(argv[1]);
-    fh = fopen(filepath->sbuf.data, mode);
+    fh = fopen(nn_string_getdata(filepath), mode);
     if(fh == NULL)
     {
         nn_except_throwclass(state, state->exceptions.ioerror, strerror(errno));
         return nn_value_makenull();
     }
-    rt = fwrite(data->sbuf.data, sizeof(char), data->sbuf.length, fh);
+    rt = fwrite(nn_string_getdata(data), sizeof(char), nn_string_getlength(data), fh);
     fclose(fh);
     return nn_value_makenumber(rt);
 }
@@ -426,11 +426,11 @@ NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv, size_t
     file = nn_value_asfile(thisval);
     if(!file->isstd)
     {
-        if(!nn_util_fsfileexists(state, file->path->sbuf.data))
+        if(!nn_util_fsfileexists(state, nn_string_getdata(file->path)))
         {
             FILE_ERROR(NotFound, "no such file or directory");
         }
-        else if(strstr(file->mode->sbuf.data, "w") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
+        else if(strstr(nn_string_getdata(file->mode), "w") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot read file in write mode");
         }
@@ -496,11 +496,11 @@ NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_
     file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(argv[0]);
-    data = (unsigned char*)string->sbuf.data;
-    length = string->sbuf.length;
+    data = (unsigned char*)nn_string_getdata(string);
+    length = nn_string_getlength(string);
     if(!file->isstd)
     {
-        if(strstr(file->mode->sbuf.data, "r") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
+        if(strstr(nn_string_getdata(file->mode), "r") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot write into non-writable file");
         }
@@ -546,11 +546,11 @@ NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t
     file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     string = nn_value_asstring(argv[0]);
-    data = (unsigned char*)string->sbuf.data;
-    length = string->sbuf.length;
+    data = (unsigned char*)nn_string_getdata(string);
+    length = nn_string_getlength(string);
     if(!file->isstd)
     {
-        if(strstr(file->mode->sbuf.data, "r") != NULL && strstr(file->mode->sbuf.data, "+") == NULL)
+        if(strstr(nn_string_getdata(file->mode), "r") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot write into non-writable file");
         }
@@ -595,7 +595,7 @@ NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     ofmt = nn_value_asstring(argv[0]);
     nn_printer_makestackio(state, &pr, file->handle, false);
-    nn_strformat_init(state, &nfi, &pr, nn_string_getcstr(ofmt), nn_string_getlength(ofmt));
+    nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
     }
@@ -680,7 +680,7 @@ NNValue nn_objfnfile_name(NNState* state, NNValue thisval, NNValue* argv, size_t
     file = nn_value_asfile(thisval);
     if(!file->isstd)
     {
-        name = nn_util_fsgetbasename(state, file->path->sbuf.data);
+        name = nn_util_fsgetbasename(state, nn_string_getdata(file->path));
         return nn_value_fromobject(nn_string_copycstr(state, name));
     }
     else if(file->istty)

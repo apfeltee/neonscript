@@ -974,7 +974,7 @@ NNAstParser* nn_astparser_makeparser(NNState* state, NNAstLexer* lexer, NNObjMod
     parser->lastwasstatement = false;
     parser->infunction = false;
     parser->inswitch = false;
-    parser->currentfile = parser->currentmodule->physicalpath->sbuf.data;
+    parser->currentfile = nn_string_getdata(parser->currentmodule->physicalpath);
     return parser;
 }
 
@@ -1015,7 +1015,7 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
     }
     prs->panicmode = true;
     fprintf(stderr, "(%d) %sSyntaxError%s",  prs->errorcount, colred, colreset);
-    fprintf(stderr, " in [%s:%d]: ", prs->currentmodule->physicalpath->sbuf.data, t->line);
+    fprintf(stderr, " in [%s:%d]: ", nn_string_getdata(prs->currentmodule->physicalpath), t->line);
     vfprintf(stderr, message, args);
     fprintf(stderr, " ");
     if(t->type == NEON_ASTTOK_EOF)
@@ -1810,11 +1810,11 @@ NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
     fname = NULL;
     if(function->name == NULL)
     {
-        fname = prs->currentmodule->physicalpath->sbuf.data;
+        fname = nn_string_getdata(prs->currentmodule->physicalpath);
     }
     else
     {
-        fname = function->name->sbuf.data;
+        fname = nn_string_getdata(function->name);
     }
     if(!prs->haderror && prs->pstate->conf.dumpbytecode)
     {

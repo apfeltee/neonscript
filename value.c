@@ -67,7 +67,7 @@ const char* nn_value_objecttypename(NNObject* object, bool detailed)
                 const char* klassname;
                 NNObjInstance* inst;
                 inst = ((NNObjInstance*)object);
-                klassname = inst->klass->name->sbuf.data;
+                klassname = nn_string_getdata(inst->klass->name);
                 sprintf(buf, "instance@%s", klassname);
                 return buf;
             }
@@ -129,16 +129,24 @@ bool nn_value_compobjarray(NNState* state, NNObject* oa, NNObject* ob)
 
 bool nn_value_compobjstring(NNState* state, NNObject* oa, NNObject* ob)
 {
+    size_t alen;
+    size_t blen;
+    const char* adata;
+    const char* bdata;
     NNObjString* stra;
     NNObjString* strb;
     (void)state;
     stra = (NNObjString*)oa;
     strb = (NNObjString*)ob;
-    if(stra->sbuf.length != strb->sbuf.length)
+    alen = nn_string_getlength(stra);
+    blen = nn_string_getlength(strb);
+    if(alen != blen)
     {
         return false;
     }
-    return (memcmp(stra->sbuf.data, strb->sbuf.data, stra->sbuf.length) == 0);
+    adata = nn_string_getdata(stra);
+    bdata = nn_string_getdata(strb);
+    return (memcmp(adata, bdata, alen) == 0);
 }
 
 bool nn_value_compobjdict(NNState* state, NNObject* oa, NNObject* ob)
@@ -265,6 +273,9 @@ bool nn_value_compare(NNState* state, NNValue a, NNValue b)
  */
 NNValue nn_value_findgreater(NNValue a, NNValue b)
 {
+    size_t alen;
+    const char* adata;
+    const char* bdata;
     NNObjString* osa;
     NNObjString* osb;    
     if(nn_value_isnull(a))
@@ -309,7 +320,10 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         {
             osa = nn_value_asstring(a);
             osb = nn_value_asstring(b);
-            if(strncmp(osa->sbuf.data, osb->sbuf.data, osa->sbuf.length) >= 0)
+            adata = nn_string_getdata(osa);
+            bdata = nn_string_getdata(osb);
+            alen = nn_string_getlength(osa);
+            if(strncmp(adata, bdata, alen) >= 0)
             {
                 return a;
             }
@@ -365,7 +379,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isfile(a) && nn_value_isfile(b))
         {
-            if(strcmp(nn_value_asfile(a)->path->sbuf.data, nn_value_asfile(b)->path->sbuf.data) >= 0)
+            if(strcmp(nn_string_getdata(nn_value_asfile(a)->path), nn_string_getdata(nn_value_asfile(b)->path)) >= 0)
             {
                 return a;
             }

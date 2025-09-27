@@ -168,7 +168,7 @@ bool nn_util_fsfileexists(NNState *state, const char *filepath);
 bool nn_util_fsfileistype(NNState *state, const char *filepath, int typ);
 bool nn_util_fsfileisfile(NNState *state, const char *filepath);
 bool nn_util_fsfileisdirectory(NNState *state, const char *filepath);
-char *nn_util_fsgetbasename(NNState *state, char *path);
+char *nn_util_fsgetbasename(NNState *state, const char *path);
 const char *nn_filestat_ctimetostring(const time_t *timep);
 bool nn_filestat_initempty(NNFSStat *nfs);
 bool nn_filestat_setup(NNFSStat *nfs);

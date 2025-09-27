@@ -532,7 +532,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0))->sbuf.data;
+        filename = nn_string_getdata(nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0)));
         fprintf(stderr, "nargv[0]=%s\n", filename);
         ok = nn_cli_runfile(state,  filename);
     }

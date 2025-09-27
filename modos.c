@@ -27,7 +27,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
 
     os = nn_value_asstring(argv[0]);
     callable = argv[1];
-    dirn = os->sbuf.data;
+    dirn = nn_string_getdata(os);
     if(fslib_diropen(&rd, dirn))
     {
         while(fslib_dirread(&rd, &itm))

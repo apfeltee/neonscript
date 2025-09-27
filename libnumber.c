@@ -112,7 +112,7 @@ NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* arg
     NNAstToken tok;
     NNAstLexer lex;
     os = nn_value_asstring(val);
-    nn_astlex_init(&lex, state, os->sbuf.data);
+    nn_astlex_init(&lex, state, nn_string_getdata(os));
     tok = nn_astlex_scannumber(&lex);
     rtval = nn_astparser_compilestrnumber(tok.type, tok.start);
     return rtval;
