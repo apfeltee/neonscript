@@ -1184,6 +1184,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(NNState* state, NNObjModule* mo
 
 NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* string, bool willassign)
 {
+    bool okindex;
     int end;
     int start;
     int index;
@@ -1215,19 +1216,28 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
     }
     if(index < maxlength && index >= 0)
     {
-        start = index;
-        end = index + 1;
-        if(!willassign)
-        {
-            /*
-            // we can safely get rid of the index from the stack
-            // +1 for the string itself
-            */
-            nn_vmbits_stackpopn(state, 2);
-        }
-        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, nn_string_getdata(string) + start, end - start)));
-        return true;
+        okindex = true;
     }
+    start = index;
+    end = index + 1;
+    if(!willassign)
+    {
+        /*
+        // we can safely get rid of the index from the stack
+        // +1 for the string itself
+        */
+        nn_vmbits_stackpopn(state, 2);
+    }
+    if(okindex)
+    {
+        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(state, nn_string_getdata(string) + start, end - start)));
+    }
+    else
+    {
+        nn_vmbits_stackpush(state, nn_value_makenull());
+    }
+    return true;
+
     nn_vmbits_stackpopn(state, 1);
     #if 0
         return nn_except_throw(state, "string index %d out of range of %d", realindex, maxlength);

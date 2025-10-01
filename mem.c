@@ -2,9 +2,6 @@
 #include "neon.h"
 #include "allocator.h"
 
-#if !defined(NEON_CONF_MEMUSEALLOCATOR) || (NEON_CONF_MEMUSEALLOCATOR == 0)
-    #define NEON_CONF_MEMUSEALLOCATOR 1
-#endif
 
 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
     /* if any global variables need to be declared, declare them here. */
@@ -123,8 +120,6 @@ void nn_gcmem_clearprotect(NNState* state)
     frame->gcprotcount = 0;
 }
 
-
-
 void nn_gcmem_maybecollect(NNState* state, int addsize, bool wasnew)
 {
     state->gcstate.bytesallocated += addsize;
@@ -140,21 +135,16 @@ void nn_gcmem_maybecollect(NNState* state, int addsize, bool wasnew)
     }
 }
 
-void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t newsize, bool retain)
+void* nn_gcmem_allocate(NNState* state, size_t newsize, size_t amount, bool retain)
 {
+    size_t oldsize;
     void* result;
+    oldsize = 0;
     if(!retain)
     {
         nn_gcmem_maybecollect(state, newsize - oldsize, newsize > oldsize);
     }
-    if(pointer == NULL)
-    {
-        result = nn_memory_malloc(newsize);
-    }
-    else
-    {
-        result = nn_memory_realloc(pointer, newsize);
-    }
+    result = nn_memory_malloc(newsize * amount);
     /*
     // just in case reallocation fails... computers ain't infinite!
     */
@@ -164,11 +154,6 @@ void* nn_gcmem_reallocate(NNState* state, void* pointer, size_t oldsize, size_t 
         abort();
     }
     return result;
-}
-
-void* nn_gcmem_allocate(NNState* state, size_t size, size_t amount, bool retain)
-{
-    return nn_gcmem_reallocate(state, NULL, 0, size * amount, retain);
 }
 
 void nn_gcmem_release(NNState* state, void* pointer, size_t oldsize)

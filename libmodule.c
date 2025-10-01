@@ -172,7 +172,7 @@ char* nn_import_resolvepath(NNState* state, const   char* modulename, const char
             nn_strbuf_appendstr(pathbuf, modulename);
             nn_strbuf_appendstr(pathbuf, NEON_CONFIG_FILEEXT);
         }
-        cstrpath = pathbuf->data; 
+        cstrpath = nn_strbuf_data(pathbuf); 
         fprintf(stderr, "import: trying '%s' ... ", cstrpath);
         if(nn_util_fsfileexists(state, cstrpath))
         {

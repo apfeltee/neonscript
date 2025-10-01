@@ -130,7 +130,7 @@ NNObjString* nn_printer_takestring(NNPrinter* pr)
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_takelen(state, pr->strbuf.data, pr->strbuf.length);
+    os = nn_string_takelen(state, nn_strbuf_mutdata(&pr->strbuf), nn_strbuf_length(&pr->strbuf));
     pr->stringtaken = true;
     return os;
 }
@@ -140,7 +140,7 @@ NNObjString* nn_printer_copystring(NNPrinter* pr)
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_copylen(state, pr->strbuf.data, pr->strbuf.length);
+    os = nn_string_copylen(state, nn_strbuf_data(&pr->strbuf), nn_strbuf_length(&pr->strbuf));
     return os;
 }
 

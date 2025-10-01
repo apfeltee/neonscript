@@ -1,11 +1,7 @@
 
 
-function foo(str, name="john", lastname="doe")
+class Foo
 {
-    printf("foo(str=%p, name=%p, lastname=%p)\n", str, name, lastname);
+    var blah = "stuff"
+
 }
-
-foo("hello world");
-foo("goodbye world", "jim");
-foo("seeya world", "petey", "dane");
-

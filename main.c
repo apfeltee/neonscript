@@ -155,7 +155,7 @@ static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
         {
             memset(varnamebuf, 0, kMaxVarName);
             sprintf(varnamebuf, "_%ld", (long)rescnt);
-            nn_state_execsource(state, state->topmodule, source->data, "<repl>", &dest);
+            nn_state_execsource(state, state->topmodule, nn_strbuf_data(source), "<repl>", &dest);
             dest = state->lastreplvalue;
             if(!nn_value_isnull(dest))
             {
@@ -412,6 +412,7 @@ int main(int argc, char* argv[], char** envp)
     char* nargv[128];
     optcontext_t options;
     NNState* state;
+    NNObjString* os;
     linocontext_t lictx;
     static optlongflags_t longopts[] =
     {
@@ -515,7 +516,6 @@ int main(int argc, char* argv[], char** envp)
         nargc++;
     }
     {
-        NNObjString* os;
         for(i=0; i<nargc; i++)
         {
             os = nn_string_copycstr(state, nargv[i]);
@@ -532,9 +532,10 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        filename = nn_string_getdata(nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0)));
-        fprintf(stderr, "nargv[0]=%s\n", filename);
-        ok = nn_cli_runfile(state,  filename);
+        os = nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0));
+        filename = nn_string_getdata(os);
+        fprintf(stderr, "nargv[0]=%s (%d islong=%d)\n", filename, nn_string_getlength(os), os->sbuf.islong);
+        ok = nn_cli_runfile(state, filename);
     }
     else
     {

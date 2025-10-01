@@ -20,7 +20,6 @@ NNObjString* nn_value_tostring(NNState* state, NNValue value)
     nn_printer_makestackstring(state, &pr);
     nn_printer_printvalue(&pr, value, false, true);
     s = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
     return s;
 }
 

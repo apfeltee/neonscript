@@ -265,6 +265,6 @@ for(var idx=0; idx<demo.length; idx++)
     {
         okstr = "OK  ";
     }
-    print(okstr, ": \"",k, "\" => ", m, "\n");
+    print(okstr, ": ",k.dump(), " => ", m, "\n");
 
 }

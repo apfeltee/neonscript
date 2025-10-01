@@ -43,7 +43,15 @@
 /**
 * if enabled, uses NaN tagging for values.
 */
-#define NEON_CONFIG_USENANTAGGING 1
+#define NEON_CONFIG_USENANTAGGING 0
+
+/*
+* set to 1 to use allocator (default).
+* stable, performs well, etc.
+* might not be portable beyond linux/windows, and a couple unix derivatives.
+* strives to use the least amount of memory (and does so very successfully).
+*/
+#define NEON_CONF_MEMUSEALLOCATOR 1
 
 /**
 * if enabled, most API calls will check for null pointers, and either
@@ -186,6 +194,8 @@
 /* how many catch() clauses per try statement */
 #define NEON_CONFIG_MAXEXCEPTHANDLERS (16)
 
+#define NN_CONF_STRBUFMAXSHORTLENGTH (50)
+
 /*
 // Maximum load factor of 12/14
 // see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
@@ -220,7 +230,7 @@
     ((capacity) < 4 ? 4 : (capacity)*2)
 
 #define nn_gcmem_growarray(state, typsz, pointer, oldcount, newcount) \
-    nn_gcmem_reallocate(state, pointer, (typsz) * (oldcount), (typsz) * (newcount), false)
+    nn_memory_realloc(pointer, (typsz) * (newcount))
 
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
@@ -280,13 +290,7 @@
     #define NEON_APIDEBUG(state, ...)
 #endif
 
-/*
-* set to 1 to use allocator (default).
-* stable, performs well, etc.
-* might not be portable beyond linux/windows, and a couple unix derivatives.
-* strives to use the least amount of memory (and does so very successfully).
-*/
-#define NEON_CONF_MEMUSEALLOCATOR 1
+
 
 #define NEON_CONF_OSPATHSIZE 1024
 
@@ -715,18 +719,28 @@ typedef NNValue(*nnbinopfunc_t)(double, double);
 
 typedef size_t (*mcitemhashfn_t)(void*);
 typedef bool (*mcitemcomparefn_t)(void*, void*);
+typedef int(*NNStrBufCharModFunc)(int);
 
 struct NNStringBuffer
 {
     bool isintern;
-
-    /* total length of this buffer */
-    size_t length;
-
+    bool islong;
     /* capacity should be >= length+1 to allow for \0 */
     size_t capacity;
+    size_t storedlength;
 
-    char* data;
+    struct
+    {
+        struct
+        {
+            /* total length of this buffer */
+            char* longstrdata;
+        } longstr;
+        struct
+        {
+            char shortstrdata[NN_CONF_STRBUFMAXSHORTLENGTH];
+        } shortstr;
+    };
 };
 
 typedef struct FSDirReader FSDirReader;

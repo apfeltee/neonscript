@@ -25,17 +25,27 @@ void nn_string_destroy(NNState* state, NNObjString* str)
     nn_gcmem_release(state, str, sizeof(NNObjString));
 }
 
+#if 0
 NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
 {
     uint32_t hsv;
     NNStringBuffer buf;
     hsv = nn_util_hashstring(chars, length);
-    memset(&buf, 0, sizeof(NNStringBuffer));
-    buf.data = (char*)chars;
-    buf.length = length;
+    nn_strbuf_makebasicemptystack(&buf, length);
+    nn_strbuf_setdata(&buf, (char*)chars);
+    nn_strbuf_setlength(&buf, length);
     buf.isintern = true;
     return nn_string_makefromstrbuf(state, &buf, hsv);
 }
+
+#else
+
+NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
+{
+    return nn_string_copylen(state, chars, length);
+}
+    
+#endif
 
 NNObjString* nn_string_intern(NNState* state, const char* chars)
 {
@@ -54,9 +64,9 @@ NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
         nn_memory_free(chars);
         return rs;
     }
-    memset(&buf, 0, sizeof(NNStringBuffer));
-    buf.data = chars;
-    buf.length = length;
+    nn_strbuf_makebasicemptystack(&buf, length);
+    nn_strbuf_setdata(&buf, chars);
+    nn_strbuf_setlength(&buf, length);
     return nn_string_makefromstrbuf(state, &buf, hsv);
 }
 
@@ -76,13 +86,11 @@ NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
     {
         return rs;
     }
-    memset(&buf, 0, sizeof(NNStringBuffer));
     nn_strbuf_makebasicemptystack(&buf, length);
     nn_strbuf_appendstrn(&buf, chars, length);
     rs = nn_string_makefromstrbuf(state, &buf, hsv);
     return rs;
 }
-
 
 NNObjString* nn_string_copycstr(NNState* state, const char* chars)
 {
@@ -96,34 +104,32 @@ NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)
 
 const char* nn_string_getdata(NNObjString* os)
 {
-    return os->sbuf.data;
+    return nn_strbuf_data(&os->sbuf);
 }
 
 char* nn_string_mutdata(NNObjString* os)
 {
-    return os->sbuf.data;
+    return nn_strbuf_mutdata(&os->sbuf);
 }
 
 size_t nn_string_getlength(NNObjString* os)
 {
-    return os->sbuf.length;
+    return nn_strbuf_length(&os->sbuf);
 }
 
 bool nn_string_setlength(NNObjString* os, size_t nlen)
 {
-    os->sbuf.length = nlen;
-    return true;
+    return nn_strbuf_setlength(&os->sbuf, nlen);
 }
 
 bool nn_string_set(NNObjString* os, size_t idx, int byte)
 {
-    os->sbuf.data[idx] = byte;
-    return true;
+    return nn_strbuf_set(&os->sbuf, idx, byte);
 }
 
 int nn_string_get(NNObjString* os, size_t idx)
 {
-    return os->sbuf.data[idx];
+    return nn_strbuf_get(&os->sbuf, idx);
 }
 
 bool nn_string_appendstringlen(NNObjString* os, const char* str, size_t len)
@@ -185,44 +191,6 @@ NNObjString* nn_string_substr(NNObjString* os, size_t start)
     return nn_string_substrlen(os, start, nn_string_getlength(os));
 }
 
-size_t nn_string_chompinplace(NNObjString* os)
-{
-    return nn_strbuf_chomp(&os->sbuf);
-}
-
-NNObjString* nn_string_chomp(NNObjString* os)
-{
-    NNObjString* r;
-    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
-    nn_string_chompinplace(r);
-    return r;
-}
-
-void nn_string_reverseinplace(NNObjString* os)
-{
-    return nn_strbuf_reverse(&os->sbuf);
-}
-
-NNObjString* nn_string_reverse(NNObjString* os)
-{
-    NNObjString* r;
-    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
-    nn_string_reverseinplace(r);
-    return r;
-}
-
-void nn_string_triminplace(NNObjString* os)
-{
-    nn_strbuf_triminplace(&os->sbuf);
-}
-
-NNObjString* nn_string_trim(NNObjString* os)
-{
-    NNObjString* r;
-    r = nn_string_copyobject(((NNObject*)os)->pstate, os);
-    nn_string_triminplace(r);
-    return r;
-}
 
 NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
@@ -1056,6 +1024,28 @@ NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(list);
 }
 
+NNValue nn_objfnstring_tobytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    size_t i;
+    size_t length;
+    NNObjArray* list;
+    NNObjString* string;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, "toBytes", argv, argc);
+    NEON_ARGS_CHECKCOUNT(&check, 0);
+    string = nn_value_asstring(thisval);
+    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
+    length = nn_string_getlength(string);
+    if(length > 0)
+    {
+        for(i = 0; i < length; i++)
+        {
+            nn_array_push(list, nn_value_makenumber(nn_string_get(string, i)));
+        }
+    }
+    return nn_value_fromobject(list);
+}
+
 NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
@@ -1234,7 +1224,7 @@ NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, s
             totallength++;
         }
     }
-    return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(result->data, result->length)));
+    return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(nn_strbuf_data(result), nn_strbuf_length(result))));
 }
 
 NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -1323,6 +1313,52 @@ NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
+NNValue nn_objfnstring_appendany(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    size_t i;
+    NNValue arg;
+    NNObjString* oss;
+    NNObjString* selfstring;
+    selfstring = nn_value_asstring(thisval);
+    for(i = 0; i < argc; i++)
+    {
+        arg = argv[i];
+        if(nn_value_isnumber(arg))
+        {
+            nn_string_appendbyte(selfstring, nn_value_asnumber(arg));
+        }
+        else
+        {
+            oss = nn_value_tostring(state, arg);
+            nn_string_appendobject(selfstring, oss);
+        }
+    }
+    /* pop the argument list */
+    return thisval;
+}
+
+NNValue nn_objfnstring_appendbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    size_t i;
+    NNValue arg;
+    NNObjString* oss;
+    NNObjString* selfstring;
+    selfstring = nn_value_asstring(thisval);
+    for(i = 0; i < argc; i++)
+    {
+        arg = argv[i];
+        if(nn_value_isnumber(arg))
+        {
+            nn_string_appendbyte(selfstring, nn_value_asnumber(arg));
+        }
+        else
+        {
+            NEON_RETURNERROR("appendbytes expects number types");
+        }
+    }
+    /* pop the argument list */
+    return thisval;
+}
 
 void nn_state_installobjectstring(NNState* state)
 {
@@ -1345,6 +1381,7 @@ void nn_state_installobjectstring(NNState* state)
         {"count", nn_objfnstring_count},
         {"toNumber", nn_objfnstring_tonumber},
         {"toList", nn_objfnstring_tolist},
+        {"toBytes", nn_objfnstring_tobytes},
         {"lpad", nn_objfnstring_lpad},
         {"rpad", nn_objfnstring_rpad},
         {"replace", nn_objfnstring_replace},
@@ -1364,6 +1401,10 @@ void nn_state_installobjectstring(NNState* state)
         {"utf8Bytes", nn_objfnstring_utf8codepoints},
         {"match", nn_objfnstring_matchcapture},
         {"matches", nn_objfnstring_matchonly},
+        {"append", nn_objfnstring_appendany},
+        {"push", nn_objfnstring_appendany},
+        {"appendbytes", nn_objfnstring_appendbytes},
+        {"appendbyte", nn_objfnstring_appendbytes},
         {NULL, NULL},
     };
     nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);

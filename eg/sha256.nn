@@ -220,7 +220,7 @@ function runtest()
         {
             okstr = "OK  ";
         }
-        println("", okstr, ": '", rawstr, "' => '", actual, "' (expected: ", expected, ")")
+        println("", okstr, ": ", rawstr.dump(), " => ", actual, " (expected: ", expected, ")")
     }
 }
 

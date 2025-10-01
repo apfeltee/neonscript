@@ -1076,7 +1076,6 @@ void nn_astparser_advance(NNAstParser* prs)
     }
 }
 
-
 bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message)
 {
     if(nn_astparser_istype(prs->currtoken.type, t))
@@ -3575,6 +3574,14 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
         if(nn_astparser_match(prs, NEON_ASTTOK_KWSTATIC))
         {
             isstatic = true;
+        }
+        if(nn_astparser_match(prs, NEON_ASTTOK_KWVAR))
+        {
+            /*
+            * TODO:
+            * using 'var ... =' in a class is actually semantically superfluous,
+            * but not incorrect either. maybe warn that this syntax is deprecated?
+            */
         }
         if(!nn_astparser_parsefield(prs, &nametoken, &havenametoken, isstatic))
         {
