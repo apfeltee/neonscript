@@ -1,5 +1,5 @@
 
-#include "neon.h"
+#include "priv.h"
 
 NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {

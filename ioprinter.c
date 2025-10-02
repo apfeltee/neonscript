@@ -68,7 +68,7 @@ NNPrinter* nn_printer_makestring(NNState* state)
 {
     NNPrinter* pr;
     pr = nn_printer_makeundefined(state, NEON_PRMODE_STRING);
-    nn_strbuf_makebasicemptystack(&pr->strbuf, 0);
+    nn_strbuf_makebasicemptystack(pr->strbuf, NULL, 0);
     return pr;
 }
 
@@ -85,7 +85,7 @@ void nn_printer_makestackstring(NNState* state, NNPrinter* pr)
     nn_printer_initvars(state, pr, NEON_PRMODE_STRING);
     pr->fromstack = true;
     pr->wrmode = NEON_PRMODE_STRING;
-    nn_strbuf_makebasicemptystack(&pr->strbuf, 0);
+    pr->strbuf = nn_strbuf_makebasicempty(NULL, 0);
 }
 
 void nn_printer_destroy(NNPrinter* pr)
@@ -106,7 +106,7 @@ void nn_printer_destroy(NNPrinter* pr)
     {
         if(!pr->stringtaken)
         {
-            nn_strbuf_destroy(&pr->strbuf);
+            nn_strbuf_destroy(pr->strbuf);
         }
     }
     else if(pr->wrmode == NEON_PRMODE_FILE)
@@ -130,7 +130,7 @@ NNObjString* nn_printer_takestring(NNPrinter* pr)
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_takelen(state, nn_strbuf_mutdata(&pr->strbuf), nn_strbuf_length(&pr->strbuf));
+    os = nn_string_takelen(state, nn_strbuf_data(pr->strbuf), nn_strbuf_length(pr->strbuf));
     pr->stringtaken = true;
     return os;
 }
@@ -140,7 +140,7 @@ NNObjString* nn_printer_copystring(NNPrinter* pr)
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_copylen(state, nn_strbuf_data(&pr->strbuf), nn_strbuf_length(&pr->strbuf));
+    os = nn_string_copylen(state, nn_strbuf_data(pr->strbuf), nn_strbuf_length(pr->strbuf));
     return os;
 }
 
@@ -160,7 +160,7 @@ bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
         }
         else if(pr->wrmode == NEON_PRMODE_STRING)
         {
-            nn_strbuf_appendstrn(&pr->strbuf, estr, elen);
+            nn_strbuf_appendstrn(pr->strbuf, estr, elen);
         }
         else
         {
@@ -300,7 +300,7 @@ bool nn_printer_vwritefmttostring(NNPrinter* pr, const char* fmt, va_list va)
         nn_printer_writestringl(pr, buf, wsz);
         nn_memory_free(buf);
     #else
-        nn_strbuf_appendformatv(&pr->strbuf, fmt, va);
+        nn_strbuf_appendformatv(pr->strbuf, fmt, va);
     #endif
     return true;
 }

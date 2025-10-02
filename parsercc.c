@@ -1,9 +1,14 @@
 
 #include "neon.h"
 
+/* how many switch cases per switch statement */
+#define NEON_CONFIG_ASTMAXSWITCHCASES (32)
+
+/* max number of function parameters */
+#define NEON_CONFIG_ASTMAXFUNCPARAMS (32)
+
 static const char* g_strthis = "this";
 static const char* g_strsuper = "super";
-
 
 void nn_blob_init(NNState* state, NNBlob* blob)
 {
@@ -24,7 +29,7 @@ void nn_blob_push(NNBlob* blob, NNInstruction ins)
     {
         oldcapacity = blob->capacity;
         blob->capacity = GROW_CAPACITY(oldcapacity);
-        blob->instrucs = (NNInstruction*)nn_gcmem_growarray(state, sizeof(NNInstruction), blob->instrucs, oldcapacity, blob->capacity);
+        blob->instrucs = (NNInstruction*)nn_memory_realloc(blob->instrucs, blob->capacity * sizeof(NNInstruction));
     }
     blob->instrucs[blob->count] = ins;
     blob->count++;
@@ -4284,7 +4289,7 @@ void nn_astparser_parsebreakstmt(NNAstParser* prs)
             nn_astparser_raiseerror(prs, "'break' can only be used in a loop");
         }
         /* discard local variables created in the loop */
-        /*
+        #if 0
         int i;
         for(i = prs->currentfunccompiler->localcount - 1; i >= 0 && prs->currentfunccompiler->locals[i].depth >= prs->currentfunccompiler->scopedepth; i--)
         {
@@ -4297,7 +4302,7 @@ void nn_astparser_parsebreakstmt(NNAstParser* prs)
                 nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
             }
         }
-        */
+        #endif
         nn_astparser_discardlocals(prs, prs->innermostloopscopedepth + 1);
         nn_astemit_emitjump(prs, NEON_OP_BREAK_PL);
     }

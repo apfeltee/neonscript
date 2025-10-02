@@ -43,15 +43,8 @@
 /**
 * if enabled, uses NaN tagging for values.
 */
-#define NEON_CONFIG_USENANTAGGING 0
+#define NEON_CONFIG_USENANTAGGING 1
 
-/*
-* set to 1 to use allocator (default).
-* stable, performs well, etc.
-* might not be portable beyond linux/windows, and a couple unix derivatives.
-* strives to use the least amount of memory (and does so very successfully).
-*/
-#define NEON_CONF_MEMUSEALLOCATOR 1
 
 /**
 * if enabled, most API calls will check for null pointers, and either
@@ -170,12 +163,6 @@
     #define DEBUG_STACK 0
 #endif
 
-/* initial amount of frames (will grow dynamically if needed) */
-#define NEON_CONFIG_INITFRAMECOUNT (32)
-
-/* initial amount of stack values (will grow dynamically if needed) */
-#define NEON_CONFIG_INITSTACKCOUNT (32 * 1)
-
 /* how many locals per function can be compiled */
 #define NEON_CONFIG_ASTMAXLOCALS (64*2)
 
@@ -194,7 +181,7 @@
 /* how many catch() clauses per try statement */
 #define NEON_CONFIG_MAXEXCEPTHANDLERS (16)
 
-#define NN_CONF_STRBUFMAXSHORTLENGTH (50)
+#define NN_CONF_STRBUFMAXSHORTLENGTH (64)
 
 /*
 // Maximum load factor of 12/14
@@ -228,9 +215,6 @@
 */
 #define GROW_CAPACITY(capacity) \
     ((capacity) < 4 ? 4 : (capacity)*2)
-
-#define nn_gcmem_growarray(state, typsz, pointer, oldcount, newcount) \
-    nn_memory_realloc(pointer, (typsz) * (newcount))
 
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
@@ -729,17 +713,10 @@ struct NNStringBuffer
     size_t capacity;
     size_t storedlength;
 
-    struct
+    union
     {
-        struct
-        {
-            /* total length of this buffer */
-            char* longstrdata;
-        } longstr;
-        struct
-        {
-            char shortstrdata[NN_CONF_STRBUFMAXSHORTLENGTH];
-        } shortstr;
+        char* longstrdata;
+        char shortstrdata[NN_CONF_STRBUFMAXSHORTLENGTH];
     };
 };
 
@@ -807,7 +784,7 @@ struct NNPrinter
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
     NNState* pstate;
-    NNStringBuffer strbuf;
+    NNStringBuffer* strbuf;
     FILE* handle;
 };
 

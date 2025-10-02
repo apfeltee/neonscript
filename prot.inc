@@ -332,35 +332,30 @@ size_t nn_strutil_countchar(const char *str, char c);
 size_t nn_strutil_split(const char *splitat, const char *sourcetxt, char ***result);
 void nn_strutil_callboundscheckinsert(NNStringBuffer *sb, size_t pos, const char *file, int line);
 void nn_strutil_callboundscheckreadrange(NNStringBuffer *sb, size_t start, size_t len, const char *file, int line);
-NNStringBuffer *nn_strbuf_makefromptr(NNStringBuffer *sb, size_t len);
-bool nn_strbuf_initbasicempty(NNStringBuffer *sb, size_t len, bool onstack);
-bool nn_strbuf_makebasicemptystack(NNStringBuffer *sb, size_t len);
-NNStringBuffer *nn_strbuf_makebasicempty(size_t len);
-bool nn_strbuf_destroyfromstack(NNStringBuffer *sb);
-bool nn_strbuf_destroy(NNStringBuffer *sb);
-bool nn_strbuf_destroyfromptr(NNStringBuffer *sb);
-NNStringBuffer *nn_strbuf_makefromstring(const char *str, size_t slen);
-NNStringBuffer *nn_strbuf_makeclone(NNStringBuffer *sb);
-void nn_strbuf_reset(NNStringBuffer *sb);
-void nn_strutil_cbufcapacity(char **buf, size_t *sizeptr, size_t len);
-bool nn_strbuf_resize(NNStringBuffer *sb, size_t newlen);
-void nn_strbuf_ensurecapacity(NNStringBuffer *sb, size_t len);
-void nn_strbuf_ensurecapacityupdateptr(NNStringBuffer *sb, size_t size, const char **ptr);
-bool nn_strbuf_containschar(NNStringBuffer *sb, char ch);
 void nn_strutil_faststrncat(char *dest, const char *src, size_t *size);
 size_t nn_strutil_strreplace1(char **str, size_t selflen, const char *findstr, size_t findlen, const char *substr, size_t sublen);
 size_t nn_strutil_strrepcount(const char *str, size_t slen, const char *findstr, size_t findlen, size_t sublen);
 void nn_strutil_strreplace2(char *target, size_t tgtlen, const char *findstr, size_t findlen, const char *substr, size_t sublen);
-bool nn_strbuf_fullreplace(NNStringBuffer *sb, const char *findstr, size_t findlen, const char *substr, size_t sublen);
 bool nn_strutil_inpreplhelper(char *dest, const char *src, size_t srclen, int findme, const char *substr, size_t sublen, size_t maxlen, size_t *dlen);
 size_t nn_strutil_inpreplace(char *target, size_t tgtlen, int findme, const char *substr, size_t sublen, size_t maxlen);
-bool nn_strbuf_charreplace(NNStringBuffer *sb, int findme, const char *substr, size_t sublen);
+NNStringBuffer *nn_strbuf_makelongfromptr(NNStringBuffer *sb, size_t len);
+bool nn_strbuf_initbasicempty(NNStringBuffer *sb, const char *str, size_t len, bool onstack);
+bool nn_strbuf_makebasicemptystack(NNStringBuffer *sb, const char *str, size_t len);
+NNStringBuffer *nn_strbuf_makebasicempty(const char *str, size_t len);
+bool nn_strbuf_destroyfromstack(NNStringBuffer *sb);
+bool nn_strbuf_destroy(NNStringBuffer *sb);
+bool nn_strbuf_destroyfromptr(NNStringBuffer *sb);
+void nn_strbuf_reset(NNStringBuffer *sb);
+bool nn_strbuf_ensurecapacity(NNStringBuffer *sb, size_t len);
+bool nn_strbuf_resize(NNStringBuffer *sb, size_t newlen);
 bool nn_strbuf_setlength(NNStringBuffer *sb, size_t len);
 bool nn_strbuf_setdata(NNStringBuffer *sb, char *str);
 size_t nn_strbuf_length(NNStringBuffer *sb);
 const char *nn_strbuf_data(NNStringBuffer *sb);
-char *nn_strbuf_mutdata(NNStringBuffer *sb);
 int nn_strbuf_get(NNStringBuffer *sb, size_t idx);
+bool nn_strbuf_containschar(NNStringBuffer *sb, char ch);
+bool nn_strbuf_fullreplace(NNStringBuffer *sb, const char *findstr, size_t findlen, const char *substr, size_t sublen);
+bool nn_strbuf_charreplace(NNStringBuffer *sb, int findme, const char *substr, size_t sublen);
 bool nn_strbuf_set(NNStringBuffer *sb, size_t idx, int b);
 bool nn_strbuf_appendchar(NNStringBuffer *sb, int c);
 bool nn_strbuf_appendstrn(NNStringBuffer *sb, const char *str, size_t len);
@@ -391,7 +386,7 @@ int nn_strbuf_appendformatnoterm(NNStringBuffer *sb, size_t pos, const char *fmt
 void nn_strbuf_triminplace(NNStringBuffer *sb);
 void nn_strbuf_trimleftinplace(NNStringBuffer *sb, const char *list);
 void nn_strbuf_trimrightinplace(NNStringBuffer *sb, const char *list);
-NNObjString *nn_string_makefromstrbuf(NNState *state, NNStringBuffer *buf, uint32_t hsv);
+NNObjString *nn_string_makefromstrbuf(NNState *state, NNStringBuffer buf, uint32_t hsv);
 void nn_string_destroy(NNState *state, NNObjString *str);
 NNObjString *nn_string_internlen(NNState *state, const char *chars, int length);
 NNObjString *nn_string_intern(NNState *state, const char *chars);
@@ -451,6 +446,7 @@ NNValue nn_objfnstring_count(NNState *state, NNValue thisval, NNValue *argv, siz
 NNValue nn_objfnstring_tonumber(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_isascii(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_tolist(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnstring_tobytes(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_lpad(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_rpad(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_split(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
@@ -458,6 +454,8 @@ NNValue nn_objfnstring_replace(NNState *state, NNValue thisval, NNValue *argv, s
 NNValue nn_objfnstring_iter(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_itern(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 NNValue nn_objfnstring_each(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnstring_appendany(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
+NNValue nn_objfnstring_appendbytes(NNState *state, NNValue thisval, NNValue *argv, size_t argc);
 void nn_state_installobjectstring(NNState *state);
 /* main.c */
 int main(int argc, char *argv[], char **envp);
@@ -837,6 +835,7 @@ bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval,
 /* neon.h */
 /* optparse.h */
 /* oslib.h */
+/* priv.h */
 /* replinc.h */
 int main(int argc, char *argv[], char **envp);
 int replmain(const char *file);
@@ -850,7 +849,6 @@ char *nn_strutil_trim(char *str);
 size_t nn_strutil_chomp(char *str, size_t len);
 size_t nn_strutil_countchar(const char *str, char c);
 size_t nn_strutil_split(const char *splitat, const char *sourcetxt, char ***result);
-void nn_strutil_cbufcapacity(char **buf, size_t *sizeptr, size_t len);
 void nn_strutil_faststrncat(char *dest, const char *src, size_t *size);
 size_t nn_strutil_strreplace1(char **str, size_t selflen, const char *findstr, size_t findlen, const char *substr, size_t sublen);
 size_t nn_strutil_strrepcount(const char *str, size_t slen, const char *findstr, size_t findlen, size_t sublen);

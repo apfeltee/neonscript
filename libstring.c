@@ -7,11 +7,11 @@
 * TODO: get rid of unused functions
 */
 
-NNObjString* nn_string_makefromstrbuf(NNState* state, NNStringBuffer* buf, uint32_t hsv)
+NNObjString* nn_string_makefromstrbuf(NNState* state, NNStringBuffer buf, uint32_t hsv)
 {
     NNObjString* rs;
     rs = (NNObjString*)nn_object_allocobject(state, sizeof(NNObjString), NEON_OBJTYPE_STRING, false);
-    rs->sbuf = *buf;
+    rs->sbuf = buf;
     rs->hashvalue = hsv;
     nn_vm_stackpush(state, nn_value_fromobject(rs));
     nn_valtable_set(&state->allocatedstrings, nn_value_fromobject(rs), nn_value_makenull());
@@ -31,13 +31,10 @@ NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
     uint32_t hsv;
     NNStringBuffer buf;
     hsv = nn_util_hashstring(chars, length);
-    nn_strbuf_makebasicemptystack(&buf, length);
-    nn_strbuf_setdata(&buf, (char*)chars);
-    nn_strbuf_setlength(&buf, length);
+    nn_strbuf_makebasicemptystack(&buf, chars, length);
     buf.isintern = true;
-    return nn_string_makefromstrbuf(state, &buf, hsv);
+    return nn_string_makefromstrbuf(state, buf, hsv);
 }
-
 #else
 
 NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
@@ -54,20 +51,24 @@ NNObjString* nn_string_intern(NNState* state, const char* chars)
 
 NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
 {
-    uint32_t hsv;
-    NNObjString* rs;
-    NNStringBuffer buf;
-    hsv = nn_util_hashstring(chars, length);
-    rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
-    if(rs != NULL)
-    {
-        nn_memory_free(chars);
-        return rs;
-    }
-    nn_strbuf_makebasicemptystack(&buf, length);
-    nn_strbuf_setdata(&buf, chars);
-    nn_strbuf_setlength(&buf, length);
-    return nn_string_makefromstrbuf(state, &buf, hsv);
+    #if 0
+        uint32_t hsv;
+        NNObjString* rs;
+        NNStringBuffer buf;
+        hsv = nn_util_hashstring(chars, length);
+        rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
+        if(rs != NULL)
+        {
+            nn_memory_free(chars);
+            return rs;
+        }
+        nn_strbuf_makebasicemptystack(&buf, NULL, length);
+        nn_strbuf_setdata(&buf, chars);
+        nn_strbuf_setlength(&buf, length);
+        return nn_string_makefromstrbuf(state, buf, hsv);
+    #else
+        return nn_string_copylen(state, chars, length);
+    #endif
 }
 
 NNObjString* nn_string_takecstr(NNState* state, char* chars)
@@ -86,9 +87,9 @@ NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
     {
         return rs;
     }
-    nn_strbuf_makebasicemptystack(&buf, length);
-    nn_strbuf_appendstrn(&buf, chars, length);
-    rs = nn_string_makefromstrbuf(state, &buf, hsv);
+    nn_strbuf_makebasicemptystack(&buf, chars, length);
+    rs = nn_string_makefromstrbuf(state, buf, hsv);
+    //fprintf(stderr, "rs: from: (%d) <<%.*s>> --> (%d) <<%.*s>>\n", (int)length, (int)length, chars, (int)nn_string_getlength(rs), (int)nn_string_getlength(rs), nn_string_getdata(rs));
     return rs;
 }
 
@@ -1188,7 +1189,7 @@ NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, s
 {
     size_t i;
     size_t totallength;
-    NNStringBuffer* result;
+    NNStringBuffer result;
     NNObjString* substr;
     NNObjString* string;
     NNObjString* repsubstr;
@@ -1205,7 +1206,7 @@ NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, s
     {
         return nn_value_fromobject(nn_string_copylen(state, nn_string_getdata(string), nn_string_getlength(string)));
     }
-    result = nn_strbuf_makebasicempty(0);
+    nn_strbuf_makebasicemptystack(&result, NULL, 0);
     totallength = 0;
     for(i = 0; i < nn_string_getlength(string); i++)
     {
@@ -1213,18 +1214,18 @@ NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, s
         {
             if(nn_string_getlength(substr) > 0)
             {
-                nn_strbuf_appendstrn(result, nn_string_getdata(repsubstr), nn_string_getlength(repsubstr));
+                nn_strbuf_appendstrn(&result, nn_string_getdata(repsubstr), nn_string_getlength(repsubstr));
             }
             i += nn_string_getlength(substr) - 1;
             totallength += nn_string_getlength(repsubstr);
         }
         else
         {
-            nn_strbuf_appendchar(result, nn_string_get(string, i));
+            nn_strbuf_appendchar(&result, nn_string_get(string, i));
             totallength++;
         }
     }
-    return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(nn_strbuf_data(result), nn_strbuf_length(result))));
+    return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(nn_strbuf_data(&result), nn_strbuf_length(&result))));
 }
 
 NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)

@@ -469,21 +469,17 @@ NNStringBuffer* nn_strbuf_makelongfromptr(NNStringBuffer* sb, size_t len)
 {
     sb->isintern = false;
     sb->storedlength = 0;
-    #if 1
-        sb->capacity = ROUNDUP2POW(len + 1);
-    #else
-        sb->capacity = len + 1;
-    #endif
-    sb->longstr.longstrdata = (char*)nn_memory_malloc(sb->capacity);
-    if(!sb->longstr.longstrdata)
+    sb->capacity = ROUNDUP2POW(len + 1);
+    sb->longstrdata = (char*)nn_memory_malloc(sb->capacity);
+    if(!sb->longstrdata)
     {
         return NULL;
     }
-    sb->longstr.longstrdata[0] = '\0';
+    sb->longstrdata[0] = '\0';
     return sb;
 }
 
-bool nn_strbuf_initbasicempty(NNStringBuffer* sb, size_t len, bool onstack)
+bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, bool onstack)
 {
     memset(sb, 0, sizeof(NNStringBuffer));
     sb->isintern = false;
@@ -496,7 +492,7 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, size_t len, bool onstack)
     #endif
     if(sb->islong)
     {
-        sb->longstr.longstrdata = NULL;
+        sb->longstrdata = NULL;
         if(!nn_strbuf_makelongfromptr(sb, len))
         {
             if(!onstack)
@@ -506,15 +502,30 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, size_t len, bool onstack)
             return false;
         }
     }
+    else
+    {
+        memset(sb->shortstrdata, 0, NN_CONF_STRBUFMAXSHORTLENGTH);
+    }
+    if(str != NULL)
+    {
+        if(sb->islong)
+        {
+            return nn_strbuf_appendstrn(sb, str, len);
+        }
+        else
+        {
+            memcpy(sb->shortstrdata, str, len);
+        }
+    }
     return true;
 }
 
-bool nn_strbuf_makebasicemptystack(NNStringBuffer* sb, size_t len)
+bool nn_strbuf_makebasicemptystack(NNStringBuffer* sb, const char* str, size_t len)
 {
-    return nn_strbuf_initbasicempty(sb, len, true);
+    return nn_strbuf_initbasicempty(sb, str, len, true);
 }
 
-NNStringBuffer* nn_strbuf_makebasicempty(size_t len)
+NNStringBuffer* nn_strbuf_makebasicempty(const char* str, size_t len)
 {
     NNStringBuffer* sb;
     sb = (NNStringBuffer*)nn_memory_malloc(sizeof(NNStringBuffer));
@@ -522,7 +533,7 @@ NNStringBuffer* nn_strbuf_makebasicempty(size_t len)
     {
         return NULL;
     }
-    if(!nn_strbuf_initbasicempty(sb, len, false))
+    if(!nn_strbuf_initbasicempty(sb, str, len, false))
     {
         return NULL;
     }
@@ -537,7 +548,7 @@ bool nn_strbuf_destroyfromstack(NNStringBuffer* sb)
     }
     if(sb->islong)
     {
-        nn_memory_free(sb->longstr.longstrdata);
+        nn_memory_free(sb->longstrdata);
     }
     return true;
 }
@@ -548,7 +559,7 @@ bool nn_strbuf_destroy(NNStringBuffer* sb)
     {
         if(sb->islong)
         {
-            nn_memory_free(sb->longstr.longstrdata);
+            nn_memory_free(sb->longstrdata);
         }
     }
     nn_memory_free(sb);
@@ -561,7 +572,7 @@ bool nn_strbuf_destroyfromptr(NNStringBuffer* sb)
     {
         if(sb->islong)
         {
-            nn_memory_free(sb->longstr.longstrdata);
+            nn_memory_free(sb->longstrdata);
         }
     }
     memset(sb, 0, sizeof(*sb));
@@ -573,73 +584,24 @@ void nn_strbuf_reset(NNStringBuffer* sb)
 {
     if(sb->islong)
     {
-        if(sb->longstr.longstrdata)
+        if(sb->longstrdata)
         {
-            memset(sb->longstr.longstrdata, 0, sb->storedlength);
+            memset(sb->longstrdata, 0, sb->storedlength);
         }
     }
     else
     {
-        memset(sb->shortstr.shortstrdata, 0, NN_CONF_STRBUFMAXSHORTLENGTH);
+        memset(sb->shortstrdata, 0, NN_CONF_STRBUFMAXSHORTLENGTH);
     }
     sb->storedlength = 0;
 }
 
 
-/*
-// Resize the buffer to have capacity to hold a string of length newlen
-// (+ a null terminating character).  Can also be used to downsize the buffer's
-// memory usage.  Returns 1 on success, 0 on failure.
-*/
-bool nn_strbuf_resize(NNStringBuffer* sb, size_t newlen)
-{
-    bool mustcopy;
-    size_t capacity;
-    char* newbuf;
-    char* tmpbuf;
-    mustcopy = false;
-    sb->isintern = false;    
-    tmpbuf = NULL;
-    if(!sb->islong)
-    {
-        if((newlen + 1) >= NN_CONF_STRBUFMAXSHORTLENGTH)
-        {
-            mustcopy = true;
-            tmpbuf = sb->shortstr.shortstrdata;
-        }
-        else
-        {
-            return true;
-        }
-    }
-    sb->islong = true;
-    capacity = ROUNDUP2POW(newlen + 1);
-    newbuf = (char*)nn_memory_realloc(sb->longstr.longstrdata, capacity * sizeof(char));
-    if(newbuf == NULL)
-    {
-        return false;
-    }
-    sb->longstr.longstrdata = newbuf;
-    if(mustcopy)
-    {
-        fprintf(stderr, "resize: copying from short ((%d) <<%.*s>>)\n", sb->storedlength, sb->storedlength, tmpbuf);
-        memcpy(sb->longstr.longstrdata, tmpbuf, sb->storedlength);
-    }
-    sb->capacity = capacity;
-    if(sb->storedlength > newlen)
-    {
-        /* Buffer was shrunk - re-add null byte */
-        sb->storedlength = newlen;
-        sb->longstr.longstrdata[sb->storedlength] = '\0';
-    }
-    fprintf(stderr, "new long string (%d): %.*s\n", sb->storedlength, sb->storedlength, sb->longstr.longstrdata);
-    return true;
-}
-
 /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
-void nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
+bool nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
 {
     bool mustcopy;
+    char* ptr;
     char* tmpbuf;
     mustcopy = false;
     tmpbuf = NULL;
@@ -649,11 +611,12 @@ void nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
         {
             sb->islong = true;
             mustcopy = true;
-            tmpbuf = sb->shortstr.shortstrdata;
+            tmpbuf = sb->shortstrdata;
+            //fprintf(stderr, "must copy: shortstrdata: (%d) <<%.*s>>\n", (int)sb->storedlength, (int)sb->storedlength, tmpbuf);
         }
         else
         {
-            return;
+            return true;
         }
     }
     /* for nul byte */
@@ -662,18 +625,37 @@ void nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
     {
         sb->capacity = ROUNDUP2POW(len);
         /* fprintf(stderr, "sizeptr=%ld\n", sb->capacity); */
-        sb->longstr.longstrdata = (char*)nn_memory_realloc(sb->longstr.longstrdata, sb->capacity);
-        if(sb->longstr.longstrdata == NULL)
+        if(mustcopy /*|| sb->longstrdata == NULL*/)
+        {
+            ptr = (char*)nn_memory_malloc(sb->capacity);
+        }
+        else
+        {
+            ptr = (char*)nn_memory_realloc(sb->longstrdata, sb->capacity);
+        }
+        if(ptr == NULL)
         {
             fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
-            abort();
+            return false;
         }
         if(mustcopy)
         {
-            fprintf(stderr, "ensurecapacity: copying from short ((%d) <<%.*s>>)\n", sb->storedlength, sb->storedlength, tmpbuf);
-            memcpy(sb->longstr.longstrdata, tmpbuf, sb->storedlength);
+            //fprintf(stderr, "ensurecapacity: copying from short ((%d) <<%.*s>>)\n", (int)sb->storedlength, (int)sb->storedlength, tmpbuf);
+            memcpy(ptr, tmpbuf, sb->storedlength);
         }
+        sb->longstrdata = ptr;
     }
+    return true;
+}
+
+/*
+// Resize the buffer to have capacity to hold a string of length newlen
+// (+ a null terminating character).  Can also be used to downsize the buffer's
+// memory usage.  Returns 1 on success, 0 on failure.
+*/
+bool nn_strbuf_resize(NNStringBuffer* sb, size_t newlen)
+{
+    return nn_strbuf_ensurecapacity(sb, newlen);
 }
 
 bool nn_strbuf_setlength(NNStringBuffer* sb, size_t len)
@@ -685,7 +667,7 @@ bool nn_strbuf_setlength(NNStringBuffer* sb, size_t len)
 bool nn_strbuf_setdata(NNStringBuffer* sb, char* str)
 {
     sb->islong = true;
-    sb->longstr.longstrdata = str;
+    sb->longstrdata = str;
     return true;
 }
 
@@ -698,27 +680,23 @@ const char* nn_strbuf_data(NNStringBuffer* sb)
 {
     if(sb->islong)
     {
-        return sb->longstr.longstrdata;
+        return sb->longstrdata;
     }
-    return sb->shortstr.shortstrdata;
+    return sb->shortstrdata;
 }
 
-char* nn_strbuf_mutdata(NNStringBuffer* sb)
-{
-    if(sb->islong)
-    {
-        return sb->longstr.longstrdata;
-    }
-    return sb->shortstr.shortstrdata;
-}
+#define nn_strbuf_mutdata(sb) \
+    ( \
+        ((sb)->islong) ? ((sb)->longstrdata) : ((sb)->shortstrdata) \
+    )
 
 int nn_strbuf_get(NNStringBuffer* sb, size_t idx)
 {
     if(sb->islong)
     {
-        return sb->longstr.longstrdata[idx];
+        return sb->longstrdata[idx];
     }
-    return sb->shortstr.shortstrdata[idx];
+    return sb->shortstrdata[idx];
 }
 
 bool nn_strbuf_containschar(NNStringBuffer* sb, char ch)
@@ -747,7 +725,7 @@ bool nn_strbuf_fullreplace(NNStringBuffer* sb, const char* findstr, size_t findl
     {
         return false;
     }
-    nn_strbuf_resize(sb, sb->capacity + needed);
+    nn_strbuf_ensurecapacity(sb, sb->capacity + needed);
     data = nn_strbuf_mutdata(sb);
     nl = nn_strutil_strreplace1(&data, sb->storedlength, findstr, findlen, substr, sublen);
     sb->storedlength = nl;
@@ -769,7 +747,7 @@ bool nn_strbuf_charreplace(NNStringBuffer* sb, int findme, const char* substr, s
             needed += sublen;
         }
     }
-    if(!nn_strbuf_resize(sb, needed+1))
+    if(!nn_strbuf_ensurecapacity(sb, needed+1))
     {
         return false;
     }
@@ -784,8 +762,8 @@ bool nn_strbuf_charreplace(NNStringBuffer* sb, int findme, const char* substr, s
 bool nn_strbuf_set(NNStringBuffer* sb, size_t idx, int b)
 {
     char* data;
-    data = nn_strbuf_mutdata(sb);
     nn_strbuf_ensurecapacity(sb, idx);
+    data = nn_strbuf_mutdata(sb);
     data[idx] = b;
     return true;
 }
@@ -794,8 +772,8 @@ bool nn_strbuf_set(NNStringBuffer* sb, size_t idx, int b)
 bool nn_strbuf_appendchar(NNStringBuffer* sb, int c)
 {
     char* data;
-    data = nn_strbuf_mutdata(sb);
     nn_strbuf_ensurecapacity(sb, sb->storedlength + 1);
+    data = nn_strbuf_mutdata(sb);
     data[sb->storedlength] = c;
     data[sb->storedlength + 1] = '\0';
     sb->storedlength++;
@@ -812,10 +790,18 @@ bool nn_strbuf_appendstrn(NNStringBuffer* sb, const char* str, size_t len)
     if(len > 0)
     {
         nn_strbuf_ensurecapacity(sb, sb->storedlength + len);
-        data = nn_strbuf_mutdata(sb);
-        memcpy(data + sb->storedlength, str, len);
-        sb->storedlength = sb->storedlength + len;
-        data[sb->storedlength] = '\0';
+        #if 1
+            data = nn_strbuf_mutdata(sb);
+            memcpy(data + sb->storedlength, str, len);
+            sb->storedlength = sb->storedlength + len;
+            data[sb->storedlength] = '\0';
+        #else
+            size_t i;
+            for(i=0; i<len; i++)
+            {
+                nn_strbuf_appendchar(sb, str[i]);
+            }
+        #endif
     }
     return true;
 }
@@ -905,7 +891,6 @@ bool nn_strbuf_appendnumulong(NNStringBuffer* sb, unsigned long value)
     size_t numdigits;
     char* dst;
     char* data;
-    data = nn_strbuf_mutdata(sb);
     /* Append two digits at a time */
     static const char* digits = (
         "0001020304050607080910111213141516171819"
@@ -917,6 +902,7 @@ bool nn_strbuf_appendnumulong(NNStringBuffer* sb, unsigned long value)
     numdigits = nn_strutil_numofdigits(value);
     pos = numdigits - 1;
     nn_strbuf_ensurecapacity(sb, sb->storedlength + numdigits);
+    data = nn_strbuf_mutdata(sb);
     dst = data + sb->storedlength;
     while(value >= 100)
     {
@@ -1166,12 +1152,12 @@ void nn_strbuf_insert(NNStringBuffer* sb, size_t dstpos, const char* src, size_t
 // Overwrite dstpos..(dstpos+dstlen-1) with srclen chars from src
 // if dstlen != srclen, content to the right of dstlen is shifted
 // Example:
-//   nn_strbuf_set(sbuf, "aaabbccc");
-//   char *data = "xxx";
-//   nn_strbuf_overwrite(sbuf,3,2,data,strlen(data));
-//   // sbuf is now "aaaxxxccc"
-//   nn_strbuf_overwrite(sbuf,3,2,"_",1);
-//   // sbuf is now "aaa_ccc"
+//   nn_strbuf_set(sb, "aaabbccc");
+//   char *mystr = "xxx";
+//   nn_strbuf_overwrite(sb,3,2,mystr,strlen(mystr));
+//   // sb is now "aaaxxxccc"
+//   nn_strbuf_overwrite(sb,3,2,"_",1);
+//   // sb is now "aaa_ccc"
 */
 void nn_strbuf_overwrite(NNStringBuffer* sb, size_t dstpos, size_t dstlen, const char* src, size_t srclen)
 {
@@ -1266,7 +1252,7 @@ int nn_strbuf_appendformatposv(NNStringBuffer* sb, size_t pos, const char* fmt, 
     nn_strbuf_boundscheckinsert(sb, pos);
     /* Length of remaining buffer */
     buflen = sb->capacity - pos;
-    if(buflen == 0 && !nn_strbuf_resize(sb, sb->capacity << 1))
+    if(buflen == 0 && !nn_strbuf_ensurecapacity(sb, sb->capacity << 1))
     {
         fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
         nn_strbuf_exitonerror();

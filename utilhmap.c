@@ -2,6 +2,13 @@
 #include "neon.h"
 
 
+/*
+// Maximum load factor of 12/14
+// see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
+*/
+#define NEON_CONFIG_MAXTABLELOAD (0.85714286)
+
+
 void nn_valtable_init(NNState* state, NNHashValTable* tab)
 {
     tab->pstate = state;

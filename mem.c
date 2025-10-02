@@ -3,6 +3,14 @@
 #include "allocator.h"
 
 
+/*
+* set to 1 to use allocator (default).
+* stable, performs well, etc.
+* might not be portable beyond linux/windows, and a couple unix derivatives.
+* strives to use the least amount of memory (and does so very successfully).
+*/
+#define NEON_CONF_MEMUSEALLOCATOR 1
+
 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
     /* if any global variables need to be declared, declare them here. */
 #endif

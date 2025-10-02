@@ -1,5 +1,5 @@
 
-#include "neon.h"
+#include "priv.h"
 
 NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {

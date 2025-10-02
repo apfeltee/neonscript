@@ -1,8 +1,6 @@
 
 #include "neon.h"
 
-
-
 NNValue nn_value_copystrlen(NNState* state, const char* str, size_t len)
 {
     return nn_value_fromobject(nn_string_copylen(state, str, len));

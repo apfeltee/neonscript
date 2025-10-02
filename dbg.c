@@ -1,5 +1,5 @@
 
-#include "neon.h"
+#include "priv.h"
 
 void nn_dbg_disasmblob(NNPrinter* pr, NNBlob* blob, const char* name)
 {

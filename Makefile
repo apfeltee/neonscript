@@ -17,7 +17,6 @@ unflags = \
 	-Wunused-variable \
 	-Wvla \
 
-unflags += -Wjump-misses-init
 
 ## has a tendency to report false positives!
 #unflags += -pedantic
@@ -26,8 +25,8 @@ unflags += -Wjump-misses-init
 allunflags = $(unflags)
 #allunflags = $(unflags) 
 
-WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self -Wmaybe-uninitialized $(allunflags)
-#WFLAGS = -Wall -Wextra -Wshadow
+WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self  $(allunflags)
+#WFLAGS += -Wmaybe-uninitialized -Wjump-misses-init
 #WFLAGS += -ansi -pedantic
 #WFLAGS = -w
 
@@ -47,7 +46,8 @@ EXTRAFLAGS =
 #EXTRAFLAGS += -fsanitize=undefined
 
 #EXTRAFLAGS += -fsanitize=memory
-#EXTRAFLAGS += -fsanitize=address -fstack-protector-all -ftrapv
+#EXTRAFLAGS += -fsanitize=address
+#EXTRAFLAGS += -fstack-protector-all -ftrapv
 
 ### WARNING: can be quite verbose! prints unused sections, giving a better clue which functions can be removed.
 #EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections

@@ -156,7 +156,7 @@ char* nn_import_resolvepath(NNState* state, const   char* modulename, const char
     (void)stmod;
     mlen = strlen(modulename);
     splen = nn_valarray_count(&state->importpath);
-    pathbuf = nn_strbuf_makebasicempty(0);
+    pathbuf = nn_strbuf_makebasicempty(NULL, 0);
     for(i=0; i<splen; i++)
     {
         pitem = nn_value_asstring(nn_valarray_get(&state->importpath, i));

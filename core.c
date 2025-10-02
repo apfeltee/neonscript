@@ -1,6 +1,6 @@
 
 
-#include "neon.h"
+#include "priv.h"
 
 NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
@@ -547,8 +547,6 @@ NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* pare
     return cl;
 }
 
-
-
 void nn_state_buildprocessinfo(NNState* state)
 {
     enum{ kMaxBuf = 1024 };
@@ -564,7 +562,6 @@ void nn_state_buildprocessinfo(NNState* state)
         {
             pathp = (char*)".";
         }
-        fprintf(stderr, "pathp=<%s>\n", pathp);
         state->processinfo->cliexedirectory = nn_string_copycstr(state, pathp);
     }
     {

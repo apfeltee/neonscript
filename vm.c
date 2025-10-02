@@ -1,30 +1,40 @@
 
 #include <assert.h>
-#include "neon.h"
+#include "priv.h"
+
+/* initial amount of frames (will grow dynamically if needed) */
+#define NEON_CONFIG_INITFRAMECOUNT (32)
+
+/* initial amount of stack values (will grow dynamically if needed) */
+#define NEON_CONFIG_INITSTACKCOUNT (32 * 1)
+
 
 void nn_vm_initvmstate(NNState* state)
 {
+    size_t finalsz;
     state->vmstate.linkedobjects = NULL;
     state->vmstate.currentframe = NULL;
     {
         state->vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
-        state->vmstate.stackvalues = (NNValue*)nn_memory_malloc(NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue));
+        finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue);
+        state->vmstate.stackvalues = (NNValue*)nn_memory_malloc(finalsz);
         if(state->vmstate.stackvalues == NULL)
         {
             fprintf(stderr, "error: failed to allocate stackvalues!\n");
             abort();
         }
-        memset(state->vmstate.stackvalues, 0, NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue));
+        memset(state->vmstate.stackvalues, 0, finalsz);
     }
     {
         state->vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
-        state->vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame));
+        finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame);
+        state->vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(finalsz);
         if(state->vmstate.framevalues == NULL)
         {
             fprintf(stderr, "error: failed to allocate framevalues!\n");
             abort();
         }
-        memset(state->vmstate.framevalues, 0, NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame));
+        memset(state->vmstate.framevalues, 0, finalsz);
     }
 }
 
@@ -1193,6 +1203,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
     NNValue vindex;
     NNObjRange* rng;
     (void)realindex;
+    okindex = false;
     vindex = nn_vmbits_stackpeek(state, 0);
     if(!nn_value_isnumber(vindex))
     {
@@ -3183,7 +3194,9 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 VM_DISPATCH();
             VM_CASE(NEON_OP_MAKECLOSURE)
                 {
-                    if(!nn_vmdo_makeclosure(state, nn_vmbits_stackpeek(state, 3)))
+                    NNValue clsv;
+                    clsv = nn_vmbits_stackpeek(state, 3);
+                    if(!nn_vmdo_makeclosure(state, clsv))
                     {
                         nn_vmmac_exitvm(state);
                     }

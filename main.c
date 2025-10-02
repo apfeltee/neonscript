@@ -44,7 +44,7 @@ static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
     state->isrepl = true;
     continuerepl = true;
     printf("Type \".exit\" to quit or \".credits\" for more information\n");
-    source = nn_strbuf_makebasicempty(0);
+    source = nn_strbuf_makebasicempty(NULL, 0);
     bracecount = 0;
     parencount = 0;
     bracketcount = 0;
@@ -278,53 +278,6 @@ static void nn_cli_parseenv(NNState* state, char** envp)
     }
 }
 
-static void nn_cli_printtypesizes()
-{
-    #define ptyp(t) \
-        { \
-            fprintf(stdout, "%d\t%s\n", (int)sizeof(t), #t); \
-            fflush(stdout); \
-        }
-    ptyp(NNPrinter);
-    ptyp(NNValue);
-    ptyp(NNObject);
-    ptyp(NNPropGetSet);
-    ptyp(NNProperty);
-    ptyp(NNValArray);
-    ptyp(NNBlob);
-    ptyp(NNHashValEntry);
-    ptyp(NNHashValTable);
-    ptyp(NNObjString);
-    ptyp(NNObjUpvalue);
-    ptyp(NNObjModule);
-    ptyp(NNObjClass);
-    ptyp(NNObjInstance);
-    ptyp(NNObjFunction);
-    ptyp(NNObjArray);
-    ptyp(NNObjRange);
-    ptyp(NNObjDict);
-    ptyp(NNObjFile);
-    ptyp(NNObjSwitch);
-    ptyp(NNObjUserdata);
-    ptyp(NNExceptionFrame);
-    ptyp(NNCallFrame);
-    ptyp(NNState);
-    ptyp(NNAstToken);
-    ptyp(NNAstLexer);
-    ptyp(NNAstLocal);
-    ptyp(NNAstUpvalue);
-    ptyp(NNAstFuncCompiler);
-    ptyp(NNAstClassCompiler);
-    ptyp(NNAstParser);
-    ptyp(NNAstRule);
-    ptyp(NNDefFunc);
-    ptyp(NNDefField);
-    ptyp(NNDefClass);
-    ptyp(NNDefModule);
-    ptyp(NNInstruction)
-    #undef ptyp
-}
-
 static void optprs_fprintmaybearg(FILE* out, const char* begin, const char* flagname, size_t flaglen, bool needval, bool maybeval, const char* delim)
 {
     fprintf(out, "%s%.*s", begin, (int)flaglen, flagname);
@@ -459,11 +412,6 @@ int main(int argc, char* argv[], char** envp)
         else if(co == 'g')
         {
             nextgcstart = atol(options.optarg);
-        }
-        else if(co == 't')
-        {
-            nn_cli_printtypesizes();
-            return 0;
         }
         else if(co == 'h')
         {
