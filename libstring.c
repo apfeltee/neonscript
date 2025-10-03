@@ -25,24 +25,17 @@ void nn_string_destroy(NNState* state, NNObjString* str)
     nn_gcmem_release(state, str, sizeof(NNObjString));
 }
 
-#if 0
 NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
 {
     uint32_t hsv;
     NNStringBuffer buf;
     hsv = nn_util_hashstring(chars, length);
-    nn_strbuf_makebasicemptystack(&buf, chars, length);
+    nn_strbuf_makebasicemptystack(&buf, NULL, 0);
     buf.isintern = true;
+    nn_strbuf_setdata(&buf, (char*)chars);
+    nn_strbuf_setlength(&buf, length);
     return nn_string_makefromstrbuf(state, buf, hsv);
 }
-#else
-
-NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
-{
-    return nn_string_copylen(state, chars, length);
-}
-    
-#endif
 
 NNObjString* nn_string_intern(NNState* state, const char* chars)
 {
@@ -51,24 +44,20 @@ NNObjString* nn_string_intern(NNState* state, const char* chars)
 
 NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
 {
-    #if 0
-        uint32_t hsv;
-        NNObjString* rs;
-        NNStringBuffer buf;
-        hsv = nn_util_hashstring(chars, length);
-        rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
-        if(rs != NULL)
-        {
-            nn_memory_free(chars);
-            return rs;
-        }
-        nn_strbuf_makebasicemptystack(&buf, NULL, length);
-        nn_strbuf_setdata(&buf, chars);
-        nn_strbuf_setlength(&buf, length);
-        return nn_string_makefromstrbuf(state, buf, hsv);
-    #else
-        return nn_string_copylen(state, chars, length);
-    #endif
+    uint32_t hsv;
+    NNObjString* rs;
+    NNStringBuffer buf;
+    hsv = nn_util_hashstring(chars, length);
+    rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
+    if(rs != NULL)
+    {
+        nn_memory_free(chars);
+        return rs;
+    }
+    nn_strbuf_makebasicemptystack(&buf, NULL, 0);
+    nn_strbuf_setdata(&buf, chars);
+    nn_strbuf_setlength(&buf, length);
+    return nn_string_makefromstrbuf(state, buf, hsv);
 }
 
 NNObjString* nn_string_takecstr(NNState* state, char* chars)
@@ -1342,7 +1331,6 @@ NNValue nn_objfnstring_appendbytes(NNState* state, NNValue thisval, NNValue* arg
 {
     size_t i;
     NNValue arg;
-    NNObjString* oss;
     NNObjString* selfstring;
     selfstring = nn_value_asstring(thisval);
     for(i = 0; i < argc; i++)

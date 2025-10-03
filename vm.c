@@ -2382,12 +2382,8 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
     size_t ssp;
     size_t putpos;
     uint16_t slot;
-    uint64_t pos;
-    NNValue vfn;
-    NNValue vpos;
     NNValue cval;
     NNValue peeked;
-    NNObjFunction* ofn;
     slot = nn_vmbits_readshort(state);
     peeked = nn_vmbits_stackpeek(state, 1);
     cval = nn_vmbits_stackpeek(state, 2);
@@ -2458,16 +2454,22 @@ NEON_FORCEINLINE bool nn_vmdo_funcargset(NNState* state)
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state, NNValue thisval)
+NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
 {
     size_t i;
     int index;
     size_t ssp;
     uint8_t islocal;
+    NNValue thisval;
     NNValue* upvals;
     NNObjFunction* function;
     NNObjFunction* closure;
     function = nn_value_asfunction(nn_vmbits_readconst(state));
+    #if 0
+        thisval = nn_vmbits_stackpeek(state, 3);
+    #else
+        thisval = nn_value_makenull();
+    #endif
     closure = nn_object_makefuncclosure(state, function, thisval);
     nn_vmbits_stackpush(state, nn_value_fromobject(closure));
     for(i = 0; i < (size_t)closure->upvalcount; i++)
@@ -3194,9 +3196,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 VM_DISPATCH();
             VM_CASE(NEON_OP_MAKECLOSURE)
                 {
-                    NNValue clsv;
-                    clsv = nn_vmbits_stackpeek(state, 3);
-                    if(!nn_vmdo_makeclosure(state, clsv))
+                    if(!nn_vmdo_makeclosure(state))
                     {
                         nn_vmmac_exitvm(state);
                     }

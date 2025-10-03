@@ -665,7 +665,6 @@ typedef struct /**/ NNPrinter NNPrinter;
 typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
-typedef struct NNBoxedString NNBoxedString;
 typedef struct NNConstClassMethodItem NNConstClassMethodItem;
 typedef struct NNStringBuffer NNStringBuffer;
 typedef struct NNFSStat NNFSStat;
@@ -784,18 +783,18 @@ struct NNPrinter
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
     NNState* pstate;
-    NNStringBuffer* strbuf;
+    NNStringBuffer strbuf;
     FILE* handle;
 };
 
 struct NNFormatInfo
 {
     /* length of the format string */
-	size_t                     fmtlen;               /*     0     8 */
+	size_t fmtlen;
     /* the actual format string */
-	const char  *              fmtstr;               /*     8     8 */
-	NNPrinter *                writer;               /*    16     8 */
-	NNState *                  pstate;                  /*    24     8 */
+	const char* fmtstr;
+	NNPrinter* writer;
+	NNState* pstate;
 };
 
 #if !defined(NEON_CONFIG_USENANTAGGING) || (NEON_CONFIG_USENANTAGGING == 0)
@@ -810,14 +809,6 @@ struct NNValue
     } valunion;
 };
 #endif
-
-struct NNBoxedString
-{
-    bool isalloced;
-    char* data;
-    size_t length;
-};
-
 
 struct NNObject
 {
@@ -887,7 +878,7 @@ struct NNHashValEntry
 struct NNHashValTable
 {
     /*
-    * FIXME: extremely stupid hack: $active ensures that a table that was destroyed
+    * FIXME: extremely stupid hack: $htactive ensures that a table that was destroyed
     * does not get marked again, et cetera.
     * since nn_valtable_destroy() zeroes the data before freeing, $active will be
     * false, and thus, no further marking occurs.
@@ -920,12 +911,19 @@ struct NNObjUpvalue
 struct NNObjModule
 {
     NNObject objpadding;
+    /* was this module imported? */
     bool imported;
+    /* named exports */
     NNHashValTable deftable;
+    /* the name of this module */
     NNObjString* name;
+    /* physsical location of this module, or NULL if some other non-physical location */
     NNObjString* physicalpath;
+    /* callback to call BEFORE this module is loaded */
     void* fnpreloaderptr;
+    /* callbac to call AFTER this module is unloaded */
     void* fnunloaderptr;
+    /* pointer that is based to preloader/unloader */
     void* handle;
 };
 
@@ -1007,6 +1005,7 @@ struct NNObjFunction
             NNObjFunction* scriptfunc;
             NNObjUpvalue** upvalues;            
         } fnclosure;
+        /* compiled script function*/
         struct
         {
             int arity;
@@ -1014,11 +1013,13 @@ struct NNObjFunction
             NNBlob blob;
             NNObjModule* module;
         } fnscriptfunc;
+        /* native C function */
         struct
         {
             NNNativeFN natfunc;
             void* userptr;
         } fnnativefunc;
+        /* class function - bound or static */
         struct
         {
             NNValue receiver;

@@ -22,9 +22,7 @@ void nn_blob_init(NNState* state, NNBlob* blob)
 
 void nn_blob_push(NNBlob* blob, NNInstruction ins)
 {
-    NNState* state;
     int oldcapacity;
-    state = blob->pstate;
     if(blob->capacity < blob->count + 1)
     {
         oldcapacity = blob->capacity;

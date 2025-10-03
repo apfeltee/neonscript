@@ -485,7 +485,7 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, b
     sb->isintern = false;
     sb->storedlength = len;
     sb->capacity = 0;
-    #if 0
+    #if 1
         sb->islong = (len >= NN_CONF_STRBUFMAXSHORTLENGTH);
     #else
         sb->islong = true;
@@ -542,42 +542,23 @@ NNStringBuffer* nn_strbuf_makebasicempty(const char* str, size_t len)
 
 bool nn_strbuf_destroyfromstack(NNStringBuffer* sb)
 {
-    if(sb->isintern)
-    {
-        return true;
-    }
     if(sb->islong)
     {
-        nn_memory_free(sb->longstrdata);
+        if(!sb->isintern)
+        {
+            nn_memory_free(sb->longstrdata);
+        }
     }
     return true;
 }
 
 bool nn_strbuf_destroy(NNStringBuffer* sb)
 {
-    if(!sb->isintern)
-    {
-        if(sb->islong)
-        {
-            nn_memory_free(sb->longstrdata);
-        }
-    }
+    nn_strbuf_destroyfromstack(sb);
     nn_memory_free(sb);
     return true;
 }
 
-bool nn_strbuf_destroyfromptr(NNStringBuffer* sb)
-{
-    if(!sb->isintern)
-    {
-        if(sb->islong)
-        {
-            nn_memory_free(sb->longstrdata);
-        }
-    }
-    memset(sb, 0, sizeof(*sb));
-    return true;
-}
 
 /* Clear the content of an existing NNStringBuffer (sets size to 0) */
 void nn_strbuf_reset(NNStringBuffer* sb)
@@ -607,16 +588,16 @@ bool nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
     tmpbuf = NULL;
     if(!sb->islong)
     {
-        if(len >= NN_CONF_STRBUFMAXSHORTLENGTH)
+        if(len < NN_CONF_STRBUFMAXSHORTLENGTH)
+        {
+            return true;
+        }
+        else
         {
             sb->islong = true;
             mustcopy = true;
             tmpbuf = sb->shortstrdata;
             //fprintf(stderr, "must copy: shortstrdata: (%d) <<%.*s>>\n", (int)sb->storedlength, (int)sb->storedlength, tmpbuf);
-        }
-        else
-        {
-            return true;
         }
     }
     /* for nul byte */
