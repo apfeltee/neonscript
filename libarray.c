@@ -124,7 +124,7 @@ NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_
     count = nn_valarray_count(&selfarr->varray);
     if(count == 0)
     {
-        return nn_value_fromobject(nn_string_copycstr(state, ""));
+        return nn_value_fromobject(nn_string_intern(state, ""));
     }
     nn_printer_makestackstring(state, &pr);
     for(i = 0; i < count; i++)

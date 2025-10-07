@@ -1303,7 +1303,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     return true;
 }
 
-NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccallername, NNValue target, const char* name)
+NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccallername, NNValue target, NNObjString* name)
 {
     NNProperty* field;
     (void)state;
@@ -1312,7 +1312,7 @@ NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccal
         fprintf(stderr, "%s: not an instance\n", ccallername);
         return NULL;
     }
-    field = nn_instance_getmethodcstr(nn_value_asinstance(target), name);
+    field = nn_instance_getmethod(nn_value_asinstance(target), name);
     if(field == NULL)
     {
         fprintf(stderr, "%s: failed to get '%s'\n", ccallername, name);
@@ -1326,7 +1326,7 @@ NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccal
     return field;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_tryoverloadbasic(NNState* state, const char* name, NNValue target, NNValue firstargvval, NNValue setvalue, bool willassign)
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadbasic(NNState* state, NNObjString* name, NNValue target, NNValue firstargvval, NNValue setvalue, bool willassign)
 {
     size_t nargc;
     NNValue finalval;
@@ -1353,12 +1353,12 @@ NEON_FORCEINLINE bool nn_vmutil_tryoverloadbasic(NNState* state, const char* nam
     return false;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_tryoverloadmath(NNState* state, const char* name, NNValue target, NNValue right, bool willassign)
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadmath(NNState* state, NNObjString* name, NNValue target, NNValue right, bool willassign)
 {
     return nn_vmutil_tryoverloadbasic(state, name, target, right, nn_value_makenull(), willassign);
 }
 
-NEON_FORCEINLINE bool nn_vmutil_tryoverloadgeneric(NNState* state, const char* name, NNValue target, bool willassign)
+NEON_FORCEINLINE bool nn_vmutil_tryoverloadgeneric(NNState* state, NNObjString* name, NNValue target, bool willassign)
 {
     NNValue setval;
     NNValue firstargval;
@@ -1378,7 +1378,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
     thisval = nn_vmbits_stackpeek(state, 1);
     if(nn_util_unlikely(nn_value_isinstance(thisval)))
     {
-        if(nn_vmutil_tryoverloadgeneric(state, "__indexget__", thisval, willassign))
+        if(nn_vmutil_tryoverloadgeneric(state, state->defaultstrings.nmindexget, thisval, willassign))
         {
             return true;
         }
@@ -1590,7 +1590,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     thisval = nn_vmbits_stackpeek(state, 2);
     if(nn_util_unlikely(nn_value_isinstance(thisval)))
     {
-        if(nn_vmutil_tryoverloadgeneric(state, "__indexset__", thisval, true))
+        if(nn_vmutil_tryoverloadgeneric(state, state->defaultstrings.nmindexset, thisval, true))
         {
             return true;
         }
@@ -2158,7 +2158,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
         {
             case NEON_OP_PRIMADD:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__add__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmadd, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2166,7 +2166,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMSUBTRACT:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__sub__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmsub, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2174,7 +2174,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMDIVIDE:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__div__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmdiv, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2182,7 +2182,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMMULTIPLY:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__mul__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmmul, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2190,7 +2190,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMAND:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__band__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmband, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2198,7 +2198,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMOR:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__bor__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmbor, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -2206,7 +2206,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 break;
             case NEON_OP_PRIMBITXOR:
                 {
-                    if(nn_vmutil_tryoverloadmath(state, "__bxor__", binvalleft, binvalright, willassign))
+                    if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmbxor, binvalleft, binvalright, willassign))
                     {
                         return true;
                     }
@@ -3443,7 +3443,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     argcount = nn_vmbits_readbyte(state);
                     vclass = nn_vmbits_stackpop(state);
                     klass = nn_value_asclass(vclass);
-                    if(!nn_vmutil_invokemethodfromclass(state, klass, state->constructorname, argcount))
+                    if(!nn_vmutil_invokemethodfromclass(state, klass, state->defaultstrings.nmconstructor, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }

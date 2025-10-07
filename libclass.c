@@ -273,7 +273,6 @@ NNProperty* nn_instance_getvar(NNObjInstance* inst, NNObjString* name)
     return field;
 }
 
-
 NNProperty* nn_instance_getvarcstr(NNObjInstance* inst, const char* name)
 {
     NNObjString* os;

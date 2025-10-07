@@ -486,16 +486,8 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, b
     sb->isintern = false;
     sb->capacity = len;
     sb->storedlength = 0;
-    sb->islong = false;
-    #if 0
-        if(len != 0)
-        {
-            sb->islong = (len >= NN_CONF_STRBUFMAXSHORTLENGTH);
-        }
-    #else
-        sb->islong = true;
-    #endif
-    if(sb->islong)
+    sb->longstrdata = NULL;
+    if(len > 0)
     {
         sb->longstrdata = NULL;
         if(!nn_strbuf_makelongfromptr(sb, len))
@@ -507,16 +499,8 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, b
             return false;
         }
     }
-    else
+    if((str != NULL) && (len > 0))
     {
-        memset(sb->shortstrdata, 0, NN_CONF_STRBUFMAXSHORTLENGTH);
-    }
-    if(str != NULL)
-    {
-        if(!sb->islong)
-        {
-            sb->capacity = NN_CONF_STRBUFMAXSHORTLENGTH;
-        }
         return nn_strbuf_appendstrn(sb, str, len);
     }
     return true;
@@ -544,12 +528,9 @@ NNStringBuffer* nn_strbuf_makebasicempty(const char* str, size_t len)
 
 bool nn_strbuf_destroyfromstack(NNStringBuffer* sb)
 {
-    if(sb->islong)
+    if(!sb->isintern)
     {
-        if(!sb->isintern)
-        {
-            nn_memory_free(sb->longstrdata);
-        }
+        nn_memory_free(sb->longstrdata);
     }
     return true;
 }
@@ -565,16 +546,9 @@ bool nn_strbuf_destroy(NNStringBuffer* sb)
 /* Clear the content of an existing NNStringBuffer (sets size to 0) */
 void nn_strbuf_reset(NNStringBuffer* sb)
 {
-    if(sb->islong)
+    if(sb->longstrdata)
     {
-        if(sb->longstrdata)
-        {
-            memset(sb->longstrdata, 0, sb->storedlength);
-        }
-    }
-    else
-    {
-        memset(sb->shortstrdata, 0, NN_CONF_STRBUFMAXSHORTLENGTH);
+        memset(sb->longstrdata, 0, sb->storedlength);
     }
     sb->storedlength = 0;
 }
@@ -588,23 +562,10 @@ bool nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
     char* tmpbuf;
     mustcopy = false;
     tmpbuf = NULL;
-    if(!sb->islong)
-    {
-        if(len < NN_CONF_STRBUFMAXSHORTLENGTH)
-        {
-            return true;
-        }
-        else
-        {
-            sb->islong = true;
-            mustcopy = true;
-            tmpbuf = sb->shortstrdata;
-            //fprintf(stderr, "must copy: shortstrdata: (%d) <<%.*s>>\n", (int)sb->storedlength, (int)sb->storedlength, tmpbuf);
-        }
-    }
+
     /* for nul byte */
     len++;
-    if(sb->capacity < len)
+    if((sb->capacity == 0) || (sb->capacity < len))
     {
         sb->capacity = ROUNDUP2POW(len);
         /* fprintf(stderr, "sizeptr=%ld\n", sb->capacity); */
@@ -649,7 +610,6 @@ bool nn_strbuf_setlength(NNStringBuffer* sb, size_t len)
 
 bool nn_strbuf_setdata(NNStringBuffer* sb, char* str)
 {
-    sb->islong = true;
     sb->longstrdata = str;
     return true;
 }
@@ -661,25 +621,17 @@ size_t nn_strbuf_length(NNStringBuffer* sb)
 
 const char* nn_strbuf_data(NNStringBuffer* sb)
 {
-    if(sb->islong)
-    {
-        return sb->longstrdata;
-    }
-    return sb->shortstrdata;
+    return sb->longstrdata;
 }
 
 #define nn_strbuf_mutdata(sb) \
     ( \
-        ((sb)->islong) ? ((sb)->longstrdata) : ((sb)->shortstrdata) \
+        (sb)->longstrdata \
     )
 
 int nn_strbuf_get(NNStringBuffer* sb, size_t idx)
 {
-    if(sb->islong)
-    {
-        return sb->longstrdata[idx];
-    }
-    return sb->shortstrdata[idx];
+    return sb->longstrdata[idx];
 }
 
 bool nn_strbuf_containschar(NNStringBuffer* sb, char ch)
@@ -769,20 +721,26 @@ bool nn_strbuf_appendchar(NNStringBuffer* sb, int c)
 */
 bool nn_strbuf_appendstrn(NNStringBuffer* sb, const char* str, size_t len)
 {
+    size_t i;
+    int epos;
     char* data;
+    epos = 0;
     if(len > 0)
     {
         nn_strbuf_ensurecapacity(sb, sb->storedlength + len);
         data = nn_strbuf_mutdata(sb);
-        memcpy(data + sb->storedlength, str, len+1);
+        if(sb->storedlength > 0)
+        {
+            epos = sb->storedlength;
+        }
+        memcpy(data + epos, str, len);
         sb->storedlength = sb->storedlength + len;
         data[sb->storedlength] = '\0';
-        //fprintf(stderr, "appendstrn: islong=%d (%d) <<<%.*s>>>\n", sb->islong, sb->storedlength, (int)sb->storedlength, data);
     }
     return true;
 }
 
-/* Copy a character array to the end of this NNStringBuffer */
+/* Copy a character array to the end of this NNStringBuf^^fer */
 bool nn_strbuf_appendstr(NNStringBuffer* sb, const char* str)
 {
     return nn_strbuf_appendstrn(sb, str, strlen(str));
@@ -792,7 +750,6 @@ bool nn_strbuf_appendbuff(NNStringBuffer* sb1, NNStringBuffer* sb2)
 {
     return nn_strbuf_appendstrn(sb1, nn_strbuf_data(sb2), sb2->storedlength);
 }
-
 
 /*
  * Integer to string functions adapted from:
@@ -914,13 +871,11 @@ bool nn_strbuf_appendnumlong(NNStringBuffer* sb, long value)
     return nn_strbuf_appendnumulong(sb, value);
 }
 
-
 bool nn_strbuf_appendnumint(NNStringBuffer* sb, int value)
 {
     /* nn_strbuf_appendformat(sb, "%i", value); */
     return nn_strbuf_appendnumlong(sb, value);
 }
-
 
 /* Append string converted to lowercase */
 bool nn_strbuf_appendstrnlowercase(NNStringBuffer* sb, const char* str, size_t len)
@@ -956,19 +911,6 @@ bool nn_strbuf_appendstrnuppercase(NNStringBuffer* sb, const char* str, size_t l
         *to = toupper(*str);
     }
     sb->storedlength += len;
-    data[sb->storedlength] = '\0';
-    return true;
-}
-
-
-/* Append char `c` `n` times */
-bool nn_strbuf_appendcharn(NNStringBuffer* sb, char c, size_t n)
-{
-    char* data;
-    nn_strbuf_ensurecapacity(sb, sb->storedlength + n);
-    data = nn_strbuf_mutdata(sb);
-    memset(data + sb->storedlength, c, n);
-    sb->storedlength += n;
     data[sb->storedlength] = '\0';
     return true;
 }

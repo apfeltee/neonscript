@@ -127,10 +127,12 @@ void nn_printer_destroy(NNPrinter* pr)
 
 NNObjString* nn_printer_takestring(NNPrinter* pr)
 {
+    size_t xlen;
     NNState* state;
     NNObjString* os;
     state = pr->pstate;
-    os = nn_string_makefromstrbuf(state, pr->strbuf, nn_util_hashstring(nn_strbuf_data(&pr->strbuf), nn_strbuf_length(&pr->strbuf)));
+    xlen = nn_strbuf_length(&pr->strbuf);
+    os = nn_string_makefromstrbuf(state, pr->strbuf, nn_util_hashstring(nn_strbuf_data(&pr->strbuf), xlen), xlen);
     pr->stringtaken = true;
     return os;
 }
@@ -283,26 +285,7 @@ bool nn_printer_writequotedstring(NNPrinter* pr, const char* str, size_t len, bo
 
 bool nn_printer_vwritefmttostring(NNPrinter* pr, const char* fmt, va_list va)
 {
-    #if 0
-        size_t wsz;
-        size_t needed;
-        char* buf;
-        va_list copy;
-        va_copy(copy, va);
-        needed = 1 + vsnprintf(NULL, 0, fmt, copy);
-        va_end(copy);
-        buf = (char*)nn_memory_malloc(sizeof(char) * (needed + 1));
-        if(!buf)
-        {
-            return false;
-        }
-        memset(buf, 0, needed + 1);
-        wsz = vsnprintf(buf, needed, fmt, va);
-        nn_printer_writestringl(pr, buf, wsz);
-        nn_memory_free(buf);
-    #else
-        nn_strbuf_appendformatv(&pr->strbuf, fmt, va);
-    #endif
+    nn_strbuf_appendformatv(&pr->strbuf, fmt, va);
     return true;
 }
 
@@ -708,15 +691,7 @@ void nn_printer_printnumber(NNPrinter* pr, NNValue value)
 {
     double dn;
     dn = nn_value_asnumber(value);
-    #if 1
-        nn_printer_printf(pr, "%.16g", dn);
-    #else
-        enum {kMaxBufSize = 128 };
-        size_t l;
-        char buf[kMaxBufSize];
-        l = snprintf(buf, kMaxBufSize, "%.16g", dn);
-        nn_printer_writestringl(pr, buf, l);
-    #endif
+    nn_printer_printf(pr, "%.16g", dn);
 }
 
 void nn_printer_printvalue(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)

@@ -707,16 +707,10 @@ typedef int(*NNStrBufCharModFunc)(int);
 struct NNStringBuffer
 {
     int isintern:1;
-    int islong:1;
     /* capacity should be >= length+1 to allow for \0 */
     size_t capacity;
     size_t storedlength;
-
-    union
-    {
-        char* longstrdata;
-        char shortstrdata[NN_CONF_STRBUFMAXSHORTLENGTH];
-    };
+    char* longstrdata;
 };
 
 typedef struct FSDirReader FSDirReader;
@@ -1159,20 +1153,42 @@ struct NNState
         NNObjClass* importerror;
     } exceptions;
 
+    struct
+    {
+        /* __indexget__ */
+        NNObjString* nmindexget;
+        /* __indexset__ */
+        NNObjString* nmindexset;
+        /* __add__ */
+        NNObjString* nmadd;
+        /* __sub__ */
+        NNObjString* nmsub;
+        /* __div__ */
+        NNObjString* nmdiv;
+        /* __mul__ */
+        NNObjString* nmmul;
+        /* __band__ */
+        NNObjString* nmband;
+        /* __bor__ */
+        NNObjString* nmbor;
+        /* __bxor__ */
+        NNObjString* nmbxor;
+
+        NNObjString* nmconstructor;
+    } defaultstrings;
+
     NNValue lastreplvalue;
 
     void* memuserptr;
     const char* rootphysfile;
 
     NNObjDict* envdict;
-    NNObjString* constructorname;
     NNObjModule* topmodule;
     NNValArray importpath;
 
     /* objects tracker */
     NNHashValTable openedmodules;
     NNHashValTable allocatedstrings;
-    NNHashValTable conststrings;
     NNHashValTable declaredglobals;
 
     /*

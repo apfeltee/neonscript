@@ -687,7 +687,19 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     */
     {
         pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
-        pstate->constructorname = nn_string_intern(pstate, "constructor");
+    }
+    {
+        pstate->defaultstrings.nmconstructor = nn_string_intern(pstate, "constructor");
+        pstate->defaultstrings.nmindexget = nn_string_copycstr(pstate, "__indexget__");
+        pstate->defaultstrings.nmindexset = nn_string_copycstr(pstate, "__indexset__");
+        pstate->defaultstrings.nmadd = nn_string_copycstr(pstate, "__add__");
+        pstate->defaultstrings.nmsub = nn_string_copycstr(pstate, "__sub__");
+        pstate->defaultstrings.nmdiv = nn_string_copycstr(pstate, "__div__");
+        pstate->defaultstrings.nmmul = nn_string_copycstr(pstate, "__mul__");
+        pstate->defaultstrings.nmband = nn_string_copycstr(pstate, "__band__");
+        pstate->defaultstrings.nmbor = nn_string_copycstr(pstate, "__bor__");
+        pstate->defaultstrings.nmbxor = nn_string_copycstr(pstate, "__bxor__");
+
     }
     /*
     * declare default classes

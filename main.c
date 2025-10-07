@@ -482,7 +482,6 @@ int main(int argc, char* argv[], char** envp)
     {
         os = nn_value_asstring(nn_valarray_get(&state->processinfo->cliargv->varray, 0));
         filename = nn_string_getdata(os);
-        fprintf(stderr, "nargv[0]=%s (%d islong=%d)\n", filename, (int)nn_string_getlength(os), os->sbuf.islong);
         ok = nn_cli_runfile(state, filename);
     }
     else
