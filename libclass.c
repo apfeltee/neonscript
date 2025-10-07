@@ -159,6 +159,15 @@ NNProperty* nn_class_getpropertyfield(NNObjClass* klass, NNObjString* name)
 {
     NNProperty* field;
     field = nn_valtable_getfield(&klass->instproperties, nn_value_fromobject(name));
+    #if 0
+    if(field == NULL)
+    {
+        if(klass->superclass != NULL)
+        {
+            return nn_class_getpropertyfield(klass->superclass, name);
+        }
+    }
+    #endif
     return field;
 }
 

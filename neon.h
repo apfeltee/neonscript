@@ -181,7 +181,7 @@
 /* how many catch() clauses per try statement */
 #define NEON_CONFIG_MAXEXCEPTHANDLERS (16)
 
-#define NN_CONF_STRBUFMAXSHORTLENGTH (64)
+#define NN_CONF_STRBUFMAXSHORTLENGTH (64*1)
 
 /*
 // Maximum load factor of 12/14
@@ -706,8 +706,8 @@ typedef int(*NNStrBufCharModFunc)(int);
 
 struct NNStringBuffer
 {
-    bool isintern;
-    bool islong;
+    int isintern:1;
+    int islong:1;
     /* capacity should be >= length+1 to allow for \0 */
     size_t capacity;
     size_t storedlength;
@@ -762,7 +762,7 @@ struct utf8iterator_t
 
 struct NNIOResult
 {
-    bool success;
+    int success:1;
     char* data;
     size_t length;    
 };
@@ -770,15 +770,15 @@ struct NNIOResult
 struct NNPrinter
 {
     /* if file: should be closed when writer is destroyed? */
-    bool shouldclose;
+    int shouldclose:1;
     /* if file: should write operations be flushed via fflush()? */
-    bool shouldflush;
+    int shouldflush:1;
     /* if string: true if $strbuf was taken via nn_printer_take */
-    bool stringtaken;
+    int stringtaken:1;
     /* was this writer instance created on stack? */
-    bool fromstack;
-    bool shortenvalues;
-    bool jsonmode;
+    int fromstack:1;
+    int shortenvalues:1;
+    int jsonmode:1;
     size_t maxvallength;
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
@@ -803,7 +803,7 @@ struct NNValue
     NNValType type;
     union
     {
-        bool vbool;
+        int vbool:1;
         double vfltnum;
         NNObject* vobjpointer;
     } valunion;
@@ -1045,7 +1045,7 @@ struct NNObjRange
 struct NNObjDict
 {
     NNObject objpadding;
-    NNValArray names;
+    NNValArray htnames;
     NNHashValTable htab;
 };
 

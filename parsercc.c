@@ -3831,8 +3831,8 @@ void nn_astparser_parseforeachstmt(NNAstParser* prs)
     NNAstToken valuetoken;
     nn_astparser_scopebegin(prs);
     /* define @iter and @itern constant */
-    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "@iter")));
-    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "@itern")));
+    citer = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@iter")));
+    citern = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "@itern")));
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'foreach'");
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected variable name after 'foreach'");
     if(!nn_astparser_check(prs, NEON_ASTTOK_COMMA))
@@ -4153,7 +4153,7 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     }
     else
     {
-        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_copycstr(prs->pstate, "Exception")));
+        type = nn_astparser_pushconst(prs, nn_value_fromobject(nn_string_intern(prs->pstate, "Exception")));
     }
     nn_astemit_patchjump(prs, exitjump);
     if(nn_astparser_match(prs, NEON_ASTTOK_KWFINALLY))

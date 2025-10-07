@@ -1099,7 +1099,7 @@ void nn_state_installobjectarray(NNState* state)
         {NULL, NULL}
     };
     nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
-    nn_class_defcallablefield(state->classprimarray, nn_string_copycstr(state, "length"), nn_objfnarray_length);
+    nn_class_defcallablefield(state->classprimarray, nn_string_intern(state, "length"), nn_objfnarray_length);
     nn_state_installmethods(state, state->classprimarray, arraymethods);
 
 }

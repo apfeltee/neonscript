@@ -535,7 +535,9 @@ NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_
 
 NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    size_t i;
     size_t count;
+    int rc;
     int length;
     unsigned char* data;
     NNObjFile* file;
@@ -544,19 +546,12 @@ NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t
     nn_argcheck_init(state, &check, "puts", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     file = nn_value_asfile(thisval);
-    NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(argv[0]);
-    data = (unsigned char*)nn_string_getdata(string);
-    length = nn_string_getlength(string);
+
     if(!file->isstd)
     {
         if(strstr(nn_string_getdata(file->mode), "r") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
         {
             FILE_ERROR(Unsupported, "cannot write into non-writable file");
-        }
-        else if(length == 0)
-        {
-            FILE_ERROR(Write, "cannot write empty buffer to file");
         }
         else if(!file->isopen)
         {
@@ -574,13 +569,64 @@ NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t
             FILE_ERROR(Unsupported, "cannot write to input file");
         }
     }
-    count = fwrite(data, sizeof(unsigned char), length, file->handle);
-    if(count > (size_t)0 || length == 0)
+    rc = 0;
+    for(i=0; i<argc; i++)
     {
-        return nn_value_makebool(true);
+        NEON_ARGS_CHECKTYPE(&check, i, nn_value_isstring);
+        string = nn_value_asstring(argv[i]);
+        data = (unsigned char*)nn_string_getdata(string);
+        length = nn_string_getlength(string);
+        count = fwrite(data, sizeof(unsigned char), length, file->handle);
+        if(count > (size_t)0 || length == 0)
+        {
+            return nn_value_makenumber(0);
+        }
+        rc += count;
     }
-    return nn_value_makebool(false);
+    return nn_value_makenumber(rc);
 }
+
+NNValue nn_objfnfile_putc(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    size_t i;
+    int rc;
+    NNObjFile* file;
+    NNArgCheck check;
+    nn_argcheck_init(state, &check, "puts", argv, argc);
+    NEON_ARGS_CHECKCOUNT(&check, 1);
+    file = nn_value_asfile(thisval);
+    if(!file->isstd)
+    {
+        if(strstr(nn_string_getdata(file->mode), "r") != NULL && strstr(nn_string_getdata(file->mode), "+") == NULL)
+        {
+            FILE_ERROR(Unsupported, "cannot write into non-writable file");
+        }
+        else if(!file->isopen)
+        {
+            FILE_ERROR(Write, "file not open");
+        }
+        else if(file->handle == NULL)
+        {
+            FILE_ERROR(Write, "could not write to file");
+        }
+    }
+    else
+    {
+        if(fileno(stdin) == file->number)
+        {
+            FILE_ERROR(Unsupported, "cannot write to input file");
+        }
+    }
+    rc = 0;
+    for(i=0; i<argc; i++)
+    {
+        NEON_ARGS_CHECKTYPE(&check, i, nn_value_isnumber);
+        int cv = nn_value_asnumber(argv[i]);
+        rc += fputc(cv, file->handle);
+    }
+    return nn_value_makenumber(rc);
+}
+
 
 NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
@@ -734,6 +780,7 @@ void nn_state_installobjectfile(NNState* state)
         {"gets", nn_objfnfile_gets},
         {"write", nn_objfnfile_write},
         {"puts", nn_objfnfile_puts},
+        {"putc", nn_objfnfile_putc},
         {"printf", nn_objfnfile_printf},
         {"number", nn_objfnfile_number},
         {"isTTY", nn_objfnfile_istty},

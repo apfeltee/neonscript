@@ -92,13 +92,13 @@ class JSONParser
     {
         if(literal.length > (this.m_source.length - this.m_index))
         {
-            error("Expecting ${literal}");
+            throw Exception("Expecting ${literal}");
         }
         for (var i = 0; i < literal.length; i++)
         {
             if(literal[i] != this.m_source[this.m_index])
             {
-                error("Expecting ${literal}");
+                throw Exception("Expecting ${literal}");
             }
             this.m_index++
         }
@@ -185,7 +185,7 @@ class JSONParser
             c = this.m_source[this.m_index];
             if (c != ":")
             {
-                error("Expecting :");
+                throw Exception("Expecting :");
             }
             this.m_index++;
             this.skipWhiteSpace();
@@ -208,7 +208,7 @@ class JSONParser
         }
         if(c != "}")
         {
-            error("Expecting }");
+            throw Exception("Expecting }");
         }
         this.m_index++;
         return o;
@@ -243,7 +243,7 @@ class JSONParser
         }
         if(c != "]")
         {
-            error("Expecting ]");
+            throw Exception("Expecting ]");
         }
         this.m_index++;
         return a;

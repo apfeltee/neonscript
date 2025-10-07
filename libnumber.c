@@ -135,13 +135,13 @@ void nn_state_installmodmath(NNState* state)
 {
     NNObjClass* klass;
     klass = nn_util_makeclass(state, "Math", state->classprimobject);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "hypot"), nn_objfnmath_hypot);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "abs"), nn_objfnmath_abs);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "round"), nn_objfnmath_round);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "sqrt"), nn_objfnmath_sqrt);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "ceil"), nn_objfnmath_ceil);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "floor"), nn_objfnmath_floor);
-    nn_class_defstaticnativemethod(klass, nn_string_copycstr(state, "min"), nn_objfnmath_min);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "hypot"), nn_objfnmath_hypot);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "abs"), nn_objfnmath_abs);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "round"), nn_objfnmath_round);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "sqrt"), nn_objfnmath_sqrt);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "ceil"), nn_objfnmath_ceil);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "floor"), nn_objfnmath_floor);
+    nn_class_defstaticnativemethod(klass, nn_string_intern(state, "min"), nn_objfnmath_min);
 }
 
 

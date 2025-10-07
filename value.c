@@ -158,8 +158,8 @@ bool nn_value_compobjdict(NNState* state, NNObject* oa, NNObject* ob)
     NNValue keya;
     dicta = (NNObjDict*)oa;
     dictb = (NNObjDict*)ob;
-    lena = nn_valarray_count(&dicta->names);
-    lenb = nn_valarray_count(&dictb->names);
+    lena = nn_valarray_count(&dicta->htnames);
+    lenb = nn_valarray_count(&dictb->htnames);
     if(lena != lenb)
     {
         return false;
@@ -168,8 +168,8 @@ bool nn_value_compobjdict(NNState* state, NNObject* oa, NNObject* ob)
     while(ai < lena)
     {
         /* first, get the key name off of dicta ... */
-        keya = nn_valarray_get(&dicta->names, ai);
-        fielda = nn_valtable_getfield(&dicta->htab, nn_valarray_get(&dicta->names, ai));
+        keya = nn_valarray_get(&dicta->htnames, ai);
+        fielda = nn_valtable_getfield(&dicta->htab, nn_valarray_get(&dicta->htnames, ai));
         if(fielda != NULL)
         {
             /* then look up that key in dictb ... */
@@ -368,7 +368,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
         }
         else if(nn_value_isdict(a) && nn_value_isdict(b))
         {
-            if(nn_valarray_count(&nn_value_asdict(a)->names) >= nn_valarray_count(&nn_value_asdict(b)->names))
+            if(nn_valarray_count(&nn_value_asdict(a)->htnames) >= nn_valarray_count(&nn_value_asdict(b)->htnames))
             {
                 return a;
             }

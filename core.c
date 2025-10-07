@@ -73,7 +73,7 @@ void nn_state_installmethods(NNState* state, NNObjClass* klass, NNConstClassMeth
     {
         rawname = listmethods[i].name;
         rawfn = listmethods[i].fn;
-        osname = nn_string_copycstr(state, rawname);
+        osname = nn_string_intern(state, rawname);
         nn_class_defnativemethod(klass, osname, rawfn);
     }
 }
@@ -167,7 +167,7 @@ NNValue nn_except_getstacktrace(NNState* state)
         }
         return nn_value_fromobject(oa);
     }
-    return nn_value_fromobject(nn_string_copylen(state, "", 0));
+    return nn_value_fromobject(nn_string_internlen(state, "", 0));
 }
 
 /**
@@ -347,7 +347,7 @@ bool nn_except_vthrowwithclass(NNState* state, NNObjClass* exklass, const char* 
     nn_vm_stackpush(state, nn_value_fromobject(instance));
     stacktrace = nn_except_getstacktrace(state);
     nn_vm_stackpush(state, stacktrace);
-    nn_instance_defproperty(instance, nn_string_copycstr(state, "stacktrace"), stacktrace);
+    nn_instance_defproperty(instance, nn_string_intern(state, "stacktrace"), stacktrace);
     nn_vm_stackpop(state);
     return nn_except_propagate(state);
 }
@@ -404,7 +404,7 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 1 & 0xff, 0));
     }
     {
-        messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_copycstr(state, "message")));
+        messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_intern(state, "message")));
         /* s_prop 0 */
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_PROPERTYSET, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
@@ -434,11 +434,11 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
     nn_valtable_set(&klass->instmethods, nn_value_fromobject(classname), nn_value_fromobject(closure));
     klass->constructor = nn_value_fromobject(closure);
     /* set class properties */
-    nn_class_defproperty(klass, nn_string_copycstr(state, "message"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_copycstr(state, "stacktrace"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_copycstr(state, "srcfile"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_copycstr(state, "srcline"), nn_value_makenull());
-    nn_class_defproperty(klass, nn_string_copycstr(state, "class"), nn_value_fromobject(klass));
+    nn_class_defproperty(klass, nn_string_intern(state, "message"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "stacktrace"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "srcfile"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "srcline"), nn_value_makenull());
+    nn_class_defproperty(klass, nn_string_intern(state, "class"), nn_value_fromobject(klass));
     nn_valtable_set(&state->declaredglobals, nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
     nn_vm_stackpop(state);
@@ -458,10 +458,10 @@ NNObjInstance* nn_except_makeinstance(NNState* state, NNObjClass* exklass, const
     instance = nn_object_makeinstance(state, exklass);
     osfile = nn_string_copycstr(state, srcfile);
     nn_vm_stackpush(state, nn_value_fromobject(instance));
-    nn_instance_defproperty(instance, nn_string_copycstr(state, "class"), nn_value_fromobject(exklass));
-    nn_instance_defproperty(instance, nn_string_copycstr(state, "message"), nn_value_fromobject(message));
-    nn_instance_defproperty(instance, nn_string_copycstr(state, "srcfile"), nn_value_fromobject(osfile));
-    nn_instance_defproperty(instance, nn_string_copycstr(state, "srcline"), nn_value_makenumber(srcline));
+    nn_instance_defproperty(instance, nn_string_intern(state, "class"), nn_value_fromobject(exklass));
+    nn_instance_defproperty(instance, nn_string_intern(state, "message"), nn_value_fromobject(message));
+    nn_instance_defproperty(instance, nn_string_intern(state, "srcfile"), nn_value_fromobject(osfile));
+    nn_instance_defproperty(instance, nn_string_intern(state, "srcline"), nn_value_makenumber(srcline));
     nn_vm_stackpop(state);
     return instance;
 }
@@ -517,7 +517,7 @@ bool nn_state_defglobalvalue(NNState* state, const char* name, NNValue val)
 {
     bool r;
     NNObjString* oname;
-    oname = nn_string_copycstr(state, name);
+    oname = nn_string_intern(state, name);
     nn_vm_stackpush(state, nn_value_fromobject(oname));
     nn_vm_stackpush(state, val);
     r = nn_valtable_set(&state->declaredglobals, state->vmstate.stackvalues[0], state->vmstate.stackvalues[1]);
@@ -687,7 +687,7 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     */
     {
         pstate->topmodule = nn_module_make(pstate, "", "<state>", false, true);
-        pstate->constructorname = nn_string_copycstr(pstate, "constructor");
+        pstate->constructorname = nn_string_intern(pstate, "constructor");
     }
     /*
     * declare default classes
@@ -804,7 +804,7 @@ NNObjFunction* nn_state_compilesource(NNState* state, NNObjModule* module, bool 
     }
     else
     {
-        function->name = nn_string_copycstr(state, "(evaledcode)");
+        function->name = nn_string_intern(state, "(evaledcode)");
     }
     closure = nn_object_makefuncclosure(state, function, nn_value_makenull());
     if(!fromeval)

@@ -42,13 +42,29 @@ NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+NNValue nn_objfnobject_getselfinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)argv;
     (void)argc;
     return thisval;
 }
+
+NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+{
+    (void)state;
+    (void)argv;
+    (void)argc;
+    #if 0
+        nn_vmdebug_printvalue(state, thisval, "<object>.class:thisval=");
+    #endif
+    if(nn_value_isinstance(thisval))
+    {
+        return nn_value_fromobject(nn_value_asinstance(thisval)->klass);
+    }
+    return nn_value_makenull();
+}
+
 
 NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
@@ -187,8 +203,8 @@ NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValue* argv
     if(!isiterable && nn_value_isinstance(selfval))
     {
         klass = nn_value_asinstance(selfval)->klass;
-        isiterable = nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_copycstr(state, "@iter")), &dummy)
-            && nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_copycstr(state, "@itern")), &dummy);
+        isiterable = nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_intern(state, "@iter")), &dummy)
+            && nn_valtable_get(&klass->instmethods, nn_value_fromobject(nn_string_intern(state, "@itern")), &dummy);
     }
     return nn_value_makebool(isiterable);
 }
@@ -259,10 +275,13 @@ void nn_state_installobjectobject(NNState* state)
         {"isInstance", nn_objfnobject_isinstance},
         {NULL, NULL},
     };
-    nn_class_defstaticnativemethod(state->classprimobject, nn_string_copycstr(state, "typename"), nn_objfnobject_typename);
-    nn_class_defstaticcallablefield(state->classprimobject, nn_string_copycstr(state, "prototype"), nn_objfnobject_getselfclass);
+
+    //nn_class_defcallablefield(state->classprimobject, nn_string_intern(state, "class"), nn_objfnobject_getselfclass);
+
+    nn_class_defstaticnativemethod(state->classprimobject, nn_string_intern(state, "typename"), nn_objfnobject_typename);
+    nn_class_defstaticcallablefield(state->classprimobject, nn_string_intern(state, "prototype"), nn_objfnobject_getselfinstance);
     nn_state_installmethods(state, state->classprimobject, objectmethods);
     {
-        nn_class_defstaticcallablefield(state->classprimclass, nn_string_copycstr(state, "name"), nn_objfnclass_getselfname);
+        nn_class_defstaticcallablefield(state->classprimclass, nn_string_intern(state, "name"), nn_objfnclass_getselfname);
     }
 }

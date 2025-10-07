@@ -7,15 +7,107 @@
 * TODO: get rid of unused functions
 */
 
+double nn_string_tabhashvaluecombine(const char* data, size_t len, uint32_t hsv)
+{
+    double dn;
+    dn = 0;
+    dn += hsv;
+    dn += len;
+    dn += data[0];
+    return dn;
+}
+
+NNValue nn_string_tabhashvaluestr(const char* data, size_t len, uint32_t hsv)
+{
+    return nn_value_makenumber(nn_string_tabhashvaluecombine(data, len, hsv));
+}
+
+NNValue nn_string_tabhashvalueobj(NNObjString* os)
+{
+    return nn_string_tabhashvaluestr(nn_string_getdata(os), nn_string_getlength(os), os->hashvalue);
+}
+
+NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, size_t length, uint32_t hsv)
+{
+    size_t slen;
+    uint32_t index;
+    double dn;
+    double wanteddn;
+    const char* sdata;
+    NNHashValEntry* entry;
+    NNObjString* string;
+    NN_NULLPTRCHECK_RETURNVALUE(table, NULL);
+    if(table->htcount == 0)
+    {
+        return NULL;
+    }
+    wanteddn = nn_string_tabhashvaluecombine(chars, length, hsv);
+    index = hsv & (table->htcapacity - 1);
+    while(true)
+    {
+        entry = &table->htentries[index];
+        if(nn_value_isnull(entry->key))
+        {
+            /*
+            // stop if we find an empty non-tombstone entry
+            //if (nn_value_isnull(entry->value))
+            */
+            {
+                return NULL;
+            }
+        }
+        #if 0
+            string = nn_value_asstring(entry->key);
+            slen = nn_string_getlength(string);
+            sdata = nn_string_getdata(string);
+            if(slen == length) 
+            {
+                if(string->hashvalue == hsv)
+                {
+                    if(memcmp(sdata, chars, length) == 0)
+                    {
+                        /* we found it */
+                        return string;
+                    }
+                }
+            }
+        #else
+            dn = nn_value_asnumber(entry->key);
+            if(dn == wanteddn)
+            {
+                return nn_value_asstring(entry->value.value);
+            }
+        #endif
+        index = (index + 1) & (table->htcapacity - 1);
+    }
+    return NULL;
+}
+
+void nn_string_strtabstore(NNState* state, NNObjString* os)
+{
+    nn_vm_stackpush(state, nn_value_fromobject(os));
+    #if 0
+        nn_valtable_set(&state->allocatedstrings, nn_value_fromobject(os), nn_value_makenull());
+    #else
+        nn_valtable_set(&state->allocatedstrings, nn_string_tabhashvalueobj(os), nn_value_fromobject(os));    
+    #endif
+    nn_vm_stackpop(state);
+}
+
+NNObjString* nn_string_strtabfind(NNState* state, const char* str, size_t len, uint32_t hsv)
+{
+    NNObjString* rs;
+    rs = nn_valtable_findstring(&state->allocatedstrings, str, len, hsv);
+    return rs;
+}
+
 NNObjString* nn_string_makefromstrbuf(NNState* state, NNStringBuffer buf, uint32_t hsv)
 {
     NNObjString* rs;
     rs = (NNObjString*)nn_object_allocobject(state, sizeof(NNObjString), NEON_OBJTYPE_STRING, false);
     rs->sbuf = buf;
     rs->hashvalue = hsv;
-    nn_vm_stackpush(state, nn_value_fromobject(rs));
-    nn_valtable_set(&state->allocatedstrings, nn_value_fromobject(rs), nn_value_makenull());
-    nn_vm_stackpop(state);
+    nn_string_strtabstore(state, rs);
     return rs;
 }
 
@@ -48,13 +140,14 @@ NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
     NNObjString* rs;
     NNStringBuffer buf;
     hsv = nn_util_hashstring(chars, length);
-    rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
+    rs = nn_string_strtabfind(state, chars, length, hsv);
     if(rs != NULL)
     {
         nn_memory_free(chars);
         return rs;
     }
     nn_strbuf_makebasicemptystack(&buf, NULL, 0);
+    buf.islong = true;
     nn_strbuf_setdata(&buf, chars);
     nn_strbuf_setlength(&buf, length);
     return nn_string_makefromstrbuf(state, buf, hsv);
@@ -306,7 +399,7 @@ NNValue nn_objfnstring_constructor(NNState* state, NNValue thisval, NNValue* arg
     (void)thisval;
     nn_argcheck_init(state, &check, "constructor", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    os = nn_string_copylen(state, "", 0);
+    os = nn_string_internlen(state, "", 0);
     return nn_value_fromobject(os);
 }
 
@@ -325,7 +418,7 @@ NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
     NNObjString* str;
     if(len <= 0)
     {
-        return nn_value_fromobject(nn_string_copylen(state, "", 0));
+        return nn_value_fromobject(nn_string_internlen(state, "", 0));
     }
     str = nn_string_copylen(state, "", 0);
     nn_string_appendstringlen(str, buf, len);
@@ -430,7 +523,7 @@ NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* argv, si
     selflen = (int)nn_string_getlength(selfstr);
     if((idx < 0) || (idx >= selflen))
     {
-        return nn_value_fromobject(nn_string_copylen(state, "", 0));
+        return nn_value_fromobject(nn_string_internlen(state, "", 0));
     }
     else
     {
@@ -664,7 +757,7 @@ NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* argv, size
     /* All spaces? */
     if(*string == 0)
     {
-        return nn_value_fromobject(nn_string_copylen(state, "", 0));
+        return nn_value_fromobject(nn_string_internlen(state, "", 0));
     }
     /* Trim trailing space */
     end = string + strlen(string) - 1;
@@ -721,7 +814,7 @@ NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* argv, siz
     /* All spaces? */
     if(*string == 0)
     {
-        return nn_value_fromobject(nn_string_copylen(state, "", 0));
+        return nn_value_fromobject(nn_string_internlen(state, "", 0));
     }
     end = string + strlen(string) - 1;
     end[1] = '\0';
@@ -748,7 +841,7 @@ NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* argv, siz
     /* All spaces? */
     if(*string == 0)
     {
-        return nn_value_fromobject(nn_string_copylen(state, "", 0));
+        return nn_value_fromobject(nn_string_internlen(state, "", 0));
     }
     end = string + strlen(string) - 1;
     if(trimmer == '\0')
@@ -792,7 +885,7 @@ NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* argv, s
     if(nn_string_getlength(string) > 0 && nn_string_getlength(needle) > 0)
     {
         haystack = nn_string_getdata(string);
-        result = strstr(haystack + startindex, nn_string_getdata(needle));
+        result = (char*)strstr(haystack + startindex, nn_string_getdata(needle));
         if(result != NULL)
         {
             return nn_value_makenumber((int)(result - haystack));
@@ -1397,11 +1490,11 @@ void nn_state_installobjectstring(NNState* state)
         {NULL, NULL},
     };
     nn_class_defnativeconstructor(state->classprimstring, nn_objfnstring_constructor);
-    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "fromCharCode"), nn_objfnstring_fromcharcode);
-    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Decode"), nn_objfnstring_utf8decode);
-    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8Encode"), nn_objfnstring_utf8encode);
-    nn_class_defstaticnativemethod(state->classprimstring, nn_string_copycstr(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
-    nn_class_defcallablefield(state->classprimstring, nn_string_copycstr(state, "length"), nn_objfnstring_length);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "fromCharCode"), nn_objfnstring_fromcharcode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Decode"), nn_objfnstring_utf8decode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8Encode"), nn_objfnstring_utf8encode);
+    nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern(state, "utf8NumBytes"), nn_objfnstring_utf8numbytes);
+    nn_class_defcallablefield(state->classprimstring, nn_string_intern(state, "length"), nn_objfnstring_length);
     nn_state_installmethods(state, state->classprimstring, stringmethods);
 
 }

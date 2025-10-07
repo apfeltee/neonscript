@@ -62,7 +62,7 @@ void nn_state_setupmodulepaths(NNState* state)
 void nn_module_setfilefield(NNState* state, NNObjModule* module)
 {
     return;
-    nn_valtable_set(&module->deftable, nn_value_fromobject(nn_string_copycstr(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
+    nn_valtable_set(&module->deftable, nn_value_fromobject(nn_string_intern(state, "__file__")), nn_value_fromobject(nn_string_copyobject(state, module->physicalpath)));
 }
 
 void nn_module_destroy(NNState* state, NNObjModule* module)

@@ -467,6 +467,7 @@ size_t nn_strutil_inpreplace(char* target, size_t tgtlen, int findme, const char
 
 NNStringBuffer* nn_strbuf_makelongfromptr(NNStringBuffer* sb, size_t len)
 {
+    //fprintf(stderr, "in makelong...\n");
     sb->isintern = false;
     sb->storedlength = 0;
     sb->capacity = ROUNDUP2POW(len + 1);
@@ -483,10 +484,14 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, b
 {
     memset(sb, 0, sizeof(NNStringBuffer));
     sb->isintern = false;
-    sb->storedlength = len;
-    sb->capacity = 0;
-    #if 1
-        sb->islong = (len >= NN_CONF_STRBUFMAXSHORTLENGTH);
+    sb->capacity = len;
+    sb->storedlength = 0;
+    sb->islong = false;
+    #if 0
+        if(len != 0)
+        {
+            sb->islong = (len >= NN_CONF_STRBUFMAXSHORTLENGTH);
+        }
     #else
         sb->islong = true;
     #endif
@@ -508,14 +513,11 @@ bool nn_strbuf_initbasicempty(NNStringBuffer* sb, const char* str, size_t len, b
     }
     if(str != NULL)
     {
-        if(sb->islong)
+        if(!sb->islong)
         {
-            return nn_strbuf_appendstrn(sb, str, len);
+            sb->capacity = NN_CONF_STRBUFMAXSHORTLENGTH;
         }
-        else
-        {
-            memcpy(sb->shortstrdata, str, len);
-        }
+        return nn_strbuf_appendstrn(sb, str, len);
     }
     return true;
 }
@@ -771,18 +773,11 @@ bool nn_strbuf_appendstrn(NNStringBuffer* sb, const char* str, size_t len)
     if(len > 0)
     {
         nn_strbuf_ensurecapacity(sb, sb->storedlength + len);
-        #if 1
-            data = nn_strbuf_mutdata(sb);
-            memcpy(data + sb->storedlength, str, len);
-            sb->storedlength = sb->storedlength + len;
-            data[sb->storedlength] = '\0';
-        #else
-            size_t i;
-            for(i=0; i<len; i++)
-            {
-                nn_strbuf_appendchar(sb, str[i]);
-            }
-        #endif
+        data = nn_strbuf_mutdata(sb);
+        memcpy(data + sb->storedlength, str, len+1);
+        sb->storedlength = sb->storedlength + len;
+        data[sb->storedlength] = '\0';
+        //fprintf(stderr, "appendstrn: islong=%d (%d) <<<%.*s>>>\n", sb->islong, sb->storedlength, (int)sb->storedlength, data);
     }
     return true;
 }

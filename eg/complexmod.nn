@@ -11,7 +11,7 @@ const image_width = 150;
 const image_height = 50;
 const max_iter = 100;
 const escape = 2;
-
+const hypot = Math.hypot
 function mandel()
 {
     var x;
@@ -42,33 +42,37 @@ function mandel()
             {
                 z = (z * z);
                 z = (z + c);
-                if(Math.hypot(z.re, z.im) >= escape)
+                if(hypot(z.re, z.im) >= escape)
                 {
                     break;
                 }
             }
             if(n == max_iter)
             {
-                print("-");
+                // "-"
+                STDOUT.putc(45);
             }
             else if(n > 6)
             {
-                print(".");
+                // "."
+                STDOUT.putc(46);
             }
             else if(n > 3)
             {
-                print("+");
+                // "+"
+                STDOUT.putc(43);
             }
             else if(n > 2)
             {
-                print("x");
+                // "x"
+                STDOUT.putc(120);
             }
             else
             {
-                print("*");
+                STDOUT.putc(42);
             }
         }
-        print("\n");
+        STDOUT.putc(10);
     }
 }
 function main()

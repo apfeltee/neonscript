@@ -402,51 +402,6 @@ bool nn_valtable_copy(NNHashValTable* from, NNHashValTable* to)
     return true;
 }
 
-NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, size_t length, uint32_t hsv)
-{
-    size_t slen;
-    uint32_t index;
-    const char* sdata;
-    NNHashValEntry* entry;
-    NNObjString* string;
-    NN_NULLPTRCHECK_RETURNVALUE(table, NULL);
-    if(table->htcount == 0)
-    {
-        return NULL;
-    }
-    index = hsv & (table->htcapacity - 1);
-    while(true)
-    {
-        entry = &table->htentries[index];
-        if(nn_value_isnull(entry->key))
-        {
-            /*
-            // stop if we find an empty non-tombstone entry
-            //if (nn_value_isnull(entry->value))
-            */
-            {
-                return NULL;
-            }
-        }
-        string = nn_value_asstring(entry->key);
-        slen = nn_string_getlength(string);
-        sdata = nn_string_getdata(string);
-        if(slen == length) 
-        {
-            if(string->hashvalue == hsv)
-            {
-                if(memcmp(sdata, chars, length) == 0)
-                {
-                    /* we found it */
-                    return string;
-                }
-            }
-        }
-        index = (index + 1) & (table->htcapacity - 1);
-    }
-    return NULL;
-}
-
 NNValue nn_valtable_findkey(NNHashValTable* table, NNValue value)
 {
     int i;

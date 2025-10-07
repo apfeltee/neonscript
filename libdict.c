@@ -5,11 +5,22 @@ NNObjDict* nn_object_makedict(NNState* state)
 {
     NNObjDict* dict;
     dict = (NNObjDict*)nn_object_allocobject(state, sizeof(NNObjDict), NEON_OBJTYPE_DICT, false);
-    nn_valarray_init(state, &dict->names);
+    nn_valarray_init(state, &dict->htnames);
     nn_valtable_init(state, &dict->htab);
     return dict;
 }
 
+void nn_dict_destroy(NNObjDict* dict)
+{
+    nn_valarray_destroy(&dict->htnames, false);
+    nn_valtable_destroy(&dict->htab);
+}
+
+void nn_dict_mark(NNState* state, NNObjDict* dict)
+{    
+    nn_valarray_mark(&dict->htnames);
+    nn_valtable_mark(state, &dict->htab);
+}
 
 bool nn_dict_setentry(NNObjDict* dict, NNValue key, NNValue value)
 {
@@ -17,7 +28,7 @@ bool nn_dict_setentry(NNObjDict* dict, NNValue key, NNValue value)
     if(!nn_valtable_get(&dict->htab, key, &tempvalue))
     {
         /* add key if it doesn't exist. */
-        nn_valarray_push(&dict->names, key);
+        nn_valarray_push(&dict->htnames, key);
     }
     return nn_valtable_set(&dict->htab, key, value);
 }
@@ -56,12 +67,12 @@ NNObjDict* nn_dict_copy(NNObjDict* dict)
     // @TODO: Figure out how to handle dictionary values correctly
     // remember that copying keys is redundant and unnecessary
     */
-    dsz = nn_valarray_count(&dict->names);
+    dsz = nn_valarray_count(&dict->htnames);
     for(i = 0; i < dsz; i++)
     {
-        key = nn_valarray_get(&dict->names, i);
-        field = nn_valtable_getfield(&dict->htab, nn_valarray_get(&dict->names, i));
-        nn_valarray_push(&ndict->names, key);
+        key = nn_valarray_get(&dict->htnames, i);
+        field = nn_valtable_getfield(&dict->htab, nn_valarray_get(&dict->htnames, i));
+        nn_valarray_push(&ndict->htnames, key);
         nn_valtable_setwithtype(&ndict->htab, key, field->value, field->type, nn_value_isstring(key));
         
     }
@@ -73,7 +84,7 @@ NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* argv, size
     NNArgCheck check;
     nn_argcheck_init(state, &check, "length", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_valarray_count(&nn_value_asdict(thisval)->names));
+    return nn_value_makenumber(nn_valarray_count(&nn_value_asdict(thisval)->htnames));
 }
 
 NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -118,7 +129,7 @@ NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv, size_
     nn_argcheck_init(state, &check, "clear", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(thisval);
-    nn_valarray_destroy(&dict->names, false);
+    nn_valarray_destroy(&dict->htnames, false);
     nn_valtable_destroy(&dict->htab);
     return nn_value_makenull();
 }
@@ -138,9 +149,9 @@ NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv, size_
         nn_except_throwclass(state, state->exceptions.argumenterror, "failed to copy table");
         return nn_value_makenull();
     }
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        nn_valarray_push(&newdict->names, nn_valarray_get(&dict->names, i));
+        nn_valarray_push(&newdict->htnames, nn_valarray_get(&dict->htnames, i));
     }
     return nn_value_fromobject(newdict);
 }
@@ -157,12 +168,12 @@ NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* argv, siz
     dict = nn_value_asdict(thisval);
     newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     tmpvalue = nn_value_makenull();
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &tmpvalue);
+        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &tmpvalue);
         if(!nn_value_compare(state, tmpvalue, nn_value_makenull()))
         {
-            nn_dict_addentry(newdict, nn_valarray_get(&dict->names, i), tmpvalue);
+            nn_dict_addentry(newdict, nn_valarray_get(&dict->htnames, i), tmpvalue);
         }
     }
     return nn_value_fromobject(newdict);
@@ -191,11 +202,11 @@ NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isdict);
     dict = nn_value_asdict(thisval);
     dictcpy = nn_value_asdict(argv[0]);
-    for(i = 0; i < nn_valarray_count(&dictcpy->names); i++)
+    for(i = 0; i < nn_valarray_count(&dictcpy->htnames); i++)
     {
-        if(!nn_valtable_get(&dict->htab, nn_valarray_get(&dictcpy->names, i), &tmp))
+        if(!nn_valtable_get(&dict->htab, nn_valarray_get(&dictcpy->htnames, i), &tmp))
         {
-            nn_valarray_push(&dict->names, nn_valarray_get(&dictcpy->names, i));
+            nn_valarray_push(&dict->htnames, nn_valarray_get(&dictcpy->htnames, i));
         }
     }
     nn_valtable_addall(&dictcpy->htab, &dict->htab, true);
@@ -235,9 +246,9 @@ NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        nn_array_push(list, nn_valarray_get(&dict->names, i));
+        nn_array_push(list, nn_valarray_get(&dict->htnames, i));
     }
     return nn_value_fromobject(list);
 }
@@ -253,9 +264,9 @@ NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKCOUNT(&check, 0);
     dict = nn_value_asdict(thisval);
     list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        field = nn_dict_getentry(dict, nn_valarray_get(&dict->names, i));
+        field = nn_dict_getentry(dict, nn_valarray_get(&dict->htnames, i));
         nn_array_push(list, field->value);
     }
     return nn_value_fromobject(list);
@@ -275,19 +286,19 @@ NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* argv, size
     {
         nn_valtable_delete(&dict->htab, argv[0]);
         index = -1;
-        for(i = 0; i < nn_valarray_count(&dict->names); i++)
+        for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
         {
-            if(nn_value_compare(state, nn_valarray_get(&dict->names, i), argv[0]))
+            if(nn_value_compare(state, nn_valarray_get(&dict->htnames, i), argv[0]))
             {
                 index = i;
                 break;
             }
         }
-        for(i = index; i < nn_valarray_count(&dict->names); i++)
+        for(i = index; i < nn_valarray_count(&dict->htnames); i++)
         {
-            nn_valarray_set(&dict->names, i, nn_valarray_get(&dict->names, i + 1));
+            nn_valarray_set(&dict->htnames, i, nn_valarray_get(&dict->htnames, i + 1));
         }
-        nn_valarray_decreaseby(&dict->names, 1);
+        nn_valarray_decreaseby(&dict->htnames, 1);
         return value;
     }
     return nn_value_makenull();
@@ -298,7 +309,7 @@ NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* argv, siz
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isempty", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makebool(nn_valarray_count(&nn_value_asdict(thisval)->names) == 0);
+    return nn_value_makebool(nn_valarray_count(&nn_value_asdict(thisval)->htnames) == 0);
 }
 
 NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -322,11 +333,11 @@ NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* argv, size
     dict = nn_value_asdict(thisval);
     namelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
     valuelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray(state));
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        nn_array_push(namelist, nn_valarray_get(&dict->names, i));
+        nn_array_push(namelist, nn_valarray_get(&dict->htnames, i));
         NNValue value;
-        if(nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value))
+        if(nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value))
         {
             nn_array_push(valuelist, value);
         }
@@ -367,17 +378,17 @@ NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv, size_
     dict = nn_value_asdict(thisval);
     if(nn_value_isnull(argv[0]))
     {
-        if(nn_valarray_count(&dict->names) == 0)
+        if(nn_valarray_count(&dict->htnames) == 0)
         {
             return nn_value_makebool(false);
         }
-        return nn_valarray_get(&dict->names, 0);
+        return nn_valarray_get(&dict->htnames, 0);
     }
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
-        if(nn_value_compare(state, argv[0], nn_valarray_get(&dict->names, i)) && (i + 1) < nn_valarray_count(&dict->names))
+        if(nn_value_compare(state, argv[0], nn_valarray_get(&dict->htnames, i)) && (i + 1) < nn_valarray_count(&dict->htnames))
         {
-            return nn_valarray_get(&dict->names, i + 1);
+            return nn_valarray_get(&dict->htnames, i + 1);
         }
     }
     return nn_value_makenull();
@@ -401,18 +412,18 @@ NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t
     callable = argv[0];
     arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
         passi = 0;
         if(arity > 0)
         {
-            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
+            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value);
             passi++;
             nestargs[0] = value;
             if(arity > 1)
             {
                 passi++;
-                nestargs[1] = nn_valarray_get(&dict->names, i);
+                nestargs[1] = nn_valarray_get(&dict->htnames, i);
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &unused, false);
@@ -440,10 +451,10 @@ NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size
     arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     resultdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict(state));
     value = nn_value_makenull();
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
         passi = 0;
-        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
+        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value);
         if(arity > 0)
         {
             passi++;
@@ -451,13 +462,13 @@ NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size
             if(arity > 1)
             {
                 passi++;
-                nestargs[1] = nn_valarray_get(&dict->names, i);
+                nestargs[1] = nn_valarray_get(&dict->htnames, i);
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
         if(!nn_value_isfalse(result))
         {
-            nn_dict_addentry(resultdict, nn_valarray_get(&dict->names, i), value);
+            nn_dict_addentry(resultdict, nn_valarray_get(&dict->htnames, i), value);
         }
     }
     /* pop the call list */
@@ -482,18 +493,18 @@ NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t
     callable = argv[0];
     arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
         passi = 0;
         if(arity > 0)
         {
-            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
+            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value);
             passi++;
             nestargs[0] = value;
             if(arity > 1)
             {
                 passi++;
-                nestargs[1] = nn_valarray_get(&dict->names, i);
+                nestargs[1] = nn_valarray_get(&dict->htnames, i);
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
@@ -525,18 +536,18 @@ NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_
     callable = argv[0];
     arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 2);
     value = nn_value_makenull();
-    for(i = 0; i < nn_valarray_count(&dict->names); i++)
+    for(i = 0; i < nn_valarray_count(&dict->htnames); i++)
     {
         passi = 0;
         if(arity > 0)
         {
-            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
+            nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value);
             passi++;
             nestargs[0] = value;
             if(arity > 1)
             {
                 passi++;
-                nestargs[1] = nn_valarray_get(&dict->names, i);
+                nestargs[1] = nn_valarray_get(&dict->htnames, i);
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
@@ -572,18 +583,18 @@ NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size
     {
         accumulator = argv[1];
     }
-    if(nn_value_isnull(accumulator) && nn_valarray_count(&dict->names) > 0)
+    if(nn_value_isnull(accumulator) && nn_valarray_count(&dict->htnames) > 0)
     {
-        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, 0), &accumulator);
+        nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, 0), &accumulator);
         startindex = 1;
     }
     arity = nn_nestcall_prepare(state, callable, thisval, nestargs, 4);
     value = nn_value_makenull();
-    for(i = startindex; i < nn_valarray_count(&dict->names); i++)
+    for(i = startindex; i < nn_valarray_count(&dict->htnames); i++)
     {
         passi = 0;
         /* only call map for non-empty values in a list. */
-        if(!nn_value_isnull(nn_valarray_get(&dict->names, i)) && !nn_value_isnull(nn_valarray_get(&dict->names, i)))
+        if(!nn_value_isnull(nn_valarray_get(&dict->htnames, i)) && !nn_value_isnull(nn_valarray_get(&dict->htnames, i)))
         {
             if(arity > 0)
             {
@@ -591,13 +602,13 @@ NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size
                 nestargs[0] = accumulator;
                 if(arity > 1)
                 {
-                    nn_valtable_get(&dict->htab, nn_valarray_get(&dict->names, i), &value);
+                    nn_valtable_get(&dict->htab, nn_valarray_get(&dict->htnames, i), &value);
                     passi++;
                     nestargs[1] = value;
                     if(arity > 2)
                     {
                         passi++;
-                        nestargs[2] = nn_valarray_get(&dict->names, i);
+                        nestargs[2] = nn_valarray_get(&dict->htnames, i);
                         if(arity > 4)
                         {
                             passi++;

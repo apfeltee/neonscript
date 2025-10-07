@@ -146,6 +146,7 @@ NNObjString* nn_printer_copystring(NNPrinter* pr)
 
 bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
 {
+    //fprintf(stderr, "writestringl: (%d) <<<%.*s>>>\n", elen, elen, estr);
     size_t chlen;
     chlen = sizeof(char);
     if(elen > 0)
@@ -404,13 +405,13 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
     NNValue val;
     NNObjDict* subdict;
     NNProperty* field;
-    dsz = nn_valarray_count(&dict->names);
+    dsz = nn_valarray_count(&dict->htnames);
     nn_printer_printf(pr, "{");
     for(i = 0; i < dsz; i++)
     {
         valisrecur = false;
         keyisrecur = false;
-        val = nn_valarray_get(&dict->names, i);
+        val = nn_valarray_get(&dict->htnames, i);
         if(nn_value_isdict(val))
         {
             subdict = nn_value_asdict(val);
@@ -428,7 +429,7 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
             nn_printer_printvalue(pr, val, true, true);
         }
         nn_printer_printf(pr, ": ");
-        field = nn_valtable_getfield(&dict->htab, nn_valarray_get(&dict->names, i));
+        field = nn_valtable_getfield(&dict->htab, nn_valarray_get(&dict->htnames, i));
         if(field != NULL)
         {
             if(nn_value_isdict(field->value))
@@ -705,7 +706,17 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
 
 void nn_printer_printnumber(NNPrinter* pr, NNValue value)
 {
-    nn_printer_printf(pr, "%.16g", nn_value_asnumber(value));
+    double dn;
+    dn = nn_value_asnumber(value);
+    #if 1
+        nn_printer_printf(pr, "%.16g", dn);
+    #else
+        enum {kMaxBufSize = 128 };
+        size_t l;
+        char buf[kMaxBufSize];
+        l = snprintf(buf, kMaxBufSize, "%.16g", dn);
+        nn_printer_writestringl(pr, buf, l);
+    #endif
 }
 
 void nn_printer_printvalue(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)

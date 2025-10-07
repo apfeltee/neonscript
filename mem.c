@@ -13,19 +13,21 @@
 
 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
     /* if any global variables need to be declared, declare them here. */
+    void* g_mspcontext;
 #endif
 
 
 void nn_memory_init()
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        nn_allocator_init();
+        g_mspcontext = nn_allocator_create();
     #endif
 }
 
 void nn_memory_finish()
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        nn_allocator_destroy(g_mspcontext);
     #endif
 }
 
@@ -55,7 +57,7 @@ void* nn_memory_malloc(size_t sz)
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        p = (void*)nn_allocuser_malloc(sz);
+        p = (void*)nn_allocuser_malloc(g_mspcontext, sz);
     #else
         p = (void*)malloc(sz);
     #endif
@@ -70,7 +72,7 @@ void* nn_memory_realloc(void* p, size_t nsz)
         {
             return nn_memory_malloc(nsz);
         }
-        retp = (void*)nn_allocuser_realloc(p, nsz);
+        retp = (void*)nn_allocuser_realloc(g_mspcontext, p, nsz);
     #else
         retp = (void*)realloc(p, nsz);
     #endif
@@ -81,7 +83,8 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        p = (void*)nn_allocuser_calloc(count, typsize);
+        p = (void*)nn_allocuser_malloc(g_mspcontext, (count * typsize));
+        memset(p, 0, (count * typsize));
     #else
         p = (void*)calloc(count, typsize);
     #endif
@@ -91,7 +94,7 @@ void* nn_memory_calloc(size_t count, size_t typsize)
 void nn_memory_free(void* ptr)
 {
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-        nn_allocuser_free(ptr);
+        nn_allocuser_free(g_mspcontext, ptr);
     #else
         free(ptr);
     #endif
@@ -247,8 +250,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
             {
                 NNObjDict* dict;
                 dict = (NNObjDict*)object;
-                nn_valarray_mark(&dict->names);
-                nn_valtable_mark(state, &dict->htab);
+                nn_dict_mark(state, dict);
             }
             break;
         case NEON_OBJTYPE_ARRAY:
@@ -353,8 +355,7 @@ void nn_object_destroy(NNState* state, NNObject* object)
             {
                 NNObjDict* dict;
                 dict = (NNObjDict*)object;
-                nn_valarray_destroy(&dict->names, false);
-                nn_valtable_destroy(&dict->htab);
+                nn_dict_destroy(dict);
                 nn_gcmem_release(state, object, sizeof(NNObjDict));
             }
             break;

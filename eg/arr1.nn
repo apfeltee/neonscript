@@ -7,4 +7,6 @@ println("a now  =", a);
 println("a[1]   =", a[1]);
 a[5]++
 println("after...?")
-println("a inc  =", a.join("/"));
+println("a inc  =", a.join("|"));
+println((456).toString())
+
