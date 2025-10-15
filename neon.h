@@ -43,8 +43,11 @@
 /**
 * if enabled, uses NaN tagging for values.
 */
-#define NEON_CONFIG_USENANTAGGING 1
+#define NEON_CONFIG_USENANTAGGING 0
 
+/**
+*/
+#define NEON_CONFIG_DEBUGMEMORY 0
 
 /**
 * if enabled, most API calls will check for null pointers, and either
@@ -56,17 +59,25 @@
 
 #if defined(__STRICT_ANSI__)
     #define va_copy(...)
-    #define NEON_INLINE static
-    #define NEON_FORCEINLINE static
-    #define inline
     #define __FUNCTION__ "<here>"
+#endif
+
+#if 0
+    #if defined(__STRICT_ANSI__)
+        #define NEON_INLINE static
+        #define NEON_FORCEINLINE static
+        #define inline
+    #else
+        #define NEON_INLINE static
+        #if defined(__GNUC__) || defined(__TINYC__)
+            #define NEON_FORCEINLINE static __attribute__((always_inline)) inline
+        #else
+            #define NEON_FORCEINLINE static inline
+        #endif
+    #endif
 #else
     #define NEON_INLINE static
-    #if defined(__GNUC__) || defined(__TINYC__)
-        #define NEON_FORCEINLINE static __attribute__((always_inline)) inline
-    #else
-        #define NEON_FORCEINLINE static inline
-    #endif
+    #define NEON_FORCEINLINE static
 #endif
 
 #if !defined(NEON_FORCEINLINE)
@@ -179,7 +190,7 @@
 #define NEON_CONFIG_ASTMAXSTRTPLDEPTH (8)
 
 /* how many catch() clauses per try statement */
-#define NEON_CONFIG_MAXEXCEPTHANDLERS (16)
+#define NEON_CONFIG_MAXEXCEPTHANDLERS (2)
 
 #define NN_CONF_STRBUFMAXSHORTLENGTH (64*1)
 
@@ -213,8 +224,6 @@
 // 3. $thisval must be retrieved before any call to nn_gcmem_protect in a
 // native function.
 */
-#define GROW_CAPACITY(capacity) \
-    ((capacity) < 4 ? 4 : (capacity)*2)
 
 #define nn_gcmem_freearray(state, typsz, pointer, oldcount) \
     nn_gcmem_release(state, pointer, (typsz) * (oldcount))
@@ -661,7 +670,7 @@ typedef struct /**/ NNDefField NNDefField;
 typedef struct /**/ NNDefClass NNDefClass;
 typedef struct /**/ NNDefModule NNDefModule;
 typedef struct /**/ NNState NNState;
-typedef struct /**/ NNPrinter NNPrinter;
+typedef struct /**/ NNIOStream NNIOStream;
 typedef struct /**/ NNArgCheck NNArgCheck;
 typedef struct /**/NNInstruction NNInstruction;
 typedef struct utf8iterator_t utf8iterator_t;
@@ -706,7 +715,7 @@ typedef int(*NNStrBufCharModFunc)(int);
 
 struct NNStringBuffer
 {
-    int isintern:1;
+    uint8_t isintern;
     /* capacity should be >= length+1 to allow for \0 */
     size_t capacity;
     size_t storedlength;
@@ -756,23 +765,23 @@ struct utf8iterator_t
 
 struct NNIOResult
 {
-    int success:1;
+    uint8_t success;
     char* data;
     size_t length;    
 };
 
-struct NNPrinter
+struct NNIOStream
 {
     /* if file: should be closed when writer is destroyed? */
-    int shouldclose:1;
+    uint8_t shouldclose;
     /* if file: should write operations be flushed via fflush()? */
-    int shouldflush:1;
-    /* if string: true if $strbuf was taken via nn_printer_take */
-    int stringtaken:1;
+    uint8_t shouldflush;
+    /* if string: true if $strbuf was taken via nn_iostream_take */
+    uint8_t stringtaken;
     /* was this writer instance created on stack? */
-    int fromstack:1;
-    int shortenvalues:1;
-    int jsonmode:1;
+    uint8_t fromstack;
+    uint8_t shortenvalues;
+    uint8_t jsonmode;
     size_t maxvallength;
     /* the mode that determines what writer actually does */
     NNPrMode wrmode;
@@ -787,7 +796,7 @@ struct NNFormatInfo
 	size_t fmtlen;
     /* the actual format string */
 	const char* fmtstr;
-	NNPrinter* writer;
+	NNIOStream* writer;
 	NNState* pstate;
 };
 
@@ -797,7 +806,7 @@ struct NNValue
     NNValType type;
     union
     {
-        int vbool:1;
+        uint8_t vbool;
         double vfltnum;
         NNObject* vobjpointer;
     } valunion;
@@ -806,9 +815,9 @@ struct NNValue
 
 struct NNObject
 {
-    NNObjType type;
-    bool mark;
-    NNState* pstate;
+	NNObjType type;
+	bool mark;
+	NNState* pstate;
     /*
     // when an object is marked as stale, it means that the
     // GC will never collect this object. This can be useful
@@ -816,8 +825,9 @@ struct NNObject
     // objects in their types/pointers. The GC cannot reach
     // them yet, so it's best for them to be kept stale.
     */
-    bool stale;
-    NNObject* next;
+	bool stale;
+	NNObject* next;    
+
 };
 
 struct NNPropGetSet
@@ -850,7 +860,7 @@ struct NNInstruction
     /* opcode or value */
     uint8_t code;
     /* line corresponding to where this instruction was emitted */
-    short srcline;
+    uint8_t srcline;
 };
 
 struct NNBlob
@@ -985,41 +995,31 @@ struct NNObjInstance
 
 struct NNObjFunction
 {
-    NNObject objpadding;
-    NNFuncContextType contexttype;
-    NNObjString* name;
-    int upvalcount;
-    NNValue clsthisval;
-    NNHashValTable defaultargvalues;
-    union
-    {
-        /* closure */
-        struct
-        {
-            NNObjFunction* scriptfunc;
-            NNObjUpvalue** upvalues;            
-        } fnclosure;
-        /* compiled script function*/
-        struct
-        {
-            int arity;
-            bool isvariadic;
-            NNBlob blob;
-            NNObjModule* module;
-        } fnscriptfunc;
-        /* native C function */
-        struct
-        {
-            NNNativeFN natfunc;
-            void* userptr;
-        } fnnativefunc;
-        /* class function - bound or static */
-        struct
-        {
-            NNValue receiver;
-            NNObjFunction* method;
-        } fnmethod;
-    };
+	NNObject objpadding;
+	NNFuncContextType contexttype;
+	NNObjString* name;
+	int upvalcount;
+	NNValue clsthisval;
+	union {
+		struct {
+			NNObjFunction * scriptfunc;
+			NNObjUpvalue * * upvalues;
+		} fnclosure;
+		struct {
+			int arity;
+			bool isvariadic;
+			NNBlob blob;
+			NNObjModule* module;
+		} fnscriptfunc;
+		struct {
+			NNNativeFN natfunc;
+			void* userptr;
+		} fnnativefunc;
+		struct {
+			NNValue receiver;
+			NNObjFunction* method;
+		} fnmethod;
+	};
 };
 
 struct NNObjArray
@@ -1075,7 +1075,7 @@ struct NNExceptionFrame
 {
     uint16_t address;
     uint16_t finallyaddress;
-    NNObjClass* klass;
+    //NNObjClass* handlerklass;
 };
 
 struct NNCallFrame
@@ -1099,7 +1099,6 @@ struct NNProcessInfo
     NNObjFile* filestdout;
     NNObjFile* filestderr;
     NNObjFile* filestdin;
-
 };
 
 struct NNState
@@ -1221,9 +1220,9 @@ struct NNState
     NNProcessInfo* processinfo;
 
     /* miscellaneous */
-    NNPrinter* stdoutprinter;
-    NNPrinter* stderrprinter;
-    NNPrinter* debugwriter;
+    NNIOStream* stdoutprinter;
+    NNIOStream* stderrprinter;
+    NNIOStream* debugwriter;
 };
 
 struct NNAstToken
@@ -1382,6 +1381,12 @@ struct NNArgCheck
     int argc;
     NNValue* argv;
 };
+
+#if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
+    #define nn_memory_malloc(...) nn_memory_debugmalloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
+    #define nn_memory_calloc(...) nn_memory_debugcalloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
+    #define nn_memory_realloc(...) nn_memory_debugrealloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
+#endif
 
 #include "prot.inc"
 

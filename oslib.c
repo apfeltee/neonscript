@@ -356,6 +356,8 @@ int osfn_getpid()
     return -1;
 }
 
+extern int kill(int, int);
+
 int osfn_kill(int pid, int code)
 {
     #if defined(OSFN_ISUNIXLIKE)

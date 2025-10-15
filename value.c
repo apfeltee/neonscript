@@ -13,11 +13,11 @@ NNValue nn_value_copystr(NNState* state, const char* str)
 
 NNObjString* nn_value_tostring(NNState* state, NNValue value)
 {
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* s;
-    nn_printer_makestackstring(state, &pr);
-    nn_printer_printvalue(&pr, value, false, true);
-    s = nn_printer_takestring(&pr);
+    nn_iostream_makestackstring(state, &pr);
+    nn_iostream_printvalue(&pr, value, false, true);
+    s = nn_iostream_takestring(&pr);
     return s;
 }
 

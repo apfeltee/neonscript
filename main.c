@@ -4,6 +4,8 @@
 #include "optparse.h"
 #include "lino.h"
 
+#define STRINGIFY_(thing) #thing
+#define STRINGIFY(thing) STRINGIFY_(thing)
 
 static char* nn_cli_getinput(linocontext_t* lictx, const char* prompt)
 {
@@ -38,7 +40,7 @@ static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
     NNStringBuffer* source;
     const char* cursor;
     NNValue dest;
-    NNPrinter* pr;
+    NNIOStream* pr;
     pr = state->stdoutprinter;
     rescnt = 0;
     state->isrepl = true;
@@ -159,10 +161,10 @@ static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
             dest = state->lastreplvalue;
             if(!nn_value_isnull(dest))
             {
-                nn_printer_printf(pr, "%s = ", varnamebuf);
-                nn_printer_printvalue(pr, dest, true, true);
+                nn_iostream_printf(pr, "%s = ", varnamebuf);
+                nn_iostream_printvalue(pr, dest, true, true);
                 nn_state_defglobalvalue(state, varnamebuf, dest);
-                nn_printer_printf(pr, "\n");
+                nn_iostream_printf(pr, "\n");
                 rescnt++;
             }
             state->lastreplvalue = nn_value_makenull();
@@ -378,7 +380,7 @@ int main(int argc, char* argv[], char** envp)
         {"quit", 'q', OPTPARSE_NONE, "initiate, then immediately destroy the interpreter state"},
         {"types", 't', OPTPARSE_NONE, "print sizeof() of types"},
         {"apidebug", 'a', OPTPARSE_NONE, "print calls to API (very verbose, very slow)"},
-        {"gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC"},
+        {"gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC (default is " STRINGIFY(NEON_CONFIG_DEFAULTGCSTART) ")"},
         {0, 0, (optargtype_t)0, NULL}
     };
     lino_context_init(&lictx);

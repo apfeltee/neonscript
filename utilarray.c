@@ -1,13 +1,18 @@
 
 #include "neon.h"
 
-#if 1
-    #define MC_UTIL_INCCAPACITY(capacity) (((capacity) < 8) ? 8 : ((capacity) * 2))
-#else
-    #define MC_UTIL_INCCAPACITY(capacity) ((capacity) + 2)
-#endif
-
-bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillval, bool first);
+static uint64_t nn_valarray_getnextcapacity(uint64_t capacity)
+{
+    if(capacity < 4)
+    {
+        return 4;
+    }
+    #if 1
+        return nn_util_rndup2pow64(capacity+1);
+    #else
+        return (capacity * 2);
+    #endif
+}
 
 void nn_valarray_init(NNState* state, NNValArray* list)
 {
@@ -68,7 +73,7 @@ bool nn_valarray_push(NNValArray* list, NNValue value)
     if(list->listcapacity < list->listcount + 1)
     {
         oldcap = list->listcapacity;
-        list->listcapacity = MC_UTIL_INCCAPACITY(oldcap);
+        list->listcapacity = nn_valarray_getnextcapacity(oldcap);
         if(list->listitems == NULL)
         {
             list->listitems = (NNValue*)nn_memory_malloc(sizeof(NNValue) * list->listcapacity);
@@ -159,7 +164,7 @@ bool nn_valarray_ensurecapacity(NNValArray* list, size_t needsize, NNValue fillv
         }
         else
         {
-            ncap = MC_UTIL_INCCAPACITY(list->listcapacity + needsize);
+            ncap = nn_valarray_getnextcapacity(list->listcapacity + needsize);
         }
         list->listcapacity = ncap;
         if(list->listitems == NULL)

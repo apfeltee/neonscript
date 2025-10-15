@@ -97,7 +97,7 @@ NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_
     bool havejoinee;
     size_t i;
     size_t count;
-    NNPrinter pr;
+    NNIOStream pr;
     NNValue ret;
     NNValue vjoinee;
     NNObjArray* selfarr;
@@ -126,17 +126,17 @@ NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_
     {
         return nn_value_fromobject(nn_string_intern(state, ""));
     }
-    nn_printer_makestackstring(state, &pr);
+    nn_iostream_makestackstring(state, &pr);
     for(i = 0; i < count; i++)
     {
-        nn_printer_printvalue(&pr, list[i], false, true);
+        nn_iostream_printvalue(&pr, list[i], false, true);
         if((havejoinee && (joinee != NULL)) && ((i+1) < count))
         {
-            nn_printer_writestringl(&pr, nn_string_getdata(joinee), nn_string_getlength(joinee));
+            nn_iostream_writestringl(&pr, nn_string_getdata(joinee), nn_string_getlength(joinee));
         }
     }
-    ret = nn_value_fromobject(nn_printer_takestring(&pr));
-    nn_printer_destroy(&pr);
+    ret = nn_value_fromobject(nn_iostream_takestring(&pr));
+    nn_iostream_destroy(&pr);
     return ret;
 }
 

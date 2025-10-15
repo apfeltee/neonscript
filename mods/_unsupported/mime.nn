@@ -1,0 +1,549 @@
+/*
+# @module mime
+#
+# This module provides functions that allow easy mime type detection from files. 
+# It offers support for detecting file type based on name or file headers and it 
+# is completely extensible so that you can add declarations for your own custom 
+# file types.
+# 
+# _See defined functions for example._
+# 
+# @copyright O2021, Ore Richard Muyiwa
+*/
+
+
+/**
+ * Mime format representation class.
+ */
+class MimeFormat {
+  /**
+   * MimeFormat(mimetype: string [, header: list | bytes])
+   * 
+   * @constructor
+   * @note only the first 16 bytes of a file header will be used.
+   */
+  constructor(mimetype, header) {
+    if (!mimetype.isString())
+      throw Exception('expecting mimetype as string')
+    if header and !is_list(header)
+      throw Exception('Mime type definition must set header to null, list of numbers or bytes')
+
+    this.mimetype = mimetype
+    this.header = header
+  }
+}
+
+// internal library of mime formats mapped by extension
+var _mimes = {
+  '.7z': MimeFormat('application/x-7z-compressed', [[0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C]]),
+  '.3gp': MimeFormat('video/3gpp', [[0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70]]),
+  '.3g2': MimeFormat('video/3gpp2', [[0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]]),
+  '.aac': MimeFormat('audio/aac', null),
+  '.abw': MimeFormat('application/x-abiword', null),
+  '.ai': MimeFormat('application/postscript', null),
+  '.aif': MimeFormat('audio/x-aiff', null),
+  '.aifc': MimeFormat('audio/x-aiff', null),
+  '.aiff': MimeFormat('audio/x-aiff', [[0x46, 0x4F, 0x52, 0x4D, 0x00]]),
+  '.arc': MimeFormat('application/x-freearc', null),
+  '.asc': MimeFormat('text/plain', null),
+  '.atom': MimeFormat('application/atom+xml', null),
+  '.au': MimeFormat('audio/basic', null),
+  '.avi': MimeFormat('video/x-msvideo', [[0x52, 0x49, 0x46, 0x46]]),
+  '.azw': MimeFormat('application/vnd.amazon.ebook', null),
+  '.bcpio': MimeFormat('application/x-bcpio', null),
+  '.bin': MimeFormat('application/octet-stream', [[0x42, 0x4C, 0x49, 0x32, 0x32, 0x33, 0x51]]),
+  '.bmp': MimeFormat('image/bmp', [[0x42, 0x4D]]),
+  '.bz2': MimeFormat('application/x-bzip2', [[0x42, 0x5A, 0x68]]),
+  '.bz': MimeFormat('application/x-bzip', null),
+  '.cab': MimeFormat('application/vnd.ms-cab-compressed', [[0x4D, 0x53, 0x43, 0x46]]),
+  '.cdf': MimeFormat('application/x-netcdf', null),
+  '.cgm': MimeFormat('image/cgm', null),
+  '.chm': MimeFormat('application/vnd.ms-htmlhelp', [[0x49, 0x54, 0x53, 0x46, 0x03, 0x00, 0x00, 0x00, 0x60, 0x00, 0x00, 0x00]]),
+  '.class': MimeFormat('application/octet-stream', [[0xCA, 0xFE, 0xBA, 0xBE]]),
+  '.conf': MimeFormat('text/plain', null),
+  '.cpio': MimeFormat('application/x-cpio', null),
+  '.cpt': MimeFormat('application/mac-compactpro', null),
+  '.csh': MimeFormat('application/x-csh', null),
+  '.css': MimeFormat('text/css', null),
+  '.csv': MimeFormat('text/csv', null),
+  '.dcr': MimeFormat('application/x-director', null),
+  '.deb': MimeFormat('application/x-debian-package', [[0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E]]),
+  '.def': MimeFormat('text/plain', null),
+  '.dif': MimeFormat('video/x-dv', null),
+  '.dir': MimeFormat('application/x-director', null),
+  '.djv': MimeFormat('image/vnd.djvu', null),
+  '.djvu': MimeFormat('image/vnd.djvu', null),
+  '.dll': MimeFormat('application/x-msdownload', [[0x49, 0x5A]]),
+  '.dmg': MimeFormat('application/x-apple-diskimage', [[0x78]]),
+  '.dms': MimeFormat('application/octet-stream', null),
+  '.doc': MimeFormat('application/msword', [
+    [0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1],
+    [0x0D, 0x44, 0x4F, 0x43], // DestMate document
+    [0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1, 0x00], // Perfect Office document
+    [0xDB, 0xA5, 0x2D, 0x00], // Word 2.0
+    [0xEC, 0xA5, 0xC1, 0x00] // Word document subheader
+  ]),
+  '.docx': MimeFormat('application/vnd.openxmlformats-officedocument.wordprocessingml.document', [
+    [0x50, 0x4B, 0x03, 0x04], // MS Office Open XML Format Document
+    [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00] // MS Office 2007 documents
+  ]),
+  '.dotx': MimeFormat('application/vnd.openxmlformats-officedocument.wordprocessingml.template', null),
+  '.docm': MimeFormat('application/vnd.ms-word.document.macroEnabled.12', null),
+  '.dotm': MimeFormat('application/vnd.ms-word.template.macroEnabled.12', null),
+  '.dtd': MimeFormat('application/xml-dtd', null),
+  '.dv': MimeFormat('video/x-dv', null),
+  '.dvi': MimeFormat('application/x-dvi', null),
+  '.dvix': MimeFormat('video/divx', null),
+  '.dwg': MimeFormat('application/acad', [
+    [0x41, 0x43, 0x31, 0x30]
+  ]),
+  '.dxr': MimeFormat('application/x-director', null),
+  '.eot': MimeFormat('application/vnd.ms-fontobject', null),
+  '.eps': MimeFormat('application/postscript', [
+    [0xC5, 0xD0, 0xD3, 0xC6]
+  ]),
+  '.epub': MimeFormat('application/epub+zip', null),
+  '.etx': MimeFormat('text/x-setext', null),
+  '.exe': MimeFormat('application/x-msdownload', [
+    [0x4D, 0x5A]
+  ]),
+  '.ez': MimeFormat('application/andrew-inset', null),
+  '.flac': MimeFormat('audio/flac', [[0x66, 0x4C, 0x61, 0x43]]),
+  '.flv': MimeFormat('video/x-flv', [
+    [0x46, 0x4C, 0x56, 0x01]
+  ]),
+  '.gif': MimeFormat('image/gif', [
+    [0x47, 0x49, 0x46, 0x38, 0x37, 0x61],
+    [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]
+  ]),
+  '.gz': MimeFormat('application/gzip', [
+    [0x1F, 0x8B, 0x08]
+  ]),
+  '.gram': MimeFormat('application/srgs', null),
+  '.grxml': MimeFormat('application/srgs+xml', null),
+  '.gtar': MimeFormat('application/x-gtar', null),
+  '.hdf': MimeFormat('application/x-hdf', null),
+  '.hqx': MimeFormat('application/mac-binhex40', null),
+  '.htm': MimeFormat('text/html', null),
+  '.html': MimeFormat('text/html', null),
+  '.ice': MimeFormat('x-conference/x-cooltalk', null),
+  '.ico': MimeFormat('image/vnd.microsoft.icon', [
+    [0x00, 0x00, 0x01, 0x00]
+  ]),
+  '.ics': MimeFormat('text/calendar', null),
+  '.ief': MimeFormat('image/ief', null),
+  '.ifb': MimeFormat('text/calendar', null),
+  '.iges': MimeFormat('model/iges', null),
+  '.igs': MimeFormat('model/iges', null),
+  '.in': MimeFormat('text/plain', null),
+  '.ini': MimeFormat('text/plain', null),
+  '.iso': MimeFormat('application/x-iso9660-image', [[0x43, 0x44, 0x30, 0x30, 0x31]]),
+  '.jar': MimeFormat('application/java-archive', [
+    [0x50, 0x4B, 0x03, 0x04],
+    [0x5F, 0x27, 0xA8, 0x89],
+    [0x4A, 0x41, 0x52, 0x43, 0x53, 0x00],
+    [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x08, 0x00]
+  ]),
+  '.jnlp': MimeFormat('application/x-java-jnlp-file', null),
+  '.jp2': MimeFormat('image/jp2', [
+    [0x00, 0x00, 0x00, 0x0C, 0x6A, 0x50, 0x20, 0x20]
+  ]),
+  '.jpe': MimeFormat('image/jpeg', [
+    [0xFF, 0xD8, 0xFF, 0xE0]
+  ]),
+  '.jpeg': MimeFormat('image/jpeg', [
+    [0xFF, 0xD8, 0xFF, 0xE0], 
+    [0xFF, 0xD8, 0xFF, 0xE2], 
+    [0xFF, 0xD8, 0xFF, 0xE3]
+  ]),
+  '.jpg': MimeFormat('image/jpeg', [
+    [0xFF, 0xD8, 0xFF, 0xE0], 
+    [0xFF, 0xD8, 0xFF, 0xE1], 
+    [0xFF, 0xD8, 0xFF, 0xE8]
+  ]),
+  '.jpgv': MimeFormat('video/jpeg', null),
+  '.js': MimeFormat('application/x-javascript', null),
+  '.json': MimeFormat('application/json', null),
+  '.jsonld': MimeFormat('application/ld+json', null),
+  '.kar': MimeFormat('audio/midi', null),
+  '.latex': MimeFormat('application/x-latex', null),
+  '.lha': MimeFormat('application/octet-stream', null),
+  '.lib': MimeFormat('application/octet-stream', [[0x21, 0x3C, 0x61, 0x72, 0x63, 0x68, 0x3E, 0x0A]]),
+  '.list': MimeFormat('text/plain', null),
+  '.log': MimeFormat('text/plain', null),
+  '.lzh': MimeFormat('application/octet-stream', null),
+  '.m3u': MimeFormat('audio/x-mpegurl', null),
+  '.m4a': MimeFormat('audio/mp4a-latm', null),
+  '.m4b': MimeFormat('audio/mp4a-latm', null),
+  '.m4p': MimeFormat('audio/mp4a-latm', null),
+  '.m4u': MimeFormat('video/vnd.mpegurl', null),
+  '.m4v': MimeFormat('video/x-m4v', null),
+  '.mac': MimeFormat('image/x-macpaint', null),
+  '.man': MimeFormat('application/x-troff-man', null),
+  '.mathml': MimeFormat('application/mathml+xml', null),
+  '.me': MimeFormat('application/x-troff-me', null),
+  '.mesh': MimeFormat('model/mesh', null),
+  '.mid': MimeFormat('audio/midi', [[0x4D, 0x54, 0x68, 0x64]]),
+  '.midi': MimeFormat('audio/midi', [[0x4D, 0x54, 0x68, 0x64]]),
+  '.mif': MimeFormat('application/vnd.mif', [
+    [0x3C, 0x4D, 0x61, 0x6B, 0x65, 0x72, 0x46, 0x69], // Adobe FrameMaker
+    [0x56, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x20] // MapInfo Interchange Format file
+  ]),
+  '.mjs': MimeFormat('text/javascript', null),
+  '.mka': MimeFormat('audio/x-matroska', [[0x1A, 0x45, 0xDF, 0xA3]]),
+  '.mkv': MimeFormat('video/x-matroska', [[0x1A, 0x45, 0xDF, 0xA3, 0x93, 0x42, 0x82, 0x88]]),
+  '.mov': MimeFormat('video/quicktime', [
+    [0x6D, 0x6F, 0x6F, 0x76],
+    [0x66, 0x72, 0x65, 0x65],
+    [0x6D, 0x64, 0x61, 0x74],
+    [0x77, 0x69, 0x64, 0x65],
+    [0x70, 0x6E, 0x6F, 0x74],
+    [0x73, 0x6B, 0x69, 0x70]
+  ]),
+  '.movie': MimeFormat('video/x-sgi-movie', null),
+  '.mp2': MimeFormat('audio/mpeg', null),
+  '.mp3': MimeFormat('audio/mpeg', [
+    [0x49, 0x44, 0x33],
+    [0xFF, 0xFB],
+    [0xFF, 0xF3],
+    [0xFF, 0xF2] // last three are for files without id3 or with id3v1 tag
+  ]),
+  '.mp4': MimeFormat('video/mp4', [[0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D]]),
+  '.mpe': MimeFormat('video/mpeg', null),
+  '.mpeg': MimeFormat('video/mpeg', null),
+  '.mpg': MimeFormat('video/mpeg', [
+    [0x00, 0x00, 0x01, 0xBA], // DVD video
+    [0x00, 0x00, 0x01, 0xB3] // MPEG video
+  ]),
+  '.mpga': MimeFormat('audio/mpeg', null),
+  '.mpkg': MimeFormat('application/vnd.apple.installer+xml', null),
+  '.ms': MimeFormat('application/x-troff-ms', null),
+  '.msh': MimeFormat('model/mesh', null),
+  '.msi': MimeFormat('application/x-msdownload', null),
+  '.mxu': MimeFormat('video/vnd.mpegurl', null),
+  '.nc': MimeFormat('application/x-netcdf', null),
+  '.oda': MimeFormat('application/oda', null),
+  '.odp': MimeFormat('application/vnd.oasis.opendocument.presentation', [[0x50, 0x4B, 0x03, 0x04]]),
+  '.ods': MimeFormat('application/vnd.oasis.opendocument.spreadsheet', null),
+  '.odt': MimeFormat('application/vnd.oasis.opendocument.text', [[0x50, 0x4B, 0x03, 0x04]]),
+  '.ogg': MimeFormat('video/ogg', [[0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0x00, 0x00]]),
+  '.ogx': MimeFormat('application/ogg', [[0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0x00, 0x00]]),
+  '.oga': MimeFormat('audio/ogg', [[0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0x00, 0x00]]),
+  '.ogv': MimeFormat('video/ogg', [[0x4F, 0x67, 0x67, 0x53, 0x00, 0x02, 0x00, 0x00]]),
+  '.opus': MimeFormat('audio/opus', null),
+  '.otf': MimeFormat('font/otf', null),
+  '.pbm': MimeFormat('image/x-portable-bitmap', null),
+  '.pct': MimeFormat('image/pict', null),
+  '.pdb': MimeFormat('chemical/x-pdb', null),
+  '.pdf': MimeFormat('application/pdf', [[0x25, 0x50, 0x44, 0x46]]),
+  '.pgm': MimeFormat('image/x-portable-graymap', null),
+  '.pgn': MimeFormat('application/x-chess-pgn', null),
+  '.php': MimeFormat('application/x-httpd-php', null),
+  '.pic': MimeFormat('image/pict', null),
+  '.pict': MimeFormat('image/pict', null),
+  '.png': MimeFormat('image/png', [[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]]), 
+  '.pnm': MimeFormat('image/x-portable-anymap', null),
+  '.pnt': MimeFormat('image/x-macpaint', null),
+  '.pntg': MimeFormat('image/x-macpaint', null),
+  '.ppm': MimeFormat('image/x-portable-pixmap', null),
+  '.ppt': MimeFormat('application/vnd.ms-powerpoint', [[0xFD, 0xFF, 0xFF, 0xFF, null, 0x00, 0x00, 0x00]]),
+  '.pptx': MimeFormat('application/vnd.openxmlformats-officedocument.presentationml.presentation', [
+    [0x50, 0x4B, 0x03, 0x04],
+    [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00]
+  ]),
+  '.potx': MimeFormat('application/vnd.openxmlformats-officedocument.presentationml.template', null),
+  '.ppsx': MimeFormat('application/vnd.openxmlformats-officedocument.presentationml.slideshow', null),
+  '.ppam': MimeFormat('application/vnd.ms-powerpoint.addin.macroEnabled.12', null),
+  '.pptm': MimeFormat('application/vnd.ms-powerpoint.presentation.macroEnabled.12', null),
+  '.potm': MimeFormat('application/vnd.ms-powerpoint.template.macroEnabled.12', null),
+  '.ppsm': MimeFormat('application/vnd.ms-powerpoint.slideshow.macroEnabled.12', null),
+  '.ps': MimeFormat('application/postscript', null),
+  '.psd': MimeFormat('application/octet-stream', [[0x38, 0x42, 0x50, 0x53]]),
+  '.pst': MimeFormat('application/vnd.ms-outlook', [[0x21, 0x42, 0x44, 0x4E]]),
+  '.pub': MimeFormat('application/x-mspublisher', [[0xD0, 0xCF, 0x11, 0xE0, 0xA1, 0xB1, 0x1A, 0xE1]]),
+  '.qt': MimeFormat('video/quicktime', null),
+  '.qti': MimeFormat('image/x-quicktime', null),
+  '.qtif': MimeFormat('image/x-quicktime', null),
+  '.ra': MimeFormat('audio/x-pn-realaudio', [
+    [0x2E, 0x52, 0x4D, 0x46, 0x00, 0x00, 0x00, 0x12],
+    [0x2E, 0x72, 0x61, 0xFD, 0x00] // the streaming variant
+  ]),
+  '.ram': MimeFormat('audio/x-pn-realaudio', [[0x72, 0x74, 0x73, 0x70, 0x3A, 0x2F, 0x2F]]),
+  '.rar': MimeFormat('application/vnd.rar', [[0x52, 0x61, 0x72, 0x21, 0x1A, 0x07, 0x00]]),
+  '.ras': MimeFormat('image/x-cmu-raster', null),
+  '.rdf': MimeFormat('application/rdf+xml', null),
+  '.rgb': MimeFormat('image/x-rgb', [[0x01, 0xDA, 0x01, 0x01, 0x00, 0x03]]),
+  '.rm': MimeFormat('application/vnd.rn-realmedia', [[0x2E, 0x52, 0x4D, 0x46]]),
+  '.roff': MimeFormat('application/x-troff', null),
+  '.rpm': MimeFormat('application/x-rpm', [[0xED, 0xAB, 0xEE, 0xDB]]),
+  '.rtf': MimeFormat('text/rtf', [[0x7B, 0x5C, 0x72, 0x74, 0x66, 0x31]]),
+  '.rtx': MimeFormat('text/richtext', null),
+  '.sgm': MimeFormat('text/sgml', null),
+  '.sgml': MimeFormat('text/sgml', null),
+  '.sh': MimeFormat('application/x-sh', null),
+  '.shar': MimeFormat('application/x-shar', null),
+  '.silo': MimeFormat('model/mesh', null),
+  '.sit': MimeFormat('application/x-stuffit', [
+    [0x53, 0x49, 0x54, 0x21, 0x00],
+    [0x53, 0x74, 0x75, 0x66, 0x66, 0x49, 0x74, 0x20] // the compressed archive
+  ]),
+  '.skd': MimeFormat('application/x-koan', null),
+  '.skm': MimeFormat('application/x-koan', null),
+  '.skp': MimeFormat('application/x-koan', null),
+  '.skt': MimeFormat('application/x-koan', null),
+  '.smi': MimeFormat('application/smil', null),
+  '.smil': MimeFormat('application/smil', null),
+  '.snd': MimeFormat('audio/basic', null),
+  '.so': MimeFormat('application/octet-stream', null),
+  '.spl': MimeFormat('application/x-futuresplash', [[0x00, 0x00, 0x01, 0x00]]),
+  '.sqlite': MimeFormat('application/vnd.sqlite3', [[0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x33, 0x00]]),
+  '.sqlitedb': MimeFormat('application/vnd.sqlite3', [[0x53, 0x51, 0x4C, 0x69, 0x74, 0x65, 0x20, 0x66, 0x6F, 0x72, 0x6D, 0x61, 0x74, 0x20, 0x33, 0x00]]),
+  '.src': MimeFormat('application/x-wais-source', null),
+  '.sv4cpio': MimeFormat('application/x-sv4cpio', null),
+  '.sv4crc': MimeFormat('application/x-sv4crc', null),
+  '.svg': MimeFormat('image/svg+xml', null),
+  '.swf': MimeFormat('application/x-shockwave-flash', [[0x46, 0x57, 0x53]]),
+  '.t': MimeFormat('application/x-troff', null),
+  '.tar': MimeFormat('application/x-tar', [[0x75, 0x73, 0x74, 0x61, 0x72]]),
+  '.tar.z': MimeFormat('application/x-tar', [
+    [0x1F, 0x9D], // Compressed using Lempel-Ziv-Welch
+    [0x1F, 0xA0] // Compressed using LZH
+  ]),
+  '.tcl': MimeFormat('application/x-tcl', null),
+  '.tex': MimeFormat('application/x-tex', null),
+  '.texi': MimeFormat('application/x-texinfo', null),
+  '.texinfo': MimeFormat('application/x-texinfo', null),
+  '.tgz': MimeFormat('application/x-gz', [[0x1F, 0x8B, 0x08]]),
+  '.tif': MimeFormat('image/tiff', [
+    [0x49, 0x20, 0x49],
+    [0x49, 0x49, 0x2A, 0x00],
+    [0x4D, 0x4D, 0x00, 0x2A],
+    [0x4D, 0x4D, 0x00, 0x2B]
+  ]),
+  '.tiff': MimeFormat('image/tiff', [
+    [0x49, 0x20, 0x49],
+    [0x49, 0x49, 0x2A, 0x00],
+    [0x4D, 0x4D, 0x00, 0x2A],
+    [0x4D, 0x4D, 0x00, 0x2B]
+  ]),
+  '.torrent': MimeFormat('application/x-bittorrent', [[0x64, 0x38, 0x3A, 0x61, 0x6E, 0x6E, 0x6F, 0x75, 0x6E, 0x63, 0x65]]),
+  '.tr': MimeFormat('application/x-troff', null),
+  '.ts': MimeFormat('video/mp2t', null),
+  '.tsv': MimeFormat('text/tab-separated-values', null),
+  '.ttf': MimeFormat('application/x-font-ttf', [[0x00, 0x01, 0x00, 0x00, 0x00]]),
+  '.txt': MimeFormat('text/plain', null),
+  '.text': MimeFormat('text/plain', null),
+  '.ustar': MimeFormat('application/x-ustar', null),
+  '.vcd': MimeFormat('application/x-cdlink', null),
+  '.vcs': MimeFormat('text/x-vcard', null),
+  '.vcard': MimeFormat('text/vcard', null),
+  '.vrml': MimeFormat('model/vrml', null),
+  '.vsd': MimeFormat('application/vnd.visio', null),
+  '.vxml': MimeFormat('application/voicexml+xml', null),
+  '.wav': MimeFormat('audio/x-wav', [[0x52, 0x49, 0x46, 0x46]]),
+  '.wbmp': MimeFormat('image/vnd.wap.wbmp', null),
+  '.wbmxl': MimeFormat('application/vnd.wap.wbxml', null),
+  '.weba': MimeFormat('audio/webm', null),
+  '.webm': MimeFormat('video/webm', [[0x1A, 0x45, 0xDF, 0xA3, 0x93, 0x42, 0x82, 0x88]]),
+  '.webp': MimeFormat('image/webp', [[0x52, 0x49, 0x46, 0x46, null, null, null, null, 0x57, 0x45, 0x42, 0x50]]),
+  '.woff': MimeFormat('font/woff', null),
+  '.woff2': MimeFormat('font/woff2', null),
+  '.wml': MimeFormat('text/vnd.wap.wml', null),
+  '.wmlc': MimeFormat('application/vnd.wap.wmlc', null),
+  '.wmls': MimeFormat('text/vnd.wap.wmlscript', null),
+  '.wmlsc': MimeFormat('application/vnd.wap.wmlscriptc', null),
+  '.wmv': MimeFormat('video/x-ms-wmv', [[0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11]]),
+  '.wma': MimeFormat('audio/x-ms-wmv', [[0x30, 0x26, 0xB2, 0x75, 0x8E, 0x66, 0xCF, 0x11]]),
+  '.wrl': MimeFormat('model/vrml', null),
+  '.xbm': MimeFormat('image/x-xbitmap', null),
+  '.xht': MimeFormat('application/xhtml+xml', null),
+  '.xhtml': MimeFormat('application/xhtml+xml', null),
+  '.xls': MimeFormat('application/vnd.ms-excel', [[0x09, 0x08, 0x10, 0x00, 0x00, 0x06, 0x05, 0x00]]),                        
+  '.xml': MimeFormat('application/xml', null),
+  '.xpm': MimeFormat('image/x-xpixmap', null),
+  '.xsl': MimeFormat('application/xml', null),
+  '.xlsx': MimeFormat('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', [
+    [0x50, 0x4B, 0x03, 0x04], // MS Office Open XML Format Document
+    [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x06, 0x00] // MS Office 2007 documents
+  ]),
+  '.xltx': MimeFormat('application/vnd.openxmlformats-officedocument.spreadsheetml.template', null),
+  '.xlsm': MimeFormat('application/vnd.ms-excel.sheet.macroEnabled.12', null),
+  '.xltm': MimeFormat('application/vnd.ms-excel.template.macroEnabled.12', null),
+  '.xlam': MimeFormat('application/vnd.ms-excel.addin.macroEnabled.12', null),
+  '.xlsb': MimeFormat('application/vnd.ms-excel.sheet.binary.macroEnabled.12', null),
+  '.xslt': MimeFormat('application/xslt+xml', null),
+  '.xul': MimeFormat('application/vnd.mozilla.xul+xml', null),
+  '.xwd': MimeFormat('image/x-xwindowdump', null),
+  '.xyz': MimeFormat('chemical/x-xyz', null),
+  '.zip': MimeFormat('application/zip', [
+    [0x50, 0x4B, 0x03, 0x04],
+    [0x50, 0x4B, 0x4C, 0x49, 0x54, 0x45], // light archive
+    [0x50, 0x4B, 0x53, 0x70, 0x58], // self-extracting
+    [0x50, 0x4B, 0x05, 0x06],
+    [0x50, 0x4B, 0x07, 0x08],
+    [0x57, 0x69, 0x6E, 0x5A, 0x69, 0x70], // WinZip compressed archive
+    [0x50, 0x4B, 0x03, 0x04, 0x14, 0x00, 0x01, 0x00] // ZLock Pro encrypted archive
+  ])
+}
+
+
+/**
+ * detect_from_name(name: string)
+ * Detects the mimetype of a file based on the
+ * extension defined in it's path.
+ *
+ * @return string
+ * @note For popular files such as Jpeg and Pngs, calling this method directly is more efficient and provides a faster lookup.
+ * 
+ * Example,
+ * 
+ * ```blade
+ * import mime
+ * echo mime.detect_from_name('myimage.png')
+ * ```
+ */
+function detect_from_name(name) {
+  if !is_string(name)
+    throw Exception('name must be string')
+
+  foreach(ext, mime in _mimes) {
+    if name.ends_with(ext) return mime.mimetype
+  }
+  return 'application/octet-stream'
+}
+
+/**
+ * detect_from_header(file: file) 
+ * Detects the mimetype of a file based on it's file header.
+ *
+ * When multiple file formats share very similar or shadowing
+ * file headers (such as the relationship between Zip files and Docx files),
+ * this method will perform an extension before returning it's result.
+ *
+ * @return string
+ * @note For dealing with files without extension, or where the accuracy of the file extension cannot be trusted, this method provides a more efficient lookup.
+ * @note This method may produce slightly more rigorous results
+ * @note This method requires that the file must be opened in binary mode
+ * 
+ * Example,
+ * 
+ * ```blade
+ * import mime
+ * var f = file('my_file.ext', 'rb')
+ * echo mime.detect_from_header(f)
+ * ```
+ */
+function detect_from_header(file) {
+  if !is_file(file)
+    throw Exception('file object expected')
+
+  if !file.mode().match('b') {
+    throw Exception('detect_from_header expects file to be opened in binary mode')
+  }
+
+  var top_16 = file.read(16)
+  var last_mime_found = null
+
+  foreach(ext, mime in _mimes) {
+    if mime.header {
+        for(var i = 0; i < mime.header.length(); i++) {
+        var mime_match = true
+        var header = mime.header[i]
+
+        for(var j = 0; j < header.length(); j++) {
+          // we use null value to skip extra data in header signatures
+          // such as webp filesize part...
+          // ie. RIFF ... WEBP where ... is represented as null
+          if header[j] != top_16[j] and header[j] != null {
+            mime_match = false
+            break
+          }
+        }
+
+        if mime_match {
+          if file.name().ends_with(ext) return mime.mimetype
+          else last_mime_found = mime.mimetype
+        }
+      }
+    }
+  }
+
+  if last_mime_found return last_mime_found
+  return 'application/octet-stream'
+}
+
+/**
+ * detect(file: file)
+ * Performs mimetype detection on a file.
+ * 
+ * this method is capable of detecting file mimetypes even
+ * in the abscence of an extension.
+ *
+ * If the file is opened in binary mode, it first attempt the more
+ * accurate header check. If the header check returns a generic result 
+ * (i.e. application/octet-stream), it performs an extension lookup.
+ *
+ * @return string
+ * @note this method gives the best result, but slightly slower than a direct lookup of name or header.
+ * 
+ * Example,
+ * 
+ * ```blade
+ * import mime
+ * var f = file('myfile', 'rb')
+ * 
+ * # using 'rb' here for two reasons: 
+ * # 1. Our file has no extension, so extension based detection is impossible
+ * # 2. We want more accuracy by having Mime check file headers
+ * 
+ * echo mime.detect(f)
+ * ```
+ */
+function detect(file) {
+  if !is_file(file)
+    throw Exception('file object expected')
+
+  if file.mode().match('b') {
+    var mime = detect_from_header(file)
+    if mime == 'application/octet-stream' {
+      return detect_from_name(file.name())
+    }
+    return mime
+  }
+  return detect_from_name(file.name())
+}
+
+/**
+ * extend(extension: string, format: MimeFormat)
+ * 
+ * Extends the mime module with support for files with the given _extension_ as 
+ * defined in the given _format_.
+ * 
+ * @return bool
+ * @note the extension MUST start with `.`
+ * 
+ * Example,
+ * 
+ * ```blade-repl
+ * %> import mime
+ * %> mime.detect_from_name('myfile.ppk')
+ * 'application/octet-stream'
+ * %> mime.extend('.ppk', mime.MimeFormat('file/ppk'))
+ * true
+ * %> mime.detect_from_name('myfile.ppk')
+ * 'file/ppk'
+ * ```
+ */
+function extend(extension, format) {
+  if !is_string(extension) or extension[0] != '.'
+    throw Exception('invalid file extension')
+  if !instance_of(format, MimeFormat)
+    throw Exception('instance of MimeFormat expected')
+  
+  extension = extension.lower()
+  
+  if _mimes.contains(extension) return false
+  _mimes.add(extension, format)
+  return true
+}
+

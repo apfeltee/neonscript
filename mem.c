@@ -11,6 +11,10 @@
 */
 #define NEON_CONF_MEMUSEALLOCATOR 0
 
+#define NEON_MEMORY_GROWCAPACITY(capacity) \
+    ((capacity) < 4 ? 4 : (capacity)*2)
+
+
 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
     /* if any global variables need to be declared, declare them here. */
     void* g_mspcontext;
@@ -52,8 +56,40 @@ size_t nn_memory_getsize(void * p)
     return -1;
 }
 
+#if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
 
+void nn_memory_printdebug(const char* file, int line, const char* exprstr, const char* from, size_t totalsz)
+{
+    fprintf(stderr, "from %s at %s:%d: %s: allocating %ld\n", from, file, line, exprstr, totalsz);
+}
+
+void* nn_memory_debugmalloc(const char* file, int line, const char* exprstr, size_t sz)
+{
+    nn_memory_printdebug(file, line, exprstr, "malloc", sz);
+    return nn_memory_mallocactual(sz);
+}
+
+
+void* nn_memory_debugcalloc(const char* file, int line, const char* exprstr, size_t count, size_t typsz)
+{
+    nn_memory_printdebug(file, line, exprstr, "calloc", (count * typsz));
+    return nn_memory_callocactual(count, typsz);
+}
+
+
+void* nn_memory_debugrealloc(const char* file, int line, const char* exprstr, void* p, size_t sz)
+{
+    nn_memory_printdebug(file, line, exprstr, "realloc", sz);
+    return nn_memory_reallocactual(p, sz);
+}
+
+#endif
+
+#if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
+void* nn_memory_mallocactual(size_t sz)
+#else
 void* nn_memory_malloc(size_t sz)
+#endif
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
@@ -64,7 +100,11 @@ void* nn_memory_malloc(size_t sz)
     return p;
 }
 
+#if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
+void* nn_memory_reallocactual(void* p, size_t nsz)
+#else
 void* nn_memory_realloc(void* p, size_t nsz)
+#endif
 {
     void* retp;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
@@ -79,7 +119,11 @@ void* nn_memory_realloc(void* p, size_t nsz)
     return retp;
 }
 
+#if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
+void* nn_memory_callocactual(size_t count, size_t typsize)
+#else    
 void* nn_memory_calloc(size_t count, size_t typsize)
+#endif
 {
     void* p;
     #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
@@ -126,9 +170,12 @@ void nn_gcmem_clearprotect(NNState* state)
     frame = &state->vmstate.framevalues[frpos];
     if(frame->gcprotcount > 0)
     {
-        state->vmstate.stackidx -= frame->gcprotcount;
+        if(frame->gcprotcount > 0)
+        {
+            state->vmstate.stackidx -= frame->gcprotcount;
+        }
+        frame->gcprotcount = 0;
     }
-    frame->gcprotcount = 0;
 }
 
 void nn_gcmem_maybecollect(NNState* state, int addsize, bool wasnew)
@@ -189,14 +236,14 @@ void nn_gcmem_markobject(NNState* state, NNObject* object)
         return;
     }
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "GC: marking object at <%p> ", (void*)object);
-    nn_printer_printvalue(state->debugwriter, nn_value_fromobject(object), false);
-    nn_printer_printf(state->debugwriter, "\n");
+    nn_iostream_printf(state->debugwriter, "GC: marking object at <%p> ", (void*)object);
+    nn_iostream_printvalue(state->debugwriter, nn_value_fromobject(object), false);
+    nn_iostream_printf(state->debugwriter, "\n");
     #endif
     object->mark = state->markvalue;
     if(state->gcstate.graycapacity < state->gcstate.graycount + 1)
     {
-        state->gcstate.graycapacity = GROW_CAPACITY(state->gcstate.graycapacity);
+        state->gcstate.graycapacity = NEON_MEMORY_GROWCAPACITY(state->gcstate.graycapacity);
         state->gcstate.graystack = (NNObject**)nn_memory_realloc(state->gcstate.graystack, sizeof(NNObject*) * state->gcstate.graycapacity);
         if(state->gcstate.graystack == NULL)
         {
@@ -219,9 +266,9 @@ void nn_gcmem_markvalue(NNState* state, NNValue value)
 void nn_gcmem_blackenobject(NNState* state, NNObject* object)
 {
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "GC: blacken object at <%p> ", (void*)object);
-    nn_printer_printvalue(state->debugwriter, nn_value_fromobject(object), false);
-    nn_printer_printf(state->debugwriter, "\n");
+    nn_iostream_printf(state->debugwriter, "GC: blacken object at <%p> ", (void*)object);
+    nn_iostream_printvalue(state->debugwriter, nn_value_fromobject(object), false);
+    nn_iostream_printf(state->debugwriter, "\n");
     #endif
     switch(object->type)
     {
@@ -328,7 +375,7 @@ void nn_gcmem_blackenobject(NNState* state, NNObject* object)
 void nn_object_destroy(NNState* state, NNObject* object)
 {
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "GC: freeing at <%p> of type %d\n", (void*)object, object->type);
+    nn_iostream_printf(state->debugwriter, "GC: freeing at <%p> of type %d\n", (void*)object, object->type);
     #endif
     if(object->stale)
     {
@@ -473,7 +520,7 @@ void nn_gcmem_markroots(NNState* state)
         for(j = 0; j < (int)state->vmstate.framevalues[i].handlercount; j++)
         {
             handler = &state->vmstate.framevalues[i].handlers[j];
-            nn_gcmem_markobject(state, (NNObject*)handler->klass);
+            /*nn_gcmem_markobject(state, (NNObject*)handler->klass);*/
         }
     }
     for(upvalue = state->vmstate.openupvalues; upvalue != NULL; upvalue = upvalue->next)
@@ -548,7 +595,7 @@ void nn_gcmem_collectgarbage(NNState* state)
     size_t before;
     (void)before;
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "GC: gc begins\n");
+    nn_iostream_printf(state->debugwriter, "GC: gc begins\n");
     before = state->gcstate.bytesallocated;
     #endif
     /*
@@ -565,8 +612,8 @@ void nn_gcmem_collectgarbage(NNState* state)
     state->gcstate.nextgc = state->gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
     state->markvalue = !state->markvalue;
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "GC: gc ends\n");
-    nn_printer_printf(state->debugwriter, "GC: collected %zu bytes (from %zu to %zu), next at %zu\n", before - state->gcstate.bytesallocated, before, state->gcstate.bytesallocated, state->gcstate.nextgc);
+    nn_iostream_printf(state->debugwriter, "GC: gc ends\n");
+    nn_iostream_printf(state->debugwriter, "GC: collected %zu bytes (from %zu to %zu), next at %zu\n", before - state->gcstate.bytesallocated, before, state->gcstate.bytesallocated, state->gcstate.nextgc);
     #endif
 }
 

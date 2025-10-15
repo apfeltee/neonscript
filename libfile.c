@@ -632,7 +632,7 @@ NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size
 {
     NNObjFile* file;
     NNFormatInfo nfi;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* ofmt;
     NNArgCheck check;
     nn_argcheck_init(state, &check, "printf", argv, argc);
@@ -640,7 +640,7 @@ NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     ofmt = nn_value_asstring(argv[0]);
-    nn_printer_makestackio(state, &pr, file->handle, false);
+    nn_iostream_makestackio(state, &pr, file->handle, false);
     nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {

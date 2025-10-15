@@ -7,6 +7,20 @@
 
 static int g_neon_ttycheck = -1;
 
+size_t nn_util_rndup2pow64(uint64_t x)
+{
+    /* long long >=64 bits guaranteed in C99 */
+    --x;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    x |= x >> 32;
+    ++x;
+    return x;
+}
+
 const char* nn_util_color(NNColor tc)
 {
     #if !defined(NEON_CONFIG_FORCEDISABLECOLOR)

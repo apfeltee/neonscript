@@ -90,11 +90,11 @@ class Lexer
         this.keywords["while"] = TokenType.Keyword_while
 
     }
+
     getNextChar()
     {
         this.pos++
         this.position++
-
         if(this.position >= this.source.length)
         {
             this.currchar = null
@@ -108,6 +108,7 @@ class Lexer
         }
         return this.currchar
     }
+
     error(line, pos, message)
     {
         if(line > 0 && pos > 0)
@@ -144,6 +145,7 @@ class Lexer
         }
         return this.maketoken(ifno, "", line, pos)
     }
+
     div_or_comment(line, pos)
     {
         if(this.getNextChar() != "*")
@@ -171,6 +173,7 @@ class Lexer
             }
         }
     }
+
     char_lit(line, pos)
     {
         var c = this.getNextChar() // skip opening quote
@@ -202,6 +205,7 @@ class Lexer
         this.getNextChar()
         return this.maketoken(TokenType.Integer, n, line, pos)
     }
+
     string_lit(start, line, pos)
     {
         var value = []
@@ -220,6 +224,7 @@ class Lexer
         this.getNextChar()
         return this.maketoken(TokenType.String, value.join(""), line, pos)
     }
+
     identifier_or_integer(line, pos)
     {
         var is_number = true
@@ -253,6 +258,7 @@ class Lexer
         }
         return this.maketoken(TokenType.Identifier, stext, line, pos)
     }
+
     getToken()
     {
         var pos;
@@ -361,6 +367,7 @@ class Lexer
         }
         return this.identifier_or_integer(line, pos)
     }
+
     /*
     https://stackoverflow.com/questions/9907419/how-to-get-a-key-in-a-javascript-object-by-its-value
     */
@@ -407,7 +414,7 @@ class Lexer
     }
 }
 
-var inputsource = File.read([Process.scriptdirectory(), "/mandel2.nn"].join(), 1024*2)
+var inputsource = File.read([Process.scriptdirectory(), "/mandel2.nn"].join())
 println(inputsource)
 l = new Lexer(inputsource)
 l.printTokens()

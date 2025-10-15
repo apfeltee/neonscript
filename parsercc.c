@@ -7,6 +7,10 @@
 /* max number of function parameters */
 #define NEON_CONFIG_ASTMAXFUNCPARAMS (32)
 
+#define NN_ASTPARSER_GROWCAPACITY(capacity) \
+    ((capacity) < 4 ? 4 : (capacity)*2)
+
+
 static const char* g_strthis = "this";
 static const char* g_strsuper = "super";
 
@@ -26,7 +30,7 @@ void nn_blob_push(NNBlob* blob, NNInstruction ins)
     if(blob->capacity < blob->count + 1)
     {
         oldcapacity = blob->capacity;
-        blob->capacity = GROW_CAPACITY(oldcapacity);
+        blob->capacity = NN_ASTPARSER_GROWCAPACITY(oldcapacity);
         blob->instrucs = (NNInstruction*)nn_memory_realloc(blob->instrucs, blob->capacity * sizeof(NNInstruction));
     }
     blob->instrucs[blob->count] = ins;
@@ -1573,7 +1577,7 @@ void nn_astemit_patchjump(NNAstParser* prs, int offset)
 void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncContextType type, bool isanon)
 {
     bool candeclthis;
-    NNPrinter wtmp;
+    NNIOStream wtmp;
     NNAstLocal* local;
     NNObjString* fname;
     fnc->enclosing = prs->currentfunccompiler;
@@ -1590,10 +1594,10 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncCon
         nn_vm_stackpush(prs->pstate, nn_value_fromobject(fnc->targetfunc));
         if(isanon)
         {
-            nn_printer_makestackstring(prs->pstate, &wtmp);
-            nn_printer_printf(&wtmp, "anonymous@[%s:%d]", prs->currentfile, prs->prevtoken.line);
-            fname = nn_printer_takestring(&wtmp);
-            nn_printer_destroy(&wtmp);
+            nn_iostream_makestackstring(prs->pstate, &wtmp);
+            nn_iostream_printf(&wtmp, "anonymous@[%s:%d]", prs->currentfile, prs->prevtoken.line);
+            fname = nn_iostream_takestring(&wtmp);
+            nn_iostream_destroy(&wtmp);
         }
         else
         {
@@ -1635,6 +1639,12 @@ int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
         rawstr++;
         rawlen--;
     }
+    #if 0
+    if(strcmp(rawstr, g_strthis))
+    {
+        
+    }
+    #endif
     str = nn_string_copylen(prs->pstate, rawstr, rawlen);
     return nn_astparser_pushconst(prs, nn_value_fromobject(str));
 }
@@ -3347,11 +3357,6 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
                     nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, defvalconst);
                 #endif
             #endif
-            #if 1
-                nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
-            #else
-                nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(paramid), nn_value_makenumber(defvalconst));
-            #endif
         }
         #endif
         nn_astparser_ignorewhitespace(prs);
@@ -4104,10 +4109,12 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     int continueexecutionaddress;
     bool catchexists;
     bool finalexists;
+    #if 0
     if(prs->currentfunccompiler->handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
     {
         nn_astparser_raiseerror(prs, "maximum exception handler in scope exceeded");
     }
+    #endif
     prs->currentfunccompiler->handlercount++;
     prs->istrying = true;
     nn_astparser_ignorewhitespace(prs);

@@ -3,10 +3,10 @@
 #include "priv.h"
 
 /* initial amount of frames (will grow dynamically if needed) */
-#define NEON_CONFIG_INITFRAMECOUNT (32)
+#define NEON_CONFIG_INITFRAMECOUNT (16)
 
 /* initial amount of stack values (will grow dynamically if needed) */
-#define NEON_CONFIG_INITSTACKCOUNT (32 * 1)
+#define NEON_CONFIG_INITSTACKCOUNT (4 * 1)
 
 
 void nn_vm_initvmstate(NNState* state)
@@ -927,7 +927,7 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
 {
     size_t i;
     size_t times;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* os;
     times = (size_t)number;
     /* 'str' * 0 == '', 'str' * -1 == '' */
@@ -940,13 +940,13 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
     {
         return str;
     }
-    nn_printer_makestackstring(state, &pr);
+    nn_iostream_makestackstring(state, &pr);
     for(i = 0; i < times; i++)
     {
-        nn_printer_writestringl(&pr, nn_string_getdata(str), nn_string_getlength(str));
+        nn_iostream_writestringl(&pr, nn_string_getdata(str), nn_string_getlength(str));
     }
-    os = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    os = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     return os;
 }
 
@@ -1315,7 +1315,7 @@ NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccal
     field = nn_instance_getmethod(nn_value_asinstance(target), name);
     if(field == NULL)
     {
-        fprintf(stderr, "%s: failed to get '%s'\n", ccallername, name);
+        fprintf(stderr, "%s: failed to get '%s'\n", ccallername, nn_string_getdata(name));
         return NULL;
     }
     if(!nn_value_iscallable(field->value))
@@ -1649,20 +1649,21 @@ NEON_FORCEINLINE bool nn_vmutil_concatenate(NNState* state)
 {
     NNValue vleft;
     NNValue vright;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* result;
     vright = nn_vmbits_stackpeek(state, 0);
     vleft = nn_vmbits_stackpeek(state, 1);
-    nn_printer_makestackstring(state, &pr);
-    nn_printer_printvalue(&pr, vleft, false, true);
-    nn_printer_printvalue(&pr, vright, false, true);
-    result = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    nn_iostream_makestackstring(state, &pr);
+    nn_iostream_printvalue(&pr, vleft, false, true);
+    nn_iostream_printvalue(&pr, vright, false, true);
+    result = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     nn_vmbits_stackpopn(state, 2);
     nn_vmbits_stackpush(state, nn_value_fromobject(result));
     return true;
 }
 
+#if 0
 NEON_INLINE NNValue nn_vmutil_floordiv(double a, double b)
 {
     int d;
@@ -1671,6 +1672,7 @@ NEON_INLINE NNValue nn_vmutil_floordiv(double a, double b)
     r = d - ((d * b == a) & ((a < 0) ^ (b < 0)));
     return nn_value_makenumber(r);
 }
+#endif
 
 NEON_INLINE NNValue nn_vmutil_modulo(double a, double b)
 {
@@ -2138,8 +2140,8 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
 {
     bool isfail;
     bool willassign;
-    long ibinright;
-    long ibinleft;
+    int64_t ibinright;
+    int64_t ibinleft;
     uint32_t ubinright;
     uint32_t ubinleft;
     double dbinright;
@@ -2423,7 +2425,6 @@ NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
 /*NEON_OP_FUNCARGOPTIONAL*/
 NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
 {
-    //nn_valtable_set(&fnc->targetfunc->defaultargvalues, nn_value_makenumber(defvalconst), nn_value_makenumber(paramid));
     size_t ssp;
     size_t putpos;
     uint16_t slot;
@@ -2450,12 +2451,12 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
         #endif
     #if 1
     {
-        NNPrinter* pr = state->stderrprinter;
-        nn_printer_printf(pr, "funcargoptional: slot=%d putpos=%ld cval=<", slot, putpos);
-        nn_printer_printvalue(pr, cval, true, false);
-        nn_printer_printf(pr, ">, peeked=<");
-        nn_printer_printvalue(pr, peeked, true, false);
-        nn_printer_printf(pr, ">\n");
+        NNIOStream* pr = state->stderrprinter;
+        nn_iostream_printf(pr, "funcargoptional: slot=%d putpos=%ld cval=<", slot, putpos);
+        nn_iostream_printvalue(pr, cval, true, false);
+        nn_iostream_printf(pr, ">, peeked=<");
+        nn_iostream_printvalue(pr, peeked, true, false);
+        nn_iostream_printf(pr, ">\n");
     }
     #endif
     if(nn_value_isnull(cval))
@@ -2502,7 +2503,7 @@ NEON_FORCEINLINE bool nn_vmdo_funcargset(NNState* state)
 NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
 {
     size_t i;
-    int index;
+    int upvidx;
     size_t ssp;
     uint8_t islocal;
     NNValue thisval;
@@ -2520,16 +2521,16 @@ NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
     for(i = 0; i < (size_t)closure->upvalcount; i++)
     {
         islocal = nn_vmbits_readbyte(state);
-        index = nn_vmbits_readshort(state);
+        upvidx = nn_vmbits_readshort(state);
         if(islocal)
         {
             ssp = state->vmstate.currentframe->stackslotpos;
-            upvals = &state->vmstate.stackvalues[ssp + index];
-            closure->fnclosure.upvalues[i] = nn_vmutil_upvaluescapture(state, upvals, index);
+            upvals = &state->vmstate.stackvalues[ssp + upvidx];
+            closure->fnclosure.upvalues[i] = nn_vmutil_upvaluescapture(state, upvals, upvidx);
         }
         else
         {
-            closure->fnclosure.upvalues[i] = state->vmstate.currentframe->closure->fnclosure.upvalues[index];
+            closure->fnclosure.upvalues[i] = state->vmstate.currentframe->closure->fnclosure.upvalues[upvidx];
         }
     }
     return true;
@@ -2604,15 +2605,15 @@ NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, n
 void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, ...)
 {
     va_list va;
-    NNPrinter* pr;
+    NNIOStream* pr;
     pr = state->stderrprinter;
-    nn_printer_printf(pr, "VMDEBUG: val=<<<");
-    nn_printer_printvalue(pr, val, true, false);
-    nn_printer_printf(pr, ">>> ");
+    nn_iostream_printf(pr, "VMDEBUG: val=<<<");
+    nn_iostream_printvalue(pr, val, true, false);
+    nn_iostream_printf(pr, ">>> ");
     va_start(va, fmt);
-    nn_printer_vwritefmt(pr, fmt, va);
+    nn_iostream_vwritefmt(pr, fmt, va);
     va_end(va);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, "\n");
 }
 
 #define NEON_CONFIG_USECOMPUTEDGOTO 0
@@ -2775,9 +2776,9 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 printpos = iterpos + 1;
                 iterpos++;
                 fprintf(stderr, "  [%s%d%s] ", nn_util_color(NEON_COLOR_YELLOW), printpos, nn_util_color(NEON_COLOR_RESET));
-                nn_printer_printf(state->debugwriter, "%s", nn_util_color(NEON_COLOR_YELLOW));
-                nn_printer_printvalue(state->debugwriter, *dbgslot, true, false);
-                nn_printer_printf(state->debugwriter, "%s", nn_util_color(NEON_COLOR_RESET));
+                nn_iostream_printf(state->debugwriter, "%s", nn_util_color(NEON_COLOR_YELLOW));
+                nn_iostream_printvalue(state->debugwriter, *dbgslot, true, false);
+                nn_iostream_printf(state->debugwriter, "%s", nn_util_color(NEON_COLOR_RESET));
                 fprintf(stderr, "\n");
                 dbgslot++;
             }
@@ -2936,6 +2937,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
+            #if 0
             VM_CASE(NEON_OP_PRIMFLOORDIVIDE)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "//", (nnbinopfunc_t)nn_vmutil_floordiv))
@@ -2943,6 +2945,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
+            #endif
             VM_CASE(NEON_OP_PRIMNEGATE)
                 {
                     NNValue peeked;
@@ -3077,10 +3080,10 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 {
                     NNValue val;
                     val = nn_vmbits_stackpeek(state, 0);
-                    nn_printer_printvalue(state->stdoutprinter, val, state->isrepl, true);
+                    nn_iostream_printvalue(state->stdoutprinter, val, state->isrepl, true);
                     if(!nn_value_isnull(val))
                     {
-                        nn_printer_writestring(state->stdoutprinter, "\n");
+                        nn_iostream_writestring(state->stdoutprinter, "\n");
                     }
                     nn_vmbits_stackpop(state);
                 }
@@ -3255,13 +3258,13 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 VM_DISPATCH();
             VM_CASE(NEON_OP_UPVALUEGET)
                 {
-                    int index;
+                    int upvidx;
                     NNObjFunction* closure;
-                    index = nn_vmbits_readshort(state);
+                    upvidx = nn_vmbits_readshort(state);
                     closure = state->vmstate.currentframe->closure;
-                    if(index < closure->upvalcount)
+                    if(upvidx < closure->upvalcount)
                     {
-                        nn_vmbits_stackpush(state, closure->fnclosure.upvalues[index]->location);
+                        nn_vmbits_stackpush(state, closure->fnclosure.upvalues[upvidx]->location);
                     }
                     else
                     {
@@ -3271,11 +3274,11 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 VM_DISPATCH();
             VM_CASE(NEON_OP_UPVALUESET)
                 {
-                    int index;
+                    int upvidx;
                     NNValue val;
-                    index = nn_vmbits_readshort(state);
+                    upvidx = nn_vmbits_readshort(state);
                     val = nn_vmbits_stackpeek(state, 0);
-                    state->vmstate.currentframe->closure->fnclosure.upvalues[index]->location = val;
+                    state->vmstate.currentframe->closure->fnclosure.upvalues[upvidx]->location = val;
                 }
                 VM_DISPATCH();
             VM_CASE(NEON_OP_CALLFUNCTION)
@@ -3314,9 +3317,9 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 {
                     NNValue thisval;
                     thisval = nn_vmbits_stackpeek(state, 3);
-                    nn_printer_printf(state->debugwriter, "CLASSGETTHIS: thisval=");
-                    nn_printer_printvalue(state->debugwriter, thisval, true, false);
-                    nn_printer_printf(state->debugwriter, "\n");
+                    nn_iostream_printf(state->debugwriter, "CLASSGETTHIS: thisval=");
+                    nn_iostream_printvalue(state->debugwriter, thisval, true, false);
+                    nn_iostream_printf(state->debugwriter, "\n");
                     nn_vmbits_stackpush(state, thisval);
                 }
                 VM_DISPATCH();

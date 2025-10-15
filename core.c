@@ -130,12 +130,12 @@ NNValue nn_except_getstacktrace(NNState* state)
     NNObjFunction* function;
     NNObjString* os;
     NNObjArray* oa;
-    NNPrinter pr;
+    NNIOStream pr;
     oa = nn_object_makearray(state);
     {
         for(i = 0; i < state->vmstate.framecount; i++)
         {
-            nn_printer_makestackstring(state, &pr);
+            nn_iostream_makestackstring(state, &pr);
             frame = &state->vmstate.framevalues[i];
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
@@ -151,16 +151,16 @@ NNValue nn_except_getstacktrace(NNState* state)
             {
                 fnname = nn_string_getdata(function->name);
             }
-            nn_printer_printf(&pr, "from %s() in %s:%d", fnname, physfile, line);
-            os = nn_printer_takestring(&pr);
-            nn_printer_destroy(&pr);
+            nn_iostream_printf(&pr, "from %s() in %s:%d", fnname, physfile, line);
+            os = nn_iostream_takestring(&pr);
+            nn_iostream_destroy(&pr);
             nn_array_push(oa, nn_value_fromobject(os));
             if((i > 15) && (state->conf.showfullstack == false))
             {
-                nn_printer_makestackstring(state, &pr);
-                nn_printer_printf(&pr, "(only upper 15 entries shown)");
-                os = nn_printer_takestring(&pr);
-                nn_printer_destroy(&pr);
+                nn_iostream_makestackstring(state, &pr);
+                nn_iostream_printf(&pr, "(only upper 15 entries shown)");
+                os = nn_iostream_takestring(&pr);
+                nn_iostream_destroy(&pr);
                 nn_array_push(oa, nn_value_fromobject(os));
                 break;
             }
@@ -200,7 +200,7 @@ bool nn_except_propagate(NNState* state)
         {
             handler = &state->vmstate.currentframe->handlers[i - 1];
             function = state->vmstate.currentframe->closure->fnclosure.scriptfunc;
-            if(handler->address != 0 && nn_util_isinstanceof(exception->klass, handler->klass))
+            if(handler->address != 0 /*&& nn_util_isinstanceof(exception->klass, handler->handlerklass)*/)
             {
                 state->vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->address];
                 return true;
@@ -220,7 +220,7 @@ bool nn_except_propagate(NNState* state)
     colblue = nn_util_color(NEON_COLOR_BLUE);
     colreset = nn_util_color(NEON_COLOR_RESET);
     colyellow = nn_util_color(NEON_COLOR_YELLOW);
-    nn_printer_printf(state->debugwriter, "%sunhandled %s%s", colred, nn_string_getdata(exception->klass->name), colreset);
+    nn_iostream_printf(state->debugwriter, "%sunhandled %s%s", colred, nn_string_getdata(exception->klass->name), colreset);
     srcfile = "none";
     srcline = 0;
     field = nn_valtable_getfieldbycstr(&exception->properties, "srcline");
@@ -241,25 +241,25 @@ bool nn_except_propagate(NNState* state)
             srcfile = nn_string_getdata(tmp);
         }
     }
-    nn_printer_printf(state->debugwriter, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
+    nn_iostream_printf(state->debugwriter, " [from native %s%s:%d%s]", colyellow, srcfile, srcline, colreset);
     field = nn_valtable_getfieldbycstr(&exception->properties, "message");
     if(field != NULL)
     {
         emsg = nn_value_tostring(state, field->value);
         if(nn_string_getlength(emsg) > 0)
         {
-            nn_printer_printf(state->debugwriter, ": %s", nn_string_getdata(emsg));
+            nn_iostream_printf(state->debugwriter, ": %s", nn_string_getdata(emsg));
         }
         else
         {
-            nn_printer_printf(state->debugwriter, ":");
+            nn_iostream_printf(state->debugwriter, ":");
         }
     }
-    nn_printer_printf(state->debugwriter, "\n");
+    nn_iostream_printf(state->debugwriter, "\n");
     field = nn_valtable_getfieldbycstr(&exception->properties, "stacktrace");
     if(field != NULL)
     {
-        nn_printer_printf(state->debugwriter, "%sstacktrace%s:\n", colblue, colreset);
+        nn_iostream_printf(state->debugwriter, "%sstacktrace%s:\n", colblue, colreset);
         oa = nn_value_asarray(field->value);
         cnt = nn_valarray_count(&oa->varray);
         i = cnt-1;
@@ -268,10 +268,10 @@ bool nn_except_propagate(NNState* state)
             while(true)
             {
                 stackitm = nn_valarray_get(&oa->varray, i);
-                nn_printer_printf(state->debugwriter, "%s", colyellow);
-                nn_printer_printf(state->debugwriter, "  ");
-                nn_printer_printvalue(state->debugwriter, stackitm, false, true);
-                nn_printer_printf(state->debugwriter, "%s\n", colreset);
+                nn_iostream_printf(state->debugwriter, "%s", colyellow);
+                nn_iostream_printf(state->debugwriter, "  ");
+                nn_iostream_printvalue(state->debugwriter, stackitm, false, true);
+                nn_iostream_printf(state->debugwriter, "%s\n", colreset);
                 if(i == 0)
                 {
                     break;
@@ -297,7 +297,7 @@ bool nn_except_pushhandler(NNState* state, NNObjClass* type, int address, int fi
     }
     frame->handlers[frame->handlercount].address = address;
     frame->handlers[frame->handlercount].finallyaddress = finallyaddress;
-    frame->handlers[frame->handlercount].klass = type;
+    /*frame->handlers[frame->handlercount].handlerklass = type;*/
     frame->handlercount++;
     return true;
 }
@@ -667,10 +667,10 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     * initialize various printer instances
     */
     {
-        pstate->stdoutprinter = nn_printer_makeio(pstate, stdout, false);
+        pstate->stdoutprinter = nn_iostream_makeio(pstate, stdout, false);
         pstate->stdoutprinter->shouldflush = true;
-        pstate->stderrprinter = nn_printer_makeio(pstate, stderr, false);
-        pstate->debugwriter = nn_printer_makeio(pstate, stderr, false);
+        pstate->stderrprinter = nn_iostream_makeio(pstate, stderr, false);
+        pstate->debugwriter = nn_iostream_makeio(pstate, stderr, false);
         pstate->debugwriter->shortenvalues = true;
         pstate->debugwriter->maxvallength = 15;
     }
@@ -773,11 +773,11 @@ void nn_state_destroy(NNState* state, bool onstack)
     destrdebug("destroying strings table...");
     nn_valtable_destroy(&state->allocatedstrings);
     destrdebug("destroying stdoutprinter...");
-    nn_printer_destroy(state->stdoutprinter);
+    nn_iostream_destroy(state->stdoutprinter);
     destrdebug("destroying stderrprinter...");
-    nn_printer_destroy(state->stderrprinter);
+    nn_iostream_destroy(state->stderrprinter);
     destrdebug("destroying debugwriter...");
-    nn_printer_destroy(state->debugwriter);
+    nn_iostream_destroy(state->debugwriter);
     destrdebug("destroying framevalues...");
     nn_memory_free(state->vmstate.framevalues);
     destrdebug("destroying stackvalues...");

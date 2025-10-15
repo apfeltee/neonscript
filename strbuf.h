@@ -32,9 +32,6 @@
 #define nn_strbuf_boundscheckinsert(sb, pos) nn_strutil_callboundscheckinsert(sb, pos, __FILE__, __LINE__)
 #define nn_strbuf_boundscheckreadrange(sb, start, len) nn_strutil_callboundscheckreadrange(sb, start, len, __FILE__, __LINE__)
 
-
-#define ROUNDUP2POW(x) nn_strutil_rndup2pow64(x)
-
 size_t nn_strutil_rndup2pow64(uint64_t x)
 {
     /* long long >=64 bits guaranteed in C99 */
@@ -470,7 +467,11 @@ NNStringBuffer* nn_strbuf_makelongfromptr(NNStringBuffer* sb, size_t len)
     //fprintf(stderr, "in makelong...\n");
     sb->isintern = false;
     sb->storedlength = 0;
-    sb->capacity = ROUNDUP2POW(len + 1);
+    #if 0
+        sb->capacity = nn_strutil_rndup2pow64(len + 1);
+    #else
+        sb->capacity = (len + 1);
+    #endif
     sb->longstrdata = (char*)nn_memory_malloc(sb->capacity);
     if(!sb->longstrdata)
     {
@@ -567,7 +568,7 @@ bool nn_strbuf_ensurecapacity(NNStringBuffer* sb, size_t len)
     len++;
     if((sb->capacity == 0) || (sb->capacity < len))
     {
-        sb->capacity = ROUNDUP2POW(len);
+        sb->capacity = nn_strutil_rndup2pow64(len);
         /* fprintf(stderr, "sizeptr=%ld\n", sb->capacity); */
         if(mustcopy /*|| sb->longstrdata == NULL*/)
         {

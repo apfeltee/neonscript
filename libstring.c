@@ -29,7 +29,7 @@ NNValue nn_string_tabhashvalueobj(NNObjString* os)
     return nn_string_tabhashvaluestr(nn_string_getdata(os), nn_string_getlength(os), os->hashvalue);
 }
 
-NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, size_t length, uint32_t hsv)
+NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* findstr, size_t findlen, uint32_t findhash)
 {
     size_t slen;
     uint32_t index;
@@ -46,9 +46,9 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
         return NULL;
     }
     #if defined(NEON_CONF_LIBSTRINGUSEHASH) && (NEON_CONF_LIBSTRINGUSEHASH == 1)
-    wanteddn = nn_string_tabhashvaluecombine(chars, length, hsv);
+    wanteddn = nn_string_tabhashvaluecombine(findstr, findlen, findhash);
     #endif
-    index = hsv & (table->htcapacity - 1);
+    index = findhash & (table->htcapacity - 1);
     while(true)
     {
         entry = &table->htentries[index];
@@ -72,15 +72,14 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
             string = nn_value_asstring(entry->key);
             slen = nn_string_getlength(string);
             sdata = nn_string_getdata(string);
-            if(slen == length) 
+            if((slen == findlen) && (string->hashvalue == findhash)) 
             {
-                if(string->hashvalue == hsv)
+                #if 0
+                if(memcmp(sdata, findstr, findlen) == 0)
+                #endif
                 {
-                    if(memcmp(sdata, chars, length) == 0)
-                    {
-                        /* we found it */
-                        return string;
-                    }
+                    /* we found it */
+                    return string;
                 }
             }
         #endif
@@ -91,13 +90,17 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* chars, si
 
 void nn_string_strtabstore(NNState* state, NNObjString* os)
 {
-    nn_vm_stackpush(state, nn_value_fromobject(os));
+    #if 0
+        nn_vm_stackpush(state, nn_value_fromobject(os));
+    #endif
     #if defined(NEON_CONF_LIBSTRINGUSEHASH) && (NEON_CONF_LIBSTRINGUSEHASH == 1)
         nn_valtable_set(&state->allocatedstrings, nn_string_tabhashvalueobj(os), nn_value_fromobject(os));    
     #else
         nn_valtable_set(&state->allocatedstrings, nn_value_fromobject(os), nn_value_makenull());
     #endif
-    nn_vm_stackpop(state);
+    #if 0
+        nn_vm_stackpop(state);
+    #endif
 }
 
 NNObjString* nn_string_strtabfind(NNState* state, const char* str, size_t len, uint32_t hsv)
@@ -126,77 +129,77 @@ void nn_string_destroy(NNState* state, NNObjString* str)
     nn_gcmem_release(state, str, sizeof(NNObjString));
 }
 
-NNObjString* nn_string_internlen(NNState* state, const char* chars, int length)
+NNObjString* nn_string_internlen(NNState* state, const char* strdata, int length)
 {
     uint32_t hsv;
     NNStringBuffer buf;
     NNObjString* rs;
-    hsv = nn_util_hashstring(chars, length);
-    rs = nn_string_strtabfind(state, chars, length, hsv);
+    hsv = nn_util_hashstring(strdata, length);
+    rs = nn_string_strtabfind(state, strdata, length, hsv);
     if(rs != NULL)
     {
         return rs;
     }
     nn_strbuf_makebasicemptystack(&buf, NULL, 0);
     buf.isintern = true;
-    nn_strbuf_setdata(&buf, (char*)chars);
+    nn_strbuf_setdata(&buf, (char*)strdata);
     nn_strbuf_setlength(&buf, length);
     return nn_string_makefromstrbuf(state, buf, hsv, length);
 }
 
-NNObjString* nn_string_intern(NNState* state, const char* chars)
+NNObjString* nn_string_intern(NNState* state, const char* strdata)
 {
-    return nn_string_internlen(state, chars, strlen(chars));
+    return nn_string_internlen(state, strdata, strlen(strdata));
 }
 
-NNObjString* nn_string_takelen(NNState* state, char* chars, int length)
+NNObjString* nn_string_takelen(NNState* state, char* strdata, int length)
 {
     uint32_t hsv;
     NNObjString* rs;
     NNStringBuffer buf;
-    hsv = nn_util_hashstring(chars, length);
-    rs = nn_string_strtabfind(state, chars, length, hsv);
+    hsv = nn_util_hashstring(strdata, length);
+    rs = nn_string_strtabfind(state, strdata, length, hsv);
     if(rs != NULL)
     {
-        nn_memory_free(chars);
+        nn_memory_free(strdata);
         return rs;
     }
     nn_strbuf_makebasicemptystack(&buf, NULL, 0);
-    nn_strbuf_setdata(&buf, chars);
+    nn_strbuf_setdata(&buf, strdata);
     nn_strbuf_setlength(&buf, length);
     return nn_string_makefromstrbuf(state, buf, hsv, length);
 }
 
-NNObjString* nn_string_takecstr(NNState* state, char* chars)
+NNObjString* nn_string_takecstr(NNState* state, char* strdata)
 {
-    return nn_string_takelen(state, chars, strlen(chars));
+    return nn_string_takelen(state, strdata, strlen(strdata));
 }
 
-NNObjString* nn_string_copylen(NNState* state, const char* chars, int length)
+NNObjString* nn_string_copylen(NNState* state, const char* strdata, int length)
 {
     uint32_t hsv;
     NNStringBuffer sb;
     NNObjString* rs;
-    hsv = nn_util_hashstring(chars, length);
+    hsv = nn_util_hashstring(strdata, length);
     if(length == 0)
     {
-        return nn_string_internlen(state, chars, length);
+        return nn_string_internlen(state, strdata, length);
     }
     {
-        rs = nn_valtable_findstring(&state->allocatedstrings, chars, length, hsv);
+        rs = nn_string_strtabfind(state, strdata, length, hsv);
         if(rs != NULL)
         {
             return rs;
         }
     }
-    nn_strbuf_makebasicemptystack(&sb, chars, length);
+    nn_strbuf_makebasicemptystack(&sb, strdata, length);
     rs = nn_string_makefromstrbuf(state, sb, hsv, length);
     return rs;
 }
 
-NNObjString* nn_string_copycstr(NNState* state, const char* chars)
+NNObjString* nn_string_copycstr(NNState* state, const char* strdata)
 {
-    return nn_string_copylen(state, chars, strlen(chars));
+    return nn_string_copylen(state, strdata, strlen(strdata));
 }
 
 NNObjString* nn_string_copyobject(NNState* state, NNObjString* origos)

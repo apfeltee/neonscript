@@ -1,6 +1,6 @@
 
 #include <time.h>
-#include <signal.h>
+
 #include "neon.h"
 #include "oslib.h"
 

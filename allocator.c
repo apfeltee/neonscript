@@ -1385,7 +1385,7 @@ void* nn_allocuser_malloc(void* msp, size_t nsize)
         idx = nn_allocator_smallindex(nb);
         smallbits = ms->smallmap >> idx;
 
-        if((smallbits & 0x3U) != 0)
+        if((smallbits & 0x3) != 0)
         { /* Remainderless fit to a smallbin. */
             nnallocatorplainchunk_t* b;
             nnallocatorplainchunk_t* p;

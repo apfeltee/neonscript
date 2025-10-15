@@ -1,7 +1,7 @@
 
 #include "neon.h"
 
-void nn_strformat_init(NNState* state, NNFormatInfo* nfi, NNPrinter* writer, const char* fmtstr, size_t fmtlen)
+void nn_strformat_init(NNState* state, NNFormatInfo* nfi, NNIOStream* writer, const char* fmtstr, size_t fmtlen)
 {
     nfi->pstate = state;
     nfi->fmtstr = fmtstr;
@@ -39,7 +39,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
         {
             if(nextch == '%')
             {
-                nn_printer_writechar(nfi->writer, '%');
+                nn_iostream_writechar(nfi->writer, '%');
             }
             else
             {
@@ -60,13 +60,13 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                     case 'q':
                     case 'p':
                         {
-                            nn_printer_printvalue(nfi->writer, cval, true, true);
+                            nn_iostream_printvalue(nfi->writer, cval, true, true);
                         }
                         break;
                     case 'c':
                         {
                             ival = (int)nn_value_asnumber(cval);
-                            nn_printer_printf(nfi->writer, "%c", ival);
+                            nn_iostream_printf(nfi->writer, "%c", ival);
                         }
                         break;
                     /* TODO: implement actual field formatting */
@@ -75,7 +75,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                     case 'i':
                     case 'g':
                         {
-                            nn_printer_printvalue(nfi->writer, cval, false, true);
+                            nn_iostream_printvalue(nfi->writer, cval, false, true);
                         }
                         break;
                     default:
@@ -88,7 +88,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
         }
         else
         {
-            nn_printer_writechar(nfi->writer, ch);
+            nn_iostream_writechar(nfi->writer, ch);
         }
     }
     return ok;

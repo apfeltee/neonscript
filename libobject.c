@@ -4,30 +4,30 @@
 NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* os;
     v = thisval;
     (void)argv;
     (void)argc;
-    nn_printer_makestackstring(state, &pr);
-    nn_printer_printvalue(&pr, v, true, false);
-    os = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    nn_iostream_makestackstring(state, &pr);
+    nn_iostream_printvalue(&pr, v, true, false);
+    os = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     return nn_value_fromobject(os);
 }
 
 NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* os;
     (void)argv;
     (void)argc;
     v = thisval;
-    nn_printer_makestackstring(state, &pr);
-    nn_printer_printvalue(&pr, v, false, true);
-    os = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    nn_iostream_makestackstring(state, &pr);
+    nn_iostream_printvalue(&pr, v, false, true);
+    os = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     return nn_value_fromobject(os);
 }
 

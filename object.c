@@ -12,7 +12,7 @@ NNObject* nn_object_allocobject(NNState* state, size_t size, NNObjType type, boo
     object->next = state->vmstate.linkedobjects;
     state->vmstate.linkedobjects = object;
     #if defined(DEBUG_GC) && DEBUG_GC
-    nn_printer_printf(state->debugwriter, "%p allocate %ld for %d\n", (void*)object, size, type);
+    nn_iostream_printf(state->debugwriter, "%p allocate %ld for %d\n", (void*)object, size, type);
     #endif
     return object;
 }

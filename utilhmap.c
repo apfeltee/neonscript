@@ -8,6 +8,18 @@
 */
 #define NEON_CONFIG_MAXTABLELOAD (0.85714286)
 
+static uint64_t nn_valtable_getnextcapacity(uint64_t capacity)
+{
+    if(capacity < 4)
+    {
+        return 4;
+    }
+    #if 1
+        return nn_util_rndup2pow64(capacity+1);
+    #else
+        return (capacity * 2);
+    #endif
+}
 
 void nn_valtable_init(NNState* state, NNHashValTable* tab)
 {
@@ -38,7 +50,7 @@ NNHashValEntry* nn_valtable_findentrybyvalue(NNHashValTable* table, NNHashValEnt
     hsv = nn_value_hashvalue(key);
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "looking for key ");
-    nn_printer_printvalue(state->debugwriter, key, true, false);
+    nn_iostream_printvalue(state->debugwriter, key, true, false);
     fprintf(stderr, " with hash %u in table...\n", hsv);
     #endif
     index = hsv & (capacity - 1);
@@ -92,7 +104,7 @@ NNHashValEntry* nn_valtable_findentrybystr(NNHashValTable* table, NNHashValEntry
     (void)havevalhash;
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "looking for key ");
-    nn_printer_printvalue(state->debugwriter, key, true, false);
+    nn_iostream_printvalue(state->debugwriter, key, true, false);
     fprintf(stderr, " with hash %u in table...\n", hsv);
     #endif
     valhash = 0;
@@ -171,7 +183,7 @@ NNProperty* nn_valtable_getfieldbyvalue(NNHashValTable* table, NNValue key)
     }
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
-    nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
+    nn_iostream_printvalue(state->debugwriter, entry->value.value, true, false);
     fprintf(stderr, "\n");
     #endif
     return &entry->value;
@@ -197,7 +209,7 @@ NNProperty* nn_valtable_getfieldbystr(NNHashValTable* table, NNValue valkey, con
     }
     #if defined(DEBUG_TABLE) && DEBUG_TABLE
     fprintf(stderr, "found entry for hash %u == ", nn_value_hashvalue(entry->key));
-    nn_printer_printvalue(state->debugwriter, entry->value.value, true, false);
+    nn_iostream_printvalue(state->debugwriter, entry->value.value, true, false);
     fprintf(stderr, "\n");
     #endif
     return &entry->value;
@@ -289,9 +301,9 @@ bool nn_valtable_setwithtype(NNHashValTable* table, NNValue key, NNValue value, 
     NNHashValEntry* entry;
     (void)keyisstring;
     state = table->pstate;
-    if(table->htcount + 1 > table->htcapacity * NEON_CONFIG_MAXTABLELOAD)
+    if((table->htcount + 1) > (table->htcapacity * NEON_CONFIG_MAXTABLELOAD))
     {
-        capacity = GROW_CAPACITY(table->htcapacity);
+        capacity = nn_valtable_getnextcapacity(table->htcapacity);
         if(!nn_valtable_adjustcapacity(table, capacity))
         {
             return false;

@@ -1,0 +1,1042 @@
+struct nnallocatorplainchunk_t {
+	size_t                     prev_foot;            /*     0     8 */
+	size_t                     head;                 /*     8     8 */
+	nnallocatorplainchunk_t *  fd;                   /*    16     8 */
+	nnallocatorplainchunk_t *  bk;                   /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 4 */
+	/* last cacheline: 32 bytes */
+};
+struct nnallocatorsegment_t {
+	char *                     base;                 /*     0     8 */
+	size_t                     size;                 /*     8     8 */
+	nnallocatorsegment_t *     next;                 /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* last cacheline: 24 bytes */
+};
+struct nnallocatortreechunk_t {
+	size_t                     prev_foot;            /*     0     8 */
+	size_t                     head;                 /*     8     8 */
+	nnallocatortreechunk_t *   fd;                   /*    16     8 */
+	nnallocatortreechunk_t *   bk;                   /*    24     8 */
+	nnallocatortreechunk_t *   child[2];             /*    32    16 */
+	nnallocatortreechunk_t *   parent;               /*    48     8 */
+	bindex_t                   index;                /*    56     8 */
+
+	/* size: 64, cachelines: 1, members: 7 */
+};
+struct nnallocatorstate_t {
+	binmap_t                   smallmap;             /*     0     4 */
+	binmap_t                   treemap;              /*     4     4 */
+	size_t                     dvsize;               /*     8     8 */
+	size_t                     topsize;              /*    16     8 */
+	nnallocatorplainchunk_t *  dv;                   /*    24     8 */
+	nnallocatorplainchunk_t *  top;                  /*    32     8 */
+	size_t                     trim_check;           /*    40     8 */
+	size_t                     release_checks;       /*    48     8 */
+	nnallocatorplainchunk_t *  smallbins[66];        /*    56   528 */
+	/* --- cacheline 9 boundary (576 bytes) was 8 bytes ago --- */
+	nnallocatortreechunk_t *   treebins[32];         /*   584   256 */
+	/* --- cacheline 13 boundary (832 bytes) was 8 bytes ago --- */
+	nnallocatorsegment_t       seg;                  /*   840    24 */
+
+	/* size: 864, cachelines: 14, members: 11 */
+	/* last cacheline: 32 bytes */
+};
+struct __va_list_tag {
+	unsigned int               gp_offset;            /*     0     4 */
+	unsigned int               fp_offset;            /*     4     4 */
+	void *                     overflow_arg_area;    /*     8     8 */
+	void *                     reg_save_area;        /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 4 */
+	/* last cacheline: 24 bytes */
+};
+struct _IO_FILE {
+	int                        _flags;               /*     0     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	char *                     _IO_read_ptr;         /*     8     8 */
+	char *                     _IO_read_end;         /*    16     8 */
+	char *                     _IO_read_base;        /*    24     8 */
+	char *                     _IO_write_base;       /*    32     8 */
+	char *                     _IO_write_ptr;        /*    40     8 */
+	char *                     _IO_write_end;        /*    48     8 */
+	char *                     _IO_buf_base;         /*    56     8 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	char *                     _IO_buf_end;          /*    64     8 */
+	char *                     _IO_save_base;        /*    72     8 */
+	char *                     _IO_backup_base;      /*    80     8 */
+	char *                     _IO_save_end;         /*    88     8 */
+	struct _IO_marker *        _markers;             /*    96     8 */
+	struct _IO_FILE *          _chain;               /*   104     8 */
+	int                        _fileno;              /*   112     4 */
+	int                        _flags2;              /*   116     4 */
+	__off_t                    _old_offset;          /*   120     8 */
+	/* --- cacheline 2 boundary (128 bytes) --- */
+	short unsigned int         _cur_column;          /*   128     2 */
+	signed char                _vtable_offset;       /*   130     1 */
+	char                       _shortbuf[1];         /*   131     1 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	_IO_lock_t *               _lock;                /*   136     8 */
+	__off64_t                  _offset;              /*   144     8 */
+	struct _IO_codecvt *       _codecvt;             /*   152     8 */
+	struct _IO_wide_data *     _wide_data;           /*   160     8 */
+	struct _IO_FILE *          _freeres_list;        /*   168     8 */
+	void *                     _freeres_buf;         /*   176     8 */
+	size_t                     __pad5;               /*   184     8 */
+	/* --- cacheline 3 boundary (192 bytes) --- */
+	int                        _mode;                /*   192     4 */
+	char                       _unused2[20];         /*   196    20 */
+
+	/* size: 216, cachelines: 4, members: 29 */
+	/* sum members: 208, holes: 2, sum holes: 8 */
+	/* last cacheline: 24 bytes */
+};
+struct NNValue {
+	NNValType                  type;                 /*     0     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	union {
+		uint8_t            vbool;                /*     8     1 */
+		double             vfltnum;              /*     8     8 */
+		NNObject *         vobjpointer;          /*     8     8 */
+	} valunion;                                      /*     8     8 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* sum members: 12, holes: 1, sum holes: 4 */
+	/* last cacheline: 16 bytes */
+};
+struct NNProcessInfo {
+	int                        cliprocessid;         /*     0     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNObjArray *               cliargv;              /*     8     8 */
+	NNObjString *              cliexedirectory;      /*    16     8 */
+	NNObjString *              cliscriptfile;        /*    24     8 */
+	NNObjString *              cliscriptdirectory;   /*    32     8 */
+	NNObjFile *                filestdout;           /*    40     8 */
+	NNObjFile *                filestderr;           /*    48     8 */
+	NNObjFile *                filestdin;            /*    56     8 */
+
+	/* size: 64, cachelines: 1, members: 8 */
+	/* sum members: 60, holes: 1, sum holes: 4 */
+};
+struct NNObject {
+	NNObjType                  type;                 /*     0     4 */
+	_Bool                      mark;                 /*     4     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	NNState *                  pstate;               /*     8     8 */
+	_Bool                      stale;                /*    16     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNObject *                 next;                 /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 5 */
+	/* sum members: 22, holes: 2, sum holes: 10 */
+	/* last cacheline: 32 bytes */
+};
+struct NNObjString {
+	NNObject                   objpadding;           /*     0    32 */
+	uint32_t                   hashvalue;            /*    32     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNStringBuffer             sbuf;                 /*    40    32 */
+
+	/* size: 72, cachelines: 2, members: 3 */
+	/* sum members: 68, holes: 1, sum holes: 4 */
+	/* last cacheline: 8 bytes */
+};
+struct NNObjArray {
+	NNObject                   objpadding;           /*     0    32 */
+	NNValArray                 varray;               /*    32    40 */
+
+	/* size: 72, cachelines: 2, members: 2 */
+	/* last cacheline: 8 bytes */
+};
+struct NNObjUpvalue {
+	NNObject                   objpadding;           /*     0    32 */
+	int                        stackpos;             /*    32     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNValue                    closed;               /*    40    16 */
+	NNValue                    location;             /*    56    16 */
+	/* --- cacheline 1 boundary (64 bytes) was 8 bytes ago --- */
+	NNObjUpvalue *             next;                 /*    72     8 */
+
+	/* size: 80, cachelines: 2, members: 5 */
+	/* sum members: 76, holes: 1, sum holes: 4 */
+	/* last cacheline: 16 bytes */
+};
+struct NNObjClass {
+	NNObject                   objpadding;           /*     0    32 */
+	NNValue                    constructor;          /*    32    16 */
+	NNValue                    destructor;           /*    48    16 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	NNHashValTable             instproperties;       /*    64    32 */
+	NNHashValTable             staticproperties;     /*    96    32 */
+	/* --- cacheline 2 boundary (128 bytes) --- */
+	NNHashValTable             instmethods;          /*   128    32 */
+	NNHashValTable             staticmethods;        /*   160    32 */
+	/* --- cacheline 3 boundary (192 bytes) --- */
+	NNObjString *              name;                 /*   192     8 */
+	NNObjClass *               superclass;           /*   200     8 */
+
+	/* size: 208, cachelines: 4, members: 9 */
+	/* last cacheline: 16 bytes */
+};
+struct NNObjModule {
+	NNObject                   objpadding;           /*     0    32 */
+	_Bool                      imported;             /*    32     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNHashValTable             deftable;             /*    40    32 */
+	/* --- cacheline 1 boundary (64 bytes) was 8 bytes ago --- */
+	NNObjString *              name;                 /*    72     8 */
+	NNObjString *              physicalpath;         /*    80     8 */
+	void *                     fnpreloaderptr;       /*    88     8 */
+	void *                     fnunloaderptr;        /*    96     8 */
+	void *                     handle;               /*   104     8 */
+
+	/* size: 112, cachelines: 2, members: 8 */
+	/* sum members: 105, holes: 1, sum holes: 7 */
+	/* last cacheline: 48 bytes */
+};
+struct NNObjInstance {
+	NNObject                   objpadding;           /*     0    32 */
+	_Bool                      active;               /*    32     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNHashValTable             properties;           /*    40    32 */
+	/* --- cacheline 1 boundary (64 bytes) was 8 bytes ago --- */
+	NNObjClass *               klass;                /*    72     8 */
+	NNObjInstance *            superinstance;        /*    80     8 */
+
+	/* size: 88, cachelines: 2, members: 5 */
+	/* sum members: 81, holes: 1, sum holes: 7 */
+	/* last cacheline: 24 bytes */
+};
+struct NNObjRange {
+	NNObject                   objpadding;           /*     0    32 */
+	int                        lower;                /*    32     4 */
+	int                        upper;                /*    36     4 */
+	int                        range;                /*    40     4 */
+
+	/* size: 48, cachelines: 1, members: 4 */
+	/* padding: 4 */
+	/* last cacheline: 48 bytes */
+};
+struct NNObjDict {
+	NNObject                   objpadding;           /*     0    32 */
+	NNValArray                 htnames;              /*    32    40 */
+	/* --- cacheline 1 boundary (64 bytes) was 8 bytes ago --- */
+	NNHashValTable             htab;                 /*    72    32 */
+
+	/* size: 104, cachelines: 2, members: 3 */
+	/* last cacheline: 40 bytes */
+};
+struct NNObjFile {
+	NNObject                   objpadding;           /*     0    32 */
+	_Bool                      isopen;               /*    32     1 */
+	_Bool                      isstd;                /*    33     1 */
+	_Bool                      istty;                /*    34     1 */
+
+	/* XXX 1 byte hole, try to pack */
+
+	int                        number;               /*    36     4 */
+	FILE *                     handle;               /*    40     8 */
+	NNObjString *              mode;                 /*    48     8 */
+	NNObjString *              path;                 /*    56     8 */
+
+	/* size: 64, cachelines: 1, members: 8 */
+	/* sum members: 63, holes: 1, sum holes: 1 */
+};
+struct NNObjSwitch {
+	NNObject                   objpadding;           /*     0    32 */
+	int                        defaultjump;          /*    32     4 */
+	int                        exitjump;             /*    36     4 */
+	NNHashValTable             table;                /*    40    32 */
+
+	/* size: 72, cachelines: 2, members: 4 */
+	/* last cacheline: 8 bytes */
+};
+struct NNObjUserdata {
+	NNObject                   objpadding;           /*     0    32 */
+	void *                     pointer;              /*    32     8 */
+	char *                     name;                 /*    40     8 */
+	NNPtrFreeFN                ondestroyfn;          /*    48     8 */
+
+	/* size: 56, cachelines: 1, members: 4 */
+	/* last cacheline: 56 bytes */
+};
+struct NNObjFunction {
+	NNObject                   objpadding;           /*     0    32 */
+	NNFuncContextType          contexttype;          /*    32     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNObjString *              name;                 /*    40     8 */
+	int                        upvalcount;           /*    48     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNValue                    clsthisval;           /*    56    16 */
+	/* --- cacheline 1 boundary (64 bytes) was 8 bytes ago --- */
+	union {
+		struct {
+			NNObjFunction * scriptfunc;      /*    72     8 */
+			NNObjUpvalue * * upvalues;       /*    80     8 */
+		} fnclosure;                             /*    72    16 */
+		struct {
+			int        arity;                /*    72     4 */
+			_Bool      isvariadic;           /*    76     1 */
+
+			/* XXX 3 bytes hole, try to pack */
+
+			NNBlob     blob;                 /*    80   104 */
+			/* --- cacheline 2 boundary (128 bytes) was 56 bytes ago --- */
+			NNObjModule * module;            /*   184     8 */
+		} fnscriptfunc;                          /*    72   120 */
+		struct {
+			NNNativeFN natfunc;              /*    72     8 */
+			void *     userptr;              /*    80     8 */
+		} fnnativefunc;                          /*    72    16 */
+		struct {
+			NNValue    receiver;             /*    72    16 */
+			NNObjFunction * method;          /*    88     8 */
+		} fnmethod;                              /*    72    24 */
+	};                                               /*    72   120 */
+
+	/* size: 192, cachelines: 3, members: 6 */
+	/* sum members: 184, holes: 2, sum holes: 8 */
+};
+struct NNPropGetSet {
+	NNValue                    getter;               /*     0    16 */
+	NNValue                    setter;               /*    16    16 */
+
+	/* size: 32, cachelines: 1, members: 2 */
+	/* last cacheline: 32 bytes */
+};
+struct NNProperty {
+	_Bool                      havegetset;           /*     0     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	NNFieldType                type;                 /*     4     4 */
+	NNValue                    value;                /*     8    16 */
+	NNPropGetSet               getset;               /*    24    32 */
+
+	/* size: 56, cachelines: 1, members: 4 */
+	/* sum members: 53, holes: 1, sum holes: 3 */
+	/* last cacheline: 56 bytes */
+};
+struct NNValArray {
+	NNState *                  pstate;               /*     0     8 */
+	const char  *              listname;             /*     8     8 */
+	NNValue *                  listitems;            /*    16     8 */
+	size_t                     listcapacity;         /*    24     8 */
+	size_t                     listcount;            /*    32     8 */
+
+	/* size: 40, cachelines: 1, members: 5 */
+	/* last cacheline: 40 bytes */
+};
+struct NNBlob {
+	int                        count;                /*     0     4 */
+	int                        capacity;             /*     4     4 */
+	NNState *                  pstate;               /*     8     8 */
+	NNInstruction *            instrucs;             /*    16     8 */
+	NNValArray                 constants;            /*    24    40 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	NNValArray                 argdefvals;           /*    64    40 */
+
+	/* size: 104, cachelines: 2, members: 6 */
+	/* last cacheline: 40 bytes */
+};
+struct NNHashValEntry {
+	NNValue                    key;                  /*     0    16 */
+	NNProperty                 value;                /*    16    56 */
+
+	/* size: 72, cachelines: 2, members: 2 */
+	/* last cacheline: 8 bytes */
+};
+struct NNHashValTable {
+	_Bool                      htactive;             /*     0     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	int                        htcount;              /*     4     4 */
+	int                        htcapacity;           /*     8     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNState *                  pstate;               /*    16     8 */
+	NNHashValEntry *           htentries;            /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 5 */
+	/* sum members: 25, holes: 2, sum holes: 7 */
+	/* last cacheline: 32 bytes */
+};
+struct NNExceptionFrame {
+	uint16_t                   address;              /*     0     2 */
+	uint16_t                   finallyaddress;       /*     2     2 */
+
+	/* size: 4, cachelines: 1, members: 2 */
+	/* last cacheline: 4 bytes */
+};
+struct NNCallFrame {
+	uint8_t                    handlercount;         /*     0     1 */
+	uint8_t                    gcprotcount;          /*     1     1 */
+	uint8_t                    stackslotpos;         /*     2     1 */
+
+	/* XXX 5 bytes hole, try to pack */
+
+	NNInstruction *            inscode;              /*     8     8 */
+	NNObjFunction *            closure;              /*    16     8 */
+	NNExceptionFrame           handlers[2];          /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 6 */
+	/* sum members: 27, holes: 1, sum holes: 5 */
+	/* last cacheline: 32 bytes */
+};
+struct NNState {
+	struct {
+		_Bool              enablewarnings;       /*     0     1 */
+		_Bool              dumpbytecode;         /*     1     1 */
+		_Bool              exitafterbytecode;    /*     2     1 */
+		_Bool              shoulddumpstack;      /*     3     1 */
+		_Bool              enablestrictmode;     /*     4     1 */
+		_Bool              showfullstack;        /*     5     1 */
+		_Bool              enableapidebug;       /*     6     1 */
+
+		/* XXX 1 byte hole, try to pack */
+
+		int                maxsyntaxerrors;      /*     8     4 */
+	} conf;                                          /*     0    12 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	struct {
+		int64_t            stackidx;             /*    16     8 */
+		int64_t            stackcapacity;        /*    24     8 */
+		int64_t            framecapacity;        /*    32     8 */
+		int64_t            framecount;           /*    40     8 */
+		NNInstruction      currentinstr;         /*    48     3 */
+
+		/* XXX 5 bytes hole, try to pack */
+
+		NNCallFrame *      currentframe;         /*    56     8 */
+		/* --- cacheline 1 boundary (64 bytes) --- */
+		NNObjUpvalue *     openupvalues;         /*    64     8 */
+		NNObject *         linkedobjects;        /*    72     8 */
+		NNCallFrame *      framevalues;          /*    80     8 */
+		NNValue *          stackvalues;          /*    88     8 */
+	} vmstate;                                       /*    16    80 */
+	struct {
+		int64_t            graycount;            /*    96     8 */
+		int64_t            graycapacity;         /*   104     8 */
+		int64_t            bytesallocated;       /*   112     8 */
+		int64_t            nextgc;               /*   120     8 */
+		/* --- cacheline 2 boundary (128 bytes) --- */
+		NNObject * *       graystack;            /*   128     8 */
+	} gcstate;                                       /*    96    40 */
+	struct {
+		NNObjClass *       stdexception;         /*   136     8 */
+		NNObjClass *       syntaxerror;          /*   144     8 */
+		NNObjClass *       asserterror;          /*   152     8 */
+		NNObjClass *       ioerror;              /*   160     8 */
+		NNObjClass *       oserror;              /*   168     8 */
+		NNObjClass *       argumenterror;        /*   176     8 */
+		NNObjClass *       regexerror;           /*   184     8 */
+		/* --- cacheline 3 boundary (192 bytes) --- */
+		NNObjClass *       importerror;          /*   192     8 */
+	} exceptions;                                    /*   136    64 */
+	struct {
+		NNObjString *      nmindexget;           /*   200     8 */
+		NNObjString *      nmindexset;           /*   208     8 */
+		NNObjString *      nmadd;                /*   216     8 */
+		NNObjString *      nmsub;                /*   224     8 */
+		NNObjString *      nmdiv;                /*   232     8 */
+		NNObjString *      nmmul;                /*   240     8 */
+		NNObjString *      nmband;               /*   248     8 */
+		/* --- cacheline 4 boundary (256 bytes) --- */
+		NNObjString *      nmbor;                /*   256     8 */
+		NNObjString *      nmbxor;               /*   264     8 */
+		NNObjString *      nmconstructor;        /*   272     8 */
+	} defaultstrings;                                /*   200    80 */
+	NNValue                    lastreplvalue;        /*   280    16 */
+	void *                     memuserptr;           /*   296     8 */
+	const char  *              rootphysfile;         /*   304     8 */
+	NNObjDict *                envdict;              /*   312     8 */
+	/* --- cacheline 5 boundary (320 bytes) --- */
+	NNObjModule *              topmodule;            /*   320     8 */
+	NNValArray                 importpath;           /*   328    40 */
+	NNHashValTable             openedmodules;        /*   368    32 */
+	/* --- cacheline 6 boundary (384 bytes) was 16 bytes ago --- */
+	NNHashValTable             allocatedstrings;     /*   400    32 */
+	NNHashValTable             declaredglobals;      /*   432    32 */
+	/* --- cacheline 7 boundary (448 bytes) was 16 bytes ago --- */
+	NNObjClass *               classprimobject;      /*   464     8 */
+	NNObjClass *               classprimclass;       /*   472     8 */
+	NNObjClass *               classprimnumber;      /*   480     8 */
+	NNObjClass *               classprimstring;      /*   488     8 */
+	NNObjClass *               classprimarray;       /*   496     8 */
+	NNObjClass *               classprimdict;        /*   504     8 */
+	/* --- cacheline 8 boundary (512 bytes) --- */
+	NNObjClass *               classprimfile;        /*   512     8 */
+	NNObjClass *               classprimrange;       /*   520     8 */
+	NNObjClass *               classprimcallable;    /*   528     8 */
+	NNObjClass *               classprimprocess;     /*   536     8 */
+	_Bool                      isrepl;               /*   544     1 */
+	_Bool                      markvalue;            /*   545     1 */
+
+	/* XXX 6 bytes hole, try to pack */
+
+	NNProcessInfo *            processinfo;          /*   552     8 */
+	NNIOStream *               stdoutprinter;        /*   560     8 */
+	NNIOStream *               stderrprinter;        /*   568     8 */
+	/* --- cacheline 9 boundary (576 bytes) --- */
+	NNIOStream *               debugwriter;          /*   576     8 */
+
+	/* size: 584, cachelines: 10, members: 30 */
+	/* sum members: 574, holes: 2, sum holes: 10 */
+	/* last cacheline: 8 bytes */
+};
+struct NNIOStream {
+	uint8_t                    shouldclose;          /*     0     1 */
+	uint8_t                    shouldflush;          /*     1     1 */
+	uint8_t                    stringtaken;          /*     2     1 */
+	uint8_t                    fromstack;            /*     3     1 */
+	uint8_t                    shortenvalues;        /*     4     1 */
+	uint8_t                    jsonmode;             /*     5     1 */
+
+	/* XXX 2 bytes hole, try to pack */
+
+	size_t                     maxvallength;         /*     8     8 */
+	NNPrMode                   wrmode;               /*    16     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNState *                  pstate;               /*    24     8 */
+	NNStringBuffer             strbuf;               /*    32    32 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	FILE *                     handle;               /*    64     8 */
+
+	/* size: 72, cachelines: 2, members: 11 */
+	/* sum members: 66, holes: 2, sum holes: 6 */
+	/* last cacheline: 8 bytes */
+};
+struct NNArgCheck {
+	NNState *                  pstate;               /*     0     8 */
+	const char  *              name;                 /*     8     8 */
+	int                        argc;                 /*    16     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNValue *                  argv;                 /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 4 */
+	/* sum members: 28, holes: 1, sum holes: 4 */
+	/* last cacheline: 32 bytes */
+};
+struct NNInstruction {
+	_Bool                      isop;                 /*     0     1 */
+	uint8_t                    code;                 /*     1     1 */
+	uint8_t                    srcline;              /*     2     1 */
+
+	/* size: 3, cachelines: 1, members: 3 */
+	/* last cacheline: 3 bytes */
+};
+struct NNConstClassMethodItem {
+	const char  *              name;                 /*     0     8 */
+	NNNativeFN                 fn;                   /*     8     8 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* last cacheline: 16 bytes */
+};
+struct NNStringBuffer {
+	uint8_t                    isintern;             /*     0     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	size_t                     capacity;             /*     8     8 */
+	size_t                     storedlength;         /*    16     8 */
+	char *                     longstrdata;          /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 4 */
+	/* sum members: 25, holes: 1, sum holes: 7 */
+	/* last cacheline: 32 bytes */
+};
+union NNUtilDblUnion {
+	uint64_t                   bits;               /*     0     8 */
+	double                     num;                /*     0     8 */
+};
+struct timespec {
+	__time_t                   tv_sec;               /*     0     8 */
+	__syscall_slong_t          tv_nsec;              /*     8     8 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* last cacheline: 16 bytes */
+};
+struct stat {
+	__dev_t                    st_dev;               /*     0     8 */
+	__ino_t                    st_ino;               /*     8     8 */
+	__nlink_t                  st_nlink;             /*    16     8 */
+	__mode_t                   st_mode;              /*    24     4 */
+	__uid_t                    st_uid;               /*    28     4 */
+	__gid_t                    st_gid;               /*    32     4 */
+	int                        __pad0;               /*    36     4 */
+	__dev_t                    st_rdev;              /*    40     8 */
+	__off_t                    st_size;              /*    48     8 */
+	__blksize_t                st_blksize;           /*    56     8 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	__blkcnt_t                 st_blocks;            /*    64     8 */
+	struct timespec            st_atim;              /*    72    16 */
+	struct timespec            st_mtim;              /*    88    16 */
+	struct timespec            st_ctim;              /*   104    16 */
+	__syscall_slong_t          __glibc_reserved[3];  /*   120    24 */
+
+	/* size: 144, cachelines: 3, members: 15 */
+	/* last cacheline: 16 bytes */
+};
+struct NNFormatInfo {
+	size_t                     fmtlen;               /*     0     8 */
+	const char  *              fmtstr;               /*     8     8 */
+	NNIOStream *               writer;               /*    16     8 */
+	NNState *                  pstate;               /*    24     8 */
+
+	/* size: 32, cachelines: 1, members: 4 */
+	/* last cacheline: 32 bytes */
+};
+struct NNIOResult {
+	uint8_t                    success;              /*     0     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	char *                     data;                 /*     8     8 */
+	size_t                     length;               /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* sum members: 17, holes: 1, sum holes: 7 */
+	/* last cacheline: 24 bytes */
+};
+struct NNDefFunc {
+	const char  *              name;                 /*     0     8 */
+	_Bool                      isstatic;             /*     8     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNNativeFN                 function;             /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* sum members: 17, holes: 1, sum holes: 7 */
+	/* last cacheline: 24 bytes */
+};
+struct NNDefField {
+	const char  *              name;                 /*     0     8 */
+	_Bool                      isstatic;             /*     8     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNNativeFN                 fieldvalfn;           /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* sum members: 17, holes: 1, sum holes: 7 */
+	/* last cacheline: 24 bytes */
+};
+struct NNDefClass {
+	const char  *              name;                 /*     0     8 */
+	NNDefField *               defpubfields;         /*     8     8 */
+	NNDefFunc *                defpubfunctions;      /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* last cacheline: 24 bytes */
+};
+struct NNDefModule {
+	const char  *              name;                 /*     0     8 */
+	NNDefField *               definedfields;        /*     8     8 */
+	NNDefFunc *                definedfunctions;     /*    16     8 */
+	NNDefClass *               definedclasses;       /*    24     8 */
+	NNModLoaderFN              fnpreloaderfunc;      /*    32     8 */
+	NNModLoaderFN              fnunloaderfunc;       /*    40     8 */
+
+	/* size: 48, cachelines: 1, members: 6 */
+	/* last cacheline: 48 bytes */
+};
+struct NNAstToken {
+	_Bool                      isglobal;             /*     0     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	NNAstTokType               type;                 /*     4     4 */
+	const char  *              start;                /*     8     8 */
+	int                        length;               /*    16     4 */
+	int                        line;                 /*    20     4 */
+
+	/* size: 24, cachelines: 1, members: 5 */
+	/* sum members: 21, holes: 1, sum holes: 3 */
+	/* last cacheline: 24 bytes */
+};
+struct NNAstLexer {
+	NNState *                  pstate;               /*     0     8 */
+	_Bool                      onstack;              /*     8     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	const char  *              start;                /*    16     8 */
+	const char  *              sourceptr;            /*    24     8 */
+	int                        line;                 /*    32     4 */
+	int                        tplstringcount;       /*    36     4 */
+	int                        tplstringbuffer[8];   /*    40    32 */
+
+	/* size: 72, cachelines: 2, members: 7 */
+	/* sum members: 65, holes: 1, sum holes: 7 */
+	/* last cacheline: 8 bytes */
+};
+struct utf8iterator_t {
+	const char  *              plainstr;             /*     0     8 */
+	uint32_t                   plainlen;             /*     8     4 */
+	uint32_t                   codepoint;            /*    12     4 */
+	uint8_t                    charsize;             /*    16     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	uint32_t                   currpos;              /*    20     4 */
+	uint32_t                   nextpos;              /*    24     4 */
+	uint32_t                   currcount;            /*    28     4 */
+
+	/* size: 32, cachelines: 1, members: 7 */
+	/* sum members: 29, holes: 1, sum holes: 3 */
+	/* last cacheline: 32 bytes */
+};
+struct RegexMatcherState {
+	uint32_t                   k;                    /*     0     4 */
+	uint32_t                   group_state;          /*     4     4 */
+	uint32_t                   prev;                 /*     8     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	uint64_t                   i;                    /*    16     8 */
+	uint64_t                   range_min;            /*    24     8 */
+	uint64_t                   range_max;            /*    32     8 */
+
+	/* size: 40, cachelines: 1, members: 6 */
+	/* sum members: 36, holes: 1, sum holes: 4 */
+	/* last cacheline: 40 bytes */
+};
+struct RegexContext {
+	_Bool                      haderror;             /*     0     1 */
+	_Bool                      isallocated;          /*     1     1 */
+
+	/* XXX 6 bytes hole, try to pack */
+
+	size_t                     maxtokens;            /*     8     8 */
+	size_t                     tokencount;           /*    16     8 */
+	char                       errorbuf[1024];       /*    24  1024 */
+	/* --- cacheline 16 boundary (1024 bytes) was 24 bytes ago --- */
+	RegexToken *               tokens;               /*  1048     8 */
+
+	/* size: 1056, cachelines: 17, members: 6 */
+	/* sum members: 1050, holes: 1, sum holes: 6 */
+	/* last cacheline: 32 bytes */
+};
+struct RegexToken {
+	uint8_t                    kind;                 /*     0     1 */
+	uint8_t                    mode;                 /*     1     1 */
+	uint16_t                   count_lo;             /*     2     2 */
+	uint16_t                   count_hi;             /*     4     2 */
+	uint16_t                   mask[16];             /*     6    32 */
+	int16_t                    pair_offset;          /*    38     2 */
+
+	/* size: 40, cachelines: 1, members: 6 */
+	/* last cacheline: 40 bytes */
+};
+struct optcontext_t {
+	char * *                   argv;                 /*     0     8 */
+	int                        argc;                 /*     8     4 */
+	int                        permute;              /*    12     4 */
+	int                        optind;               /*    16     4 */
+	int                        optopt;               /*    20     4 */
+	char *                     optarg;               /*    24     8 */
+	char                       errmsg[64];           /*    32    64 */
+	/* --- cacheline 1 boundary (64 bytes) was 32 bytes ago --- */
+	int                        subopt;               /*    96     4 */
+
+	/* size: 104, cachelines: 2, members: 8 */
+	/* padding: 4 */
+	/* last cacheline: 40 bytes */
+};
+struct optlongflags_t {
+	const char  *              longname;             /*     0     8 */
+	int                        shortname;            /*     8     4 */
+	optargtype_t               argtype;              /*    12     4 */
+	const char  *              helptext;             /*    16     8 */
+
+	/* size: 24, cachelines: 1, members: 4 */
+	/* last cacheline: 24 bytes */
+};
+struct winsize {
+	short unsigned int         ws_row;               /*     0     2 */
+	short unsigned int         ws_col;               /*     2     2 */
+	short unsigned int         ws_xpixel;            /*     4     2 */
+	short unsigned int         ws_ypixel;            /*     6     2 */
+
+	/* size: 8, cachelines: 1, members: 4 */
+	/* last cacheline: 8 bytes */
+};
+struct termios {
+	tcflag_t                   c_iflag;              /*     0     4 */
+	tcflag_t                   c_oflag;              /*     4     4 */
+	tcflag_t                   c_cflag;              /*     8     4 */
+	tcflag_t                   c_lflag;              /*    12     4 */
+	cc_t                       c_line;               /*    16     1 */
+	cc_t                       c_cc[32];             /*    17    32 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	speed_t                    c_ispeed;             /*    52     4 */
+	speed_t                    c_ospeed;             /*    56     4 */
+
+	/* size: 60, cachelines: 1, members: 8 */
+	/* sum members: 57, holes: 1, sum holes: 3 */
+	/* last cacheline: 60 bytes */
+};
+struct linocontext_t {
+	linofncomp_t *             completioncallback;   /*     0     8 */
+	linofnhint_t *             hintscallback;        /*     8     8 */
+	linofnhintfree_t *         freehintscallback;    /*    16     8 */
+	linofnprevchlen_t *        fnprevcharlen;        /*    24     8 */
+	linofnnextchlen_t *        fnnextcharlen;        /*    32     8 */
+	linofnreadcode_t *         fnreadcode;           /*    40     8 */
+	struct termios             origtermios;          /*    48    60 */
+	/* --- cacheline 1 boundary (64 bytes) was 44 bytes ago --- */
+	int                        maskmode;             /*   108     4 */
+	int                        israwmode;            /*   112     4 */
+	int                        ismultilinemode;      /*   116     4 */
+	int                        atexitregistered;     /*   120     4 */
+	int                        historymaxlen;        /*   124     4 */
+	/* --- cacheline 2 boundary (128 bytes) --- */
+	int                        historylength;        /*   128     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	char * *                   historybuflines;      /*   136     8 */
+
+	/* size: 144, cachelines: 3, members: 14 */
+	/* sum members: 140, holes: 1, sum holes: 4 */
+	/* last cacheline: 16 bytes */
+};
+struct linobuffer_t {
+	char *                     bufdata;              /*     0     8 */
+	int                        buflen;               /*     8     4 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* padding: 4 */
+	/* last cacheline: 16 bytes */
+};
+struct linocompletions_t {
+	size_t                     count;                /*     0     8 */
+	char * *                   cvec;                 /*     8     8 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* last cacheline: 16 bytes */
+};
+struct linoeditstate_t {
+	int                        termstdinfd;          /*     0     4 */
+	int                        termstdoutfd;         /*     4     4 */
+	char *                     edlinebuf;            /*     8     8 */
+	size_t                     edlinelen;            /*    16     8 */
+	const char  *              promptdata;           /*    24     8 */
+	size_t                     promptlen;            /*    32     8 */
+	size_t                     currentcursorpos;     /*    40     8 */
+	size_t                     prevrefreshcursorpos; /*    48     8 */
+	size_t                     currentedlinelen;     /*    56     8 */
+	/* --- cacheline 1 boundary (64 bytes) --- */
+	size_t                     terminalcolumns;      /*    64     8 */
+	size_t                     maxrowsused;          /*    72     8 */
+	int                        historyindex;         /*    80     4 */
+
+	/* size: 88, cachelines: 2, members: 12 */
+	/* padding: 4 */
+	/* last cacheline: 24 bytes */
+};
+struct NNUClassComplex {
+	NNObjInstance              selfinstance;         /*     0    88 */
+	/* --- cacheline 1 boundary (64 bytes) was 24 bytes ago --- */
+	double                     re;                   /*    88     8 */
+	double                     im;                   /*    96     8 */
+
+	/* size: 104, cachelines: 2, members: 3 */
+	/* last cacheline: 40 bytes */
+};
+struct timeval {
+	__time_t                   tv_sec;               /*     0     8 */
+	__suseconds_t              tv_usec;              /*     8     8 */
+
+	/* size: 16, cachelines: 1, members: 2 */
+	/* last cacheline: 16 bytes */
+};
+struct NNFSStat {
+	struct stat                rawstbuf;             /*     0   144 */
+	/* --- cacheline 2 boundary (128 bytes) was 16 bytes ago --- */
+	int                        mode;                 /*   144     4 */
+	int                        inode;                /*   148     4 */
+	int                        numlinks;             /*   152     4 */
+	int                        owneruid;             /*   156     4 */
+	int                        ownergid;             /*   160     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	const char  *              modename;             /*   168     8 */
+	_Bool                      isfile;               /*   176     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	size_t                     blocksize;            /*   184     8 */
+	/* --- cacheline 3 boundary (192 bytes) --- */
+	size_t                     blockcount;           /*   192     8 */
+	size_t                     filesize;             /*   200     8 */
+	const time_t  *            tmlastchanged;        /*   208     8 */
+	const time_t  *            tmlastaccessed;       /*   216     8 */
+	const time_t  *            tmlastmodified;       /*   224     8 */
+
+	/* size: 232, cachelines: 4, members: 14 */
+	/* sum members: 221, holes: 2, sum holes: 11 */
+	/* last cacheline: 40 bytes */
+};
+struct FSDirReader {
+	void *                     handle;               /*     0     8 */
+
+	/* size: 8, cachelines: 1, members: 1 */
+	/* last cacheline: 8 bytes */
+};
+struct FSDirItem {
+	char                       name[1025];           /*     0  1025 */
+	/* --- cacheline 16 boundary (1024 bytes) was 1 byte ago --- */
+	_Bool                      isdir;                /*  1025     1 */
+	_Bool                      isfile;               /*  1026     1 */
+
+	/* size: 1027, cachelines: 17, members: 3 */
+	/* last cacheline: 3 bytes */
+};
+struct dirent {
+	__ino_t                    d_ino;                /*     0     8 */
+	__off_t                    d_off;                /*     8     8 */
+	short unsigned int         d_reclen;             /*    16     2 */
+	unsigned char              d_type;               /*    18     1 */
+	char                       d_name[256];          /*    19   256 */
+
+	/* size: 280, cachelines: 5, members: 5 */
+	/* padding: 5 */
+	/* last cacheline: 24 bytes */
+};
+struct NNAstFuncCompiler {
+	int                        localcount;           /*     0     4 */
+	int                        scopedepth;           /*     4     4 */
+	int                        handlercount;         /*     8     4 */
+	_Bool                      fromimport;           /*    12     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	NNAstFuncCompiler *        enclosing;            /*    16     8 */
+	NNObjFunction *            targetfunc;           /*    24     8 */
+	NNFuncContextType          contexttype;          /*    32     4 */
+
+	/* XXX 4 bytes hole, try to pack */
+
+	NNAstLocal                 locals[128];          /*    40  4096 */
+	/* --- cacheline 64 boundary (4096 bytes) was 40 bytes ago --- */
+	NNAstUpvalue               upvalues[128];        /*  4136   512 */
+
+	/* size: 4648, cachelines: 73, members: 9 */
+	/* sum members: 4641, holes: 2, sum holes: 7 */
+	/* last cacheline: 40 bytes */
+};
+struct NNAstLocal {
+	_Bool                      iscaptured;           /*     0     1 */
+
+	/* XXX 3 bytes hole, try to pack */
+
+	int                        depth;                /*     4     4 */
+	NNAstToken                 name;                 /*     8    24 */
+
+	/* size: 32, cachelines: 1, members: 3 */
+	/* sum members: 29, holes: 1, sum holes: 3 */
+	/* last cacheline: 32 bytes */
+};
+struct NNAstUpvalue {
+	_Bool                      islocal;              /*     0     1 */
+
+	/* XXX 1 byte hole, try to pack */
+
+	uint16_t                   index;                /*     2     2 */
+
+	/* size: 4, cachelines: 1, members: 2 */
+	/* sum members: 3, holes: 1, sum holes: 1 */
+	/* last cacheline: 4 bytes */
+};
+struct NNAstClassCompiler {
+	_Bool                      hassuperclass;        /*     0     1 */
+
+	/* XXX 7 bytes hole, try to pack */
+
+	NNAstClassCompiler *       enclosing;            /*     8     8 */
+	NNAstToken                 name;                 /*    16    24 */
+
+	/* size: 40, cachelines: 1, members: 3 */
+	/* sum members: 33, holes: 1, sum holes: 7 */
+	/* last cacheline: 40 bytes */
+};
+struct NNAstParser {
+	_Bool                      haderror;             /*     0     1 */
+	_Bool                      panicmode;            /*     1     1 */
+	_Bool                      isreturning;          /*     2     1 */
+	_Bool                      istrying;             /*     3     1 */
+	_Bool                      replcanecho;          /*     4     1 */
+	_Bool                      keeplastvalue;        /*     5     1 */
+	_Bool                      lastwasstatement;     /*     6     1 */
+	_Bool                      infunction;           /*     7     1 */
+	_Bool                      inswitch;             /*     8     1 */
+	_Bool                      stopprintingsyntaxerrors; /*     9     1 */
+
+	/* XXX 2 bytes hole, try to pack */
+
+	int                        innermostloopstart;   /*    12     4 */
+	int                        innermostloopscopedepth; /*    16     4 */
+	int                        blockcount;           /*    20     4 */
+	int                        errorcount;           /*    24     4 */
+	NNAstCompContext           compcontext;          /*    28     4 */
+	const char  *              currentfile;          /*    32     8 */
+	NNState *                  pstate;               /*    40     8 */
+	NNAstLexer *               lexer;                /*    48     8 */
+	NNAstToken                 currtoken;            /*    56    24 */
+	/* --- cacheline 1 boundary (64 bytes) was 16 bytes ago --- */
+	NNAstToken                 prevtoken;            /*    80    24 */
+	NNAstFuncCompiler *        currentfunccompiler;  /*   104     8 */
+	NNAstClassCompiler *       currentclasscompiler; /*   112     8 */
+	NNObjModule *              currentmodule;        /*   120     8 */
+
+	/* size: 128, cachelines: 2, members: 23 */
+	/* sum members: 126, holes: 1, sum holes: 2 */
+};
+struct NNAstRule {
+	NNAstParsePrefixFN         prefix;               /*     0     8 */
+	NNAstParseInfixFN          infix;                /*     8     8 */
+	NNAstPrecedence            precedence;           /*    16     4 */
+
+	/* size: 24, cachelines: 1, members: 3 */
+	/* padding: 4 */
+	/* last cacheline: 24 bytes */
+};

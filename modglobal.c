@@ -167,7 +167,7 @@ NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, s
 NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* res;
     NNObjString* ofmt;
     NNArgCheck check;
@@ -176,14 +176,14 @@ NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     ofmt = nn_value_asstring(argv[0]);
-    nn_printer_makestackstring(state, &pr);
+    nn_iostream_makestackstring(state, &pr);
     nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
         return nn_value_makenull();
     }
-    res = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    res = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     return nn_value_fromobject(res);
 }
 
@@ -210,7 +210,7 @@ NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t
     (void)thisval;
     for(i = 0; i < argc; i++)
     {
-        nn_printer_printvalue(state->stdoutprinter, argv[i], false, true);
+        nn_iostream_printvalue(state->stdoutprinter, argv[i], false, true);
     }
     return nn_value_makenull();
 }
@@ -219,7 +219,7 @@ NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size
 {
     NNValue v;
     v = nn_nativefn_print(state, thisval, argv, argc);
-    nn_printer_writestring(state->stdoutprinter, "\n");
+    nn_iostream_writestring(state->stdoutprinter, "\n");
     return v;
 }
 
@@ -236,16 +236,16 @@ NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t
 NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
-    NNPrinter pr;
+    NNIOStream pr;
     NNObjString* os;
     (void)thisval;
     (void)argc;
     v = argv[0];
-    nn_printer_makestackstring(state, &pr);
+    nn_iostream_makestackstring(state, &pr);
     pr.jsonmode = true;
-    nn_printer_printvalue(&pr, v, true, false);
-    os = nn_printer_takestring(&pr);
-    nn_printer_destroy(&pr);
+    nn_iostream_printvalue(&pr, v, true, false);
+    os = nn_iostream_takestring(&pr);
+    nn_iostream_destroy(&pr);
     return nn_value_fromobject(os);
 }
 

@@ -1,32 +1,32 @@
 
 #include "neon.h"
 
-void nn_valtable_print(NNState* state, NNPrinter* pr, NNHashValTable* table, const char* name)
+void nn_valtable_print(NNState* state, NNIOStream* pr, NNHashValTable* table, const char* name)
 {
     size_t i;
     size_t hcap;
     NNHashValEntry* entry;
     (void)state;
     hcap = nn_valtable_capacity(table);
-    nn_printer_printf(pr, "<HashTable of %s : {\n", name);
+    nn_iostream_printf(pr, "<HashTable of %s : {\n", name);
     for(i = 0; i < hcap; i++)
     {
         entry = nn_valtable_entryatindex(table, i);
         if(!nn_value_isnull(entry->key))
         {
-            nn_printer_printvalue(pr, entry->key, true, true);
-            nn_printer_printf(pr, ": ");
-            nn_printer_printvalue(pr, entry->value.value, true, true);
+            nn_iostream_printvalue(pr, entry->key, true, true);
+            nn_iostream_printf(pr, ": ");
+            nn_iostream_printvalue(pr, entry->value.value, true, true);
             if(i != (hcap - 1))
             {
-                nn_printer_printf(pr, ",\n");
+                nn_iostream_printf(pr, ",\n");
             }
         }
     }
-    nn_printer_printf(pr, "}>\n");
+    nn_iostream_printf(pr, "}>\n");
 }
 
-void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
+void nn_iostream_initvars(NNState* state, NNIOStream* pr, NNPrMode mode)
 {
     pr->pstate = state;
     pr->fromstack = false;
@@ -41,54 +41,54 @@ void nn_printer_initvars(NNState* state, NNPrinter* pr, NNPrMode mode)
     pr->wrmode = mode;
 }
 
-NNPrinter* nn_printer_makeundefined(NNState* state, NNPrMode mode)
+NNIOStream* nn_iostream_makeundefined(NNState* state, NNPrMode mode)
 {
-    NNPrinter* pr;
+    NNIOStream* pr;
     (void)state;
-    pr = (NNPrinter*)nn_memory_malloc(sizeof(NNPrinter));
+    pr = (NNIOStream*)nn_memory_malloc(sizeof(NNIOStream));
     if(!pr)
     {
-        fprintf(stderr, "cannot allocate NNPrinter\n");
+        fprintf(stderr, "cannot allocate NNIOStream\n");
         return NULL;
     }
-    nn_printer_initvars(state, pr, mode);
+    nn_iostream_initvars(state, pr, mode);
     return pr;
 }
 
-NNPrinter* nn_printer_makeio(NNState* state, FILE* fh, bool shouldclose)
+NNIOStream* nn_iostream_makeio(NNState* state, FILE* fh, bool shouldclose)
 {
-    NNPrinter* pr;
-    pr = nn_printer_makeundefined(state, NEON_PRMODE_FILE);
+    NNIOStream* pr;
+    pr = nn_iostream_makeundefined(state, NEON_PRMODE_FILE);
     pr->handle = fh;
     pr->shouldclose = shouldclose;
     return pr;
 }
 
-NNPrinter* nn_printer_makestring(NNState* state)
+NNIOStream* nn_iostream_makestring(NNState* state)
 {
-    NNPrinter* pr;
-    pr = nn_printer_makeundefined(state, NEON_PRMODE_STRING);
+    NNIOStream* pr;
+    pr = nn_iostream_makeundefined(state, NEON_PRMODE_STRING);
     nn_strbuf_makebasicemptystack(&pr->strbuf, NULL, 0);
     return pr;
 }
 
-void nn_printer_makestackio(NNState* state, NNPrinter* pr, FILE* fh, bool shouldclose)
+void nn_iostream_makestackio(NNState* state, NNIOStream* pr, FILE* fh, bool shouldclose)
 {
-    nn_printer_initvars(state, pr, NEON_PRMODE_FILE);
+    nn_iostream_initvars(state, pr, NEON_PRMODE_FILE);
     pr->fromstack = true;
     pr->handle = fh;
     pr->shouldclose = shouldclose;
 }
 
-void nn_printer_makestackstring(NNState* state, NNPrinter* pr)
+void nn_iostream_makestackstring(NNState* state, NNIOStream* pr)
 {
-    nn_printer_initvars(state, pr, NEON_PRMODE_STRING);
+    nn_iostream_initvars(state, pr, NEON_PRMODE_STRING);
     pr->fromstack = true;
     pr->wrmode = NEON_PRMODE_STRING;
     nn_strbuf_makebasicemptystack(&pr->strbuf, NULL, 0);
 }
 
-void nn_printer_destroy(NNPrinter* pr)
+void nn_iostream_destroy(NNIOStream* pr)
 {
     NNState* state;
     (void)state;
@@ -100,7 +100,7 @@ void nn_printer_destroy(NNPrinter* pr)
     {
         return;
     }
-    /*fprintf(stderr, "nn_printer_destroy: pr->wrmode=%d\n", pr->wrmode);*/
+    /*fprintf(stderr, "nn_iostream_destroy: pr->wrmode=%d\n", pr->wrmode);*/
     state = pr->pstate;
     if(pr->wrmode == NEON_PRMODE_STRING)
     {
@@ -125,7 +125,7 @@ void nn_printer_destroy(NNPrinter* pr)
     }
 }
 
-NNObjString* nn_printer_takestring(NNPrinter* pr)
+NNObjString* nn_iostream_takestring(NNIOStream* pr)
 {
     size_t xlen;
     NNState* state;
@@ -137,7 +137,7 @@ NNObjString* nn_printer_takestring(NNPrinter* pr)
     return os;
 }
 
-NNObjString* nn_printer_copystring(NNPrinter* pr)
+NNObjString* nn_iostream_copystring(NNIOStream* pr)
 {
     NNState* state;
     NNObjString* os;
@@ -146,7 +146,7 @@ NNObjString* nn_printer_copystring(NNPrinter* pr)
     return os;
 }
 
-bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
+bool nn_iostream_writestringl(NNIOStream* pr, const char* estr, size_t elen)
 {
     //fprintf(stderr, "writestringl: (%d) <<<%.*s>>>\n", elen, elen, estr);
     size_t chlen;
@@ -173,18 +173,18 @@ bool nn_printer_writestringl(NNPrinter* pr, const char* estr, size_t elen)
     return true;
 }
 
-bool nn_printer_writestring(NNPrinter* pr, const char* estr)
+bool nn_iostream_writestring(NNIOStream* pr, const char* estr)
 {
-    return nn_printer_writestringl(pr, estr, strlen(estr));
+    return nn_iostream_writestringl(pr, estr, strlen(estr));
 }
 
-bool nn_printer_writechar(NNPrinter* pr, int b)
+bool nn_iostream_writechar(NNIOStream* pr, int b)
 {
     char ch;
     if(pr->wrmode == NEON_PRMODE_STRING)
     {
         ch = b;
-        nn_printer_writestringl(pr, &ch, 1);
+        nn_iostream_writestringl(pr, &ch, 1);
     }
     else if(pr->wrmode == NEON_PRMODE_FILE)
     {
@@ -197,103 +197,103 @@ bool nn_printer_writechar(NNPrinter* pr, int b)
     return true;
 }
 
-bool nn_printer_writeescapedchar(NNPrinter* pr, int ch)
+bool nn_iostream_writeescapedchar(NNIOStream* pr, int ch)
 {
     switch(ch)
     {
         case '\'':
             {
-                nn_printer_writestring(pr, "\\\'");
+                nn_iostream_writestring(pr, "\\\'");
             }
             break;
         case '\"':
             {
-                nn_printer_writestring(pr, "\\\"");
+                nn_iostream_writestring(pr, "\\\"");
             }
             break;
         case '\\':
             {
-                nn_printer_writestring(pr, "\\\\");
+                nn_iostream_writestring(pr, "\\\\");
             }
             break;
         case '\b':
             {
-                nn_printer_writestring(pr, "\\b");
+                nn_iostream_writestring(pr, "\\b");
             }
             break;
         case '\f':
             {
-                nn_printer_writestring(pr, "\\f");
+                nn_iostream_writestring(pr, "\\f");
             }
             break;
         case '\n':
             {
-                nn_printer_writestring(pr, "\\n");
+                nn_iostream_writestring(pr, "\\n");
             }
             break;
         case '\r':
             {
-                nn_printer_writestring(pr, "\\r");
+                nn_iostream_writestring(pr, "\\r");
             }
             break;
         case '\t':
             {
-                nn_printer_writestring(pr, "\\t");
+                nn_iostream_writestring(pr, "\\t");
             }
             break;
         case 0:
             {
-                nn_printer_writestring(pr, "\\0");
+                nn_iostream_writestring(pr, "\\0");
             }
             break;
         default:
             {
-                nn_printer_printf(pr, "\\x%02x", (unsigned char)ch);
+                nn_iostream_printf(pr, "\\x%02x", (unsigned char)ch);
             }
             break;
     }
     return true;
 }
 
-bool nn_printer_writequotedstring(NNPrinter* pr, const char* str, size_t len, bool withquot)
+bool nn_iostream_writequotedstring(NNIOStream* pr, const char* str, size_t len, bool withquot)
 {
     int bch;
     size_t i;
     bch = 0;
     if(withquot)
     {
-        nn_printer_writechar(pr, '"');
+        nn_iostream_writechar(pr, '"');
     }
     for(i = 0; i < len; i++)
     {
         bch = str[i];
         if((bch < 32) || (bch > 127) || (bch == '\"') || (bch == '\\'))
         {
-            nn_printer_writeescapedchar(pr, bch);
+            nn_iostream_writeescapedchar(pr, bch);
         }
         else
         {
-            nn_printer_writechar(pr, bch);
+            nn_iostream_writechar(pr, bch);
         }
     }
     if(withquot)
     {
-        nn_printer_writechar(pr, '"');
+        nn_iostream_writechar(pr, '"');
     }
     return true;
 }
 
-bool nn_printer_vwritefmttostring(NNPrinter* pr, const char* fmt, va_list va)
+bool nn_iostream_vwritefmttostring(NNIOStream* pr, const char* fmt, va_list va)
 {
     nn_strbuf_appendformatv(&pr->strbuf, fmt, va);
     return true;
 }
 
-bool nn_printer_vwritefmt(NNPrinter* pr, const char* fmt, va_list va)
+bool nn_iostream_vwritefmt(NNIOStream* pr, const char* fmt, va_list va)
 {
     if(pr->wrmode == NEON_PRMODE_STRING)
     {
-        return nn_printer_vwritefmttostring(pr, fmt, va);
+        return nn_iostream_vwritefmttostring(pr, fmt, va);
     }
     else if(pr->wrmode == NEON_PRMODE_FILE)
     {
@@ -306,38 +306,39 @@ bool nn_printer_vwritefmt(NNPrinter* pr, const char* fmt, va_list va)
     return true;
 }
 
-bool nn_printer_printf(NNPrinter* pr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
+bool nn_iostream_printf(NNIOStream* pr, const char* fmt, ...) NEON_ATTR_PRINTFLIKE(2, 3);
 
-bool nn_printer_printf(NNPrinter* pr, const char* fmt, ...)
+bool nn_iostream_printf(NNIOStream* pr, const char* fmt, ...)
 {
     bool b;
     va_list va;
     va_start(va, fmt);
-    b = nn_printer_vwritefmt(pr, fmt, va);
+    b = nn_iostream_vwritefmt(pr, fmt, va);
     va_end(va);
     return b;
 }
 
-void nn_printer_printfunction(NNPrinter* pr, NNObjFunction* func)
+
+void nn_iostream_printfunction(NNIOStream* pr, NNObjFunction* func)
 {
     if(func->name == NULL)
     {
-        nn_printer_printf(pr, "<script at %p>", (void*)func);
+        nn_iostream_printf(pr, "<script at %p>", (void*)func);
     }
     else
     {
         if(func->fnscriptfunc.isvariadic)
         {
-            nn_printer_printf(pr, "<function %s(%d...) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
+            nn_iostream_printf(pr, "<function %s(%d...) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
         }
         else
         {
-            nn_printer_printf(pr, "<function %s(%d) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
+            nn_iostream_printf(pr, "<function %s(%d) at %p>", nn_string_getdata(func->name), func->fnscriptfunc.arity, (void*)func);
         }
     }
 }
 
-void nn_printer_printarray(NNPrinter* pr, NNObjArray* list)
+void nn_iostream_printarray(NNIOStream* pr, NNObjArray* list)
 {
     size_t i;
     size_t vsz;
@@ -345,7 +346,7 @@ void nn_printer_printarray(NNPrinter* pr, NNObjArray* list)
     NNValue val;
     NNObjArray* subarr;
     vsz = nn_valarray_count(&list->varray);
-    nn_printer_printf(pr, "[");
+    nn_iostream_printf(pr, "[");
     for(i = 0; i < vsz; i++)
     {
         isrecur = false;
@@ -360,26 +361,26 @@ void nn_printer_printarray(NNPrinter* pr, NNObjArray* list)
         }
         if(isrecur)
         {
-            nn_printer_printf(pr, "<recursion>");
+            nn_iostream_printf(pr, "<recursion>");
         }
         else
         {
-            nn_printer_printvalue(pr, val, true, true);
+            nn_iostream_printvalue(pr, val, true, true);
         }
         if(i != vsz - 1)
         {
-            nn_printer_printf(pr, ",");
+            nn_iostream_printf(pr, ",");
         }
         if(pr->shortenvalues && (i >= pr->maxvallength))
         {
-            nn_printer_printf(pr, " [%ld items]", vsz);
+            nn_iostream_printf(pr, " [%ld items]", vsz);
             break;
         }
     }
-    nn_printer_printf(pr, "]");
+    nn_iostream_printf(pr, "]");
 }
 
-void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
+void nn_iostream_printdict(NNIOStream* pr, NNObjDict* dict)
 {
     size_t i;
     size_t dsz;
@@ -389,7 +390,7 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
     NNObjDict* subdict;
     NNProperty* field;
     dsz = nn_valarray_count(&dict->htnames);
-    nn_printer_printf(pr, "{");
+    nn_iostream_printf(pr, "{");
     for(i = 0; i < dsz; i++)
     {
         valisrecur = false;
@@ -405,13 +406,13 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
         }
         if(valisrecur)
         {
-            nn_printer_printf(pr, "<recursion>");
+            nn_iostream_printf(pr, "<recursion>");
         }
         else
         {
-            nn_printer_printvalue(pr, val, true, true);
+            nn_iostream_printvalue(pr, val, true, true);
         }
-        nn_printer_printf(pr, ": ");
+        nn_iostream_printf(pr, ": ");
         field = nn_valtable_getfield(&dict->htab, nn_valarray_get(&dict->htnames, i));
         if(field != NULL)
         {
@@ -425,37 +426,37 @@ void nn_printer_printdict(NNPrinter* pr, NNObjDict* dict)
             }
             if(keyisrecur)
             {
-                nn_printer_printf(pr, "<recursion>");
+                nn_iostream_printf(pr, "<recursion>");
             }
             else
             {
-                nn_printer_printvalue(pr, field->value, true, true);
+                nn_iostream_printvalue(pr, field->value, true, true);
             }
         }
         if(i != dsz - 1)
         {
-            nn_printer_printf(pr, ", ");
+            nn_iostream_printf(pr, ", ");
         }
         if(pr->shortenvalues && (pr->maxvallength >= i))
         {
-            nn_printer_printf(pr, " [%ld items]", dsz);
+            nn_iostream_printf(pr, " [%ld items]", dsz);
             break;
         }
     }
-    nn_printer_printf(pr, "}");
+    nn_iostream_printf(pr, "}");
 }
 
-void nn_printer_printfile(NNPrinter* pr, NNObjFile* file)
+void nn_iostream_printfile(NNIOStream* pr, NNObjFile* file)
 {
-    nn_printer_printf(pr, "<file at %s in mode %s>", nn_string_getdata(file->path), nn_string_getdata(file->mode));
+    nn_iostream_printf(pr, "<file at %s in mode %s>", nn_string_getdata(file->path), nn_string_getdata(file->mode));
 }
 
-void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invmethod)
+void nn_iostream_printinstance(NNIOStream* pr, NNObjInstance* instance, bool invmethod)
 {
     (void)invmethod;
     #if 0
     int arity;
-    NNPrinter subw;
+    NNIOStream subw;
     NNValue resv;
     NNValue thisval;
     NNProperty* field;
@@ -476,10 +477,10 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
             nn_vm_stackpush(state, thisval);
             if(nn_nestcall_callfunction(state, field->value, thisval, NULL, 0, &resv, false))
             {
-                nn_printer_makestackstring(state, &subw);
-                nn_printer_printvalue(&subw, resv, false, false);
-                os = nn_printer_takestring(&subw);
-                nn_printer_writestringl(pr, nn_string_getdata(os), nn_string_getlength(os));
+                nn_iostream_makestackstring(state, &subw);
+                nn_iostream_printvalue(&subw, resv, false, false);
+                os = nn_iostream_takestring(&subw);
+                nn_iostream_writestringl(pr, nn_string_getdata(os), nn_string_getlength(os));
                 #if 0
                     nn_vm_stackpop(state);
                 #endif
@@ -488,10 +489,10 @@ void nn_printer_printinstance(NNPrinter* pr, NNObjInstance* instance, bool invme
         }
     }
     #endif
-    nn_printer_printf(pr, "<instance of %s at %p>", nn_string_getdata(instance->klass->name), (void*)instance);
+    nn_iostream_printf(pr, "<instance of %s at %p>", nn_string_getdata(instance->klass->name), (void*)instance);
 }
 
-void nn_printer_printtable(NNPrinter* pr, NNHashValTable* table)
+void nn_iostream_printtable(NNIOStream* pr, NNHashValTable* table)
 {
     size_t i;
     size_t hcap;
@@ -499,7 +500,7 @@ void nn_printer_printtable(NNPrinter* pr, NNHashValTable* table)
     NNHashValEntry* nextentry;
 
     hcap = nn_valtable_capacity(table);
-    nn_printer_printf(pr, "{");
+    nn_iostream_printf(pr, "{");
     for(i = 0; i < (size_t)hcap; i++)
     {
         entry = nn_valtable_entryatindex(table, i);
@@ -507,22 +508,22 @@ void nn_printer_printtable(NNPrinter* pr, NNHashValTable* table)
         {
             continue;
         }
-        nn_printer_printvalue(pr, entry->key, true, false);
-        nn_printer_printf(pr, ":");
-        nn_printer_printvalue(pr, entry->value.value, true, false);
+        nn_iostream_printvalue(pr, entry->key, true, false);
+        nn_iostream_printf(pr, ":");
+        nn_iostream_printvalue(pr, entry->value.value, true, false);
         nextentry = nn_valtable_entryatindex(table, i+1);
         if((nextentry != NULL) && !nn_value_isnull(nextentry->key))
         {
             if((i+1) < (size_t)hcap)
             {
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, ",");
             }
         }
     }
-    nn_printer_printf(pr, "}");
+    nn_iostream_printf(pr, "}");
 }
 
-void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
+void nn_iostream_printobjclass(NNIOStream* pr, NNValue value, bool fixstring, bool invmethod)
 {
     bool oldexp;
     NNObjClass* klass;
@@ -531,55 +532,55 @@ void nn_printer_printobjclass(NNPrinter* pr, NNValue value, bool fixstring, bool
     klass = nn_value_asclass(value);
     if(pr->jsonmode)
     {
-        nn_printer_printf(pr, "{");
+        nn_iostream_printf(pr, "{");
         {
             {
-                nn_printer_printf(pr, "name: ");
-                nn_printer_printvalue(pr, nn_value_fromobject(klass->name), true, false);
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, "name: ");
+                nn_iostream_printvalue(pr, nn_value_fromobject(klass->name), true, false);
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "superclass: ");
+                nn_iostream_printf(pr, "superclass: ");
                 oldexp = pr->jsonmode;
                 pr->jsonmode = false;
-                nn_printer_printvalue(pr, nn_value_fromobject(klass->superclass), true, false);
+                nn_iostream_printvalue(pr, nn_value_fromobject(klass->superclass), true, false);
                 pr->jsonmode = oldexp;
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "constructor: ");
-                nn_printer_printvalue(pr, klass->constructor, true, false);
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, "constructor: ");
+                nn_iostream_printvalue(pr, klass->constructor, true, false);
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "instanceproperties:");
-                nn_printer_printtable(pr, &klass->instproperties);
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, "instanceproperties:");
+                nn_iostream_printtable(pr, &klass->instproperties);
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "staticproperties:");
-                nn_printer_printtable(pr, &klass->staticproperties);
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, "staticproperties:");
+                nn_iostream_printtable(pr, &klass->staticproperties);
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "instancemethods:");
-                nn_printer_printtable(pr, &klass->instmethods);
-                nn_printer_printf(pr, ",");
+                nn_iostream_printf(pr, "instancemethods:");
+                nn_iostream_printtable(pr, &klass->instmethods);
+                nn_iostream_printf(pr, ",");
             }
             {
-                nn_printer_printf(pr, "staticmethods:");
-                nn_printer_printtable(pr, &klass->staticmethods);
+                nn_iostream_printf(pr, "staticmethods:");
+                nn_iostream_printtable(pr, &klass->staticmethods);
             }
         }
-        nn_printer_printf(pr, "}");
+        nn_iostream_printf(pr, "}");
     }
     else
     {
-        nn_printer_printf(pr, "<class %s at %p>", nn_string_getdata(klass->name), (void*)klass);
+        nn_iostream_printf(pr, "<class %s at %p>", nn_string_getdata(klass->name), (void*)klass);
     }
 }
 
-void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
+void nn_iostream_printobject(NNIOStream* pr, NNValue value, bool fixstring, bool invmethod)
 {
     NNObject* obj;
     obj = nn_value_asobject(value);
@@ -587,67 +588,67 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
     {
         case NEON_OBJTYPE_SWITCH:
             {
-                nn_printer_writestring(pr, "<switch>");
+                nn_iostream_writestring(pr, "<switch>");
             }
             break;
         case NEON_OBJTYPE_USERDATA:
             {
-                nn_printer_printf(pr, "<userdata %s>", nn_value_asuserdata(value)->name);
+                nn_iostream_printf(pr, "<userdata %s>", nn_value_asuserdata(value)->name);
             }
             break;
         case NEON_OBJTYPE_RANGE:
             {
                 NNObjRange* range;
                 range = nn_value_asrange(value);
-                nn_printer_printf(pr, "<range %d .. %d>", range->lower, range->upper);
+                nn_iostream_printf(pr, "<range %d .. %d>", range->lower, range->upper);
             }
             break;
         case NEON_OBJTYPE_FILE:
             {
-                nn_printer_printfile(pr, nn_value_asfile(value));
+                nn_iostream_printfile(pr, nn_value_asfile(value));
             }
             break;
         case NEON_OBJTYPE_DICT:
             {
-                nn_printer_printdict(pr, nn_value_asdict(value));
+                nn_iostream_printdict(pr, nn_value_asdict(value));
             }
             break;
         case NEON_OBJTYPE_ARRAY:
             {
-                nn_printer_printarray(pr, nn_value_asarray(value));
+                nn_iostream_printarray(pr, nn_value_asarray(value));
             }
             break;
         case NEON_OBJTYPE_FUNCBOUND:
             {
                 NNObjFunction* bn;
                 bn = nn_value_asfunction(value);
-                nn_printer_printfunction(pr, bn->fnmethod.method->fnclosure.scriptfunc);
+                nn_iostream_printfunction(pr, bn->fnmethod.method->fnclosure.scriptfunc);
             }
             break;
         case NEON_OBJTYPE_MODULE:
             {
                 NNObjModule* mod;
                 mod = nn_value_asmodule(value);
-                nn_printer_printf(pr, "<module '%s' at '%s'>", nn_string_getdata(mod->name), nn_string_getdata(mod->physicalpath));
+                nn_iostream_printf(pr, "<module '%s' at '%s'>", nn_string_getdata(mod->name), nn_string_getdata(mod->physicalpath));
             }
             break;
         case NEON_OBJTYPE_CLASS:
             {
-                nn_printer_printobjclass(pr, value, fixstring, invmethod);
+                nn_iostream_printobjclass(pr, value, fixstring, invmethod);
             }
             break;
         case NEON_OBJTYPE_FUNCCLOSURE:
             {
                 NNObjFunction* cls;
                 cls = nn_value_asfunction(value);
-                nn_printer_printfunction(pr, cls->fnclosure.scriptfunc);
+                nn_iostream_printfunction(pr, cls->fnclosure.scriptfunc);
             }
             break;
         case NEON_OBJTYPE_FUNCSCRIPT:
             {
                 NNObjFunction* fn;
                 fn = nn_value_asfunction(value);
-                nn_printer_printfunction(pr, fn);
+                nn_iostream_printfunction(pr, fn);
             }
             break;
         case NEON_OBJTYPE_INSTANCE:
@@ -655,19 +656,19 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
                 /* @TODO: support the toString() override */
                 NNObjInstance* instance;
                 instance = nn_value_asinstance(value);
-                nn_printer_printinstance(pr, instance, invmethod);
+                nn_iostream_printinstance(pr, instance, invmethod);
             }
             break;
         case NEON_OBJTYPE_FUNCNATIVE:
             {
                 NNObjFunction* native;
                 native = nn_value_asfunction(value);
-                nn_printer_printf(pr, "<function %s(native) at %p>", nn_string_getdata(native->name), (void*)native);
+                nn_iostream_printf(pr, "<function %s(native) at %p>", nn_string_getdata(native->name), (void*)native);
             }
             break;
         case NEON_OBJTYPE_UPVALUE:
             {
-                nn_printer_printf(pr, "<upvalue>");
+                nn_iostream_printf(pr, "<upvalue>");
             }
             break;
         case NEON_OBJTYPE_STRING:
@@ -676,41 +677,41 @@ void nn_printer_printobject(NNPrinter* pr, NNValue value, bool fixstring, bool i
                 string = nn_value_asstring(value);
                 if(fixstring)
                 {
-                    nn_printer_writequotedstring(pr, nn_string_getdata(string), nn_string_getlength(string), true);
+                    nn_iostream_writequotedstring(pr, nn_string_getdata(string), nn_string_getlength(string), true);
                 }
                 else
                 {
-                    nn_printer_writestringl(pr, nn_string_getdata(string), nn_string_getlength(string));
+                    nn_iostream_writestringl(pr, nn_string_getdata(string), nn_string_getlength(string));
                 }
             }
             break;
     }
 }
 
-void nn_printer_printnumber(NNPrinter* pr, NNValue value)
+void nn_iostream_printnumber(NNIOStream* pr, NNValue value)
 {
     double dn;
     dn = nn_value_asnumber(value);
-    nn_printer_printf(pr, "%.16g", dn);
+    nn_iostream_printf(pr, "%.16g", dn);
 }
 
-void nn_printer_printvalue(NNPrinter* pr, NNValue value, bool fixstring, bool invmethod)
+void nn_iostream_printvalue(NNIOStream* pr, NNValue value, bool fixstring, bool invmethod)
 {
     if(nn_value_isnull(value))
     {
-        nn_printer_writestring(pr, "null");
+        nn_iostream_writestring(pr, "null");
     }
     else if(nn_value_isbool(value))
     {
-        nn_printer_writestring(pr, nn_value_asbool(value) ? "true" : "false");
+        nn_iostream_writestring(pr, nn_value_asbool(value) ? "true" : "false");
     }
     else if(nn_value_isnumber(value))
     {
-        nn_printer_printnumber(pr, value);
+        nn_iostream_printnumber(pr, value);
     }
     else
     {
-        nn_printer_printobject(pr, value, fixstring, invmethod);
+        nn_iostream_printobject(pr, value, fixstring, invmethod);
     }
 }
 

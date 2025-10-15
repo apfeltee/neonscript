@@ -1,87 +1,87 @@
 
 #include "priv.h"
 
-void nn_dbg_disasmblob(NNPrinter* pr, NNBlob* blob, const char* name)
+void nn_dbg_disasmblob(NNIOStream* pr, NNBlob* blob, const char* name)
 {
     int offset;
-    nn_printer_printf(pr, "== compiled '%s' [[\n", name);
+    nn_iostream_printf(pr, "== compiled '%s' [[\n", name);
     for(offset = 0; offset < blob->count;)
     {
         offset = nn_dbg_printinstructionat(pr, blob, offset);
     }
-    nn_printer_printf(pr, "]]\n");
+    nn_iostream_printf(pr, "]]\n");
 }
 
-void nn_dbg_printinstrname(NNPrinter* pr, const char* name)
+void nn_dbg_printinstrname(NNIOStream* pr, const char* name)
 {
-    nn_printer_printf(pr, "%s%-16s%s ", nn_util_color(NEON_COLOR_RED), name, nn_util_color(NEON_COLOR_RESET));
+    nn_iostream_printf(pr, "%s%-16s%s ", nn_util_color(NEON_COLOR_RED), name, nn_util_color(NEON_COLOR_RESET));
 }
 
-int nn_dbg_printsimpleinstr(NNPrinter* pr, const char* name, int offset)
+int nn_dbg_printsimpleinstr(NNIOStream* pr, const char* name, int offset)
 {
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, "\n");
     return offset + 1;
 }
 
-int nn_dbg_printconstinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printconstinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint16_t constant;
     constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d ", constant);
-    nn_printer_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, "%8d ", constant);
+    nn_iostream_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
+    nn_iostream_printf(pr, "\n");
     return offset + 3;
 }
 
-int nn_dbg_printpropertyinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printpropertyinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     const char* proptn;
     uint16_t constant;
     constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d ", constant);
-    nn_printer_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
+    nn_iostream_printf(pr, "%8d ", constant);
+    nn_iostream_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
     proptn = "";
     if(blob->instrucs[offset + 3].code == 1)
     {
         proptn = "static";
     }
-    nn_printer_printf(pr, " (%s)", proptn);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, " (%s)", proptn);
+    nn_iostream_printf(pr, "\n");
     return offset + 4;
 }
 
-int nn_dbg_printshortinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printshortinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint16_t slot;
     slot = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d\n", slot);
+    nn_iostream_printf(pr, "%8d\n", slot);
     return offset + 3;
 }
 
-int nn_dbg_printbyteinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printbyteinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint8_t slot;
     slot = blob->instrucs[offset + 1].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d\n", slot);
+    nn_iostream_printf(pr, "%8d\n", slot);
     return offset + 2;
 }
 
-int nn_dbg_printjumpinstr(NNPrinter* pr, const char* name, int sign, NNBlob* blob, int offset)
+int nn_dbg_printjumpinstr(NNIOStream* pr, const char* name, int sign, NNBlob* blob, int offset)
 {
     uint16_t jump;
     jump = (uint16_t)(blob->instrucs[offset + 1].code << 8);
     jump |= blob->instrucs[offset + 2].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d -> %d\n", offset, offset + 3 + sign * jump);
+    nn_iostream_printf(pr, "%8d -> %d\n", offset, offset + 3 + sign * jump);
     return offset + 3;
 }
 
-int nn_dbg_printtryinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printtryinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint16_t finally;
     uint16_t type;
@@ -93,11 +93,11 @@ int nn_dbg_printtryinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offs
     finally = (uint16_t)(blob->instrucs[offset + 5].code << 8);
     finally |= blob->instrucs[offset + 6].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "%8d -> %d, %d\n", type, address, finally);
+    nn_iostream_printf(pr, "%8d -> %d, %d\n", type, address, finally);
     return offset + 7;
 }
 
-int nn_dbg_printinvokeinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printinvokeinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint16_t constant;
     uint8_t argcount;
@@ -105,9 +105,9 @@ int nn_dbg_printinvokeinstr(NNPrinter* pr, const char* name, NNBlob* blob, int o
     constant |= blob->instrucs[offset + 2].code;
     argcount = blob->instrucs[offset + 3].code;
     nn_dbg_printinstrname(pr, name);
-    nn_printer_printf(pr, "(%d args) %8d ", argcount, constant);
-    nn_printer_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, "(%d args) %8d ", argcount, constant);
+    nn_iostream_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
+    nn_iostream_printf(pr, "\n");
     return offset + 4;
 }
 
@@ -195,7 +195,7 @@ const char* nn_dbg_op2str(uint8_t instruc)
     return "<?unknown?>";
 }
 
-int nn_dbg_printclosureinstr(NNPrinter* pr, const char* name, NNBlob* blob, int offset)
+int nn_dbg_printclosureinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     int j;
     int islocal;
@@ -206,9 +206,9 @@ int nn_dbg_printclosureinstr(NNPrinter* pr, const char* name, NNBlob* blob, int 
     offset++;
     constant = blob->instrucs[offset++].code << 8;
     constant |= blob->instrucs[offset++].code;
-    nn_printer_printf(pr, "%-16s %8d ", name, constant);
-    nn_printer_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
-    nn_printer_printf(pr, "\n");
+    nn_iostream_printf(pr, "%-16s %8d ", name, constant);
+    nn_iostream_printvalue(pr, nn_valarray_get(&blob->constants, constant), true, false);
+    nn_iostream_printf(pr, "\n");
     function = nn_value_asfunction(nn_valarray_get(&blob->constants, constant));
     for(j = 0; j < function->upvalcount; j++)
     {
@@ -220,23 +220,23 @@ int nn_dbg_printclosureinstr(NNPrinter* pr, const char* name, NNBlob* blob, int 
         {
             locn = "local";
         }
-        nn_printer_printf(pr, "%04d      |                     %s %d\n", offset - 3, locn, (int)index);
+        nn_iostream_printf(pr, "%04d      |                     %s %d\n", offset - 3, locn, (int)index);
     }
     return offset;
 }
 
-int nn_dbg_printinstructionat(NNPrinter* pr, NNBlob* blob, int offset)
+int nn_dbg_printinstructionat(NNIOStream* pr, NNBlob* blob, int offset)
 {
     uint8_t instruction;
     const char* opname;
-    nn_printer_printf(pr, "%08d ", offset);
+    nn_iostream_printf(pr, "%08d ", offset);
     if(offset > 0 && blob->instrucs[offset].srcline == blob->instrucs[offset - 1].srcline)
     {
-        nn_printer_printf(pr, "       | ");
+        nn_iostream_printf(pr, "       | ");
     }
     else
     {
-        nn_printer_printf(pr, "%8d ", blob->instrucs[offset].srcline);
+        nn_iostream_printf(pr, "%8d ", blob->instrucs[offset].srcline);
     }
     instruction = blob->instrucs[offset].code;
     opname = nn_dbg_op2str(instruction);
@@ -396,7 +396,7 @@ int nn_dbg_printinstructionat(NNPrinter* pr, NNBlob* blob, int offset)
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
         default:
             {
-                nn_printer_printf(pr, "unknown opcode %d\n", instruction);
+                nn_iostream_printf(pr, "unknown opcode %d\n", instruction);
             }
             break;
     }

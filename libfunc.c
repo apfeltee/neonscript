@@ -7,7 +7,6 @@ NNObjFunction* nn_object_makefuncgeneric(NNState* state, NNObjString* name, NNOb
     ofn = (NNObjFunction*)nn_object_allocobject(state, sizeof(NNObjFunction), fntype, false);
     ofn->clsthisval = thisval;
     ofn->name = name;
-    nn_valtable_init(state, &ofn->defaultargvalues);
     return ofn;
 
 }

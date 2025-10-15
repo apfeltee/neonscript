@@ -1,0 +1,292 @@
+/* 
+# @module type
+# 
+# Provides type validation and conversion capabilities
+# 
+# This module is wrapper around the builtin functions
+# where applicable and does and return the same thing as the builtin
+# alternative.
+# 
+# @copyright 2021, Ore Richard Muyiwa and Blade contributors
+*/
+
+
+/**
+ * of(value: any)
+ *
+ * returns the name of the type of value
+ * @note method implemented as part of core language features
+ */
+function of(value) { 
+  return typeof(value)
+}
+
+/**
+ * digit(value: char)
+ *
+ * returns true if the value is a character and digit,
+ * otherwise returns false
+ * @return bool
+ */
+function digit(value) {
+  if !is_string(value) or !value.length() == 1
+    throw Exception('char expected')
+  var _ = ord(value)
+  return _ >= 48 and _ <= 57
+}
+
+/**
+ * alpha(value: char)
+ *
+ * returns true if the value is a character and alphabetic,
+ * otherwise returns false
+ * @return bool
+ */
+function alpha(value) {
+  if !is_string(value) or !value.length() == 1
+    throw Exception('char expected')
+  var _ = ord(value)
+  return (_ >= 65 and _ <= 90) or (_ >= 97 and _ <= 122)
+}
+
+/**
+ * int(value: any)
+ *
+ * returns true if the value is an integer or false otherwise
+ * @return bool
+ */
+function int(value) {
+  return is_int(value)
+}
+
+/**
+ * bool(value: any)
+ *
+ * returns true if the value is a boolean or false otherwise
+ * @return bool
+ */
+function bool(value) {
+  return is_bool(value)
+}
+
+/**
+ * is_number(value: any)
+ *
+ * returns true if the value is a number or false otherwise
+ * @note this method also returns true for integers
+ * @return bool
+ */
+function number(value) {
+  return is_number(value)
+}
+
+/**
+ * char(value: any)
+ *
+ * returns true if the value is a single character or false otherwise
+ * @return bool
+ */
+function char(value) {
+  return is_string(value) and value.length() == 1
+}
+
+/**
+ * string(value: any)
+ *
+ * returns true if the value is a string or false otherwise
+ * @return bool
+ */
+function string(value) {
+  return is_string(value)
+}
+
+/**
+ * bytes(value: any)
+ *
+ * returns true if the value is a bytes or false otherwise
+ * @return bool
+ */
+function bytes(value) {
+  return is_bytes(value)
+}
+
+/**
+ * list(value: any)
+ *
+ * returns true if the value is a list or false otherwise
+ * @return bool
+ */
+function list(value) {
+  return is_list(value)
+}
+
+/**
+ * is_dict(value: any)
+ *
+ * returns true if the value is a dictionary or false otherwise
+ * @return bool
+ */
+function dict(value) {
+  return is_dict(value)
+}
+
+/**
+ * object(value: any)
+ *
+ * returns true if the value is an object or false otherwise
+ * @return bool
+ */
+function object(value) {
+  return is_object(value)
+}
+
+/**
+ * function(value: any)
+ *
+ * returns true if the value is a function or false otherwise
+ * @return bool
+ */
+function function(value) {
+  return is_function(value)
+}
+
+/**
+ * class(value: any)
+ *
+ * returns true if the value is a class or false otherwise
+ * @return bool
+ */
+function is_a_class(value) {
+  return is_class(value)
+}
+
+/**
+ * file(value: any)
+ *
+ * returns true if the value is a file or false otherwise
+ * @return bool
+ */
+function file(value) {
+  return is_file(value)
+}
+
+/**
+ * iterable(value: any)
+ *
+ * returns true if the value is an iterable or false otherwise
+ * @return bool
+ */
+function iterable(value) {
+  return is_iterable(value)
+}
+
+/**
+ * callable(value: any)
+ *
+ * returns true if the value is a callable function or class and false otherwise
+ * @return bool
+ */
+function callable(value) {
+  return is_callable(value)
+}
+
+/**
+ * instance(value: any, type: class)
+ *
+ * returns true if the value is an instance the given class, false
+ * otherwise
+ * @return bool
+ */
+function instance(value, type) {
+  if !is_class(type)
+    throw Exception('class expected')
+  return instance_of(value, type)
+}
+
+
+/**
+ * The Convert class handles conversion from one type to another
+ */
+class Convert {
+
+  /**
+   * Convert(value: any)
+   * @constructor 
+   */
+  Convert(value) {
+    this.value = value
+  }
+
+  /**
+   * to_int()
+   *
+   * convert the value into an integer.
+   * @note classes may override the return value by declaring a to_int()
+   * function.
+   * @return bool
+   */
+  to_int() {
+    return to_int(this.value)
+  }
+
+  /**
+   * to_number()
+   *
+   * convert the value into a number.
+   * @note classes may override the return value by declaring a to_number()
+   * function.
+   * @return bool
+   */
+  to_number() {
+    return to_number(this.value)
+  }
+
+  /**
+   * to_string()
+   *
+   * convert the value into a string.
+   * @note classes may override the return value by declaring a to_string()
+   * function.
+   * @return bool
+   */
+  to_string() {
+    return to_string(this.value)
+  }
+
+  /**
+   * to_bool()
+   *
+   * converts the value into a boolean.
+   * @note classes may override the return value by declaring a to_bool()
+   * function.
+   * @return bool
+   */
+  to_bool() {
+    return to_bool(this.value)
+  }
+
+  /**
+   * to_list()
+   *
+   * convert the value into a list.
+   * @note classes may override the return value by declaring a to_list()
+   * function.
+   * @return bool
+   */
+  to_list() {
+    return to_list(this.value)
+  }
+
+  /**
+   * to_dict()
+   *
+   * convert the value value into a dictionary.
+   * @note classes may override the return value by declaring a to_dict()
+   * function.
+   * @return bool
+   */
+  to_dict() {
+    return to_dict(this.value)
+  }
+}
+
