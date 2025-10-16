@@ -19,12 +19,12 @@ double nn_string_tabhashvaluecombine(const char* data, size_t len, uint32_t hsv)
     return dn;
 }
 
-NNValue nn_string_tabhashvaluestr(const char* data, size_t len, uint32_t hsv)
+static NNValue nn_string_tabhashvaluestr(const char* data, size_t len, uint32_t hsv)
 {
     return nn_value_makenumber(nn_string_tabhashvaluecombine(data, len, hsv));
 }
 
-NNValue nn_string_tabhashvalueobj(NNObjString* os)
+static NNValue nn_string_tabhashvalueobj(NNObjString* os)
 {
     return nn_string_tabhashvaluestr(nn_string_getdata(os), nn_string_getlength(os), os->hashvalue);
 }
@@ -40,6 +40,8 @@ NNObjString* nn_valtable_findstring(NNHashValTable* table, const char* findstr, 
     const char* sdata;
     NNHashValEntry* entry;
     NNObjString* string;
+    (void)findstr;
+    (void)sdata;
     NN_NULLPTRCHECK_RETURNVALUE(table, NULL);
     if(table->htcount == 0)
     {
@@ -297,7 +299,7 @@ NNObjString* nn_string_substr(NNObjString* os, size_t start)
 }
 
 
-NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int incode;
     int res;
@@ -311,7 +313,7 @@ NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* ar
     return nn_value_makenumber(res);
 }
 
-NNValue nn_objfnstring_utf8decode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_utf8decode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int res;
     NNObjString* instr;
@@ -325,7 +327,7 @@ NNValue nn_objfnstring_utf8decode(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_makenumber(res);
 }
 
-NNValue nn_objfnstring_utf8encode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_utf8encode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int incode;
     size_t len;
@@ -389,18 +391,18 @@ static NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue*
     return nn_value_fromobject(res);
 }
 
-NNValue nn_objfnstring_utf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_utf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     return nn_util_stringutf8chars(state, thisval, argv, argc, false);
 }
 
-NNValue nn_objfnstring_utf8codepoints(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_utf8codepoints(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     return nn_util_stringutf8chars(state, thisval, argv, argc, true);
 }
 
 
-NNValue nn_objfnstring_fromcharcode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_fromcharcode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char ch;
     NNObjString* os;
@@ -414,7 +416,7 @@ NNValue nn_objfnstring_fromcharcode(NNState* state, NNValue thisval, NNValue* ar
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnstring_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* os;
     NNArgCheck check;
@@ -425,7 +427,7 @@ NNValue nn_objfnstring_constructor(NNState* state, NNValue thisval, NNValue* arg
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnstring_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     NNObjString* selfstr;
@@ -435,7 +437,7 @@ NNValue nn_objfnstring_length(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makenumber(nn_string_getlength(selfstr));
 }
 
-NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
+static NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
 {
     NNObjString* str;
     if(len <= 0)
@@ -483,7 +485,7 @@ NNObjString* nn_string_substring(NNState* state, NNObjString* selfstr, size_t st
     return nn_string_takelen(state, raw, len);
 }
 
-NNValue nn_objfnstring_substring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_substring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t end;
     size_t start;
@@ -506,7 +508,7 @@ NNValue nn_objfnstring_substring(NNState* state, NNValue thisval, NNValue* argv,
     return nn_value_fromobject(nos);
 }
 
-NNValue nn_objfnstring_charcodeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_charcodeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ch;
     int idx;
@@ -530,7 +532,7 @@ NNValue nn_objfnstring_charcodeat(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_makenumber(ch);
 }
 
-NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char ch;
     int idx;
@@ -554,7 +556,7 @@ NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(nn_string_copylen(state, &ch, 1));
 }
 
-NNValue nn_objfnstring_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t slen;
     char* string;
@@ -568,7 +570,7 @@ NNValue nn_objfnstring_upper(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
-NNValue nn_objfnstring_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t slen;
     char* string;
@@ -582,7 +584,7 @@ NNValue nn_objfnstring_lower(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(nn_string_copylen(state, string, slen));
 }
 
-NNValue nn_objfnstring_isalpha(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isalpha(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -602,7 +604,7 @@ NNValue nn_objfnstring_isalpha(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_string_getlength(selfstr) != 0);
 }
 
-NNValue nn_objfnstring_isalnum(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isalnum(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -622,7 +624,7 @@ NNValue nn_objfnstring_isalnum(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_string_getlength(selfstr) != 0);
 }
 
-NNValue nn_objfnstring_isfloat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isfloat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     double f;
     char* p;
@@ -652,7 +654,7 @@ NNValue nn_objfnstring_isfloat(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnstring_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -672,7 +674,7 @@ NNValue nn_objfnstring_isnumber(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makebool(nn_string_getlength(selfstr) != 0);
 }
 
-NNValue nn_objfnstring_islower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_islower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -698,7 +700,7 @@ NNValue nn_objfnstring_islower(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(alphafound);
 }
 
-NNValue nn_objfnstring_isupper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isupper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -724,7 +726,7 @@ NNValue nn_objfnstring_isupper(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(alphafound);
 }
 
-NNValue nn_objfnstring_isspace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isspace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t len;
@@ -744,7 +746,7 @@ NNValue nn_objfnstring_isspace(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_string_getlength(selfstr) != 0);
 }
 
-NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char trimmer;
     char* end;
@@ -801,7 +803,7 @@ NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(nn_string_copycstr(state, string));
 }
 
-NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char trimmer;
     char* end;
@@ -843,7 +845,7 @@ NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(nn_string_copycstr(state, string));
 }
 
-NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char trimmer;
     char* end;
@@ -885,7 +887,7 @@ NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(nn_string_copycstr(state, string));
 }
 
-NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int startindex;
     char* result;
@@ -916,7 +918,7 @@ NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makenumber(-1);
 }
 
-NNValue nn_objfnstring_startswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_startswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* substr;
     NNObjString* string;
@@ -933,7 +935,7 @@ NNValue nn_objfnstring_startswith(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_makebool(memcmp(nn_string_getdata(substr), nn_string_getdata(string), nn_string_getlength(substr)) == 0);
 }
 
-NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int difference;
     NNObjString* substr;
@@ -952,7 +954,7 @@ NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makebool(memcmp(nn_string_getdata(substr), nn_string_getdata(string) + difference, nn_string_getlength(substr)) == 0);
 }
 
-NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjString* pattern, bool capture)
+static NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjString* pattern, bool capture)
 {
     enum {
         matchMaxTokens = 128*4,
@@ -1027,7 +1029,7 @@ NNValue nn_util_stringregexmatch(NNState* state, NNObjString* string, NNObjStrin
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnstring_matchcapture(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_matchcapture(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* pattern;
     NNObjString* string;
@@ -1040,7 +1042,7 @@ NNValue nn_objfnstring_matchcapture(NNState* state, NNValue thisval, NNValue* ar
     return nn_util_stringregexmatch(state, string, pattern, true);
 }
 
-NNValue nn_objfnstring_matchonly(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_matchonly(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* pattern;
     NNObjString* string;
@@ -1053,7 +1055,7 @@ NNValue nn_objfnstring_matchonly(NNState* state, NNValue thisval, NNValue* argv,
     return nn_util_stringregexmatch(state, string, pattern, false);
 }
 
-NNValue nn_objfnstring_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int count;
     const char* tmp;
@@ -1079,7 +1081,7 @@ NNValue nn_objfnstring_count(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenumber(count);
 }
 
-NNValue nn_objfnstring_tonumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_tonumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* selfstr;
     NNArgCheck check;
@@ -1089,7 +1091,7 @@ NNValue nn_objfnstring_tonumber(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makenumber(strtod(nn_string_getdata(selfstr), NULL));
 }
 
-NNValue nn_objfnstring_isascii(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_isascii(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* string;
     NNArgCheck check;
@@ -1103,7 +1105,7 @@ NNValue nn_objfnstring_isascii(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_fromobject(string);
 }
 
-NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t end;
@@ -1129,7 +1131,7 @@ NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfnstring_tobytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_tobytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t length;
@@ -1151,7 +1153,7 @@ NNValue nn_objfnstring_tobytes(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t width;
@@ -1196,7 +1198,7 @@ NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(result);
 }
 
-NNValue nn_objfnstring_rpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_rpad(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t width;
@@ -1241,7 +1243,7 @@ NNValue nn_objfnstring_rpad(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(result);
 }
 
-NNValue nn_objfnstring_split(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_split(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t end;
@@ -1289,7 +1291,7 @@ NNValue nn_objfnstring_split(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t xlen;
@@ -1334,7 +1336,7 @@ NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_fromobject(nn_string_makefromstrbuf(state, result, nn_util_hashstring(nn_strbuf_data(&result), xlen), xlen));
 }
 
-NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     size_t length;
@@ -1355,7 +1357,7 @@ NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     size_t length;
@@ -1385,7 +1387,7 @@ NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
-NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -1420,7 +1422,7 @@ NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnstring_appendany(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_appendany(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNValue arg;
@@ -1444,7 +1446,7 @@ NNValue nn_objfnstring_appendany(NNState* state, NNValue thisval, NNValue* argv,
     return thisval;
 }
 
-NNValue nn_objfnstring_appendbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnstring_appendbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNValue arg;

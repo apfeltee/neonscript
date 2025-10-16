@@ -1,12 +1,13 @@
 
 #include "priv.h"
 
-NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     enum {
         /* 12 == "NEON_ASTTOK_".length */
         kTokPrefixLength = 12
     };
+
     const char* cstr;
     NNObjString* insrc;
     NNAstLexer* scn;

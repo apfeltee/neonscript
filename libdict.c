@@ -79,7 +79,7 @@ NNObjDict* nn_dict_copy(NNObjDict* dict)
     return ndict;
 }
 
-NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "length", argv, argc);
@@ -87,7 +87,7 @@ NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(nn_valarray_count(&nn_value_asdict(thisval)->htnames));
 }
 
-NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue tempvalue;
     NNObjDict* dict;
@@ -103,7 +103,7 @@ NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_set(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_set(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjDict* dict;
@@ -122,7 +122,7 @@ NNValue nn_objfndict_set(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjDict* dict;
     NNArgCheck check;
@@ -134,7 +134,7 @@ NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -156,7 +156,7 @@ NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_fromobject(newdict);
 }
 
-NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -179,7 +179,7 @@ NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(newdict);
 }
 
-NNValue nn_objfndict_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjDict* dict;
@@ -190,7 +190,7 @@ NNValue nn_objfndict_contains(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makebool(nn_valtable_get(&dict->htab, argv[0], &value));
 }
 
-NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNValue tmp;
@@ -213,7 +213,7 @@ NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjDict* dict;
     NNProperty* field;
@@ -236,7 +236,7 @@ NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return field->value;
 }
 
-NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -253,7 +253,7 @@ NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -272,7 +272,7 @@ NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     int index;
@@ -304,7 +304,7 @@ NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isempty", argv, argc);
@@ -312,7 +312,7 @@ NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makebool(nn_valarray_count(&nn_value_asdict(thisval)->htnames) == 0);
 }
 
-NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "findkey", argv, argc);
@@ -320,7 +320,7 @@ NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_valtable_findkey(&nn_value_asdict(thisval)->htab, argv[0]);
 }
 
-NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -353,7 +353,7 @@ NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(list);
 }
 
-NNValue nn_objfndict_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjDict* dict;
@@ -368,7 +368,7 @@ NNValue nn_objfndict_iter(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -394,7 +394,7 @@ NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -431,7 +431,7 @@ NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -475,7 +475,7 @@ NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(resultdict);
 }
 
-NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -518,7 +518,7 @@ NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -560,7 +560,7 @@ NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(true);
 }
 
-NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;

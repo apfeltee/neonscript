@@ -1,7 +1,7 @@
 
 #include "priv.h"
 
-NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)argv;
     (void)argc;
@@ -9,7 +9,7 @@ NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* arg
 }
 
 
-NNValue nn_objfnmath_hypot(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_hypot(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -18,7 +18,7 @@ NNValue nn_objfnmath_hypot(NNState* state, NNValue thisval, NNValue* argv, size_
 }
 
 
-NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -26,7 +26,7 @@ NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenumber(fabs(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -34,7 +34,7 @@ NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenumber(round(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -42,7 +42,7 @@ NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(sqrt(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -50,7 +50,7 @@ NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(ceil(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -58,7 +58,7 @@ NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenumber(floor(nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     double b;
     double x;
@@ -72,21 +72,21 @@ NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenumber(b);
 }
 
-NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)argv;
     (void)argc;
     return nn_value_fromobject(nn_util_numbertobinstring(state, nn_value_asnumber(thisval)));
 }
 
-NNValue nn_objfnnumber_tooctstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnnumber_tooctstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)argv;
     (void)argc;
     return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(thisval), false));
 }
 
-NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue val;
     NNValue rtval;

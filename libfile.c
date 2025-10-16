@@ -173,7 +173,7 @@ bool nn_fileobject_open(NNObjFile* file)
     return false;
 }
 
-NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     FILE* hnd;
     const char* path;
@@ -203,7 +203,7 @@ NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue* argv,
     return nn_value_fromobject(file);
 }
 
-NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
@@ -215,7 +215,7 @@ NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makebool(nn_util_fsfileexists(state, nn_string_getdata(file)));
 }
 
-NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
@@ -227,7 +227,7 @@ NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makebool(nn_util_fsfileisfile(state, nn_string_getdata(file)));
 }
 
-NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* file;
     NNArgCheck check;
@@ -240,7 +240,7 @@ NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue* argv,
 }
 
 
-NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* buf;
     size_t thismuch;
@@ -267,7 +267,7 @@ NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue* argv, 
 }
 
 
-NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     bool appending;
     size_t rt;
@@ -307,7 +307,7 @@ NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue* argv,
 
 
 
-NNValue nn_objfnfile_close(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_close(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "close", argv, argc);
@@ -316,7 +316,7 @@ NNValue nn_objfnfile_close(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_open(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_open(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "open", argv, argc);
@@ -325,7 +325,7 @@ NNValue nn_objfnfile_open(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_isopen(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_isopen(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     (void)state;
@@ -335,7 +335,7 @@ NNValue nn_objfnfile_isopen(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makebool(file->isstd || file->isopen);
 }
 
-NNValue nn_objfnfile_isclosed(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_isclosed(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     (void)state;
@@ -345,7 +345,7 @@ NNValue nn_objfnfile_isclosed(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makebool(!file->isstd && !file->isopen);
 }
 
-NNValue nn_objfnfile_readmethod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_readmethod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t readhowmuch;
     NNIOResult res;
@@ -368,7 +368,7 @@ NNValue nn_objfnfile_readmethod(NNState* state, NNValue thisval, NNValue* argv, 
 }
 
 
-NNValue nn_objfnfile_readline(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_readline(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long rdline;
     size_t linelen;
@@ -390,7 +390,7 @@ NNValue nn_objfnfile_readline(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(nos);
 }
 
-NNValue nn_objfnfile_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ch;
     NNObjFile* file;
@@ -406,7 +406,7 @@ NNValue nn_objfnfile_get(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenumber(ch);
 }
 
-NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long end;
     long length;
@@ -483,7 +483,7 @@ NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_fromobject(nn_string_takelen(state, buffer, bytesread));
 }
 
-NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t count;
     int length;
@@ -533,7 +533,7 @@ NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t count;
@@ -586,7 +586,7 @@ NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(rc);
 }
 
-NNValue nn_objfnfile_putc(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_putc(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     int rc;
@@ -628,7 +628,7 @@ NNValue nn_objfnfile_putc(NNState* state, NNValue thisval, NNValue* argv, size_t
 }
 
 
-NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNFormatInfo nfi;
@@ -648,7 +648,7 @@ NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_number(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_number(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "number", argv, argc);
@@ -656,7 +656,7 @@ NNValue nn_objfnfile_number(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(nn_value_asfile(thisval)->number);
 }
 
-NNValue nn_objfnfile_istty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_istty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
@@ -666,7 +666,7 @@ NNValue nn_objfnfile_istty(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(file->istty);
 }
 
-NNValue nn_objfnfile_flush(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_flush(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
@@ -695,7 +695,7 @@ NNValue nn_objfnfile_flush(NNState* state, NNValue thisval, NNValue* argv, size_
 }
 
 
-NNValue nn_objfnfile_path(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_path(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
@@ -706,7 +706,7 @@ NNValue nn_objfnfile_path(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_fromobject(file->path);
 }
 
-NNValue nn_objfnfile_mode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_mode(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;
@@ -716,7 +716,7 @@ NNValue nn_objfnfile_mode(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_fromobject(file->mode);
 }
 
-NNValue nn_objfnfile_name(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_name(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     char* name;
     NNObjFile* file;
@@ -736,7 +736,7 @@ NNValue nn_objfnfile_name(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_objfnfile_seek(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_seek(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     long position;
     int seektype;
@@ -753,7 +753,7 @@ NNValue nn_objfnfile_seek(NNState* state, NNValue thisval, NNValue* argv, size_t
     RETURN_STATUS(fseek(file->handle, position, seektype));
 }
 
-NNValue nn_objfnfile_tell(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnfile_tell(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjFile* file;
     NNArgCheck check;

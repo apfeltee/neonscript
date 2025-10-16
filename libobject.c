@@ -1,7 +1,7 @@
 
 #include "neon.h"
 
-NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNIOStream pr;
@@ -16,7 +16,7 @@ NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNIOStream pr;
@@ -31,7 +31,7 @@ NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNObjString* os;
@@ -42,7 +42,7 @@ NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_fromobject(os);
 }
 
-NNValue nn_objfnobject_getselfinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_getselfinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)argv;
@@ -50,7 +50,7 @@ NNValue nn_objfnobject_getselfinstance(NNState* state, NNValue thisval, NNValue*
     return thisval;
 }
 
-NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)argv;
@@ -66,7 +66,7 @@ NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNValue* ar
 }
 
 
-NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     (void)state;
@@ -76,7 +76,7 @@ NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makebool(nn_value_isstring(v));
 }
 
-NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     (void)state;
@@ -86,7 +86,7 @@ NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_value_isarray(v));
 }
 
-NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNValue otherclval;
@@ -108,7 +108,7 @@ NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnobject_iscallable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_iscallable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -124,7 +124,7 @@ NNValue nn_objfnobject_iscallable(NNState* state, NNValue thisval, NNValue* argv
     ));
 }
 
-NNValue nn_objfnobject_isbool(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isbool(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -134,7 +134,7 @@ NNValue nn_objfnobject_isbool(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makebool(nn_value_isbool(selfval));
 }
 
-NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -144,7 +144,7 @@ NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makebool(nn_value_isnumber(selfval));
 }
 
-NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -154,7 +154,7 @@ NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makebool(nn_value_isnumber(selfval) && (((int)nn_value_asnumber(selfval)) == nn_value_asnumber(selfval)));
 }
 
-NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -164,7 +164,7 @@ NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makebool(nn_value_isdict(selfval));
 }
 
-NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -174,7 +174,7 @@ NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue* argv, 
     return nn_value_makebool(nn_value_isobject(selfval));
 }
 
-NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -189,7 +189,7 @@ NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValue* argv
     );
 }
 
-NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     bool isiterable;
     NNValue dummy;
@@ -209,7 +209,7 @@ NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_makebool(isiterable);
 }
 
-NNValue nn_objfnobject_isclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isclass(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -219,7 +219,7 @@ NNValue nn_objfnobject_isclass(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_value_isclass(selfval));
 }
 
-NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -229,7 +229,7 @@ NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makebool(nn_value_isfile(selfval));
 }
 
-NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     (void)state;
@@ -240,7 +240,7 @@ NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValue* argv
 }
 
 
-NNValue nn_objfnclass_getselfname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnclass_getselfname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue selfval;
     NNObjClass* klass;

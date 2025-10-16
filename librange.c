@@ -1,7 +1,7 @@
 
 #include "neon.h"
 
-NNValue nn_objfnrange_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_lower(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "lower", argv, argc);
@@ -9,7 +9,7 @@ NNValue nn_objfnrange_lower(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(nn_value_asrange(thisval)->lower);
 }
 
-NNValue nn_objfnrange_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_upper(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "upper", argv, argc);
@@ -17,7 +17,7 @@ NNValue nn_objfnrange_upper(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(nn_value_asrange(thisval)->upper);
 }
 
-NNValue nn_objfnrange_range(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_range(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "range", argv, argc);
@@ -25,7 +25,7 @@ NNValue nn_objfnrange_range(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(nn_value_asrange(thisval)->range);
 }
 
-NNValue nn_objfnrange_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int val;
     int index;
@@ -55,7 +55,7 @@ NNValue nn_objfnrange_iter(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int index;
     NNObjRange* range;
@@ -83,7 +83,7 @@ NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int i;
     NNValue val;
@@ -101,7 +101,7 @@ NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(oa);
 }
 
-NNValue nn_objfnrange_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnrange_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int a;
     int b;

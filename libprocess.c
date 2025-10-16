@@ -1,7 +1,7 @@
 
 #include "neon.h"
 
-NNValue nn_objfnprocess_exedirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnprocess_exedirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)thisval;
     (void)argv;
@@ -13,7 +13,7 @@ NNValue nn_objfnprocess_exedirectory(NNState* state, NNValue thisval, NNValue* a
     return nn_value_makenull();
 }
 
-NNValue nn_objfnprocess_scriptfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnprocess_scriptfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)thisval;
     (void)argv;
@@ -26,7 +26,7 @@ NNValue nn_objfnprocess_scriptfile(NNState* state, NNValue thisval, NNValue* arg
 }
 
 
-NNValue nn_objfnprocess_scriptdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnprocess_scriptdirectory(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)thisval;
     (void)argv;
@@ -38,7 +38,7 @@ NNValue nn_objfnprocess_scriptdirectory(NNState* state, NNValue thisval, NNValue
     return nn_value_makenull();
 }
 
-NNValue nn_objfnprocess_exit(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnprocess_exit(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int rc;
     (void)state;
@@ -52,7 +52,7 @@ NNValue nn_objfnprocess_exit(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
-NNValue nn_objfnprocess_kill(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnprocess_kill(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int pid;
     int code;

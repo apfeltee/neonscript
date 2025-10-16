@@ -722,7 +722,6 @@ bool nn_strbuf_appendchar(NNStringBuffer* sb, int c)
 */
 bool nn_strbuf_appendstrn(NNStringBuffer* sb, const char* str, size_t len)
 {
-    size_t i;
     int epos;
     char* data;
     epos = 0;

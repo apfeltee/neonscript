@@ -8,7 +8,7 @@
 
 #include "neon.h"
 
-NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     struct timeval tv;
     NNArgCheck check;
@@ -19,7 +19,7 @@ NNValue nn_nativefn_time(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
 }
 
-NNValue nn_nativefn_microtime(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_microtime(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     struct timeval tv;
     NNArgCheck check;
@@ -30,7 +30,7 @@ NNValue nn_nativefn_microtime(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makenumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
 }
 
-NNValue nn_nativefn_id(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_id(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue val;
     NNArgCheck check;
@@ -41,7 +41,7 @@ NNValue nn_nativefn_id(NNState* state, NNValue thisval, NNValue* argv, size_t ar
     return nn_value_makenumber(*(long*)&val);
 }
 
-NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     (void)thisval;
@@ -55,7 +55,7 @@ NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, size_t a
     return nn_value_makenumber((double)((int)nn_value_asnumber(argv[0])));
 }
 
-NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t len;
     char* string;
@@ -70,7 +70,7 @@ NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t a
     return nn_value_fromobject(nn_string_takelen(state, string, len));
 }
 
-NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int ord;
     int length;
@@ -94,7 +94,7 @@ NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, size_t a
     return nn_value_makenumber(ord);
 }
 
-NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int tmp;
     int lowerlimit;
@@ -124,7 +124,7 @@ NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, size_t 
     return nn_value_makenumber(nn_util_mtrand(lowerlimit, upperlimit));
 }
 
-NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjString* os;
@@ -139,7 +139,7 @@ NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, size_t 
 }
 
 /*
-NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue result;
     NNObjString* os;
@@ -153,7 +153,7 @@ NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* argv, siz
 }
 */
 
-NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     (void)thisval;
@@ -164,7 +164,7 @@ NNValue nn_nativefn_instanceof(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(nn_util_isinstanceof(nn_value_asinstance(argv[0])->klass, nn_value_asclass(argv[1])));
 }
 
-NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
     NNIOStream pr;
@@ -187,7 +187,7 @@ NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(res);
 }
 
-NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNFormatInfo nfi;
     NNObjString* ofmt;
@@ -204,7 +204,7 @@ NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     (void)thisval;
@@ -215,7 +215,7 @@ NNValue nn_nativefn_print(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     v = nn_nativefn_print(state, thisval, argv, argc);
@@ -224,7 +224,7 @@ NNValue nn_nativefn_println(NNState* state, NNValue thisval, NNValue* argv, size
 }
 
 
-NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     (void)state;
     (void)thisval;
@@ -233,7 +233,7 @@ NNValue nn_nativefn_isnan(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNIOStream pr;

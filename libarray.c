@@ -72,7 +72,7 @@ NNObjArray* nn_array_copy(NNObjArray* list, long start, long length)
 }
 
 
-NNValue nn_objfnarray_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int cnt;
     NNValue filler;
@@ -92,7 +92,7 @@ NNValue nn_objfnarray_constructor(NNState* state, NNValue thisval, NNValue* argv
     return nn_value_fromobject(arr);
 }
 
-NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     bool havejoinee;
     size_t i;
@@ -141,7 +141,7 @@ NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv, size_
 }
 
 
-NNValue nn_objfnarray_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_length(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* selfarr;
     (void)state;
@@ -151,7 +151,7 @@ NNValue nn_objfnarray_length(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenumber(nn_valarray_count(&selfarr->varray));
 }
 
-NNValue nn_objfnarray_append(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_append(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     (void)state;
@@ -162,7 +162,7 @@ NNValue nn_objfnarray_append(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_clear(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "clear", argv, argc);
@@ -171,7 +171,7 @@ NNValue nn_objfnarray_clear(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_clone(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
@@ -181,7 +181,7 @@ NNValue nn_objfnarray_clone(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(nn_array_copy(list, 0, nn_valarray_count(&list->varray)));
 }
 
-NNValue nn_objfnarray_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_count(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     int count;
@@ -201,7 +201,7 @@ NNValue nn_objfnarray_count(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenumber(count);
 }
 
-NNValue nn_objfnarray_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_extend(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -219,7 +219,7 @@ NNValue nn_objfnarray_extend(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_indexof(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -243,7 +243,7 @@ NNValue nn_objfnarray_indexof(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_makenumber(-1);
 }
 
-NNValue nn_objfnarray_insert(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_insert(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int index;
     NNObjArray* list;
@@ -258,7 +258,7 @@ NNValue nn_objfnarray_insert(NNState* state, NNValue thisval, NNValue* argv, siz
 }
 
 
-NNValue nn_objfnarray_pop(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_pop(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue value;
     NNObjArray* list;
@@ -275,7 +275,7 @@ NNValue nn_objfnarray_pop(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -321,7 +321,7 @@ NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_removeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_removeat(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t index;
@@ -346,7 +346,7 @@ NNValue nn_objfnarray_removeat(NNState* state, NNValue thisval, NNValue* argv, s
     return value;
 }
 
-NNValue nn_objfnarray_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_remove(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t index;
@@ -375,7 +375,7 @@ NNValue nn_objfnarray_remove(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_reverse(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_reverse(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int fromtop;
     NNObjArray* list;
@@ -405,7 +405,7 @@ NNValue nn_objfnarray_reverse(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(nlist);
 }
 
-NNValue nn_objfnarray_sort(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_sort(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
@@ -416,7 +416,7 @@ NNValue nn_objfnarray_sort(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_contains(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -434,7 +434,7 @@ NNValue nn_objfnarray_contains(NNState* state, NNValue thisval, NNValue* argv, s
     return nn_value_makebool(false);
 }
 
-NNValue nn_objfnarray_delete(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_delete(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t idxupper;
@@ -468,7 +468,7 @@ NNValue nn_objfnarray_delete(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_makenumber((double)idxupper - (double)idxlower + 1);
 }
 
-NNValue nn_objfnarray_first(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_first(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
@@ -482,7 +482,7 @@ NNValue nn_objfnarray_first(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_last(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_last(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjArray* list;
     NNArgCheck check;
@@ -496,7 +496,7 @@ NNValue nn_objfnarray_last(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_isempty(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isEmpty", argv, argc);
@@ -505,7 +505,7 @@ NNValue nn_objfnarray_isempty(NNState* state, NNValue thisval, NNValue* argv, si
 }
 
 
-NNValue nn_objfnarray_take(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_take(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t count;
     NNObjArray* list;
@@ -526,7 +526,7 @@ NNValue nn_objfnarray_take(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_fromobject(nn_array_copy(list, 0, count));
 }
 
-NNValue nn_objfnarray_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_get(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
@@ -543,7 +543,7 @@ NNValue nn_objfnarray_get(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_valarray_get(&list->varray, index);
 }
 
-NNValue nn_objfnarray_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_compact(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjArray* list;
@@ -564,7 +564,7 @@ NNValue nn_objfnarray_compact(NNState* state, NNValue thisval, NNValue* argv, si
 }
 
 
-NNValue nn_objfnarray_unique(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_unique(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -595,7 +595,7 @@ NNValue nn_objfnarray_unique(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(newlist);
 }
 
-NNValue nn_objfnarray_zip(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_zip(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -635,7 +635,7 @@ NNValue nn_objfnarray_zip(NNState* state, NNValue thisval, NNValue* argv, size_t
 }
 
 
-NNValue nn_objfnarray_zipfrom(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_zipfrom(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t j;
@@ -677,7 +677,7 @@ NNValue nn_objfnarray_zipfrom(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(newlist);
 }
 
-NNValue nn_objfnarray_todict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_todict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     NNObjDict* dict;
@@ -694,7 +694,7 @@ NNValue nn_objfnarray_todict(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(dict);
 }
 
-NNValue nn_objfnarray_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_iter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
@@ -711,7 +711,7 @@ NNValue nn_objfnarray_iter(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t index;
     NNObjArray* list;
@@ -739,7 +739,7 @@ NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makenull();
 }
 
-NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -774,7 +774,7 @@ NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv, size_
 }
 
 
-NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -819,7 +819,7 @@ NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv, size_t
 }
 
 
-NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -862,7 +862,7 @@ NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(resultlist);
 }
 
-NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -904,7 +904,7 @@ NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv, size_
 }
 
 
-NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -945,7 +945,7 @@ NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_makebool(true);
 }
 
-NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     size_t i;
     size_t passi;
@@ -1004,7 +1004,7 @@ NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* argv, siz
     return accumulator;
 }
 
-NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t i;
     int64_t until;

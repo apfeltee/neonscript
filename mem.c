@@ -9,7 +9,7 @@
 * might not be portable beyond linux/windows, and a couple unix derivatives.
 * strives to use the least amount of memory (and does so very successfully).
 */
-#define NEON_CONF_MEMUSEALLOCATOR 0
+#define NEON_CONF_MEMUSEALLOCATOR 1
 
 #define NEON_MEMORY_GROWCAPACITY(capacity) \
     ((capacity) < 4 ? 4 : (capacity)*2)
@@ -510,6 +510,7 @@ void nn_gcmem_markroots(NNState* state)
     NNValue* slot;
     NNObjUpvalue* upvalue;
     NNExceptionFrame* handler;
+    (void)handler;
     for(slot = state->vmstate.stackvalues; slot < &state->vmstate.stackvalues[state->vmstate.stackidx]; slot++)
     {
         nn_gcmem_markvalue(state, *slot);

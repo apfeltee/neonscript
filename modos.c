@@ -9,7 +9,7 @@ void nn_modfn_os_preloader(NNState* state)
     (void)state;
 }
 
-NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* dirn;
     FSDirReader rd;
@@ -52,7 +52,7 @@ NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* argv, size
 }
 
 /*
-NNValue nn_modfn_os_$template(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_$template(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     int64_t mod;
@@ -69,7 +69,7 @@ NNValue nn_modfn_os_$template(NNState* state, NNValue thisval, NNValue* argv, si
 }
 */
 
-NNValue nn_modfn_os_chmod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_chmod(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     int64_t mod;
@@ -85,7 +85,7 @@ NNValue nn_modfn_os_chmod(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(r);
 }
 
-NNValue nn_modfn_os_mkdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_mkdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     int64_t mod;
@@ -102,7 +102,7 @@ NNValue nn_modfn_os_mkdir(NNState* state, NNValue thisval, NNValue* argv, size_t
 }
 
 
-NNValue nn_modfn_os_chdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_chdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     NNObjString* path;
@@ -115,7 +115,7 @@ NNValue nn_modfn_os_chdir(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(r);
 }
 
-NNValue nn_modfn_os_rmdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_rmdir(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     NNObjString* path;
@@ -129,7 +129,7 @@ NNValue nn_modfn_os_rmdir(NNState* state, NNValue thisval, NNValue* argv, size_t
     return nn_value_makenumber(r);
 }
 
-NNValue nn_modfn_os_unlink(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_unlink(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     int64_t r;
     NNObjString* path;
@@ -142,7 +142,7 @@ NNValue nn_modfn_os_unlink(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makenumber(r);
 }
 
-NNValue nn_modfn_os_getenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_getenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* r;
     NNObjString* key;
@@ -159,7 +159,7 @@ NNValue nn_modfn_os_getenv(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_fromobject(nn_string_copycstr(state, r));
 }
 
-NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNObjString* key;
     NNObjString* value;
@@ -173,7 +173,7 @@ NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv, size_
     return nn_value_makebool(osfn_setenv(nn_string_getdata(key), nn_string_getdata(value), true));
 }
 
-NNValue nn_modfn_os_cwdhelper(NNState* state, NNValue thisval, NNValue* argv, size_t argc, const char* name)
+static NNValue nn_modfn_os_cwdhelper(NNState* state, NNValue thisval, NNValue* argv, size_t argc, const char* name)
 {
     enum { kMaxBufSz = 1024 };
     NNArgCheck check;
@@ -189,17 +189,17 @@ NNValue nn_modfn_os_cwdhelper(NNState* state, NNValue thisval, NNValue* argv, si
     return nn_value_fromobject(nn_string_copycstr(state, r));
 }
 
-NNValue nn_modfn_os_cwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_cwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     return nn_modfn_os_cwdhelper(state, thisval, argv, argc, "cwd");
 }
 
-NNValue nn_modfn_os_pwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_pwd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     return nn_modfn_os_cwdhelper(state, thisval, argv, argc, "pwd");
 }
 
-NNValue nn_modfn_os_basename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_basename(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* r;
     NNObjString* path;
@@ -216,7 +216,7 @@ NNValue nn_modfn_os_basename(NNState* state, NNValue thisval, NNValue* argv, siz
     return nn_value_fromobject(nn_string_copycstr(state, r));
 }
 
-NNValue nn_modfn_os_dirname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_dirname(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     const char* r;
     NNObjString* path;
@@ -233,7 +233,7 @@ NNValue nn_modfn_os_dirname(NNState* state, NNValue thisval, NNValue* argv, size
     return nn_value_fromobject(nn_string_copycstr(state, r));
 }
 
-NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
+static NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     FILE* fh;
     NNObjString* path;

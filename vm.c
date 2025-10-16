@@ -8,7 +8,6 @@
 /* initial amount of stack values (will grow dynamically if needed) */
 #define NEON_CONFIG_INITSTACKCOUNT (4 * 1)
 
-
 void nn_vm_initvmstate(NNState* state)
 {
     size_t finalsz;
@@ -178,7 +177,6 @@ NEON_INLINE bool nn_vm_checkmayberesize(NNState* state)
     }
     return false;
 }
-
 
 void nn_state_resetvmstate(NNState* state)
 {
@@ -410,7 +408,6 @@ NEON_INLINE NNFuncContextType nn_value_getmethodtype(NNValue method)
     }
     return NEON_FNCONTEXTTYPE_FUNCTION;
 }
-
 
 NNObjClass* nn_value_getclassfor(NNState* state, NNValue receiver)
 {
@@ -850,46 +847,6 @@ NEON_FORCEINLINE void nn_vmutil_defineproperty(NNState* state, NNObjString* name
     nn_vmbits_stackpop(state);
 }
 
-bool nn_value_isfalse(NNValue value)
-{
-    if(nn_value_isnull(value))
-    {
-        return true;
-    }
-    if(nn_value_isbool(value))
-    {
-        return !nn_value_asbool(value);
-    }
-    /* -1 is the number equivalent of false */
-    if(nn_value_isnumber(value))
-    {
-        return nn_value_asnumber(value) < 0;
-    }
-    /* Non-empty strings are true, empty strings are false.*/
-    if(nn_value_isstring(value))
-    {
-        return nn_string_getlength(nn_value_asstring(value)) < 1;
-    }
-    /* Non-empty lists are true, empty lists are false.*/
-    if(nn_value_isarray(value))
-    {
-        return nn_valarray_count(&nn_value_asarray(value)->varray) == 0;
-    }
-    /* Non-empty dicts are true, empty dicts are false. */
-    if(nn_value_isdict(value))
-    {
-        return nn_valarray_count(&nn_value_asdict(value)->htnames) == 0;
-    }
-    /*
-    // All classes are true
-    // All closures are true
-    // All bound methods are true
-    // All functions are in themselves true if you do not account for what they
-    // return.
-    */
-    return false;
-}
-
 /*
 * TODO: this is somewhat basic instanceof checking;
 * it does not account for namespacing, which could spell issues in the future.
@@ -1303,7 +1260,7 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     return true;
 }
 
-NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccallername, NNValue target, NNObjString* name)
+static NNProperty* nn_vmutil_checkoverloadrequirements(NNState* state, const char* ccallername, NNValue target, NNObjString* name)
 {
     NNProperty* field;
     (void)state;
@@ -2602,7 +2559,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, n
     return true;
 }
 
-void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, ...)
+static void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, ...)
 {
     va_list va;
     NNIOStream* pr;

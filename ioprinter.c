@@ -41,6 +41,46 @@ void nn_iostream_initvars(NNState* state, NNIOStream* pr, NNPrMode mode)
     pr->wrmode = mode;
 }
 
+
+bool nn_iostream_makestackio(NNState* state, NNIOStream* pr, FILE* fh, bool shouldclose)
+{
+    nn_iostream_initvars(state, pr, NEON_PRMODE_FILE);
+    pr->fromstack = true;
+    pr->handle = fh;
+    pr->shouldclose = shouldclose;
+    return true;
+}
+
+bool nn_iostream_makestackopenfile(NNState* state, NNIOStream* pr, const char* path, bool writemode)
+{
+    const char* mode;
+    nn_iostream_initvars(state, pr, NEON_PRMODE_FILE);
+    mode = "rb";
+    if(writemode)
+    {
+        mode = "wb";
+    }
+    pr->fromstack = true;
+    pr->shouldclose = true;
+    pr->handle = fopen(path, mode);
+    if(pr->handle == NULL)
+    {
+        return false;
+    }
+    return true;
+}
+
+
+bool nn_iostream_makestackstring(NNState* state, NNIOStream* pr)
+{
+    nn_iostream_initvars(state, pr, NEON_PRMODE_STRING);
+    pr->fromstack = true;
+    pr->wrmode = NEON_PRMODE_STRING;
+    nn_strbuf_makebasicemptystack(&pr->strbuf, NULL, 0);
+    return true;
+}
+
+
 NNIOStream* nn_iostream_makeundefined(NNState* state, NNPrMode mode)
 {
     NNIOStream* pr;
@@ -64,28 +104,28 @@ NNIOStream* nn_iostream_makeio(NNState* state, FILE* fh, bool shouldclose)
     return pr;
 }
 
+NNIOStream* nn_iostream_makeopenfile(NNState* state, const char* path, bool writemode)
+{
+    NNIOStream* pr;
+    pr = nn_iostream_makeundefined(state, NEON_PRMODE_FILE);
+    if(nn_iostream_makestackopenfile(state, pr, path, writemode))
+    {
+        pr->fromstack = false;
+        return pr;
+    }
+    else
+    {
+        nn_iostream_destroy(pr);
+    }
+    return NULL;
+}
+
 NNIOStream* nn_iostream_makestring(NNState* state)
 {
     NNIOStream* pr;
     pr = nn_iostream_makeundefined(state, NEON_PRMODE_STRING);
     nn_strbuf_makebasicemptystack(&pr->strbuf, NULL, 0);
     return pr;
-}
-
-void nn_iostream_makestackio(NNState* state, NNIOStream* pr, FILE* fh, bool shouldclose)
-{
-    nn_iostream_initvars(state, pr, NEON_PRMODE_FILE);
-    pr->fromstack = true;
-    pr->handle = fh;
-    pr->shouldclose = shouldclose;
-}
-
-void nn_iostream_makestackstring(NNState* state, NNIOStream* pr)
-{
-    nn_iostream_initvars(state, pr, NEON_PRMODE_STRING);
-    pr->fromstack = true;
-    pr->wrmode = NEON_PRMODE_STRING;
-    nn_strbuf_makebasicemptystack(&pr->strbuf, NULL, 0);
 }
 
 void nn_iostream_destroy(NNIOStream* pr)

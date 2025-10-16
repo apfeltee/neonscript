@@ -102,6 +102,47 @@ const char* nn_value_typename(NNValue value, bool detailed)
     return "?unknown?";
 }
 
+bool nn_value_isfalse(NNValue value)
+{
+    if(nn_value_isnull(value))
+    {
+        return true;
+    }
+    if(nn_value_isbool(value))
+    {
+        return !nn_value_asbool(value);
+    }
+    /* -1 is the number equivalent of false */
+    if(nn_value_isnumber(value))
+    {
+        return nn_value_asnumber(value) < 0;
+    }
+    /* Non-empty strings are true, empty strings are false.*/
+    if(nn_value_isstring(value))
+    {
+        return nn_string_getlength(nn_value_asstring(value)) < 1;
+    }
+    /* Non-empty lists are true, empty lists are false.*/
+    if(nn_value_isarray(value))
+    {
+        return nn_valarray_count(&nn_value_asarray(value)->varray) == 0;
+    }
+    /* Non-empty dicts are true, empty dicts are false. */
+    if(nn_value_isdict(value))
+    {
+        return nn_valarray_count(&nn_value_asdict(value)->htnames) == 0;
+    }
+    /*
+    // All classes are true
+    // All closures are true
+    // All bound methods are true
+    // All functions are in themselves true if you do not account for what they
+    // return.
+    */
+    return false;
+}
+
+
 bool nn_value_compobjarray(NNState* state, NNObject* oa, NNObject* ob)
 {
     size_t i;

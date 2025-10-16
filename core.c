@@ -289,6 +289,7 @@ bool nn_except_propagate(NNState* state)
 bool nn_except_pushhandler(NNState* state, NNObjClass* type, int address, int finallyaddress)
 {
     NNCallFrame* frame;
+    (void)type;
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
     if(frame->handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
     {

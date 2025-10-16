@@ -14,6 +14,49 @@
 static const char* g_strthis = "this";
 static const char* g_strsuper = "super";
 
+static void nn_astparser_runparser(NNAstParser* parser);
+static void nn_astparser_ignorewhitespace(NNAstParser* prs);
+static void nn_astparser_parsedeclaration(NNAstParser* prs);
+static bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args);
+static void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named);
+static void nn_astparser_parsefuncdecl(NNAstParser* prs);
+static void nn_astparser_advance(NNAstParser* prs);
+static void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool isconst);
+static void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi);
+static void nn_astparser_scopebegin(NNAstParser* prs);
+static bool nn_astparser_check(NNAstParser* prs, NNAstTokType t);
+static bool nn_astparser_parseblock(NNAstParser* prs);
+static void nn_astparser_scopeend(NNAstParser* prs);
+static void nn_astparser_parsestmt(NNAstParser* prs);
+static void nn_astparser_synchronize(NNAstParser* prs);
+static bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message);
+static void nn_astparser_parseechostmt(NNAstParser* prs);
+static void nn_astparser_parseifstmt(NNAstParser* prs);
+static void nn_astparser_parsedo_whilestmt(NNAstParser* prs);
+static void nn_astparser_parsewhilestmt(NNAstParser* prs);
+static void nn_astparser_parseforstmt(NNAstParser* prs);
+static void nn_astparser_parseforeachstmt(NNAstParser* prs);
+static void nn_astparser_parseswitchstmt(NNAstParser* prs);
+static void nn_astparser_parsecontinuestmt(NNAstParser* prs);
+static void nn_astparser_parsebreakstmt(NNAstParser* prs);
+static void nn_astparser_parsereturnstmt(NNAstParser* prs);
+static void nn_astparser_parseassertstmt(NNAstParser* prs);
+static void nn_astparser_parsethrowstmt(NNAstParser* prs);
+static void nn_astparser_parsetrystmt(NNAstParser* prs);
+static bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassign);
+static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence);
+static int nn_astparser_parsevariable(NNAstParser* prs, const char* message);
+static bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign);
+static uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs);
+static void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg);
+static bool nn_astparser_parseexpression(NNAstParser* prs);
+static bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign);
+static bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign);
+static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstPrecedence precedence);
+static bool nn_astparser_ruleanonclass(NNAstParser* prs, bool canassign);
+static void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc);
+
+
 void nn_blob_init(NNState* state, NNBlob* blob)
 {
     blob->pstate = state;
@@ -91,7 +134,7 @@ bool nn_astlex_isatend(NNAstLexer* lex)
     return *lex->sourceptr == '\0';
 }
 
-NNAstToken nn_astlex_createtoken(NNAstLexer* lex, NNAstTokType type)
+static NNAstToken nn_astlex_createtoken(NNAstLexer* lex, NNAstTokType type)
 {
     NNAstToken t;
     t.isglobal = false;
@@ -102,7 +145,7 @@ NNAstToken nn_astlex_createtoken(NNAstLexer* lex, NNAstTokType type)
     return t;
 }
 
-NNAstToken nn_astlex_errortoken(NNAstLexer* lex, const char* fmt, ...)
+static NNAstToken nn_astlex_errortoken(NNAstLexer* lex, const char* fmt, ...)
 {
     int length;
     char* buf;
@@ -128,27 +171,27 @@ NNAstToken nn_astlex_errortoken(NNAstLexer* lex, const char* fmt, ...)
     return t;
 }
 
-bool nn_astutil_isdigit(char c)
+static bool nn_astutil_isdigit(char c)
 {
     return c >= '0' && c <= '9';
 }
 
-bool nn_astutil_isbinary(char c)
+static bool nn_astutil_isbinary(char c)
 {
     return c == '0' || c == '1';
 }
 
-bool nn_astutil_isalpha(char c)
+static bool nn_astutil_isalpha(char c)
 {
     return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
 }
 
-bool nn_astutil_isoctal(char c)
+static bool nn_astutil_isoctal(char c)
 {
     return c >= '0' && c <= '7';
 }
 
-bool nn_astutil_ishexadecimal(char c)
+static bool nn_astutil_ishexadecimal(char c)
 {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
@@ -262,7 +305,7 @@ const char* nn_astutil_toktype2str(int t)
     return "?invalid?";
 }
 
-char nn_astlex_advance(NNAstLexer* lex)
+static char nn_astlex_advance(NNAstLexer* lex)
 {
     lex->sourceptr++;
     if(lex->sourceptr[-1] == '\n')
@@ -272,7 +315,7 @@ char nn_astlex_advance(NNAstLexer* lex)
     return lex->sourceptr[-1];
 }
 
-bool nn_astlex_match(NNAstLexer* lex, char expected)
+static bool nn_astlex_match(NNAstLexer* lex, char expected)
 {
     if(nn_astlex_isatend(lex))
     {
@@ -290,12 +333,12 @@ bool nn_astlex_match(NNAstLexer* lex, char expected)
     return true;
 }
 
-char nn_astlex_peekcurr(NNAstLexer* lex)
+static char nn_astlex_peekcurr(NNAstLexer* lex)
 {
     return *lex->sourceptr;
 }
 
-char nn_astlex_peekprev(NNAstLexer* lex)
+static char nn_astlex_peekprev(NNAstLexer* lex)
 {
     if(lex->sourceptr == lex->start)
     {
@@ -304,7 +347,7 @@ char nn_astlex_peekprev(NNAstLexer* lex)
     return lex->sourceptr[-1];
 }
 
-char nn_astlex_peeknext(NNAstLexer* lex)
+static char nn_astlex_peeknext(NNAstLexer* lex)
 {
     if(nn_astlex_isatend(lex))
     {
@@ -313,7 +356,7 @@ char nn_astlex_peeknext(NNAstLexer* lex)
     return lex->sourceptr[1];
 }
 
-NNAstToken nn_astlex_skipblockcomments(NNAstLexer* lex)
+static NNAstToken nn_astlex_skipblockcomments(NNAstLexer* lex)
 {
     int nesting;
     nesting = 1;
@@ -350,7 +393,7 @@ NNAstToken nn_astlex_skipblockcomments(NNAstLexer* lex)
     return nn_astlex_createtoken(lex, NEON_ASTTOK_UNDEFINED);
 }
 
-NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
+static NNAstToken nn_astlex_skipspace(NNAstLexer* lex)
 {
     char c;
     NNAstToken result;
@@ -523,7 +566,7 @@ NNAstToken nn_astlex_scannumber(NNAstLexer* lex)
     return nn_astlex_createtoken(lex, NEON_ASTTOK_LITNUMREG);
 }
 
-NNAstTokType nn_astlex_getidenttype(NNAstLexer* lex)
+static NNAstTokType nn_astlex_getidenttype(NNAstLexer* lex)
 {
     static const struct
     {
@@ -620,7 +663,7 @@ NNAstToken nn_astlex_scanident(NNAstLexer* lex, bool isdollar)
     return tok;
 }
 
-NNAstToken nn_astlex_scandecorator(NNAstLexer* lex)
+static NNAstToken nn_astlex_scandecorator(NNAstLexer* lex)
 {
     while(nn_astutil_isalpha(nn_astlex_peekcurr(lex)) || nn_astutil_isdigit(nn_astlex_peekcurr(lex)))
     {
@@ -990,12 +1033,12 @@ void nn_astparser_destroy(NNAstParser* parser)
     nn_memory_free(parser);
 }
 
-NNBlob* nn_astparser_currentblob(NNAstParser* prs)
+static NNBlob* nn_astparser_currentblob(NNAstParser* prs)
 {
     return &prs->currentfunccompiler->targetfunc->fnscriptfunc.blob;
 }
 
-bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args)
+static bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* message, va_list args)
 {
     const char* colred;
     const char* colreset;    
@@ -1051,7 +1094,7 @@ bool nn_astparser_raiseerroratv(NNAstParser* prs, NNAstToken* t, const char* mes
     return false;
 }
 
-bool nn_astparser_raiseerror(NNAstParser* prs, const char* message, ...)
+static bool nn_astparser_raiseerror(NNAstParser* prs, const char* message, ...)
 {
     va_list args;
     va_start(args, message);
@@ -1060,7 +1103,7 @@ bool nn_astparser_raiseerror(NNAstParser* prs, const char* message, ...)
     return false;
 }
 
-bool nn_astparser_raiseerroratcurrent(NNAstParser* prs, const char* message, ...)
+static bool nn_astparser_raiseerroratcurrent(NNAstParser* prs, const char* message, ...)
 {
     va_list args;
     va_start(args, message);
@@ -1069,7 +1112,7 @@ bool nn_astparser_raiseerroratcurrent(NNAstParser* prs, const char* message, ...
     return false;
 }
 
-void nn_astparser_advance(NNAstParser* prs)
+static void nn_astparser_advance(NNAstParser* prs)
 {
     prs->prevtoken = prs->currtoken;
     while(true)
@@ -1083,7 +1126,7 @@ void nn_astparser_advance(NNAstParser* prs)
     }
 }
 
-bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message)
+static bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message)
 {
     if(nn_astparser_istype(prs->currtoken.type, t))
     {
@@ -1093,7 +1136,7 @@ bool nn_astparser_consume(NNAstParser* prs, NNAstTokType t, const char* message)
     return nn_astparser_raiseerroratcurrent(prs, message);
 }
 
-void nn_astparser_consumeor(NNAstParser* prs, const char* message, const NNAstTokType* ts, int count)
+static void nn_astparser_consumeor(NNAstParser* prs, const char* message, const NNAstTokType* ts, int count)
 {
     int i;
     for(i = 0; i < count; i++)
@@ -1107,7 +1150,7 @@ void nn_astparser_consumeor(NNAstParser* prs, const char* message, const NNAstTo
     nn_astparser_raiseerroratcurrent(prs, message);
 }
 
-bool nn_astparser_checknumber(NNAstParser* prs)
+static bool nn_astparser_checknumber(NNAstParser* prs)
 {
     NNAstTokType t;
     t = prs->prevtoken.type;
@@ -1131,12 +1174,12 @@ bool nn_astparser_istype(NNAstTokType prev, NNAstTokType t)
     return (prev == t);
 }
 
-bool nn_astparser_check(NNAstParser* prs, NNAstTokType t)
+static bool nn_astparser_check(NNAstParser* prs, NNAstTokType t)
 {
     return nn_astparser_istype(prs->currtoken.type, t);
 }
 
-bool nn_astparser_match(NNAstParser* prs, NNAstTokType t)
+static bool nn_astparser_match(NNAstParser* prs, NNAstTokType t)
 {
     if(!nn_astparser_check(prs, t))
     {
@@ -1146,7 +1189,7 @@ bool nn_astparser_match(NNAstParser* prs, NNAstTokType t)
     return true;
 }
 
-void nn_astparser_runparser(NNAstParser* parser)
+static void nn_astparser_runparser(NNAstParser* parser)
 {
     nn_astparser_advance(parser);
     nn_astparser_ignorewhitespace(parser);
@@ -1156,7 +1199,7 @@ void nn_astparser_runparser(NNAstParser* parser)
     }
 }
 
-void nn_astparser_parsedeclaration(NNAstParser* prs)
+static void nn_astparser_parsedeclaration(NNAstParser* prs)
 {
     nn_astparser_ignorewhitespace(prs);
     if(nn_astparser_match(prs, NEON_ASTTOK_KWCLASS))
@@ -1200,7 +1243,7 @@ void nn_astparser_parsedeclaration(NNAstParser* prs)
     nn_astparser_ignorewhitespace(prs);
 }
 
-void nn_astparser_parsestmt(NNAstParser* prs)
+static void nn_astparser_parsestmt(NNAstParser* prs)
 {
     prs->replcanecho = false;
     nn_astparser_ignorewhitespace(prs);
@@ -1269,7 +1312,7 @@ void nn_astparser_parsestmt(NNAstParser* prs)
     nn_astparser_ignorewhitespace(prs);
 }
 
-void nn_astparser_consumestmtend(NNAstParser* prs)
+static void nn_astparser_consumestmtend(NNAstParser* prs)
 {
     /* allow block last statement to omit statement end */
     if(prs->blockcount > 0 && nn_astparser_check(prs, NEON_ASTTOK_BRACECLOSE))
@@ -1293,7 +1336,7 @@ void nn_astparser_consumestmtend(NNAstParser* prs)
     }
 }
 
-void nn_astparser_ignorewhitespace(NNAstParser* prs)
+static void nn_astparser_ignorewhitespace(NNAstParser* prs)
 {
     while(true)
     {
@@ -1308,7 +1351,7 @@ void nn_astparser_ignorewhitespace(NNAstParser* prs)
     }
 }
 
-int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* constants, int ip)
+static int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* constants, int ip)
 {
     int constant;
     NNOpCode code;
@@ -1412,7 +1455,7 @@ int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* 
     return 0;
 }
 
-void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
+static void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
 {
     NNInstruction ins;
     ins.code = byte;
@@ -1421,41 +1464,41 @@ void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
     nn_blob_push(nn_astparser_currentblob(prs), ins);
 }
 
-void nn_astemit_patchat(NNAstParser* prs, size_t idx, uint8_t byte)
+static void nn_astemit_patchat(NNAstParser* prs, size_t idx, uint8_t byte)
 {
     nn_astparser_currentblob(prs)->instrucs[idx].code = byte;
 }
 
-void nn_astemit_emitinstruc(NNAstParser* prs, uint8_t byte)
+static void nn_astemit_emitinstruc(NNAstParser* prs, uint8_t byte)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, true);
 }
 
-void nn_astemit_emit1byte(NNAstParser* prs, uint8_t byte)
+static void nn_astemit_emit1byte(NNAstParser* prs, uint8_t byte)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
 }
 
-void nn_astemit_emit1short(NNAstParser* prs, uint16_t byte)
+static void nn_astemit_emit1short(NNAstParser* prs, uint16_t byte)
 {
     nn_astemit_emit(prs, (byte >> 8) & 0xff, prs->prevtoken.line, false);
     nn_astemit_emit(prs, byte & 0xff, prs->prevtoken.line, false);
 }
 
-void nn_astemit_emit2byte(NNAstParser* prs, uint8_t byte, uint8_t byte2)
+static void nn_astemit_emit2byte(NNAstParser* prs, uint8_t byte, uint8_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
     nn_astemit_emit(prs, byte2, prs->prevtoken.line, false);
 }
 
-void nn_astemit_emitbyteandshort(NNAstParser* prs, uint8_t byte, uint16_t byte2)
+static void nn_astemit_emitbyteandshort(NNAstParser* prs, uint8_t byte, uint16_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
     nn_astemit_emit(prs, (byte2 >> 8) & 0xff, prs->prevtoken.line, false);
     nn_astemit_emit(prs, byte2 & 0xff, prs->prevtoken.line, false);
 }
 
-void nn_astemit_emitloop(NNAstParser* prs, int loopstart)
+static void nn_astemit_emitloop(NNAstParser* prs, int loopstart)
 {
     int offset;
     nn_astemit_emitinstruc(prs, NEON_OP_LOOP);
@@ -1468,7 +1511,7 @@ void nn_astemit_emitloop(NNAstParser* prs, int loopstart)
     nn_astemit_emit1byte(prs, offset & 0xff);
 }
 
-void nn_astemit_emitreturn(NNAstParser* prs)
+static void nn_astemit_emitreturn(NNAstParser* prs)
 {
     if(prs->istrying)
     {
@@ -1495,21 +1538,21 @@ void nn_astemit_emitreturn(NNAstParser* prs)
     nn_astemit_emitinstruc(prs, NEON_OP_RETURN);
 }
 
-int nn_astparser_pushconst(NNAstParser* prs, NNValue value)
+static int nn_astparser_pushconst(NNAstParser* prs, NNValue value)
 {
     int constant;
     constant = nn_blob_pushconst(nn_astparser_currentblob(prs), value);
     return constant;
 }
 
-void nn_astemit_emitconst(NNAstParser* prs, NNValue value)
+static void nn_astemit_emitconst(NNAstParser* prs, NNValue value)
 {
     int constant;
     constant = nn_astparser_pushconst(prs, value);
     nn_astemit_emitbyteandshort(prs, NEON_OP_PUSHCONSTANT, (uint16_t)constant);
 }
 
-int nn_astemit_emitjump(NNAstParser* prs, uint8_t instruction)
+static int nn_astemit_emitjump(NNAstParser* prs, uint8_t instruction)
 {
     nn_astemit_emitinstruc(prs, instruction);
     /* placeholders */
@@ -1518,7 +1561,7 @@ int nn_astemit_emitjump(NNAstParser* prs, uint8_t instruction)
     return nn_astparser_currentblob(prs)->count - 2;
 }
 
-int nn_astemit_emitswitch(NNAstParser* prs)
+static int nn_astemit_emitswitch(NNAstParser* prs)
 {
     nn_astemit_emitinstruc(prs, NEON_OP_SWITCH);
     /* placeholders */
@@ -1527,7 +1570,7 @@ int nn_astemit_emitswitch(NNAstParser* prs)
     return nn_astparser_currentblob(prs)->count - 2;
 }
 
-int nn_astemit_emittry(NNAstParser* prs)
+static int nn_astemit_emittry(NNAstParser* prs)
 {
     nn_astemit_emitinstruc(prs, NEON_OP_EXTRY);
     /* type placeholders */
@@ -1542,13 +1585,13 @@ int nn_astemit_emittry(NNAstParser* prs)
     return nn_astparser_currentblob(prs)->count - 6;
 }
 
-void nn_astemit_patchswitch(NNAstParser* prs, int offset, int constant)
+static void nn_astemit_patchswitch(NNAstParser* prs, int offset, int constant)
 {
     nn_astemit_patchat(prs, offset, (constant >> 8) & 0xff);
     nn_astemit_patchat(prs, offset + 1, constant & 0xff);
 }
 
-void nn_astemit_patchtry(NNAstParser* prs, int offset, int type, int address, int finally)
+static void nn_astemit_patchtry(NNAstParser* prs, int offset, int type, int address, int finally)
 {
     /* patch type */
     nn_astemit_patchat(prs, offset, (type >> 8) & 0xff);
@@ -1561,7 +1604,7 @@ void nn_astemit_patchtry(NNAstParser* prs, int offset, int type, int address, in
     nn_astemit_patchat(prs, offset + 5, finally & 0xff);
 }
 
-void nn_astemit_patchjump(NNAstParser* prs, int offset)
+static void nn_astemit_patchjump(NNAstParser* prs, int offset)
 {
     /* -2 to adjust the bytecode for the offset itself */
     int jump;
@@ -1574,7 +1617,7 @@ void nn_astemit_patchjump(NNAstParser* prs, int offset)
     nn_astemit_patchat(prs, offset + 1, jump & 0xff);
 }
 
-void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncContextType type, bool isanon)
+static void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncContextType type, bool isanon)
 {
     bool candeclthis;
     NNIOStream wtmp;
@@ -1627,7 +1670,7 @@ void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NNFuncCon
     }
 }
 
-int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
+static int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
 {
     int rawlen;
     const char* rawstr;
@@ -1649,12 +1692,12 @@ int nn_astparser_makeidentconst(NNAstParser* prs, NNAstToken* name)
     return nn_astparser_pushconst(prs, nn_value_fromobject(str));
 }
 
-bool nn_astparser_identsequal(NNAstToken* a, NNAstToken* b)
+static bool nn_astparser_identsequal(NNAstToken* a, NNAstToken* b)
 {
     return a->length == b->length && memcmp(a->start, b->start, a->length) == 0;
 }
 
-int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
+static int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
 {
     int i;
     NNAstLocal* local;
@@ -1676,7 +1719,7 @@ int nn_astfunccompiler_resolvelocal(NNAstParser* prs, NNAstFuncCompiler* fnc, NN
     return -1;
 }
 
-int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, uint16_t index, bool islocal)
+static int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, uint16_t index, bool islocal)
 {
     int i;
     int upcnt;
@@ -1700,7 +1743,7 @@ int nn_astfunccompiler_addupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, uint
     return fnc->targetfunc->upvalcount++;
 }
 
-int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
+static int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, NNAstToken* name)
 {
     int local;
     int upvalue;
@@ -1722,7 +1765,7 @@ int nn_astfunccompiler_resolveupvalue(NNAstParser* prs, NNAstFuncCompiler* fnc, 
     return -1;
 }
 
-int nn_astparser_addlocal(NNAstParser* prs, NNAstToken name)
+static int nn_astparser_addlocal(NNAstParser* prs, NNAstToken name)
 {
     NNAstLocal* local;
     if(prs->currentfunccompiler->localcount == NEON_CONFIG_ASTMAXLOCALS)
@@ -1738,7 +1781,7 @@ int nn_astparser_addlocal(NNAstParser* prs, NNAstToken name)
     return prs->currentfunccompiler->localcount;
 }
 
-void nn_astparser_declarevariable(NNAstParser* prs)
+static void nn_astparser_declarevariable(NNAstParser* prs)
 {
     int i;
     NNAstToken* name;
@@ -1764,7 +1807,7 @@ void nn_astparser_declarevariable(NNAstParser* prs)
     nn_astparser_addlocal(prs, *name);
 }
 
-int nn_astparser_parsevariable(NNAstParser* prs, const char* message)
+static int nn_astparser_parsevariable(NNAstParser* prs, const char* message)
 {
     if(!nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, message))
     {
@@ -1779,7 +1822,7 @@ int nn_astparser_parsevariable(NNAstParser* prs, const char* message)
     return nn_astparser_makeidentconst(prs, &prs->prevtoken);
 }
 
-void nn_astparser_markinitialized(NNAstParser* prs)
+static void nn_astparser_markinitialized(NNAstParser* prs)
 {
     if(prs->currentfunccompiler->scopedepth == 0)
     {
@@ -1788,7 +1831,7 @@ void nn_astparser_markinitialized(NNAstParser* prs)
     prs->currentfunccompiler->locals[prs->currentfunccompiler->localcount - 1].depth = prs->currentfunccompiler->scopedepth;
 }
 
-void nn_astparser_definevariable(NNAstParser* prs, int global)
+static void nn_astparser_definevariable(NNAstParser* prs, int global)
 {
     /* we are in a local scope... */
     if(prs->currentfunccompiler->scopedepth > 0)
@@ -1799,7 +1842,7 @@ void nn_astparser_definevariable(NNAstParser* prs, int global)
     nn_astemit_emitbyteandshort(prs, NEON_OP_GLOBALDEFINE, global);
 }
 
-NNAstToken nn_astparser_synthtoken(const char* name)
+static NNAstToken nn_astparser_synthtoken(const char* name)
 {
     NNAstToken token;
     token.isglobal = false;
@@ -1810,7 +1853,7 @@ NNAstToken nn_astparser_synthtoken(const char* name)
     return token;
 }
 
-NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
+static NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
 {
     const char* fname;
     NNObjFunction* function;
@@ -1836,12 +1879,12 @@ NNObjFunction* nn_astparser_endcompiler(NNAstParser* prs, bool istoplevel)
     return function;
 }
 
-void nn_astparser_scopebegin(NNAstParser* prs)
+static void nn_astparser_scopebegin(NNAstParser* prs)
 {
     prs->currentfunccompiler->scopedepth++;
 }
 
-bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
+static bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
 {
     int lopos;
     int locount;
@@ -1858,7 +1901,7 @@ bool nn_astutil_scopeendcancontinue(NNAstParser* prs)
     return false;
 }
 
-void nn_astparser_scopeend(NNAstParser* prs)
+static void nn_astparser_scopeend(NNAstParser* prs)
 {
     prs->currentfunccompiler->scopedepth--;
     /*
@@ -1884,7 +1927,7 @@ void nn_astparser_scopeend(NNAstParser* prs)
     }
 }
 
-int nn_astparser_discardlocals(NNAstParser* prs, int depth)
+static int nn_astparser_discardlocals(NNAstParser* prs, int depth)
 {
     int local;
     if(prs->keeplastvalue)
@@ -1913,7 +1956,7 @@ int nn_astparser_discardlocals(NNAstParser* prs, int depth)
     return prs->currentfunccompiler->localcount - local - 1;
 }
 
-void nn_astparser_endloop(NNAstParser* prs)
+static void nn_astparser_endloop(NNAstParser* prs)
 {
     int i;
     NNInstruction* bcode;
@@ -1939,7 +1982,7 @@ void nn_astparser_endloop(NNAstParser* prs)
     }
 }
 
-bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     NNAstTokType op;
     NNAstRule* rule;
@@ -2018,7 +2061,7 @@ bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassi
     return true;
 }
 
-bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     uint8_t argcount;
     (void)previous;
@@ -2028,7 +2071,7 @@ bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign
     return true;
 }
 
-bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     switch(prs->prevtoken.type)
@@ -2049,7 +2092,7 @@ bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
     return true;
 }
 
-void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+static void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
 {
     prs->replcanecho = false;
     if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
@@ -2076,7 +2119,7 @@ void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, u
     }
 }
 
-void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
+static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
 {
     if(canassign && nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
     {
@@ -2197,7 +2240,7 @@ void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int
     }
 }
 
-bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     int name;
     bool caninvoke;
@@ -2243,7 +2286,7 @@ bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool canassign)
     return true;
 }
 
-void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
+static void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
 {
     bool fromclass;
     uint8_t getop;
@@ -2283,7 +2326,7 @@ void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
     nn_astparser_assignment(prs, getop, setop, arg, canassign);
 }
 
-void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
+static void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
 {
     int local;
     if(prs->currentfunccompiler->targetfunc->name != NULL)
@@ -2298,7 +2341,7 @@ void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
     }
 }
 
-bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
 {
     int count;
     (void)canassign;
@@ -2327,7 +2370,7 @@ bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
 {
     bool usedexpression;
     int itemcount;
@@ -2385,7 +2428,7 @@ bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     bool assignable;
     bool commamatch;
@@ -2434,14 +2477,14 @@ bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, bool canas
     return true;
 }
 
-bool nn_astparser_rulevarnormal(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulevarnormal(NNAstParser* prs, bool canassign)
 {
     nn_astparser_namedvar(prs, prs->prevtoken, canassign);
     return true;
 }
 
 
-bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     #if 0
@@ -2466,7 +2509,7 @@ bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
 {
     int name;
     bool invokeself;
@@ -2517,7 +2560,7 @@ bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulegrouping(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulegrouping(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astparser_ignorewhitespace(prs);
@@ -2555,12 +2598,12 @@ NNValue nn_astparser_compilestrnumber(NNAstTokType type, const char* source)
     return nn_value_makenumber(dbval);
 }
 
-NNValue nn_astparser_compilenumber(NNAstParser* prs)
+static NNValue nn_astparser_compilenumber(NNAstParser* prs)
 {
     return nn_astparser_compilestrnumber(prs->prevtoken.type, prs->prevtoken.start);
 }
 
-bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astemit_emitconst(prs, nn_astparser_compilenumber(prs));
@@ -2571,7 +2614,7 @@ bool nn_astparser_rulenumber(NNAstParser* prs, bool canassign)
 // Reads the next character, which should be a hex digit (0-9, a-f, or A-F) and
 // returns its numeric value. If the character isn't a hex digit, returns -1.
 */
-int nn_astparser_readhexdigit(char c)
+static int nn_astparser_readhexdigit(char c)
 {
     if((c >= '0') && (c <= '9'))
     {
@@ -2591,7 +2634,7 @@ int nn_astparser_readhexdigit(char c)
 /*
 // Reads [digits] hex digits in a string literal and returns their number value.
 */
-int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
+static int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int count)
 {
     size_t pos;
     int i;
@@ -2619,7 +2662,7 @@ int nn_astparser_readhexescape(NNAstParser* prs, const char* str, int index, int
     return value;
 }
 
-int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* realstring, int numberbytes, int realindex, int index)
+static int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* realstring, int numberbytes, int realindex, int index)
 {
     int value;
     int count;
@@ -2659,7 +2702,7 @@ int nn_astparser_readunicodeescape(NNAstParser* prs, char* string, const char* r
     return count;
 }
 
-char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescapes)
+static char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescapes)
 {
     int k;
     int i;
@@ -2831,7 +2874,7 @@ char* nn_astparser_compilestring(NNAstParser* prs, int* length, bool permitescap
     return deststr;
 }
 
-bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
 {
     int length;
     char* str;
@@ -2841,7 +2884,7 @@ bool nn_astparser_rulestring(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
 {
     int length;
     char* str;
@@ -2851,7 +2894,7 @@ bool nn_astparser_rulerawstring(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
 {
     int count;
     bool doadd;
@@ -2888,7 +2931,7 @@ bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
 {
     NNAstTokType op;
     (void)canassign;
@@ -2913,7 +2956,7 @@ bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     int endjump;
     (void)previous;
@@ -2926,7 +2969,7 @@ bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign)
 }
 
 
-bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     int endjump;
     int elsejump;
@@ -2941,7 +2984,7 @@ bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool canassign)
     return true;
 }
 
-bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     (void)previous;
     (void)canassign;
@@ -2951,7 +2994,7 @@ bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, bool can
     return true;
 }
 
-bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     int thenjump;
     int elsejump;
@@ -2978,7 +3021,7 @@ bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, bool ca
     return true;
 }
 
-bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astparser_parseexpression(prs);
@@ -2986,13 +3029,13 @@ bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulenew(NNAstParser* prs, bool canassign)
 {
     nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "class name after 'new'");
     return nn_astparser_rulevarnormal(prs, canassign);
 }
 
-bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'typeof'");
@@ -3002,14 +3045,14 @@ bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
     return true;
 }
 
-bool nn_astparser_rulenothingprefix(NNAstParser* prs, bool canassign)
+static bool nn_astparser_rulenothingprefix(NNAstParser* prs, bool canassign)
 {
     (void)prs;
     (void)canassign;
     return true;
 }
 
-bool nn_astparser_rulenothinginfix(NNAstParser* prs, NNAstToken previous, bool canassign)
+static bool nn_astparser_rulenothinginfix(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
     (void)prs;
     (void)previous;
@@ -3017,7 +3060,7 @@ bool nn_astparser_rulenothinginfix(NNAstParser* prs, NNAstToken previous, bool c
     return true;
 }
 
-NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstPrecedence precedence)
+static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstPrecedence precedence)
 {
     dest->prefix = prefix;
     dest->infix = infix;
@@ -3139,7 +3182,7 @@ NNAstRule* nn_astparser_getrule(NNAstTokType type)
 }
 #undef dorule
 
-bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence/*, NNAstExpression* dest*/)
+static bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence/*, NNAstExpression* dest*/)
 {
     bool canassign;
     NNAstRule* rule;
@@ -3187,7 +3230,7 @@ bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence
     return true;
 }
 
-bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
+static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
 {
     if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
@@ -3202,7 +3245,7 @@ bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
     return nn_astparser_doparseprecedence(prs, precedence);
 }
 
-bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence precedence)
+static bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence precedence)
 {
     if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
@@ -3216,12 +3259,12 @@ bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence precedenc
     return nn_astparser_doparseprecedence(prs, precedence);
 }
 
-bool nn_astparser_parseexpression(NNAstParser* prs)
+static bool nn_astparser_parseexpression(NNAstParser* prs)
 {
     return nn_astparser_parseprecedence(prs, NEON_ASTPREC_ASSIGNMENT);
 }
 
-bool nn_astparser_parseblock(NNAstParser* prs)
+static bool nn_astparser_parseblock(NNAstParser* prs)
 {
     prs->blockcount++;
     nn_astparser_ignorewhitespace(prs);
@@ -3240,7 +3283,7 @@ bool nn_astparser_parseblock(NNAstParser* prs)
     return true;
 }
 
-void nn_astparser_declarefuncargvar(NNAstParser* prs)
+static void nn_astparser_declarefuncargvar(NNAstParser* prs)
 {
     int i;
     NNAstToken* name;
@@ -3267,7 +3310,7 @@ void nn_astparser_declarefuncargvar(NNAstParser* prs)
 }
 
 
-int nn_astparser_parsefuncparamvar(NNAstParser* prs, const char* message)
+static int nn_astparser_parsefuncparamvar(NNAstParser* prs, const char* message)
 {
     if(!nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, message))
     {
@@ -3282,7 +3325,7 @@ int nn_astparser_parsefuncparamvar(NNAstParser* prs, const char* message)
     return nn_astparser_makeidentconst(prs, &prs->prevtoken);
 }
 
-uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
+static uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
 {
     uint8_t argcount;
     argcount = 0;
@@ -3307,7 +3350,7 @@ uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
     return argcount;
 }
 
-void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
+static void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
 {
     int defvalconst;
     int paramconst;
@@ -3317,6 +3360,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
     (void)paramid;
     (void)paramname;
     (void)defvalconst;
+    (void)fnc;
     paramid = 0;
     /* compile argument list... */
     do
@@ -3365,7 +3409,7 @@ void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc)
     } while(nn_astparser_match(prs, NEON_ASTTOK_COMMA));
 }
 
-void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* fnc, bool closescope, bool isanon)
+static void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* fnc, bool closescope, bool isanon)
 {
     int i;
     NNObjFunction* function;
@@ -3390,7 +3434,7 @@ void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* fnc, bo
     nn_vm_stackpop(prs->pstate);
 }
 
-void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool isanon)
+static void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool isanon)
 {
     NNAstFuncCompiler fnc;
     prs->infunction = true;
@@ -3407,7 +3451,7 @@ void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool i
     prs->infunction = false;
 }
 
-void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken methodname, bool havenametoken, bool isstatic)
+static void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken methodname, bool havenametoken, bool isstatic)
 {
     size_t sn;
     int constant;
@@ -3445,7 +3489,7 @@ void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNAstToken
     nn_astemit_emitbyteandshort(prs, NEON_OP_MAKEMETHOD, constant);
 }
 
-bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
 {
     NNAstFuncCompiler fnc;
     (void)canassign;
@@ -3467,14 +3511,14 @@ bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
 }
 
 
-bool nn_astparser_ruleanonclass(NNAstParser* prs, bool canassign)
+static bool nn_astparser_ruleanonclass(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astparser_parseclassdeclaration(prs, false);
     return true;
 }
 
-bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest, bool* havenamedest, bool isstatic)
+static bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest, bool* havenamedest, bool isstatic)
 {
     int fieldconstant;
     NNAstToken fieldname;
@@ -3499,7 +3543,7 @@ bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest, bool* 
     return false;
 }
 
-void nn_astparser_parsefuncdecl(NNAstParser* prs)
+static void nn_astparser_parsefuncdecl(NNAstParser* prs)
 {
     int global;
     global = nn_astparser_parsevariable(prs, "function name expected");
@@ -3508,7 +3552,7 @@ void nn_astparser_parsefuncdecl(NNAstParser* prs)
     nn_astparser_definevariable(prs, global);
 }
 
-void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
+static void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
 {
     bool isstatic;
     bool havenametoken;
@@ -3613,7 +3657,7 @@ void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
     prs->compcontext = oldctx;
 }
 
-void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool isconst)
+static void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool isconst)
 {
     int global;
     int totalparsed;
@@ -3648,7 +3692,7 @@ void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool iscons
     }
 }
 
-void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
+static void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
 {
     if(prs->pstate->isrepl && prs->currentfunccompiler->scopedepth == 0)
     {
@@ -3707,7 +3751,7 @@ void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, bool semi)
  * }
  */
  
-void nn_astparser_parseforstmt(NNAstParser* prs)
+static void nn_astparser_parseforstmt(NNAstParser* prs)
 {
     int exitjump;
     int bodyjump;
@@ -3821,7 +3865,7 @@ void nn_astparser_parseforstmt(NNAstParser* prs)
  * @itern(x) function returns a false value. so the @iter(x) never needs
  * to return a false value
  */
-void nn_astparser_parseforeachstmt(NNAstParser* prs)
+static void nn_astparser_parseforeachstmt(NNAstParser* prs)
 {
     int citer;
     int citern;
@@ -3929,7 +3973,7 @@ void nn_astparser_parseforeachstmt(NNAstParser* prs)
  *    ...
  * }
  */
-void nn_astparser_parseswitchstmt(NNAstParser* prs)
+static void nn_astparser_parseswitchstmt(NNAstParser* prs)
 {
     int i;
     int length;
@@ -4048,7 +4092,7 @@ void nn_astparser_parseswitchstmt(NNAstParser* prs)
     nn_vm_stackpop(prs->pstate);
 }
 
-void nn_astparser_parseifstmt(NNAstParser* prs)
+static void nn_astparser_parseifstmt(NNAstParser* prs)
 {
     int elsejump;
     int thenjump;
@@ -4066,14 +4110,14 @@ void nn_astparser_parseifstmt(NNAstParser* prs)
     nn_astemit_patchjump(prs, elsejump);
 }
 
-void nn_astparser_parseechostmt(NNAstParser* prs)
+static void nn_astparser_parseechostmt(NNAstParser* prs)
 {
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_ECHO);
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsethrowstmt(NNAstParser* prs)
+static void nn_astparser_parsethrowstmt(NNAstParser* prs)
 {
     nn_astparser_parseexpression(prs);
     nn_astemit_emitinstruc(prs, NEON_OP_EXTHROW);
@@ -4081,7 +4125,7 @@ void nn_astparser_parsethrowstmt(NNAstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parseassertstmt(NNAstParser* prs)
+static void nn_astparser_parseassertstmt(NNAstParser* prs)
 {
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'assert'");
     nn_astparser_parseexpression(prs);
@@ -4099,7 +4143,7 @@ void nn_astparser_parseassertstmt(NNAstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsetrystmt(NNAstParser* prs)
+static void nn_astparser_parsetrystmt(NNAstParser* prs)
 {
     int address;
     int type;
@@ -4188,7 +4232,7 @@ void nn_astparser_parsetrystmt(NNAstParser* prs)
     nn_astemit_patchtry(prs, trybegins, type, address, finally);
 }
 
-void nn_astparser_parsereturnstmt(NNAstParser* prs)
+static void nn_astparser_parsereturnstmt(NNAstParser* prs)
 {
     prs->isreturning = true;
     /*
@@ -4218,7 +4262,7 @@ void nn_astparser_parsereturnstmt(NNAstParser* prs)
     prs->isreturning = false;
 }
 
-void nn_astparser_parsewhilestmt(NNAstParser* prs)
+static void nn_astparser_parsewhilestmt(NNAstParser* prs)
 {
     int exitjump;
     int surroundingloopstart;
@@ -4243,7 +4287,7 @@ void nn_astparser_parsewhilestmt(NNAstParser* prs)
     prs->innermostloopscopedepth = surroundingscopedepth;
 }
 
-void nn_astparser_parsedo_whilestmt(NNAstParser* prs)
+static void nn_astparser_parsedo_whilestmt(NNAstParser* prs)
 {
     int exitjump;
     int surroundingloopstart;
@@ -4269,7 +4313,7 @@ void nn_astparser_parsedo_whilestmt(NNAstParser* prs)
     prs->innermostloopscopedepth = surroundingscopedepth;
 }
 
-void nn_astparser_parsecontinuestmt(NNAstParser* prs)
+static void nn_astparser_parsecontinuestmt(NNAstParser* prs)
 {
     if(prs->innermostloopstart == -1)
     {
@@ -4285,7 +4329,7 @@ void nn_astparser_parsecontinuestmt(NNAstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_parsebreakstmt(NNAstParser* prs)
+static void nn_astparser_parsebreakstmt(NNAstParser* prs)
 {
     if(!prs->inswitch)
     {
@@ -4314,7 +4358,7 @@ void nn_astparser_parsebreakstmt(NNAstParser* prs)
     nn_astparser_consumestmtend(prs);
 }
 
-void nn_astparser_synchronize(NNAstParser* prs)
+static void nn_astparser_synchronize(NNAstParser* prs)
 {
     prs->panicmode = false;
     while(prs->currtoken.type != NEON_ASTTOK_EOF)
