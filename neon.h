@@ -855,12 +855,12 @@ struct NNValArray
 
 struct NNInstruction
 {
-    /* is this instruction an opcode? */
-    bool isop;
     /* opcode or value */
     uint8_t code;
+    /* is this instruction an opcode? */
+    uint8_t isop: 1;
     /* line corresponding to where this instruction was emitted */
-    uint8_t srcline;
+    uint8_t fromsourceline;
 };
 
 struct NNBlob

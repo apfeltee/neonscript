@@ -418,11 +418,15 @@ uint32_t nn_object_hashobject(NNObject* object)
                 uint32_t tmpptr;
                 NNObjFunction* fn;
                 fn = (NNObjFunction*)object;
-                tmpptr = (uint32_t)(uintptr_t)fn; 
-                tmpa = nn_util_hashdouble(fn->fnscriptfunc.arity);
-                tmpb = nn_util_hashdouble(fn->fnscriptfunc.blob.count);
-                tmpres = tmpa ^ tmpb;
-                tmpres = tmpres ^ tmpptr;
+                tmpptr = (uint32_t)(uintptr_t)fn;
+                #if 1
+                    tmpa = nn_util_hashdouble(fn->fnscriptfunc.arity);
+                    tmpb = nn_util_hashdouble(fn->fnscriptfunc.blob.count);
+                    tmpres = tmpa ^ tmpb;
+                    tmpres = tmpres ^ tmpptr;
+                #else
+                    tmpres = tmpptr;
+                #endif
                 return tmpres;
             }
             break;

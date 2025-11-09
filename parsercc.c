@@ -1459,7 +1459,7 @@ static void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
 {
     NNInstruction ins;
     ins.code = byte;
-    ins.srcline = line;
+    ins.fromsourceline = line;
     ins.isop = isop;
     nn_blob_push(nn_astparser_currentblob(prs), ins);
 }

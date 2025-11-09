@@ -140,7 +140,7 @@ NNValue nn_except_getstacktrace(NNState* state)
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-            line = function->fnscriptfunc.blob.instrucs[instruction].srcline;
+            line = function->fnscriptfunc.blob.instrucs[instruction].fromsourceline;
             physfile = "(unknown)";
             if(function->fnscriptfunc.module->physicalpath != NULL)
             {
@@ -361,7 +361,7 @@ NNInstruction nn_util_makeinst(bool isop, uint8_t code, int srcline)
     NNInstruction inst;
     inst.isop = isop;
     inst.code = code;
-    inst.srcline = srcline;
+    inst.fromsourceline = srcline;
     return inst;
 }
 
@@ -483,7 +483,7 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
     frame = &state->vmstate.framevalues[state->vmstate.framecount - 1];
     function = frame->closure->fnclosure.scriptfunc;
     instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-    line = function->fnscriptfunc.blob.instrucs[instruction].srcline;
+    line = function->fnscriptfunc.blob.instrucs[instruction].fromsourceline;
     fprintf(stderr, "RuntimeError: ");
     va_start(args, format);
     vfprintf(stderr, format, args);
@@ -499,7 +499,7 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-            fprintf(stderr, "    %s:%d -> ", nn_string_getdata(function->fnscriptfunc.module->physicalpath), function->fnscriptfunc.blob.instrucs[instruction].srcline);
+            fprintf(stderr, "    %s:%d -> ", nn_string_getdata(function->fnscriptfunc.module->physicalpath), function->fnscriptfunc.blob.instrucs[instruction].fromsourceline);
             if(function->name == NULL)
             {
                 fprintf(stderr, "<script>");
@@ -669,7 +669,7 @@ bool nn_state_makewithuserptr(NNState* pstate, void* userptr)
     */
     {
         pstate->stdoutprinter = nn_iostream_makeio(pstate, stdout, false);
-        pstate->stdoutprinter->shouldflush = true;
+        pstate->stdoutprinter->shouldflush = false;
         pstate->stderrprinter = nn_iostream_makeio(pstate, stderr, false);
         pstate->debugwriter = nn_iostream_makeio(pstate, stderr, false);
         pstate->debugwriter->shortenvalues = true;

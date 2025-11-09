@@ -1,6 +1,8 @@
 
 #include "oslib.h"
 
+extern int kill(int, int);
+
 char* osfn_utilstrndup(const char* src, size_t len)
 {
     char* buf;
@@ -355,8 +357,6 @@ int osfn_getpid()
     #endif
     return -1;
 }
-
-extern int kill(int, int);
 
 int osfn_kill(int pid, int code)
 {

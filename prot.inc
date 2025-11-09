@@ -1,9 +1,3 @@
-/* allocator.c */
-void *nn_allocator_create(void);
-void nn_allocator_destroy(void *msp);
-void *nn_allocuser_malloc(void *msp, size_t nsize);
-void *nn_allocuser_free(void *msp, void *ptr);
-void *nn_allocuser_realloc(void *msp, void *ptr, size_t nsize);
 /* core.c */
 NNValue nn_argcheck_vfail(NNArgCheck *ch, const char *srcfile, int srcline, const char *fmt, va_list va);
 NNValue nn_argcheck_fail(NNArgCheck *ch, const char *srcfile, int srcline, const char *fmt, ...);
@@ -470,7 +464,6 @@ bool nn_util_isinstanceof(NNObjClass *klass1, NNObjClass *expected);
 NNStatus nn_vm_runvm(NNState *state, int exitframe, NNValue *rv);
 int nn_nestcall_prepare(NNState *state, NNValue callable, NNValue mthobj, NNValue *callarr, int maxcallarr);
 bool nn_nestcall_callfunction(NNState *state, NNValue callable, NNValue thisval, NNValue *argv, size_t argc, NNValue *dest, bool fromoper);
-/* allocator.h */
 /* lino.h */
 /* mrx.h */
 /* neon.h */

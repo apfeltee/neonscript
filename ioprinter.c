@@ -1,31 +1,6 @@
 
 #include "neon.h"
 
-void nn_valtable_print(NNState* state, NNIOStream* pr, NNHashValTable* table, const char* name)
-{
-    size_t i;
-    size_t hcap;
-    NNHashValEntry* entry;
-    (void)state;
-    hcap = nn_valtable_capacity(table);
-    nn_iostream_printf(pr, "<HashTable of %s : {\n", name);
-    for(i = 0; i < hcap; i++)
-    {
-        entry = nn_valtable_entryatindex(table, i);
-        if(!nn_value_isnull(entry->key))
-        {
-            nn_iostream_printvalue(pr, entry->key, true, true);
-            nn_iostream_printf(pr, ": ");
-            nn_iostream_printvalue(pr, entry->value.value, true, true);
-            if(i != (hcap - 1))
-            {
-                nn_iostream_printf(pr, ",\n");
-            }
-        }
-    }
-    nn_iostream_printf(pr, "}>\n");
-}
-
 void nn_iostream_initvars(NNState* state, NNIOStream* pr, NNPrMode mode)
 {
     pr->pstate = state;
@@ -186,6 +161,14 @@ NNObjString* nn_iostream_copystring(NNIOStream* pr)
     return os;
 }
 
+void nn_iostream_flush(NNIOStream* pr)
+{
+    if(pr->shouldflush)
+    {
+        fflush(pr->handle);
+    }
+}
+
 bool nn_iostream_writestringl(NNIOStream* pr, const char* estr, size_t elen)
 {
     //fprintf(stderr, "writestringl: (%d) <<<%.*s>>>\n", elen, elen, estr);
@@ -196,10 +179,7 @@ bool nn_iostream_writestringl(NNIOStream* pr, const char* estr, size_t elen)
         if(pr->wrmode == NEON_PRMODE_FILE)
         {
             fwrite(estr, chlen, elen, pr->handle);
-            if(pr->shouldflush)
-            {
-                fflush(pr->handle);
-            }
+            nn_iostream_flush(pr);
         }
         else if(pr->wrmode == NEON_PRMODE_STRING)
         {
@@ -229,10 +209,7 @@ bool nn_iostream_writechar(NNIOStream* pr, int b)
     else if(pr->wrmode == NEON_PRMODE_FILE)
     {
         fputc(b, pr->handle);
-        if(pr->shouldflush)
-        {
-            fflush(pr->handle);
-        }
+        nn_iostream_flush(pr);
     }
     return true;
 }
@@ -338,10 +315,7 @@ bool nn_iostream_vwritefmt(NNIOStream* pr, const char* fmt, va_list va)
     else if(pr->wrmode == NEON_PRMODE_FILE)
     {
         vfprintf(pr->handle, fmt, va);
-        if(pr->shouldflush)
-        {
-            fflush(pr->handle);
-        }
+        nn_iostream_flush(pr);
     }
     return true;
 }
@@ -358,6 +332,31 @@ bool nn_iostream_printf(NNIOStream* pr, const char* fmt, ...)
     return b;
 }
 
+
+void nn_valtable_print(NNState* state, NNIOStream* pr, NNHashValTable* table, const char* name)
+{
+    size_t i;
+    size_t hcap;
+    NNHashValEntry* entry;
+    (void)state;
+    hcap = nn_valtable_capacity(table);
+    nn_iostream_printf(pr, "<HashTable of %s : {\n", name);
+    for(i = 0; i < hcap; i++)
+    {
+        entry = nn_valtable_entryatindex(table, i);
+        if(!nn_value_isnull(entry->key))
+        {
+            nn_iostream_printvalue(pr, entry->key, true, true);
+            nn_iostream_printf(pr, ": ");
+            nn_iostream_printvalue(pr, entry->value.value, true, true);
+            if(i != (hcap - 1))
+            {
+                nn_iostream_printf(pr, ",\n");
+            }
+        }
+    }
+    nn_iostream_printf(pr, "}>\n");
+}
 
 void nn_iostream_printfunction(NNIOStream* pr, NNObjFunction* func)
 {

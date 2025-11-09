@@ -230,13 +230,13 @@ int nn_dbg_printinstructionat(NNIOStream* pr, NNBlob* blob, int offset)
     uint8_t instruction;
     const char* opname;
     nn_iostream_printf(pr, "%08d ", offset);
-    if(offset > 0 && blob->instrucs[offset].srcline == blob->instrucs[offset - 1].srcline)
+    if(offset > 0 && blob->instrucs[offset].fromsourceline == blob->instrucs[offset - 1].fromsourceline)
     {
         nn_iostream_printf(pr, "       | ");
     }
     else
     {
-        nn_iostream_printf(pr, "%8d ", blob->instrucs[offset].srcline);
+        nn_iostream_printf(pr, "%8d ", blob->instrucs[offset].fromsourceline);
     }
     instruction = blob->instrucs[offset].code;
     opname = nn_dbg_op2str(instruction);

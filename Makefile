@@ -71,7 +71,7 @@ depfiles_all = $(objfiles_all:.o=.d)
 protofile = prot.inc
 
 # janky mess
-havecproto = 1
+havecproto = 0
 ifeq (, $(shell which cproto))
 havecproto = 0
 endif

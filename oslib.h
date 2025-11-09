@@ -3,7 +3,6 @@
 #define __nnoslib_header_h__
 
 #include <time.h>
-#include <signal.h>
 #include "neon.h"
 
 #if defined(__unix__) || defined(__linux__)
