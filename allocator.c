@@ -51,6 +51,9 @@ enum
 #if defined(NNALLOC_TARGET_WINDOWS)
     #define WIN32_LEAN_AND_MEAN
     #include <windows.h>
+    #if defined(_MSC_VER)
+        #include <intrin.h>
+    #endif
 #else
     #include <errno.h>
     #include <sys/mman.h>
@@ -85,132 +88,14 @@ enum
 
 #include "allocator.h"
 
-#if defined(__GNUC__)
-    #define nn_util_likely(x) __builtin_expect(!!(x), 1)
-    #define nn_util_unlikely(x) __builtin_expect(!!(x), 0)
-
-    #define lj_ffs(x) ((uint32_t)__builtin_ctz(x))
-    /* Don't ask ... */
-    #if defined(__INTEL_COMPILER) && (defined(__i386__) || defined(__x86_64__))
-        static uint32_t lj_fls(uint32_t x)
-        {
-            uint32_t r;
-            __asm__("bsrl %1, %0" : "=r"(r) : "rm"(x) : "cc");
-            return r;
-        }
+#if !defined(nn_util_likely)
+    #if defined(__GNUC__)
+        #define nn_util_likely(x) __builtin_expect(!!(x), 1)
+        #define nn_util_unlikely(x) __builtin_expect(!!(x), 0)
     #else
-        #define lj_fls(x) ((uint32_t)(__builtin_clz(x) ^ 31))
+        #define nn_util_likely(x) x
+        #define nn_util_unlikely(x) x
     #endif
-#elif defined(_MSC_VER)
-    #ifdef _M_PPC
-        unsigned int _CountLeadingZeros(long);
-        #pragma intrinsic(_CountLeadingZeros)
-        static uint32_t lj_fls(uint32_t x)
-        {
-            return _CountLeadingZeros(x) ^ 31;
-        }
-    #else
-        unsigned char _BitScanForward(uint32_t*, unsigned long);
-        unsigned char _BitScanReverse(uint32_t*, unsigned long);
-        #pragma intrinsic(_BitScanForward)
-        #pragma intrinsic(_BitScanReverse)
-
-        static uint32_t lj_ffs(uint32_t x)
-        {
-            uint32_t r;
-            _BitScanForward(&r, x);
-            return r;
-        }
-
-        static uint32_t lj_fls(uint32_t x)
-        {
-            uint32_t r;
-            _BitScanReverse(&r, x);
-            return r;
-        }
-    #endif
-#else
-    #define nn_util_likely(x) x
-    #define nn_util_unlikely(x) x
-
-    #if 1
-        #define lj_ffs(x) (ffs(x) - 1)
-    #else
-        static uint32_t lj_ffs(uint32_t x)
-        {
-            uint32_t r = 32;
-            if (!x)
-            {
-                return 0;
-            }
-            if (!(x & 0xffff0000u))
-            {
-                x <<= 16;
-                r -= 16;
-            }
-            if (!(x & 0xff000000u))
-            {
-                x <<= 8;
-                r -= 8;
-            }
-            if (!(x & 0xf0000000u))
-            {
-                x <<= 4;
-                r -= 4;
-            }
-            if (!(x & 0xc0000000u))
-            {
-                x <<= 2;
-                r -= 2;
-            }
-            if (!(x & 0x80000000u))
-            {
-                x <<= 1;
-                r -= 1;
-            }
-            return r;
-        }
-    #endif
-    static uint32_t lj_fls(uint32_t x)
-    {
-        uint32_t r = 32;
-        if (!x)
-        {
-            return 0;
-        }
-        if (!(x & 0xffff0000u))
-        {
-            x <<= 16;
-            r -= 16;
-        }
-        if (!(x & 0xff000000u))
-        {
-            x <<= 8;
-            r -= 8;
-        }
-        if (!(x & 0xf0000000u))
-        {
-            x <<= 4;
-            r -= 4;
-        }
-        if (!(x & 0xc0000000u))
-        {
-            x <<= 2;
-            r -= 2;
-        }
-        if (!(x & 0x80000000u))
-        {
-            x <<= 1;
-            r -= 1;
-        }
-        return r;
-    }
-#endif
-
-/* Optional defines. */
-#ifndef nn_util_likely
-    #define nn_util_likely(x) (x)
-    #define nn_util_unlikely(x) (x)
 #endif
 
 /* The bit mask value corresponding to NNALLOC_CONST_MALLOCALIGNMENT */
@@ -576,6 +461,36 @@ enum
     #endif
 #endif
 
+static int nn_allocator_nativebitscanreverse(uint64_t x)
+{
+    static const char nnalloc_debruijntable[64] = {
+        0,  47, 1,  56, 48, 27, 2,  60, 57, 49, 41, 37, 28, 16, 3,  61,
+        54, 58, 35, 52, 50, 42, 21, 44, 38, 32, 29, 23, 17, 11, 4,  62,
+        46, 55, 26, 59, 40, 36, 15, 53, 34, 51, 20, 43, 31, 22, 10, 45,
+        25, 39, 14, 33, 19, 30, 9,  24, 13, 18, 8,  12, 7,  6,  5,  63,
+    };
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    x |= x >> 32;
+    return nnalloc_debruijntable[(x * 0x03f79d71b4cb0a89) >> 58];
+}
+
+static int nn_allocator_nativebitscanforward(uint64_t x)
+{
+    uint32_t l, r;
+    x &= -x;
+    l = x | x >> 32;
+    r = !!(x >> 32), r <<= 1;
+    r += !!((l & 0xffff0000)), r <<= 1;
+    r += !!((l & 0xff00ff00)), r <<= 1;
+    r += !!((l & 0xf0f0f0f0)), r <<= 1;
+    r += !!((l & 0xcccccccc)), r <<= 1;
+    r += !!((l & 0xaaaaaaaa));
+    return r;
+}
 
 /* Return segment holding given address */
 static nnallocatorsegment_t* nn_allocator_segmentholding(nnallocatorstate_t* m, char* addr)
@@ -635,7 +550,7 @@ static int nn_allocator_hassegmentlink(nnallocatorstate_t* m, nnallocatorsegment
         }                                                                      \
         else                                                                   \
         {                                                                      \
-            unsigned int K = lj_fls(X);                                        \
+            unsigned int K = nn_allocator_nativebitscanreverse(X);                                        \
             I = (bindex_t)((K << 1) + ((sz >> (K + (NNALLOC_CONST_TREEBINSHIFT - 1)) & 1))); \
         }                                                                      \
     }
@@ -1261,7 +1176,7 @@ static void* nn_allocator_tmalloclarge(nnallocatorstate_t* m, size_t nb)
     { /* set t to root of next non-empty treebin */
         binmap_t leftbits = left_bits(nn_allocator_idx2bit(idx)) & m->treemap;
         if(leftbits != 0)
-            t = *nn_allocator_treebinat(m, lj_ffs(leftbits));
+            t = *nn_allocator_treebinat(m, nn_allocator_nativebitscanforward(leftbits));
     }
 
     while(t != 0)
@@ -1302,7 +1217,7 @@ static void* nn_allocator_tmallocsmall(nnallocatorstate_t* m, size_t nb)
     nnallocatortreechunk_t* v;
     nnallocatorplainchunk_t* r;
     size_t rsize;
-    bindex_t i = lj_ffs(m->treemap);
+    bindex_t i = nn_allocator_nativebitscanforward(m->treemap);
 
     v = t = *nn_allocator_treebinat(m, i);
     rsize = chunksize(t) - nb;
@@ -1406,7 +1321,7 @@ void* nn_allocuser_malloc(void* msp, size_t nsize)
                 nnallocatorplainchunk_t* r;
                 size_t rsize;
                 binmap_t leftbits = (smallbits << idx) & left_bits(nn_allocator_idx2bit(idx));
-                bindex_t i = lj_ffs(leftbits);
+                bindex_t i = nn_allocator_nativebitscanforward(leftbits);
                 b = nn_allocator_smallbinat(ms, i);
                 p = b->fd;
                 nn_allocator_unlinkfirstsmallchunk(ms, b, p, i);
