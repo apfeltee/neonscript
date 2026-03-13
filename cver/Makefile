@@ -26,24 +26,13 @@ allunflags = $(unflags)
 #allunflags = $(unflags) 
 
 WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self  $(allunflags)
-WFLAGS += -Wmaybe-uninitialized  -Wnull-dereference -Wduplicated-cond
-WFLAGS +=  -Wwrite-strings
-
-## very verbose
-#WFLAGS += -Wconversion
-
-## will complain about computed gotos
-#WFLAGS += -pedantic
-
-## also very verbose
-#WFLAGS += -Weffc++
-
+#WFLAGS += -Wmaybe-uninitialized -Wjump-misses-init
+#WFLAGS += -ansi -pedantic
 #WFLAGS = -w
 
 
 OPTFLAGS = -Og
 #OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
-
 
 ## empty by default
 EXTRAFLAGS =
@@ -55,40 +44,38 @@ EXTRAFLAGS =
 #*** WARNING ***
 # causes quite a steep use of memory!
 #EXTRAFLAGS += -fsanitize=undefined
+
 #EXTRAFLAGS += -fsanitize=memory
 #EXTRAFLAGS += -fsanitize=address
 #EXTRAFLAGS += -fstack-protector-all -ftrapv
-#export COLLECT_NO_DEMANGLE=0
 
 ### WARNING: can be quite verbose! prints unused sections, giving a better clue which functions can be removed.
 #EXTRAFLAGS += -fdata-sections -ffunction-sections -Wl,--gc-sections -Wl,--print-gc-sections
 
-CXX = g++ -std=c++20 $(WFLAGS) $(EXTRAFLAGS)
-#CXX = clang++ -gdwarf-4 -std=c++2c -ferror-limit=1000 $(WFLAGS) $(EXTRAFLAGS)
-
+#CC = clang++ -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
+#CC = g++ $(WFLAGS) $(EXTRAFLAGS)
 CC = gcc $(WFLAGS) $(EXTRAFLAGS)
+#CC = clang -gdwarf-4 $(WFLAGS) $(EXTRAFLAGS)
 #CC = tcc $(WFLAGS) $(EXTRAFLAGS)
-DEPCC = gcc
 
 #CFLAGS = $(INCFLAGS) -Ofast -march=native -flto -ffast-math -funroll-loops
 CFLAGS = $(INCFLAGS) $(OPTFLAGS) -g3 -ggdb3
 LDFLAGS = -ldl -lm
 target = run
 
-srcfiles_all = $(wildcard *.cpp)
+srcfiles_all = $(wildcard *.c)
 headerfiles_all = $(wildcard *.h)
 
-objfiles_all = $(srcfiles_all:.cpp=.o)
+objfiles_all = $(srcfiles_all:.c=.o)
 depfiles_all = $(objfiles_all:.o=.d)
 protofile = prot.inc
 
 # janky mess
-havecproto = 0
+havecproto = 1
 ifeq (, $(shell which cproto))
 havecproto = 0
 endif
 
-.PHONY: all
 all: $(protofile) $(target)
 
 ## dear god what a kludge
@@ -102,18 +89,20 @@ $(protofile): $(srcfiles_all)
 endif
 
 $(target): $(objfiles_all)
-	$(CXX) -o $(target) $(objfiles_all) $(LDFLAGS)
+	@echo "LINK $@"
+	@$(CC) -o $@ $^ $(LDFLAGS)
 
 -include $(depfiles_all)
 
 # rule to generate a dep file by using the C preprocessor
 # (see man cpp for details on the -MM and -MT options)
-%.d: %.cpp
-	$(DEPCC) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
+%.d: %.c
+	@echo "DEP $@ -> $<"
+	@$(CC) $(CFLAGS) $< -MM -MT $(@:.d=.o) -MF $@
 
-%.o: %.cpp
-	$(CXX) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
-
+%.o: %.c
+	@echo "CC $< -> $@"
+	@$(CC) $(CFLAGS) -c $(DBGFLAGS) -o $@ $<
 
 .PHONY: clean
 clean:
@@ -128,4 +117,3 @@ distclean: cleandep clean
 
 .PHONY: rebuild
 rebuild: clean cleandep $(target)
-

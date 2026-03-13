@@ -32,21 +32,6 @@
 #define nn_strbuf_boundscheckinsert(sb, pos) nn_strutil_callboundscheckinsert(sb, pos, __FILE__, __LINE__)
 #define nn_strbuf_boundscheckreadrange(sb, start, len) nn_strutil_callboundscheckreadrange(sb, start, len, __FILE__, __LINE__)
 
-class NNStringBuffer;
-bool nn_strbuf_appendstrn(NNStringBuffer* sb, const char* str, size_t len);
-
-
-class NNStringBuffer
-{
-    public:
-        uint8_t isintern;
-        /* capacity should be >= length+1 to allow for \0 */
-        size_t capacity;
-        size_t storedlength;
-        char* longstrdata;
-};
-
-
 size_t nn_strutil_rndup2pow64(uint64_t x)
 {
     /* long long >=64 bits guaranteed in C99 */
@@ -288,7 +273,7 @@ void nn_strutil_callboundscheckreadrange(NNStringBuffer* sb, size_t start, size_
     if(start + len > sb->storedlength)
     {
         fprintf(stderr,"%s:%i: - out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n",
-                file, line, (long)start, (long)len, (long)sb->storedlength, (int)STRBUF_MIN(5, sb->storedlength), sb->longstrdata, sb->storedlength > 5 ? "..." : "");
+                file, line, (long)start, (long)len, (long)sb->storedlength, (int)STRBUF_MIN(5, sb->storedlength), nn_strbuf_data(sb), sb->storedlength > 5 ? "..." : "");
         errno = EDOM;
         nn_strbuf_exitonerror();
     }

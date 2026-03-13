@@ -143,19 +143,11 @@ LICENSE
 
 #if !defined(NEON_INLINE)
     #if defined(__STRICT_ANSI__)
-        #define NEON_INLINE
-        #define NEON_FORCEINLINE
-        #define inline
+        #define NEON_INLINE static
     #else
-        #define NEON_INLINE inline
-        #if defined(__GNUC__) || defined(__TINYC__)
-            #define NEON_FORCEINLINE __attribute__((always_inline)) inline
-        #else
-            #define NEON_FORCEINLINE inline
-        #endif
+        #define NEON_INLINE static inline
     #endif
 #endif
-
 
 #if !defined(MRX_CONFIG_VERBOSE)
     #define MRX_CONFIG_VERBOSE 0

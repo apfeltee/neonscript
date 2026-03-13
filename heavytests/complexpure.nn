@@ -62,7 +62,7 @@ function mandel()
     var n;
     var c;
     var z;
-    var start_x = Complex(-2.100000000000000088817841970012523233890533447265625e+0, 0.0);
+    var start_x = Complex(-2.1888, 0.0);
     var end_x = Complex(1.0e+0, 0.0);
     var start_y = Complex(-1.25e+0, 0.0);
     var step_x = ((end_x - start_x) / Complex(1.5e+2, 0.0));

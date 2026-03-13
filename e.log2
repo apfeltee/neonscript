@@ -1,0 +1,2702 @@
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/arr1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/arr1.nn"])
+==1967== Memcheck, a memory error detector
+==1967== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1967== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1967== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/arr1.nn
+==1967== 
+a:count=3
+a      =["red","green","blue"]
+a now  =["red","green","blue","yellow","purple",42,889]
+a[1]   =green
+after...?
+a inc  =red|green|blue|yellow|purple|43|889
+456
+==1967== 
+==1967== HEAP SUMMARY:
+==1967==     in use at exit: 0 bytes in 0 blocks
+==1967==   total heap usage: 940 allocs, 940 frees, 320,760 bytes allocated
+==1967== 
+==1967== All heap blocks were freed -- no leaks are possible
+==1967== 
+==1967== For lists of detected and suppressed errors, rerun with: -s
+==1967== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/arr2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/arr2.nn"])
+==1968== Memcheck, a memory error detector
+==1968== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1968== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1968== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/arr2.nn
+==1968== 
+before: {"jim": ["red",889,"blue"]}
+after index: ["red",890,"blue"]
+after: {"jim": ["red",890,"blue"]}
+==1968== 
+==1968== HEAP SUMMARY:
+==1968==     in use at exit: 0 bytes in 0 blocks
+==1968==   total heap usage: 922 allocs, 922 frees, 319,003 bytes allocated
+==1968== 
+==1968== All heap blocks were freed -- no leaks are possible
+==1968== 
+==1968== For lists of detected and suppressed errors, rerun with: -s
+==1968== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/base64.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/base64.nn"])
+==1969== Memcheck, a memory error detector
+==1969== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1969== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1969== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/base64.nn
+==1969== 
+encoded = TGVhcm5pbmcgSmF2YVNjcmlwd/
+decoded = Learning JavaScripw��
+==1969== 
+==1969== HEAP SUMMARY:
+==1969==     in use at exit: 0 bytes in 0 blocks
+==1969==   total heap usage: 1,032 allocs, 1,032 frees, 335,212 bytes allocated
+==1969== 
+==1969== All heap blocks were freed -- no leaks are possible
+==1969== 
+==1969== For lists of detected and suppressed errors, rerun with: -s
+==1969== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/bf.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/bf.nn"])
+==1970== Memcheck, a memory error detector
+==1970== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1970== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1970== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/bf.nn
+==1970== 
+bfsource: ++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.
+Hello World!
+==1970== 
+==1970== HEAP SUMMARY:
+==1970==     in use at exit: 0 bytes in 0 blocks
+==1970==   total heap usage: 987 allocs, 987 frees, 347,088 bytes allocated
+==1970== 
+==1970== All heap blocks were freed -- no leaks are possible
+==1970== 
+==1970== For lists of detected and suppressed errors, rerun with: -s
+==1970== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/bfc.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/bfc.nn"])
+==1971== Memcheck, a memory error detector
+==1971== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1971== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1971== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/bfc.nn
+==1971== 
+fpath=null
+src=++++++++[>++++[>++>+++>+++>+<<<<-]>+>+>->>+[<]<-]>>.>---.+++++++..+++.>>.<-.<.+++.------.--------.>>+.>++.
+compiled 59 instructions. now resolving jumps...
+finished compiling!
+running 59 instructions...
+Hello World!
+==1971== 
+==1971== HEAP SUMMARY:
+==1971==     in use at exit: 0 bytes in 0 blocks
+==1971==   total heap usage: 1,335 allocs, 1,335 frees, 1,470,795 bytes allocated
+==1971== 
+==1971== All heap blocks were freed -- no leaks are possible
+==1971== 
+==1971== For lists of detected and suppressed errors, rerun with: -s
+==1971== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees1.nn"])
+==1972== Memcheck, a memory error detector
+==1972== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1972== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1972== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/bintrees1.nn
+==1972== 
+Min depth : 4, max depth : 8 and stretched depth : 9
+Starting benchmark...
+Check 1 : 18
+Number of trees : 512
+Current running depth : 4
+Check 3 : 4096
+Number of trees : 128
+Current running depth : 6
+Check 4 : 1536
+Long lived tree depth : 8
+Check 4 : 16
+Benchmarking finished (created 33662 Trees in total)
+==1972== 
+==1972== HEAP SUMMARY:
+==1972==     in use at exit: 0 bytes in 0 blocks
+==1972==   total heap usage: 169,310 allocs, 169,310 frees, 37,501,742 bytes allocated
+==1972== 
+==1972== All heap blocks were freed -- no leaks are possible
+==1972== 
+==1972== For lists of detected and suppressed errors, rerun with: -s
+==1972== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/bintrees2.nn"])
+==1973== Memcheck, a memory error detector
+==1973== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1973== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1973== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/bintrees2.nn
+==1973== 
+stretch tree of depth:9 check:-1
+num trees:512, depth:4, checkme:-512
+num trees:128, depth:6, checkme:-128
+num trees:32, depth:8, checkme:-32
+long lived tree of depth:8, check:-1, elapsed:0
+==1973== 
+==1973== HEAP SUMMARY:
+==1973==     in use at exit: 0 bytes in 0 blocks
+==1973==   total heap usage: 251,069 allocs, 251,069 frees, 55,557,083 bytes allocated
+==1973== 
+==1973== All heap blocks were freed -- no leaks are possible
+==1973== 
+==1973== For lists of detected and suppressed errors, rerun with: -s
+==1973== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/bogus.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/bogus.nn"])
+==1974== Memcheck, a memory error detector
+==1974== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1974== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1974== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/bogus.nn
+==1974== 
+hello world
+hello world
+==1974== 
+==1974== HEAP SUMMARY:
+==1974==     in use at exit: 0 bytes in 0 blocks
+==1974==   total heap usage: 907 allocs, 907 frees, 316,405 bytes allocated
+==1974== 
+==1974== All heap blocks were freed -- no leaks are possible
+==1974== 
+==1974== For lists of detected and suppressed errors, rerun with: -s
+==1974== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/breakfor.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/breakfor.nn"])
+==1975== Memcheck, a memory error detector
+==1975== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1975== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1975== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/breakfor.nn
+==1975== 
+i=56, j=48
+==1975== 
+==1975== HEAP SUMMARY:
+==1975==     in use at exit: 0 bytes in 0 blocks
+==1975==   total heap usage: 910 allocs, 910 frees, 318,105 bytes allocated
+==1975== 
+==1975== All heap blocks were freed -- no leaks are possible
+==1975== 
+==1975== For lists of detected and suppressed errors, rerun with: -s
+==1975== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/cbf.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/cbf.nn"])
+==1976== Memcheck, a memory error detector
+==1976== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1976== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1976== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/cbf.nn
+==1976== 
+++++++[>++++++++++++>+++++++++++++++++>+++++>+++++++++++++++>++<<<<<-]><<<<<.<<<<-.<<<<+++++++.<<<<.<<<<+++.<<<++.<<---.<<<<.<<<<+++.<<<<------.<<<<--------.<<<+.<--.
+==1976== 
+==1976== HEAP SUMMARY:
+==1976==     in use at exit: 0 bytes in 0 blocks
+==1976==   total heap usage: 1,547 allocs, 1,547 frees, 390,742 bytes allocated
+==1976== 
+==1976== All heap blocks were freed -- no leaks are possible
+==1976== 
+==1976== For lists of detected and suppressed errors, rerun with: -s
+==1976== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/ceval.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/ceval.nn"])
+==1977== Memcheck, a memory error detector
+==1977== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1977== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1977== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/ceval.nn
+==1977== 
+OK  : (0x777 & 0xFF) = 119 (119)
+OK  : (1234 & 5678) = 1026 (1026)
+OK  : (12 << 48) = 786432 (786432)
+OK  : (233 >> 2) = 58 (58)
+OK  : (12 | 48) = 60 (60)
+OK  : (55 ^ 48) = 7 (7)
+all good
+==1977== 
+==1977== HEAP SUMMARY:
+==1977==     in use at exit: 0 bytes in 0 blocks
+==1977==   total heap usage: 1,033 allocs, 1,033 frees, 340,115 bytes allocated
+==1977== 
+==1977== All heap blocks were freed -- no leaks are possible
+==1977== 
+==1977== For lists of detected and suppressed errors, rerun with: -s
+==1977== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/class.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/class.nn"])
+==1978== Memcheck, a memory error detector
+==1978== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1978== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1978== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/class.nn
+==1978== 
+3
+10
+scone with berries and cream
+fntyp: 5
+Person is shouting
+2001
+welcome Richard. You are 15 years old
+welcome Jane. You are 25 years old
+A
+Name is set
+hello
+hello again
+170
+Name is set
+==1978== 
+==1978== HEAP SUMMARY:
+==1978==     in use at exit: 0 bytes in 0 blocks
+==1978==   total heap usage: 1,175 allocs, 1,175 frees, 359,838 bytes allocated
+==1978== 
+==1978== All heap blocks were freed -- no leaks are possible
+==1978== 
+==1978== For lists of detected and suppressed errors, rerun with: -s
+==1978== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/continue.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/continue.nn"])
+==1979== Memcheck, a memory error detector
+==1979== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1979== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1979== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/continue.nn
+==1979== 
+t1: really simple test ...
+t1: 1
+t1: 2
+t1: 3
+t1: 4
+t1: 5
+t1: done!
+t2: simple test ...
+t2: printing three
+t2: done!
+t3: other test ...
+t3: 4!
+t3: 3!
+t4: zero
+t4: scopes ok
+t5: 0
+t5: 1
+t5: 2
+==1979== 
+==1979== HEAP SUMMARY:
+==1979==     in use at exit: 0 bytes in 0 blocks
+==1979==   total heap usage: 987 allocs, 987 frees, 330,391 bytes allocated
+==1979== 
+==1979== All heap blocks were freed -- no leaks are possible
+==1979== 
+==1979== For lists of detected and suppressed errors, rerun with: -s
+==1979== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/ctest.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/ctest.nn"])
+==1980== Memcheck, a memory error detector
+==1980== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1980== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1980== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/ctest.nn
+==1980== 
+IMPORTIMPORT: name='colors'
+import: trying '/mnt/c/cloud/local/dev/langs/neon/colors.nn' ... does not exist
+import: trying 'mods/colors.nn' ... found!
+loading module from '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'
+IMPORTIMPORT: mod='0x4e7d940'
+colors=<module 'colors' at '/mnt/c/cloud/local/dev/langs/neon/mods/colors.nn'>
+v=32
+[32mSuccessful![0m==1980== 
+==1980== HEAP SUMMARY:
+==1980==     in use at exit: 0 bytes in 0 blocks
+==1980==   total heap usage: 1,480 allocs, 1,480 frees, 481,824 bytes allocated
+==1980== 
+==1980== All heap blocks were freed -- no leaks are possible
+==1980== 
+==1980== For lists of detected and suppressed errors, rerun with: -s
+==1980== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/dir.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/dir.nn"])
+==1981== Memcheck, a memory error detector
+==1981== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1981== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1981== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/dir.nn
+==1981== 
+IMPORTIMPORT: name='os'
+IMPORTIMPORT: mod='0x4e71050'
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/args.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/colors.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/array.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/exception.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/index.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/interface.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/parser.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/scanner.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/ast/token.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/base64.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/bcrypt.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/convert.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/entities.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/format.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/html.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/index.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/lexer.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/parser.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/html/tags.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/client.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/exception.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/index.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/request.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/response.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/server.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/status.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/http/_process.bl
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/iters.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/math.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/mime.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/process.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/reflect.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/struct.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/types.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/url.nn
+/mnt/c/cloud/local/dev/langs/neon/eg/../mods/_unsupported/zip.nn
+==1981== 
+==1981== HEAP SUMMARY:
+==1981==     in use at exit: 0 bytes in 0 blocks
+==1981==   total heap usage: 1,219 allocs, 1,219 frees, 505,179 bytes allocated
+==1981== 
+==1981== All heap blocks were freed -- no leaks are possible
+==1981== 
+==1981== For lists of detected and suppressed errors, rerun with: -s
+==1981== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/expr.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/expr.nn"])
+==1982== Memcheck, a memory error detector
+==1982== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1982== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1982== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/expr.nn
+==1982== 
+input:
+((data "quoted data with escaped \"" 123 4.5 "14")
+ (data (!@# (4.5) "(more" "data)")))
+
+output:
+[["data","quoted data with escaped \\"," 123 4.5 ",14],["data",["!@#",[4.5],"(more","data)"]]]
+
+round trip:
+( ( "data" "quoted data with escaped \\" " 123 4.5 " 14 ) ( "data" ( "!@#" ( 4.5 ) "(more" "data)" ) ) )
+
+==1982== 
+==1982== HEAP SUMMARY:
+==1982==     in use at exit: 0 bytes in 0 blocks
+==1982==   total heap usage: 1,712 allocs, 1,712 frees, 518,396 bytes allocated
+==1982== 
+==1982== All heap blocks were freed -- no leaks are possible
+==1982== 
+==1982== For lists of detected and suppressed errors, rerun with: -s
+==1982== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/extclass.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/extclass.nn"])
+==1983== Memcheck, a memory error detector
+==1983== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1983== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1983== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/extclass.nn
+==1983== 
+46
+QURKED(foo)
+<<45 / gabba / gabba(goo)>>
+==1983== 
+==1983== HEAP SUMMARY:
+==1983==     in use at exit: 0 bytes in 0 blocks
+==1983==   total heap usage: 1,005 allocs, 1,005 frees, 328,530 bytes allocated
+==1983== 
+==1983== All heap blocks were freed -- no leaks are possible
+==1983== 
+==1983== For lists of detected and suppressed errors, rerun with: -s
+==1983== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/fib.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/fib.nn"])
+==1984== Memcheck, a memory error detector
+==1984== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1984== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1984== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/fib.nn
+==1984== 
+fib(12): 144; elapsed: 1099
+==1984== 
+==1984== HEAP SUMMARY:
+==1984==     in use at exit: 0 bytes in 0 blocks
+==1984==   total heap usage: 922 allocs, 922 frees, 320,600 bytes allocated
+==1984== 
+==1984== All heap blocks were freed -- no leaks are possible
+==1984== 
+==1984== For lists of detected and suppressed errors, rerun with: -s
+==1984== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/foo.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/foo.nn"])
+==1985== Memcheck, a memory error detector
+==1985== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1985== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1985== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/foo.nn
+==1985== 
+this.shit = 42
+first = 44
+args = [55,66]
+==1985== 
+==1985== HEAP SUMMARY:
+==1985==     in use at exit: 0 bytes in 0 blocks
+==1985==   total heap usage: 943 allocs, 943 frees, 323,780 bytes allocated
+==1985== 
+==1985== All heap blocks were freed -- no leaks are possible
+==1985== 
+==1985== For lists of detected and suppressed errors, rerun with: -s
+==1985== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/fplisp.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/fplisp.nn"])
+==1986== Memcheck, a memory error detector
+==1986== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1986== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1986== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/fplisp.nn
+==1986== 
+fp_apply: +
+fp_apply: eq
+evaled=true
+t
+==1986== 
+==1986== HEAP SUMMARY:
+==1986==     in use at exit: 0 bytes in 0 blocks
+==1986==   total heap usage: 1,610 allocs, 1,610 frees, 460,121 bytes allocated
+==1986== 
+==1986== All heap blocks were freed -- no leaks are possible
+==1986== 
+==1986== For lists of detected and suppressed errors, rerun with: -s
+==1986== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/gencolors.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/gencolors.nn"])
+==1987== Memcheck, a memory error detector
+==1987== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1987== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1987== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/gencolors.nn
+==1987== 
+color 0: [0mhello and goodbye![0m
+color 1: [1mhello and goodbye![0m
+color 2: [2mhello and goodbye![0m
+color 3: [3mhello and goodbye![0m
+color 4: [4mhello and goodbye![0m
+color 5: [5mhello and goodbye![0m
+color 6: [6mhello and goodbye![0m
+color 7: [7mhello and goodbye![0m
+color 8: [8mhello and goodbye![0m
+color 9: [9mhello and goodbye![0m
+color 10: [10mhello and goodbye![0m
+color 11: [11mhello and goodbye![0m
+color 12: [12mhello and goodbye![0m
+color 13: [13mhello and goodbye![0m
+color 14: [14mhello and goodbye![0m
+color 15: [15mhello and goodbye![0m
+color 16: [16mhello and goodbye![0m
+color 17: [17mhello and goodbye![0m
+color 18: [18mhello and goodbye![0m
+color 19: [19mhello and goodbye![0m
+color 20: [20mhello and goodbye![0m
+color 21: [21mhello and goodbye![0m
+color 22: [22mhello and goodbye![0m
+color 23: [23mhello and goodbye![0m
+color 24: [24mhello and goodbye![0m
+color 25: [25mhello and goodbye![0m
+color 26: [26mhello and goodbye![0m
+color 27: [27mhello and goodbye![0m
+color 28: [28mhello and goodbye![0m
+color 29: [29mhello and goodbye![0m
+color 30: [30mhello and goodbye![0m
+color 31: [31mhello and goodbye![0m
+color 32: [32mhello and goodbye![0m
+color 33: [33mhello and goodbye![0m
+color 34: [34mhello and goodbye![0m
+color 35: [35mhello and goodbye![0m
+color 36: [36mhello and goodbye![0m
+color 37: [37mhello and goodbye![0m
+color 38: [38mhello and goodbye![0m
+color 39: [39mhello and goodbye![0m
+color 40: [40mhello and goodbye![0m
+color 41: [41mhello and goodbye![0m
+color 42: [42mhello and goodbye![0m
+color 43: [43mhello and goodbye![0m
+color 44: [44mhello and goodbye![0m
+color 45: [45mhello and goodbye![0m
+color 46: [46mhello and goodbye![0m
+color 47: [47mhello and goodbye![0m
+color 48: [48mhello and goodbye![0m
+color 49: [49mhello and goodbye![0m
+color 50: [50mhello and goodbye![0m
+color 51: [51mhello and goodbye![0m
+color 52: [52mhello and goodbye![0m
+color 53: [53mhello and goodbye![0m
+color 54: [54mhello and goodbye![0m
+color 55: [55mhello and goodbye![0m
+color 56: [56mhello and goodbye![0m
+color 57: [57mhello and goodbye![0m
+color 58: [58mhello and goodbye![0m
+color 59: [59mhello and goodbye![0m
+color 60: [60mhello and goodbye![0m
+color 61: [61mhello and goodbye![0m
+color 62: [62mhello and goodbye![0m
+color 63: [63mhello and goodbye![0m
+color 64: [64mhello and goodbye![0m
+color 65: [65mhello and goodbye![0m
+color 66: [66mhello and goodbye![0m
+color 67: [67mhello and goodbye![0m
+color 68: [68mhello and goodbye![0m
+color 69: [69mhello and goodbye![0m
+color 70: [70mhello and goodbye![0m
+color 71: [71mhello and goodbye![0m
+color 72: [72mhello and goodbye![0m
+color 73: [73mhello and goodbye![0m
+color 74: [74mhello and goodbye![0m
+color 75: [75mhello and goodbye![0m
+color 76: [76mhello and goodbye![0m
+color 77: [77mhello and goodbye![0m
+color 78: [78mhello and goodbye![0m
+color 79: [79mhello and goodbye![0m
+==1987== 
+==1987== HEAP SUMMARY:
+==1987==     in use at exit: 0 bytes in 0 blocks
+==1987==   total heap usage: 2,764 allocs, 2,764 frees, 608,474 bytes allocated
+==1987== 
+==1987== All heap blocks were freed -- no leaks are possible
+==1987== 
+==1987== For lists of detected and suppressed errors, rerun with: -s
+==1987== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/heart.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/heart.nn"])
+==1988== Memcheck, a memory error detector
+==1988== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1988== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1988== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/heart.nn
+==1988== 
+                                                            
+                                                            
+                                                            
+                *********           *********               
+            *****************   *****************           
+          ****************************************          
+         *******************************************        
+        *********************************************       
+        *********************************************       
+        *********************************************       
+        *********************************************       
+        *********************************************       
+        *********************************************       
+         *******************************************        
+          *****************************************         
+          ****************************************          
+            *************************************           
+             ***********************************            
+              *********************************             
+                *****************************               
+                  *************************                 
+                    *********************                   
+                       ***************                      
+                          *********                         
+                             ***                            
+                                                            
+                                                            
+                                                            
+                                                            
+                                                            
+==1988== 
+==1988== HEAP SUMMARY:
+==1988==     in use at exit: 0 bytes in 0 blocks
+==1988==   total heap usage: 908 allocs, 908 frees, 318,190 bytes allocated
+==1988== 
+==1988== All heap blocks were freed -- no leaks are possible
+==1988== 
+==1988== For lists of detected and suppressed errors, rerun with: -s
+==1988== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/hello.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/hello.nn"])
+==1989== Memcheck, a memory error detector
+==1989== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1989== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1989== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/hello.nn
+==1989== 
+hello world!
+1==1989== 
+==1989== HEAP SUMMARY:
+==1989==     in use at exit: 0 bytes in 0 blocks
+==1989==   total heap usage: 904 allocs, 904 frees, 316,686 bytes allocated
+==1989== 
+==1989== All heap blocks were freed -- no leaks are possible
+==1989== 
+==1989== For lists of detected and suppressed errors, rerun with: -s
+==1989== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/html.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/html.nn"])
+==1990== Memcheck, a memory error detector
+==1990== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1990== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1990== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/html.nn
+==1990== 
+IMPORTIMPORT: name='os'
+IMPORTIMPORT: mod='0x4e71050'
+Status: 200
+Content-Type: text/html
+
+<html><head><title>dummy document (full of lies)</title></head><body><h1>files: </h1><ul><li><a href="web.cgi?f=foo.exe">foo.exe</a></li>
+<li><a href="web.cgi?f=stuff.mov">stuff.mov</a></li>
+<li><a href="web.cgi?f=source.f90">source.f90</a></li>
+<li><a href="web.cgi?f=runme.vbs">runme.vbs</a></li>
+<li><a href="web.cgi?f=twitter.php">twitter.php</a></li>
+<li><a href="web.cgi?f=facebook.java">facebook.java</a></li>
+</ul></body></html>==1990== 
+==1990== HEAP SUMMARY:
+==1990==     in use at exit: 0 bytes in 0 blocks
+==1990==   total heap usage: 1,689 allocs, 1,689 frees, 404,634 bytes allocated
+==1990== 
+==1990== All heap blocks were freed -- no leaks are possible
+==1990== 
+==1990== For lists of detected and suppressed errors, rerun with: -s
+==1990== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/io.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/io.nn"])
+==1991== Memcheck, a memory error detector
+==1991== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1991== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1991== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/io.nn
+==1991== 
+raw: <file at /mnt/c/cloud/local/dev/langs/neon/eg/../Makefile in mode rb>
+[1]:  
+[2]: INCFLAGS = 
+[3]:  
+[4]: unflags = \ 
+[19]:  
+[20]:  
+[23]:  
+[24]:  
+[25]: allunflags = $(unflags) 
+[27]:  
+[28]: WFLAGS = -Wall -Wextra -Wshadow -Wpointer-arith -Wuninitialized -Winit-self  $(allunflags) 
+[29]: WFLAGS += -Wmaybe-uninitialized  -Wnull-dereference -Wduplicated-cond 
+[30]: WFLAGS +=  -Wwrite-strings 
+[31]:  
+[34]:  
+[37]:  
+[40]:  
+[42]:  
+[43]:  
+[44]: OPTFLAGS = -Og 
+[46]:  
+[47]:  
+[49]: EXTRAFLAGS = 
+[52]:  
+[54]:  
+[62]:  
+[65]:  
+[66]: CXX = g++ -std=c++20 $(WFLAGS) $(EXTRAFLAGS) 
+[68]:  
+[69]: CC = gcc $(WFLAGS) $(EXTRAFLAGS) 
+[71]: DEPCC = gcc 
+[72]:  
+[74]: CFLAGS = $(INCFLAGS) $(OPTFLAGS) -g3 -ggdb3 
+[75]: LDFLAGS = -ldl -lm 
+[76]: target = run 
+[77]:  
+[78]: srcfiles_all = $(wildcard *.cpp) 
+[79]: headerfiles_all = $(wildcard *.h) 
+[80]:  
+[81]: objfiles_all = $(srcfiles_all:.cpp=.o) 
+[82]: depfiles_all = $(objfiles_all:.o=.d) 
+[83]: protofile = prot.inc 
+[84]:  
+[86]: havecproto = 0 
+[87]: ifeq (, $(shell which cproto)) 
+[88]: havecproto = 0 
+[89]: endif 
+[90]:  
+[91]: .PHONY: all 
+[92]: all: $(protofile) $(target) 
+[93]:  
+[95]: ifeq (1, $(havecproto)) 
+[96]: $(protofile): $(srcfiles_all) $(headerfiles_all) 
+[100]: else 
+[101]: $(protofile): $(srcfiles_all) 
+[102]: endif 
+[103]:  
+[104]: $(target): $(objfiles_all) 
+[106]:  
+[107]: -include $(depfiles_all) 
+[108]:  
+[111]: %.d: %.cpp 
+[113]:  
+[114]: %.o: %.cpp 
+[116]:  
+[117]:  
+[118]: .PHONY: clean 
+[119]: clean: 
+[121]:  
+[122]: .PHONY: cleandep 
+[123]: cleandep: 
+[125]:  
+[126]: .PHONY: distclean 
+[127]: distclean: cleandep clean 
+[128]:  
+[129]: .PHONY: rebuild 
+[130]: rebuild: clean cleandep $(target) 
+[131]:  
+[132]: 
+==1991== 
+==1991== HEAP SUMMARY:
+==1991==     in use at exit: 0 bytes in 0 blocks
+==1991==   total heap usage: 1,153 allocs, 1,153 frees, 363,922 bytes allocated
+==1991== 
+==1991== All heap blocks were freed -- no leaks are possible
+==1991== 
+==1991== For lists of detected and suppressed errors, rerun with: -s
+==1991== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/iter.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/iter.nn"])
+==1992== Memcheck, a memory error detector
+==1992== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1992== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1992== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/iter.nn
+==1992== 
+k=foo, v=bar
+k=red, v=color
+i=0
+i=1
+i=2
+i=3
+i=4
+i=5
+i=6
+i=7
+i=8
+i=9
+==1992== 
+==1992== HEAP SUMMARY:
+==1992==     in use at exit: 0 bytes in 0 blocks
+==1992==   total heap usage: 923 allocs, 923 frees, 319,304 bytes allocated
+==1992== 
+==1992== All heap blocks were freed -- no leaks are possible
+==1992== 
+==1992== For lists of detected and suppressed errors, rerun with: -s
+==1992== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/json.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/json.nn"])
+==1993== Memcheck, a memory error detector
+==1993== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1993== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1993== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/json.nn
+==1993== 
+---source=<<<[1, 2, 3, {"name": "john doe", "flags": [4, 5, 6]}]>>>
+c = 1, pos=2
+parseNumber: str=${str.dump()}
+c = 2, pos=3
+parseNumber: str=${str.dump()}
+c = 3, pos=4
+parseNumber: str=${str.dump()}
+c = 4, pos=5
+parseNumber: str=${str.dump()}
+c = 5, pos=6
+parseNumber: str=${str.dump()}
+c = 6, pos=7
+parseNumber: str=${str.dump()}
+[1,2,3,{"name": "john doe", "flags": [4,5,6]}]
+==1993== 
+==1993== HEAP SUMMARY:
+==1993==     in use at exit: 0 bytes in 0 blocks
+==1993==   total heap usage: 1,222 allocs, 1,222 frees, 366,417 bytes allocated
+==1993== 
+==1993== All heap blocks were freed -- no leaks are possible
+==1993== 
+==1993== For lists of detected and suppressed errors, rerun with: -s
+==1993== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/json2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/json2.nn"])
+==1994== Memcheck, a memory error detector
+==1994== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1994== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1994== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/json2.nn
+==1994== 
+---source=<<<[1, 2, 3, {"name": "john doe", "flags": [4, 5, 6]}]>>>
+c = 1, pos=2
+parseNumber: str=${str.dump()}
+c = 2, pos=3
+parseNumber: str=${str.dump()}
+c = 3, pos=4
+parseNumber: str=${str.dump()}
+c = 4, pos=5
+parseNumber: str=${str.dump()}
+c = 5, pos=6
+parseNumber: str=${str.dump()}
+c = 6, pos=7
+parseNumber: str=${str.dump()}
+[1,2,3,{"name": "john doe", "flags": [4,5,6]}]
+==1994== 
+==1994== HEAP SUMMARY:
+==1994==     in use at exit: 0 bytes in 0 blocks
+==1994==   total heap usage: 1,258 allocs, 1,258 frees, 367,076 bytes allocated
+==1994== 
+==1994== All heap blocks were freed -- no leaks are possible
+==1994== 
+==1994== For lists of detected and suppressed errors, rerun with: -s
+==1994== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/json3.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/json3.nn"])
+==1995== Memcheck, a memory error detector
+==1995== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1995== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1995== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/json3.nn
+==1995== 
+---source=<<<[1, 2, 3, {"name": "john doe", "flags": [4, 5, 6]}]>>>
+c = 1, pos=2
+parseNumber: str=${str.dump()}
+c = 2, pos=3
+parseNumber: str=${str.dump()}
+c = 3, pos=4
+parseNumber: str=${str.dump()}
+c = 4, pos=5
+parseNumber: str=${str.dump()}
+c = 5, pos=6
+parseNumber: str=${str.dump()}
+c = 6, pos=7
+parseNumber: str=${str.dump()}
+[1,2,3,{"name": "john doe", "flags": [4,5,6]}]
+==1995== 
+==1995== HEAP SUMMARY:
+==1995==     in use at exit: 0 bytes in 0 blocks
+==1995==   total heap usage: 1,243 allocs, 1,243 frees, 369,738 bytes allocated
+==1995== 
+==1995== All heap blocks were freed -- no leaks are possible
+==1995== 
+==1995== For lists of detected and suppressed errors, rerun with: -s
+==1995== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/lexmanual.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/lexmanual.nn"])
+==1996== Memcheck, a memory error detector
+==1996== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1996== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1996== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/lexmanual.nn
+==1996== 
+
+
+function do_add(x, y)
+{
+    return x + y
+}
+
+function do_sub(x, y)
+{
+    return x - y
+}
+
+function do_mul(x, y)
+{
+    var t = x * y
+    return (t + 8192 / 2) / 8192
+}
+
+function do_div(x, y)
+{
+    var t = x * 8192
+    return (t + y / 2) / y
+}
+
+function of_int(x)
+{
+    return x * 8192
+}
+
+function doiter(n, a, b, xn, yn)
+{
+    if(n == 100)
+    {
+        return true
+    }
+    var xn2 = do_mul(xn, xn)
+    var yn2 = do_mul(yn, yn)
+    if(do_add(xn2, yn2) > of_int(4))
+    {
+        return false
+    }
+    return doiter(n + 1, a, b, do_add(do_sub(xn2, yn2), a), do_add(do_mul(of_int(2), do_mul(xn, yn)), b))
+}
+
+function inside(x, y)
+{
+    return doiter(0, x, y, of_int(0), of_int(0))
+}
+
+function run()
+{
+    var steps = 30
+    var xmin = of_int(-2)
+    var xmax = of_int(1)
+    var deltax = do_div(do_sub(xmax, xmin), of_int(2 * steps))
+    var ymin = of_int(-1)
+    var ymax = of_int(1)
+    var deltay = do_div(do_sub(ymax, ymin), of_int(steps))
+    var i = 0
+    while(i < steps)
+    {
+        var y = do_add(ymin, do_mul(of_int(i), deltay))
+        var j = 0
+        while(j < 2 * steps)
+        {
+            var x = do_add(xmin, do_mul(of_int(j), deltax))
+            var ins = inside(x, y)
+            if(ins == true)
+            {
+                print("#")
+            }
+            else
+            {
+                print("-")
+            }
+            j++
+        }
+        print("\n")
+        i++
+    }
+}
+run()
+
+
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>x
+ <type Op_add>: 
+ <type Identifier>:  <ident>y
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>do_sub
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>x
+ <type Op_subtract>: 
+ <type Identifier>:  <ident>y
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>t
+ <type Op_assign>: 
+ <type Identifier>:  <ident>x
+ <type Op_multiply>: 
+ <type Identifier>:  <ident>y
+ <type Identifier>:  <ident>return
+ <type LeftParen>: 
+ <type Identifier>:  <ident>t
+ <type Op_add>: 
+ <type Integer>:  <number>8192
+ <type Op_divide>: 
+ <type Integer>:  <number>2
+ <type RightParen>: 
+ <type Op_divide>: 
+ <type Integer>:  <number>8192
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>do_div
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>t
+ <type Op_assign>: 
+ <type Identifier>:  <ident>x
+ <type Op_multiply>: 
+ <type Integer>:  <number>8192
+ <type Identifier>:  <ident>return
+ <type LeftParen>: 
+ <type Identifier>:  <ident>t
+ <type Op_add>: 
+ <type Identifier>:  <ident>y
+ <type Op_divide>: 
+ <type Integer>:  <number>2
+ <type RightParen>: 
+ <type Op_divide>: 
+ <type Identifier>:  <ident>y
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>x
+ <type Op_multiply>: 
+ <type Integer>:  <number>8192
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>doiter
+ <type LeftParen>: 
+ <type Identifier>:  <ident>n
+ <type Comma>: 
+ <type Identifier>:  <ident>a
+ <type Comma>: 
+ <type Identifier>:  <ident>b
+ <type Comma>: 
+ <type Identifier>:  <ident>xn
+ <type Comma>: 
+ <type Identifier>:  <ident>yn
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Keyword_if>: 
+ <type LeftParen>: 
+ <type Identifier>:  <ident>n
+ <type Op_equal>: 
+ <type Integer>:  <number>100
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>true
+ <type RightBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>xn2
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xn
+ <type Comma>: 
+ <type Identifier>:  <ident>xn
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>yn2
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>yn
+ <type Comma>: 
+ <type Identifier>:  <ident>yn
+ <type RightParen>: 
+ <type Keyword_if>: 
+ <type LeftParen>: 
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xn2
+ <type Comma>: 
+ <type Identifier>:  <ident>yn2
+ <type RightParen>: 
+ <type Op_greater>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>4
+ <type RightParen>: 
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>false
+ <type RightBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>doiter
+ <type LeftParen>: 
+ <type Identifier>:  <ident>n
+ <type Op_add>: 
+ <type Integer>:  <number>1
+ <type Comma>: 
+ <type Identifier>:  <ident>a
+ <type Comma>: 
+ <type Identifier>:  <ident>b
+ <type Comma>: 
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>do_sub
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xn2
+ <type Comma>: 
+ <type Identifier>:  <ident>yn2
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>a
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>2
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xn
+ <type Comma>: 
+ <type Identifier>:  <ident>yn
+ <type RightParen>: 
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>b
+ <type RightParen>: 
+ <type RightParen>: 
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>inside
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>return
+ <type Identifier>:  <ident>doiter
+ <type LeftParen>: 
+ <type Integer>:  <number>0
+ <type Comma>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type Comma>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>0
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>0
+ <type RightParen>: 
+ <type RightParen>: 
+ <type RightBrace>: 
+ <type Identifier>:  <ident>function
+ <type Identifier>:  <ident>run
+ <type LeftParen>: 
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>steps
+ <type Op_assign>: 
+ <type Integer>:  <number>30
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>xmin
+ <type Op_assign>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Op_subtract>: 
+ <type Integer>:  <number>2
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>xmax
+ <type Op_assign>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>1
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>deltax
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_div
+ <type LeftParen>: 
+ <type Identifier>:  <ident>do_sub
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xmax
+ <type Comma>: 
+ <type Identifier>:  <ident>xmin
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>2
+ <type Op_multiply>: 
+ <type Identifier>:  <ident>steps
+ <type RightParen>: 
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>ymin
+ <type Op_assign>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Op_subtract>: 
+ <type Integer>:  <number>1
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>ymax
+ <type Op_assign>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Integer>:  <number>1
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>deltay
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_div
+ <type LeftParen>: 
+ <type Identifier>:  <ident>do_sub
+ <type LeftParen>: 
+ <type Identifier>:  <ident>ymax
+ <type Comma>: 
+ <type Identifier>:  <ident>ymin
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Identifier>:  <ident>steps
+ <type RightParen>: 
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>i
+ <type Op_assign>: 
+ <type Integer>:  <number>0
+ <type Keyword_while>: 
+ <type LeftParen>: 
+ <type Identifier>:  <ident>i
+ <type Op_less>: 
+ <type Identifier>:  <ident>steps
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>y
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>ymin
+ <type Comma>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Identifier>:  <ident>i
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>deltay
+ <type RightParen>: 
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>j
+ <type Op_assign>: 
+ <type Integer>:  <number>0
+ <type Keyword_while>: 
+ <type LeftParen>: 
+ <type Identifier>:  <ident>j
+ <type Op_less>: 
+ <type Integer>:  <number>2
+ <type Op_multiply>: 
+ <type Identifier>:  <ident>steps
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>x
+ <type Op_assign>: 
+ <type Identifier>:  <ident>do_add
+ <type LeftParen>: 
+ <type Identifier>:  <ident>xmin
+ <type Comma>: 
+ <type Identifier>:  <ident>do_mul
+ <type LeftParen>: 
+ <type Identifier>:  <ident>of_int
+ <type LeftParen>: 
+ <type Identifier>:  <ident>j
+ <type RightParen>: 
+ <type Comma>: 
+ <type Identifier>:  <ident>deltax
+ <type RightParen>: 
+ <type RightParen>: 
+ <type Identifier>:  <ident>var
+ <type Identifier>:  <ident>ins
+ <type Op_assign>: 
+ <type Identifier>:  <ident>inside
+ <type LeftParen>: 
+ <type Identifier>:  <ident>x
+ <type Comma>: 
+ <type Identifier>:  <ident>y
+ <type RightParen>: 
+ <type Keyword_if>: 
+ <type LeftParen>: 
+ <type Identifier>:  <ident>ins
+ <type Op_equal>: 
+ <type Identifier>:  <ident>true
+ <type RightParen>: 
+ <type LeftBrace>: 
+ <type Keyword_print>: 
+ <type LeftParen>: 
+ <type String>:  <string>"#"
+ <type RightParen>: 
+ <type RightBrace>: 
+ <type Keyword_else>: 
+ <type LeftBrace>: 
+ <type Keyword_print>: 
+ <type LeftParen>: 
+ <type String>:  <string>"-"
+ <type RightParen>: 
+ <type RightBrace>: 
+ <type Identifier>:  <ident>j
+ <type Op_add>: 
+ <type Op_add>: 
+ <type RightBrace>: 
+ <type Keyword_print>: 
+ <type LeftParen>: 
+ <type String>:  <string>"\\n"
+ <type RightParen>: 
+ <type Identifier>:  <ident>i
+ <type Op_add>: 
+ <type Op_add>: 
+ <type RightBrace>: 
+ <type RightBrace>: 
+ <type Identifier>:  <ident>run
+ <type LeftParen>: 
+ <type RightParen>: 
+ <type End_of_input>: 
+==1996== 
+==1996== HEAP SUMMARY:
+==1996==     in use at exit: 0 bytes in 0 blocks
+==1996==   total heap usage: 13,246 allocs, 13,246 frees, 3,854,987 bytes allocated
+==1996== 
+==1996== All heap blocks were freed -- no leaks are possible
+==1996== 
+==1996== For lists of detected and suppressed errors, rerun with: -s
+==1996== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/lexmod.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/lexmod.nn"])
+==1997== Memcheck, a memory error detector
+==1997== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1997== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1997== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/lexmod.nn
+==1997== 
+IMPORTIMPORT: name='astscan'
+IMPORTIMPORT: mod='0x4e735c0'
+[{"line": 2, "type": "NEWLINE", "source": "\n"},{"line": 4, "type": "NEWLINE", "source": "\n"},{"line": 5, "type": "NEWLINE", "source": "\n"},{"line": 5, "type": "IDENTNORMAL", "source": "print"},{"line": 5, "type": "PARENOPEN", "source": "("},{"line": 5, "type": "LITERALSTRING", "source": "\"hello world!\\n\""},{"line": 5, "type": "PARENCLOSE", "source": ")"},{"line": 6, "type": "NEWLINE", "source": "\n"},{"line": 6, "type": "KWVAR", "source": "var"},{"line": 6, "type": "IDENTNORMAL", "source": "i"},{"line": 6, "type": "ASSIGN", "source": "="},{"line": 6, "type": "LITNUMREG", "source": "0"},{"line": 7, "type": "NEWLINE", "source": "\n"},{"line": 7, "type": "IDENTNORMAL", "source": "i"},{"line": 7, "type": "INCREMENT", "source": "++"},{"line": 8, "type": "NEWLINE", "source": "\n"},{"line": 8, "type": "IDENTNORMAL", "source": "print"},{"line": 8, "type": "PARENOPEN", "source": "("},{"line": 8, "type": "IDENTNORMAL", "source": "i"},{"line": 8, "type": "PARENCLOSE", "source": ")"},{"line": 9, "type": "NEWLINE", "source": "\n"},{"line": 10, "type": "NEWLINE", "source": "\n"}]
+==1997== 
+==1997== HEAP SUMMARY:
+==1997==     in use at exit: 0 bytes in 0 blocks
+==1997==   total heap usage: 1,036 allocs, 1,036 frees, 345,053 bytes allocated
+==1997== 
+==1997== All heap blocks were freed -- no leaks are possible
+==1997== 
+==1997== For lists of detected and suppressed errors, rerun with: -s
+==1997== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/list.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/list.nn"])
+==1998== Memcheck, a memory error detector
+==1998== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1998== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1998== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/list.nn
+==1998== 
+true
+10 
+1
+ll=<instance of LinkedList at 0x4e82660>
+10 20 30 40 50 
+is element removed? 50
+10 20 30 40 
+Index of 40 3
+10 20 60 30 40 
+is List Empty? false
+30
+10 20 60 40 
+==1998== 
+==1998== HEAP SUMMARY:
+==1998==     in use at exit: 0 bytes in 0 blocks
+==1998==   total heap usage: 1,076 allocs, 1,076 frees, 356,039 bytes allocated
+==1998== 
+==1998== All heap blocks were freed -- no leaks are possible
+==1998== 
+==1998== For lists of detected and suppressed errors, rerun with: -s
+==1998== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mandel1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mandel1.nn"])
+==1999== Memcheck, a memory error detector
+==1999== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==1999== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==1999== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mandel1.nn
+==1999== 
+-----------------------***************************************************************************-----
+--------------------*********************************************************************************--
+------------------*************************************************************************************
+----------------***************************************************************************************
+---------------****************************************************************************************
+-------------***********************************......##.......****************************************
+------------*******************************..........##++###.......************************************
+-----------*****************************.............##%++++##.......**********************************
+---------****************************..............##%%++++%%#.........********************************
+--------***************************.............###%++++++++++##.........******************************
+--------************************............#######%+++++++++%%####.......*****************************
+-------***********************...........#+++++%%++++++++++++++++%####+%...****************************
+------*********************............###%+++++++++++++++++++++++++++++%...***************************
+-----*******************.............####%%++++++++++++++++++++++++++++%#....**************************
+-----**************....#####.....######%+++++++++++++++++++++++++++++++%##....*************************
+----*********.........#%+%%##%%+%####%%%++++++++++++++++++++++++++++++++++#...*************************
+----****.............###%+++++++++++%%+++++++++++++++++++++++++++++++++++##....************************
+----**..............####%++++++++++++++++++++++++++++++++++++++++++++++++%.....************************
+----.............##%+%%++++++++++++++++++++++++++++++++++++++++++++++++++#......***********************
+---*......########%%+++++++++++++++++++++++++++++++++++++++++++++++++++%##......***********************
+---+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++%##.......***********************
+---*......########%%+++++++++++++++++++++++++++++++++++++++++++++++++++%##......***********************
+----.............##%+%%++++++++++++++++++++++++++++++++++++++++++++++++++#......***********************
+----**..............####%++++++++++++++++++++++++++++++++++++++++++++++++%.....************************
+----****.............###%+++++++++++%%+++++++++++++++++++++++++++++++++++##....************************
+----*********.........#%+%%##%%+%####%%%++++++++++++++++++++++++++++++++++#...*************************
+-----**************....#####.....######%+++++++++++++++++++++++++++++++%##....*************************
+-----*******************.............####%%++++++++++++++++++++++++++++%#....**************************
+------*********************............###%+++++++++++++++++++++++++++++%...***************************
+-------***********************...........#+++++%%++++++++++++++++%####+%...****************************
+--------************************............#######%+++++++++%%####.......*****************************
+--------***************************.............###%++++++++++##.........******************************
+---------****************************..............##%%++++%%#.........********************************
+-----------*****************************.............##%++++##.......**********************************
+------------*******************************..........##++###.......************************************
+-------------***********************************......##.......****************************************
+---------------****************************************************************************************
+----------------***************************************************************************************
+------------------*************************************************************************************
+--------------------*********************************************************************************--
+==1999== 
+==1999== HEAP SUMMARY:
+==1999==     in use at exit: 0 bytes in 0 blocks
+==1999==   total heap usage: 938 allocs, 938 frees, 325,054 bytes allocated
+==1999== 
+==1999== All heap blocks were freed -- no leaks are possible
+==1999== 
+==1999== For lists of detected and suppressed errors, rerun with: -s
+==1999== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mandel2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mandel2.nn"])
+==2000== Memcheck, a memory error detector
+==2000== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2000== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2000== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mandel2.nn
+==2000== 
+------------------------------------------------------------
+------------------------------------------------------------
+--------------------------------------#---------------------
+------------------------------------####--------------------
+------------------------------------####--------------------
+-------------------------------------##--#------------------
+------------------------------#--##########-----------------
+------------------------------#################-------------
+-----------------------------#################--------------
+----------------------------###################-------------
+---------------------------######################-----------
+-----------------#--#------#####################------------
+-----------------#######--######################------------
+----------------#########-######################------------
+----------------###############################-------------
+-----#------##################################--------------
+----------------###############################-------------
+----------------#########-######################------------
+-----------------######---######################------------
+-----------------#--#------#####################------------
+---------------------------######################-----------
+----------------------------###################-------------
+-----------------------------#################--------------
+------------------------------#################-------------
+-----------------------------##--##########-----------------
+-------------------------------------##---------------------
+------------------------------------####--------------------
+------------------------------------####--------------------
+--------------------------------------#---------------------
+------------------------------------------------------------
+==2000== 
+==2000== HEAP SUMMARY:
+==2000==     in use at exit: 0 bytes in 0 blocks
+==2000==   total heap usage: 998 allocs, 998 frees, 367,526 bytes allocated
+==2000== 
+==2000== All heap blocks were freed -- no leaks are possible
+==2000== 
+==2000== For lists of detected and suppressed errors, rerun with: -s
+==2000== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mandelawk.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mandelawk.nn"])
+==2001== Memcheck, a memory error detector
+==2001== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2001== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2001== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mandelawk.nn
+==2001== 
+>>>>>>=====<<<<<<<<<<<<<<<;;;;;;:::96032:;;;;<<<<==========
+>>>>>===<<<<<<<<<<<<<<<<;;;;;;;:::873*079::;;;;<<<<<=======
+>>>>===<<<<<<<<<<<<<<<;;;;;;;::9974    (.9::::;;<<<<<======
+>>>==<<<<<<<<<<<<<<<;;;;;;:98888764     5789999:;;<<<<<====
+>>==<<<<<<<<<<<<<;;;;::::996. &2           45335:;<<<<<<===
+>>=<<<<<<<<<<<;;;::::::999752                 *79:;<<<<<<==
+>=<<<<<<<<;;;:599999999886                    %78:;;<<<<<<=
+><<<<;;;;;:::972456-567763                      +9;;<<<<<<<
+><;;;;;;::::9875&      .3                       *9;;;<<<<<<
+>;;;;;;::997564'        '                       8:;;;<<<<<<
+>::988897735/                                 &89:;;;<<<<<<
+>::988897735/                                 &89:;;;<<<<<<
+>;;;;;;::997564'        '                       8:;;;<<<<<<
+><;;;;;;::::9875&      .3                       *9;;;<<<<<<
+><<<<;;;;;:::972456-567763                      +9;;<<<<<<<
+>=<<<<<<<<;;;:599999999886                    %78:;;<<<<<<=
+>>=<<<<<<<<<<<;;;::::::999752                 *79:;<<<<<<==
+>>==<<<<<<<<<<<<<;;;;::::996. &2           45335:;<<<<<<===
+>>>==<<<<<<<<<<<<<<<;;;;;;:98888764     5789999:;;<<<<<====
+>>>>===<<<<<<<<<<<<<<<;;;;;;;::9974    (.9::::;;<<<<<======
+>>>>>===<<<<<<<<<<<<<<<<;;;;;;;:::873*079::;;;;<<<<<=======
+==2001== 
+==2001== HEAP SUMMARY:
+==2001==     in use at exit: 0 bytes in 0 blocks
+==2001==   total heap usage: 940 allocs, 940 frees, 328,045 bytes allocated
+==2001== 
+==2001== All heap blocks were freed -- no leaks are possible
+==2001== 
+==2001== For lists of detected and suppressed errors, rerun with: -s
+==2001== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mandelcolor.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mandelcolor.nn"])
+==2002== Memcheck, a memory error detector
+==2002== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2002== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2002== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mandelcolor.nn
+==2002== 
+lines=39, cols=78
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;46m [37;41m [37;46m [37;46m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;41m [37;42m [37;46m [37;46m [37;42m [37;46m [37;45m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;46m [37;44m [37;42m [37;44m [37;41m [37;45m [37;41m [37;45m [37;46m [37;45m [37;45m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;46m [37;46m [37;46m [37;41m [37;41m [37;42m [37;44m [37;45m [37;40m [37;40m [37;40m [37;40m [37;44m [37;42m [37;41m [37;46m [37;46m [37;46m [37;45m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [0m
+[37;41m [37;41m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;46m [37;41m [37;43m [37;45m [37;43m [37;45m [37;43m [37;42m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;43m [37;40m [37;44m [37;43m [37;43m [37;45m [37;42m [37;45m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [0m
+[37;41m [37;41m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;45m [37;45m [37;45m [37;46m [37;46m [37;41m [37;42m [37;45m [37;44m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;46m [37;40m [37;44m [37;42m [37;46m [37;45m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [0m
+[37;41m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;46m [37;44m [37;46m [37;46m [37;46m [37;46m [37;46m [37;46m [37;46m [37;41m [37;41m [37;42m [37;44m [37;41m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;43m [37;43m [37;42m [37;45m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;46m [37;42m [37;45m [37;42m [37;45m [37;45m [37;41m [37;45m [37;42m [37;43m [37;43m [37;44m [37;46m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;42m [37;46m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;41m [37;41m [37;44m [37;41m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;42m [37;42m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;41m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;44m [37;44m [37;44m [37;44m [37;44m [37;46m [37;46m [37;46m [37;41m [37;41m [37;43m [37;41m [37;42m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;45m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;46m [37;46m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;42m [37;41m [37;43m [37;41m [37;41m [37;45m [37;41m [37;40m [37;44m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;43m [37;43m [37;41m [37;46m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;44m [37;44m [37;44m [37;44m [37;44m [37;46m [37;46m [37;46m [37;41m [37;41m [37;43m [37;41m [37;42m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;45m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;46m [37;46m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;41m [37;41m [37;44m [37;41m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;42m [37;42m [37;43m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;41m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;46m [37;42m [37;45m [37;42m [37;45m [37;45m [37;41m [37;45m [37;42m [37;43m [37;43m [37;44m [37;46m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;42m [37;46m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;46m [37;44m [37;46m [37;46m [37;46m [37;46m [37;46m [37;46m [37;46m [37;41m [37;41m [37;42m [37;44m [37;41m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;43m [37;43m [37;42m [37;45m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [0m
+[37;41m [37;41m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;45m [37;45m [37;45m [37;46m [37;46m [37;41m [37;42m [37;45m [37;44m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;46m [37;40m [37;44m [37;42m [37;46m [37;45m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [0m
+[37;41m [37;41m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;45m [37;45m [37;46m [37;41m [37;43m [37;45m [37;43m [37;45m [37;43m [37;42m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;40m [37;43m [37;40m [37;44m [37;43m [37;43m [37;45m [37;42m [37;45m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [0m
+[37;41m [37;41m [37;41m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;46m [37;46m [37;46m [37;41m [37;41m [37;42m [37;44m [37;45m [37;40m [37;40m [37;40m [37;40m [37;44m [37;42m [37;41m [37;46m [37;46m [37;46m [37;45m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;46m [37;44m [37;42m [37;44m [37;41m [37;45m [37;41m [37;45m [37;46m [37;45m [37;45m [37;45m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;41m [37;42m [37;46m [37;46m [37;42m [37;46m [37;45m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;45m [37;45m [37;46m [37;46m [37;41m [37;46m [37;46m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;44m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;43m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;42m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+[37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [37;41m [0m
+==2002== 
+==2002== HEAP SUMMARY:
+==2002==     in use at exit: 0 bytes in 0 blocks
+==2002==   total heap usage: 955 allocs, 955 frees, 327,471 bytes allocated
+==2002== 
+==2002== All heap blocks were freed -- no leaks are possible
+==2002== 
+==2002== For lists of detected and suppressed errors, rerun with: -s
+==2002== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/map.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/map.nn"])
+==2003== Memcheck, a memory error detector
+==2003== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2003== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2003== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/map.nn
+==2003== 
+before: a=[22,33,44]
+args=[22,1]
+****** callme() being called? i=22, v=23
+args=[33,1]
+****** callme() being called? i=33, v=34
+args=[44,1]
+****** callme() being called? i=44, v=45
+******continuing******
+after: na=[23,34,45], a=[22,33,44]
+******end of script********
+==2003== 
+==2003== HEAP SUMMARY:
+==2003==     in use at exit: 0 bytes in 0 blocks
+==2003==   total heap usage: 951 allocs, 951 frees, 324,903 bytes allocated
+==2003== 
+==2003== All heap blocks were freed -- no leaks are possible
+==2003== 
+==2003== For lists of detected and suppressed errors, rerun with: -s
+==2003== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/map2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/map2.nn"])
+==2004== Memcheck, a memory error detector
+==2004== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2004== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2004== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/map2.nn
+==2004== 
+before: [44,55,66,77]
+after: [268,279,290,301]
+--- all done ----
+==2004== 
+==2004== HEAP SUMMARY:
+==2004==     in use at exit: 0 bytes in 0 blocks
+==2004==   total heap usage: 978 allocs, 978 frees, 333,800 bytes allocated
+==2004== 
+==2004== All heap blocks were freed -- no leaks are possible
+==2004== 
+==2004== For lists of detected and suppressed errors, rerun with: -s
+==2004== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mob1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mob1.nn"])
+==2005== Memcheck, a memory error detector
+==2005== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2005== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2005== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mob1.nn
+==2005== 
+0 -> 1
+1 -> 0
+2 -> -2
+3 -> 0
+4 -> 1
+5 -> 0
+6 -> 1
+7 -> -1
+8 -> -10
+9 -> -30
+10 -> -67
+==2005== 
+==2005== HEAP SUMMARY:
+==2005==     in use at exit: 0 bytes in 0 blocks
+==2005==   total heap usage: 12,089 allocs, 12,089 frees, 1,611,711 bytes allocated
+==2005== 
+==2005== All heap blocks were freed -- no leaks are possible
+==2005== 
+==2005== For lists of detected and suppressed errors, rerun with: -s
+==2005== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mob2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mob2.nn"])
+==2006== Memcheck, a memory error detector
+==2006== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2006== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2006== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mob2.nn
+==2006== 
+-67
+==2006== 
+==2006== HEAP SUMMARY:
+==2006==     in use at exit: 0 bytes in 0 blocks
+==2006==   total heap usage: 6,751 allocs, 6,751 frees, 1,137,744 bytes allocated
+==2006== 
+==2006== All heap blocks were freed -- no leaks are possible
+==2006== 
+==2006== For lists of detected and suppressed errors, rerun with: -s
+==2006== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/mob3.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/mob3.nn"])
+==2007== Memcheck, a memory error detector
+==2007== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2007== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2007== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/mob3.nn
+==2007== 
+-67
+==2007== 
+==2007== HEAP SUMMARY:
+==2007==     in use at exit: 0 bytes in 0 blocks
+==2007==   total heap usage: 6,767 allocs, 6,767 frees, 1,141,717 bytes allocated
+==2007== 
+==2007== All heap blocks were freed -- no leaks are possible
+==2007== 
+==2007== For lists of detected and suppressed errors, rerun with: -s
+==2007== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/nestfunc.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/nestfunc.nn"])
+==2008== Memcheck, a memory error detector
+==2008== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2008== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2008== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/nestfunc.nn
+==2008== 
+a = barfoo
+==2008== 
+==2008== HEAP SUMMARY:
+==2008==     in use at exit: 0 bytes in 0 blocks
+==2008==   total heap usage: 939 allocs, 939 frees, 321,552 bytes allocated
+==2008== 
+==2008== All heap blocks were freed -- no leaks are possible
+==2008== 
+==2008== For lists of detected and suppressed errors, rerun with: -s
+==2008== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/perceptron.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/perceptron.nn"])
+==2009== Memcheck, a memory error detector
+==2009== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2009== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2009== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/perceptron.nn
+==2009== 
+simple single layer perceptron
+Error - updating weight to [-0.72,-0.82]
+Error - updating weight to [-1.52,-0.06999999999999995]
+Error - updating weight to [-1.63,0.03000000000000005]
+Error - updating weight to [-1.32,-0.9299999999999999]
+Iteration 0: Correct: 16 / 20
+Error - updating weight to [-2.23,-0.24]
+Error - updating weight to [-1.92,-1.2]
+Iteration 1: Correct: 18 / 20
+Error - updating weight to [-2.83,-0.51]
+Error - updating weight to [-2.52,-1.47]
+Iteration 2: Correct: 18 / 20
+Error - updating weight to [-2.64,-1.72]
+Iteration 3: Correct: 19 / 20
+Iteration 4: Correct: 20 / 20
+Training complete in 5 iterations
+==2009== 
+==2009== HEAP SUMMARY:
+==2009==     in use at exit: 0 bytes in 0 blocks
+==2009==   total heap usage: 1,183 allocs, 1,183 frees, 379,008 bytes allocated
+==2009== 
+==2009== All heap blocks were freed -- no leaks are possible
+==2009== 
+==2009== For lists of detected and suppressed errors, rerun with: -s
+==2009== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/person.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/person.nn"])
+==2010== Memcheck, a memory error detector
+==2010== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2010== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2010== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/person.nn
+==2010== 
+Person ${this.name()}, age ${this.age()}, lives at ${this.livesat()}, has ${this.m_pets.length == 0 ? 
+==2010== 
+==2010== HEAP SUMMARY:
+==2010==     in use at exit: 0 bytes in 0 blocks
+==2010==   total heap usage: 1,050 allocs, 1,050 frees, 343,805 bytes allocated
+==2010== 
+==2010== All heap blocks were freed -- no leaks are possible
+==2010== 
+==2010== For lists of detected and suppressed errors, rerun with: -s
+==2010== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/rec.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/rec.nn"])
+==2011== Memcheck, a memory error detector
+==2011== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2011== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2011== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/rec.nn
+==2011== 
+[1,2,3,<recursion>,4,5,6]
+==2011== 
+==2011== HEAP SUMMARY:
+==2011==     in use at exit: 0 bytes in 0 blocks
+==2011==   total heap usage: 904 allocs, 904 frees, 317,146 bytes allocated
+==2011== 
+==2011== All heap blocks were freed -- no leaks are possible
+==2011== 
+==2011== For lists of detected and suppressed errors, rerun with: -s
+==2011== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/rtassign.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/rtassign.nn"])
+==2012== Memcheck, a memory error detector
+==2012== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2012== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2012== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/rtassign.nn
+==2012== 
+inside camelCase: this=pork
+Pork
+inside funkyCase: this=grey
+funky!
+==2012== 
+==2012== HEAP SUMMARY:
+==2012==     in use at exit: 0 bytes in 0 blocks
+==2012==   total heap usage: 946 allocs, 946 frees, 321,046 bytes allocated
+==2012== 
+==2012== All heap blocks were freed -- no leaks are possible
+==2012== 
+==2012== For lists of detected and suppressed errors, rerun with: -s
+==2012== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/sanity.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/sanity.nn"])
+==2013== Memcheck, a memory error detector
+==2013== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2013== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2013== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/sanity.nn
+==2013== 
+testing array creation ... 
+testing array creation: ok!
+testing array push ... 
+testing array push: ok!
+testing array assign ... 
+a = ["foo","bar"]
+testing array assign: ok!
+testing array.map ... 
+testing array.map: ok!
+testing exceptions ... 
+testing exceptions: ok!
+all good
+==2013== 
+==2013== HEAP SUMMARY:
+==2013==     in use at exit: 0 bytes in 0 blocks
+==2013==   total heap usage: 1,145 allocs, 1,145 frees, 346,182 bytes allocated
+==2013== 
+==2013== All heap blocks were freed -- no leaks are possible
+==2013== 
+==2013== For lists of detected and suppressed errors, rerun with: -s
+==2013== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/searchtree.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/searchtree.nn"])
+==2014== Memcheck, a memory error detector
+==2014== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2014== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2014== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/searchtree.nn
+==2014== 
+true
+true
+==2014== 
+==2014== HEAP SUMMARY:
+==2014==     in use at exit: 0 bytes in 0 blocks
+==2014==   total heap usage: 996 allocs, 996 frees, 336,596 bytes allocated
+==2014== 
+==2014== All heap blocks were freed -- no leaks are possible
+==2014== 
+==2014== For lists of detected and suppressed errors, rerun with: -s
+==2014== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/self.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/self.nn"])
+==2015== Memcheck, a memory error detector
+==2015== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2015== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2015== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/self.nn
+==2015== 
+this.things=42
+==2015== 
+==2015== HEAP SUMMARY:
+==2015==     in use at exit: 0 bytes in 0 blocks
+==2015==   total heap usage: 922 allocs, 922 frees, 319,625 bytes allocated
+==2015== 
+==2015== All heap blocks were freed -- no leaks are possible
+==2015== 
+==2015== For lists of detected and suppressed errors, rerun with: -s
+==2015== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/sha1.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/sha1.nn"])
+==2016== Memcheck, a memory error detector
+==2016== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2016== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2016== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/sha1.nn
+==2016== 
+FAIL: "foo" => a435e964c5de8cf443252f4560aa0563c2b66a37
+FAIL: "bar" => 3888a78d58ad3d9209f9a22171f138a9e980bd6e
+FAIL: "hello world" => 6eefb5d60352899846b728fed7da890a04cef10d
+FAIL: "abcdx" => a8a767ff7b883017c2dbd22319c68fe5d2a6dd07
+FAIL: "long text, some spaces, blah blah" => 8ca685247a30367fa8cc28d57d7b91238ec138ab
+==2016== 
+==2016== HEAP SUMMARY:
+==2016==     in use at exit: 0 bytes in 0 blocks
+==2016==   total heap usage: 1,605 allocs, 1,605 frees, 485,092 bytes allocated
+==2016== 
+==2016== All heap blocks were freed -- no leaks are possible
+==2016== 
+==2016== For lists of detected and suppressed errors, rerun with: -s
+==2016== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/sha256.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/sha256.nn"])
+==2017== Memcheck, a memory error detector
+==2017== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2017== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2017== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/sha256.nn
+==2017== 
+FAIL: "foo" => d306dfdbfdb00712da11ea58f0a1af5d7c188634328c4d6a975ea0eea927e589 (expected: 2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae)
+FAIL: "bar" => d481e2ee56581d750f37d0f4d592e5214cf009ed3d4860973a5602a8bbe6fe4f (expected: fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9)
+FAIL: "hello world" => 3358dba00fb6010c7022439c854252017565319d58fe973ed17900e30e6b01c5 (expected: b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9)
+FAIL: "javascript" => 10e01c48344cfa49845b3636c7f56cea63091a9f801c74de0957cb1949321ae1 (expected: eda71746c01c3f465ffd02b6da15a6518e6fbc8f06f1ac525be193be5507069d)
+FAIL: "ecmascript" => 258cdf2927c3b68133991cffcb8f5512e50573c49fe56100a7cf67faaa23bac8 (expected: 5168c9577878ef31591e6d0ab9b5ef1ce607c74c57e10b9fd46be00ae75a5b3a)
+FAIL: "what's up doc?" => 548ed6800c54de73c61414f0d7402a3c48c640c82c694d47e0e7c0531079f52d (expected: 6c4ff685d4f8bd026184371f9de4945b2767fe61842bb912cf5b015879d427f9)
+==2017== 
+==2017== HEAP SUMMARY:
+==2017==     in use at exit: 0 bytes in 0 blocks
+==2017==   total heap usage: 1,329 allocs, 1,329 frees, 423,916 bytes allocated
+==2017== 
+==2017== All heap blocks were freed -- no leaks are possible
+==2017== 
+==2017== For lists of detected and suppressed errors, rerun with: -s
+==2017== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/sierpinski.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/sierpinski.nn"])
+==2018== Memcheck, a memory error detector
+==2018== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2018== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2018== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/sierpinski.nn
+==2018== 
+                               * 
+                              * * 
+                             *   * 
+                            * * * * 
+                           *       * 
+                          * *     * * 
+                         *   *   *   * 
+                        * * * * * * * * 
+                       *               * 
+                      * *             * * 
+                     *   *           *   * 
+                    * * * *         * * * * 
+                   *       *       *       * 
+                  * *     * *     * *     * * 
+                 *   *   *   *   *   *   *   * 
+                * * * * * * * * * * * * * * * * 
+               *                               * 
+              * *                             * * 
+             *   *                           *   * 
+            * * * *                         * * * * 
+           *       *                       *       * 
+          * *     * *                     * *     * * 
+         *   *   *   *                   *   *   *   * 
+        * * * * * * * *                 * * * * * * * * 
+       *               *               *               * 
+      * *             * *             * *             * * 
+     *   *           *   *           *   *           *   * 
+    * * * *         * * * *         * * * *         * * * * 
+   *       *       *       *       *       *       *       * 
+  * *     * *     * *     * *     * *     * *     * *     * * 
+ *   *   *   *   *   *   *   *   *   *   *   *   *   *   *   * 
+* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * 
+==2018== 
+==2018== HEAP SUMMARY:
+==2018==     in use at exit: 0 bytes in 0 blocks
+==2018==   total heap usage: 920 allocs, 920 frees, 320,135 bytes allocated
+==2018== 
+==2018== All heap blocks were freed -- no leaks are possible
+==2018== 
+==2018== For lists of detected and suppressed errors, rerun with: -s
+==2018== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/simple.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/simple.nn"])
+==2019== Memcheck, a memory error detector
+==2019== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2019== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2019== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/simple.nn
+==2019== 
+42==2019== 
+==2019== HEAP SUMMARY:
+==2019==     in use at exit: 0 bytes in 0 blocks
+==2019==   total heap usage: 897 allocs, 897 frees, 315,885 bytes allocated
+==2019== 
+==2019== All heap blocks were freed -- no leaks are possible
+==2019== 
+==2019== For lists of detected and suppressed errors, rerun with: -s
+==2019== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/slice.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/slice.nn"])
+==2020== Memcheck, a memory error detector
+==2020== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2020== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2020== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/slice.nn
+==2020== 
+expect: ['Orange','Lemon'] of ["Banana","Orange","Lemon","Apple","Mango"]
+citrus: ["Orange","Lemon"]
+
+expect: ['Orange', 'Mango', 'Pineapple'] of ["Apple","Banana","Orange","Mango","Pineapple"]
+tropical: ["Orange","Mango","Pineapple"]
+
+expect: ['Mango', 'Pineapple'] of ["Apple","Banana","Orange","Mango","Pineapple"]
+lasttwo = ["Mango","Pineapple"]
+
+==2020== 
+==2020== HEAP SUMMARY:
+==2020==     in use at exit: 0 bytes in 0 blocks
+==2020==   total heap usage: 978 allocs, 978 frees, 325,164 bytes allocated
+==2020== 
+==2020== All heap blocks were freed -- no leaks are possible
+==2020== 
+==2020== For lists of detected and suppressed errors, rerun with: -s
+==2020== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/stack.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/stack.nn"])
+==2021== Memcheck, a memory error detector
+==2021== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2021== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2021== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/stack.nn
+==2021== 
+==2021== 
+==2021== HEAP SUMMARY:
+==2021==     in use at exit: 0 bytes in 0 blocks
+==2021==   total heap usage: 913 allocs, 913 frees, 330,372 bytes allocated
+==2021== 
+==2021== All heap blocks were freed -- no leaks are possible
+==2021== 
+==2021== For lists of detected and suppressed errors, rerun with: -s
+==2021== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/static.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/static.nn"])
+==2022== Memcheck, a memory error detector
+==2022== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2022== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2022== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/static.nn
+==2022== 
+someValue
+fntyp: 5
+static method has been called.
+forks
+==2022== 
+==2022== HEAP SUMMARY:
+==2022==     in use at exit: 0 bytes in 0 blocks
+==2022==   total heap usage: 931 allocs, 931 frees, 320,941 bytes allocated
+==2022== 
+==2022== All heap blocks were freed -- no leaks are possible
+==2022== 
+==2022== For lists of detected and suppressed errors, rerun with: -s
+==2022== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/substr.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/substr.nn"])
+==2023== Memcheck, a memory error detector
+==2023== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2023== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2023== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/substr.nn
+==2023== 
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+OK
+==2023== 
+==2023== HEAP SUMMARY:
+==2023==     in use at exit: 0 bytes in 0 blocks
+==2023==   total heap usage: 941 allocs, 941 frees, 321,717 bytes allocated
+==2023== 
+==2023== All heap blocks were freed -- no leaks are possible
+==2023== 
+==2023== For lists of detected and suppressed errors, rerun with: -s
+==2023== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/template.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/template.nn"])
+==2024== Memcheck, a memory error detector
+==2024== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2024== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2024== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/template.nn
+==2024== 
+parsed: <<<return (function(response){
+
+/* stuff happens here ... */
+var username = "Nobody";
+
+response.write("\n<!DOCTYPE html>\n<html>\n    <head>\n        <title>Blah</title>\n    </head>\n    <body>\n        <h3>Goodbye ");
+response.write( username );
+response.write("!</h3>\n        <table>\n            <thead>\n                <tr>\n                    <td>\n                        <b>\n                            Key\n                        </b>\n                    </td>\n                </tr>\n            </thead>\n            <tbody>\n            ");
+ foreach(key, val in Process.env) {  
+response.write("\n                <tr>\n                    <td>\n                        ");
+response.write( key );
+response.write("\n                    </td>\n                    <td>\n                        <em>\n                            ");
+response.write( val );
+response.write("\n                        </em>\n                    </td>\n                </tr>\n            ");
+}
+response.write("\n            </tbody>\n        </ul>\n    </body>\n</html>");
+
+})>>>
+compiled=<function anonymous@[/mnt/c/cloud/local/dev/langs/neon/eg/template.nn:1](1) at 0x4e9fbc0>
+
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Blah</title>
+    </head>
+    <body>
+        <h3>Goodbye Nobody!</h3>
+        <table>
+            <thead>
+                <tr>
+                    <td>
+                        <b>
+                            Key
+                        </b>
+                    </td>
+                </tr>
+            </thead>
+            <tbody>
+            
+                <tr>
+                    <td>
+                        EMCC_CFLAGS
+                    </td>
+                    <td>
+                        <em>
+                            -sWASM=0 -sNODERAWFS=1 -sVERBOSE=1 -sEXPORT_ALL=1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        USER
+                    </td>
+                    <td>
+                        <em>
+                            john
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        SHLVL
+                    </td>
+                    <td>
+                        <em>
+                            1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WT_PROFILE_ID
+                    </td>
+                    <td>
+                        <em>
+                            {51855cb2-8cce-5362-8f54-464b92b32386}
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        LD_LIBRARY_PATH
+                    </td>
+                    <td>
+                        <em>
+                            /usr/lib/debug
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        HOME
+                    </td>
+                    <td>
+                        <em>
+                            /home/john
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        OLDPWD
+                    </td>
+                    <td>
+                        <em>
+                            /home/john
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        LISTMAX
+                    </td>
+                    <td>
+                        <em>
+                            800
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        FPATH
+                    </td>
+                    <td>
+                        <em>
+                            /home/john/.config/zshfunctions:/usr/local/share/zsh/site-functions:/usr/share/zsh/vendor-functions:/usr/share/zsh/vendor-completions:/usr/share/zsh/functions/Calendar:/usr/share/zsh/functions/Chpwd:/usr/share/zsh/functions/Completion:/usr/share/zsh/functions/Completion/AIX:/usr/share/zsh/functions/Completion/BSD:/usr/share/zsh/functions/Completion/Base:/usr/share/zsh/functions/Completion/Cygwin:/usr/share/zsh/functions/Completion/Darwin:/usr/share/zsh/functions/Completion/Debian:/usr/share/zsh/functions/Completion/Linux:/usr/share/zsh/functions/Completion/Mandriva:/usr/share/zsh/functions/Completion/Redhat:/usr/share/zsh/functions/Completion/Solaris:/usr/share/zsh/functions/Completion/Unix:/usr/share/zsh/functions/Completion/X:/usr/share/zsh/functions/Completion/Zsh:/usr/share/zsh/functions/Completion/openSUSE:/usr/share/zsh/functions/Exceptions:/usr/share/zsh/functions/MIME:/usr/share/zsh/functions/Math:/usr/share/zsh/functions/Misc:/usr/share/zsh/functions/Newuser:/usr/share/zsh/functions/Prompts:/usr/share/zsh/functions/TCP:/usr/share/zsh/functions/VCS_Info:/usr/share/zsh/functions/VCS_Info/Backends:/usr/share/zsh/functions/Zftp:/usr/share/zsh/functions/Zle
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        PS1
+                    </td>
+                    <td>
+                        <em>
+                            [%F{blue}%M%f / %F{blue}%D{%A[%d]/%h/%y | %H:%M:%S}%f] %F{yellow}%~%f
+%# 
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        DBUS_SESSION_BUS_ADDRESS
+                    </td>
+                    <td>
+                        <em>
+                            unix:path=/run/user/1000/bus
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WSL_DISTRO_NAME
+                    </td>
+                    <td>
+                        <em>
+                            Ubuntu
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        DEBUGINFOD_URLS
+                    </td>
+                    <td>
+                        <em>
+                            https://debuginfod.ubuntu.com 
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        CPLUS_INCLUDE_PATH
+                    </td>
+                    <td>
+                        <em>
+                            /cloud/local/sharedcode/include
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WAYLAND_DISPLAY
+                    </td>
+                    <td>
+                        <em>
+                            wayland-0
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        LOGNAME
+                    </td>
+                    <td>
+                        <em>
+                            john
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        NAME
+                    </td>
+                    <td>
+                        <em>
+                            DESKTOP-JCE0S4L
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WSL_INTEROP
+                    </td>
+                    <td>
+                        <em>
+                            /run/WSL/409_interop
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        PULSE_SERVER
+                    </td>
+                    <td>
+                        <em>
+                            unix:/mnt/wslg/PulseServer
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        _
+                    </td>
+                    <td>
+                        <em>
+                            /home/john/dev/langs/neon/./check.rb
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        TERM
+                    </td>
+                    <td>
+                        <em>
+                            xterm-256color
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        PATH
+                    </td>
+                    <td>
+                        <em>
+                            /home/john/.cargo/bin:/home/john/bin:/home/john/.local/bin:/home/john/go/bin:/home/linuxbrew/.linuxbrew/bin:/usr/bin:/bin:/usr/sbin:/usr/local/bin:/snap/bin
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WT_SESSION
+                    </td>
+                    <td>
+                        <em>
+                            c11f3722-625e-4b6b-95d4-a85bcbcf8cef
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        XDG_RUNTIME_DIR
+                    </td>
+                    <td>
+                        <em>
+                            /run/user/1000/
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        GLIBCPP_FORCE_NEW
+                    </td>
+                    <td>
+                        <em>
+                            1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        DISPLAY
+                    </td>
+                    <td>
+                        <em>
+                            :0
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        LANG
+                    </td>
+                    <td>
+                        <em>
+                            C
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        HISTSIZE
+                    </td>
+                    <td>
+                        <em>
+                            500
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        SHELL
+                    </td>
+                    <td>
+                        <em>
+                            /bin/bash
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        PWD
+                    </td>
+                    <td>
+                        <em>
+                            /home/john/dev/langs/neon
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        SHELL_IS_ZSH
+                    </td>
+                    <td>
+                        <em>
+                            1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        XDG_DATA_DIRS
+                    </td>
+                    <td>
+                        <em>
+                            /usr/local/share:/usr/share:/var/lib/snapd/desktop
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        CPATH
+                    </td>
+                    <td>
+                        <em>
+                            /cloud/local/sharedcode/include
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WSL2_GUI_APPS_ENABLED
+                    </td>
+                    <td>
+                        <em>
+                            1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        HOSTTYPE
+                    </td>
+                    <td>
+                        <em>
+                            x86_64
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        WSLENV
+                    </td>
+                    <td>
+                        <em>
+                            WT_SESSION:WT_PROFILE_ID:
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        GLIBCXX_FORCE_NEW
+                    </td>
+                    <td>
+                        <em>
+                            1
+                        </em>
+                    </td>
+                </tr>
+            
+                <tr>
+                    <td>
+                        LD_PRELOAD
+                    </td>
+                    <td>
+                        <em>
+                            /usr/libexec/valgrind/vgpreload_core-amd64-linux.so:/usr/libexec/valgrind/vgpreload_memcheck-amd64-linux.so
+                        </em>
+                    </td>
+                </tr>
+            
+            </tbody>
+        </ul>
+    </body>
+</html>==2024== 
+==2024== HEAP SUMMARY:
+==2024==     in use at exit: 0 bytes in 0 blocks
+==2024==   total heap usage: 1,875 allocs, 1,875 frees, 555,190 bytes allocated
+==2024== 
+==2024== All heap blocks were freed -- no leaks are possible
+==2024== 
+==2024== For lists of detected and suppressed errors, rerun with: -s
+==2024== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/tos.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/tos.nn"])
+==2025== Memcheck, a memory error detector
+==2025== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2025== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2025== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/tos.nn
+==2025== 
+<instance of Foo at 0x4e78a30>
+==2025== 
+==2025== HEAP SUMMARY:
+==2025==     in use at exit: 0 bytes in 0 blocks
+==2025==   total heap usage: 927 allocs, 927 frees, 320,545 bytes allocated
+==2025== 
+==2025== All heap blocks were freed -- no leaks are possible
+==2025== 
+==2025== For lists of detected and suppressed errors, rerun with: -s
+==2025== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/try2.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/try2.nn"])
+==2026== Memcheck, a memory error detector
+==2026== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2026== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2026== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/try2.nn
+==2026== 
+inner: (Exception)  Second exception thrown at null
+10
+
+Message: object of type null is not callable
+Despite the error, I run because I am in finally
+
+Catching exception...
+Exception message: I am a thrown exception
+Exception trace: ["from <script>() in /mnt/c/cloud/local/dev/langs/neon/eg/try2.nn:41"]
+
+Try block called
+Final block called
+
+past finally: list are numerically indexed
+Error occurred, but I will still run
+all good
+==2026== 
+==2026== HEAP SUMMARY:
+==2026==     in use at exit: 0 bytes in 0 blocks
+==2026==   total heap usage: 1,026 allocs, 1,026 frees, 335,504 bytes allocated
+==2026== 
+==2026== All heap blocks were freed -- no leaks are possible
+==2026== 
+==2026== For lists of detected and suppressed errors, rerun with: -s
+==2026== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/utf.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/utf.nn"])
+==2027== Memcheck, a memory error detector
+==2027== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2027== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2027== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/utf.nn
+==2027== 
+len=8: [104,228,117,223,108,101]: häußle:
+   h,ä,u,ß,l,e
+
+len=15: [20320,22909,19990,30028,65281]: 你好世界！:
+   你,好,世,界,！
+
+len=14: [50504,45397,32,49464,49345,33]: 안녕 세상!:
+   안,녕, ,세,상,!
+
+len=38: [2344,2350,2360,2381,2325,2366,2352,32,2360,2306,2360,2366,2352,33]: नमस्कार संसार!:
+   न,म,स,्,क,ा,र, ,स,ं,स,ा,र,!
+
+len=37: [3626,3623,3633,3626,3604,3637,3594,3634,3623,3650,3621,3585,33]: สวัสดีชาวโลก!:
+   ส,ว,ั,ส,ด,ี,ช,า,ว,โ,ล,ก,!
+
+len=19: [67,104,224,111,32,116,104,7871,32,103,105,7899,105,33]: Chào thế giới!:
+   C,h,à,o, ,t,h,ế, ,g,i,ớ,i,!
+
+all good.
+==2027== 
+==2027== HEAP SUMMARY:
+==2027==     in use at exit: 0 bytes in 0 blocks
+==2027==   total heap usage: 1,053 allocs, 1,053 frees, 329,002 bytes allocated
+==2027== 
+==2027== All heap blocks were freed -- no leaks are possible
+==2027== 
+==2027== For lists of detected and suppressed errors, rerun with: -s
+==2027== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/xmlgen.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/xmlgen.nn"])
+==2028== Memcheck, a memory error detector
+==2028== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2028== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2028== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/xmlgen.nn
+==2028== 
+obuf=["<","html"], cnt=0
+obuf=["<","head"], cnt=0
+obuf=["<","title"], cnt=0
+obuf=["<","body"], cnt=0
+fntyp: 5
+obuf=["<","form"," ","action","=\"","/bin/submit.cgi","\""], cnt=1
+fntyp: 5
+fntyp: 5
+obuf=["<","input"," ","name","=\"","fr_uname","\""," ","type","=\"","text","\""], cnt=2
+fntyp: 5
+fntyp: 5
+obuf=["<","input"," ","type","=\"","submit","\""," ","value","=\"","Go!","\""], cnt=2
+fntyp: 5
+fntyp: 5
+obuf=["<","input"," ","name","=\"","fr_uname","\""," ","type","=\"","text","\""], cnt=2
+fntyp: 5
+fntyp: 5
+obuf=["<","input"," ","type","=\"","submit","\""," ","value","=\"","Go!","\""], cnt=2
+<html>
+<head>   
+   <title>      Example Document
+</title>
+</head>
+<body>   
+   <form action="/bin/submit.cgi">      
+      <input name="fr_uname" type="text" />
+      <input type="submit" value="Go!" />
+      <input name="fr_uname" type="text" />
+      <input type="submit" value="Go!" />
+</form>
+</body>
+</html>
+
+==2028== 
+==2028== HEAP SUMMARY:
+==2028==     in use at exit: 0 bytes in 0 blocks
+==2028==   total heap usage: 1,298 allocs, 1,298 frees, 391,795 bytes allocated
+==2028== 
+==2028== All heap blocks were freed -- no leaks are possible
+==2028== 
+==2028== For lists of detected and suppressed errors, rerun with: -s
+==2028== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+----------------------------
+>>>>>> RUNNING: "/mnt/c/cloud/local/dev/langs/neon/eg/y.nn" (["valgrind", "/mnt/c/cloud/local/dev/langs/neon/run", "/mnt/c/cloud/local/dev/langs/neon/eg/y.nn"])
+==2029== Memcheck, a memory error detector
+==2029== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2029== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2029== Command: /mnt/c/cloud/local/dev/langs/neon/run /mnt/c/cloud/local/dev/langs/neon/eg/y.nn
+==2029== 
+5! is 120
+==2029== 
+==2029== HEAP SUMMARY:
+==2029==     in use at exit: 0 bytes in 0 blocks
+==2029==   total heap usage: 982 allocs, 982 frees, 327,595 bytes allocated
+==2029== 
+==2029== All heap blocks were freed -- no leaks are possible
+==2029== 
+==2029== For lists of detected and suppressed errors, rerun with: -s
+==2029== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+********************
+finished!

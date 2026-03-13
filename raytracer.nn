@@ -13,58 +13,54 @@ const G = [
     233230,
 ];
 
-const Vec3Mod = import("vector3")
-const Vector3 = Vec3Mod.Vector3
-
-/*
-var op_add = null
-var op_mul = null
-var op_mod = null
-var op_xor = null
-var op_bang = null
-
-function Vector3(x, y, z) {
-    return {
-        x: x,
-        y: y,
-        z: z,
-        __operator_add__: op_add,
-        __operator_mul__: op_mul,
-        __operator_mod__: op_mod,
-        __operator_xor__: op_xor,
-        __operator_bang__: op_bang,
+class Vector3
+{
+    constructor(x, y, z)
+    {
+        this.x = x;
+        this.y = y;
+        this.z = z;
     }
-}
 
-op_add = function(a, b) {
-    return Vector3(a.x + b.x, a.y + b.y, a.z + b.z)
-}
-
-op_mul = function(a, b) {
-    if (is_number(b)) {
-        return Vector3(a.x * b, a.y * b, a.z * b)
-    } else if (is_number(a)) {
-        return Vector3(a * b.x, a * b.y, a * b.z)
+    __add__(a, b)
+    {
+        return Vector3(a.x + b.x, a.y + b.y, a.z + b.z)
     }
-    assert(false)
+
+    __mul__(a, b)
+    {
+        if (is_number(b)) {
+            return Vector3(a.x * b, a.y * b, a.z * b)
+        } else if (is_number(a)) {
+            return Vector3(a * b.x, a * b.y, a * b.z)
+        }
+        assert(false)
+    }
+
+    __mod__(a, b)
+    {
+        return a.x * b.x + a.y * b.y + a.z * b.z
+    }
+
+    __bxor__(a, b)
+    {
+        var v = Vector3(0, 0, 0)
+        v.x = (a.y * b.z) - (b.y * a.z)
+        v.y = (a.z * b.x) - (b.z * a.x)
+        v.z = (a.x * b.y) - (b.x * a.y)
+        return v
+    }
+
+    bang(a)
+    {
+        return a * (1 / Math.sqrt(a % a))
+    }
+
 }
 
-op_mod = function(a, b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z
-}
 
-op_xor = function(a, b) {
-    var v = Vector3(0, 0, 0)
-    v.x = (a.y * b.z) - (b.y * a.z)
-    v.y = (a.z * b.x) - (b.z * a.x)
-    v.z = (a.x * b.y) - (b.x * a.y)
-    return v
-}
 
-op_bang = function(a) {
-    return a * (1 / Math.sqrt(a % a))
-}
-*/
+
 
 function test(o, d, t, n) { 
     t = 1e9

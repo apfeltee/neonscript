@@ -20,6 +20,9 @@ _tmp/
 _tmp/*
 _obj/*
 _obj
+_src
+_src/
+_src/*
 cpp/*
 cpp/
 big
