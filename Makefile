@@ -38,7 +38,7 @@ WFLAGS +=  -Wwrite-strings
 ## also very verbose
 #WFLAGS += -Weffc++
 
-#WFLAGS = -w
+WFLAGS = -w
 
 
 OPTFLAGS = -Og
