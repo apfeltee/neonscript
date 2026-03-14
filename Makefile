@@ -38,10 +38,10 @@ WFLAGS +=  -Wwrite-strings
 ## also very verbose
 #WFLAGS += -Weffc++
 
-WFLAGS = -w
+#WFLAGS = -w
 
 
-OPTFLAGS = -Og
+OPTFLAGS = -O0
 #OPTFLAGS = -O5 -funroll-loops -flto -ffast-math 
 
 

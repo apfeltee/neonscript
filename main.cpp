@@ -197,7 +197,7 @@
 
 #define NEON_RETURNERROR(...) \
     { \
-        nn_vm_stackpopn(state, argc); \
+        GCSingleton::get()->stackPop(argc); \
         nn_except_throw(state, ##__VA_ARGS__); \
     } \
     return nn_value_makebool(false);
@@ -251,87 +251,6 @@
 
 #define SCRIPTFN_UNUSED(var) (void)var
 
-enum NNOpCode
-{
-    NEON_OP_GLOBALDEFINE,
-    NEON_OP_GLOBALGET,
-    NEON_OP_GLOBALSET,
-    NEON_OP_LOCALGET,
-    NEON_OP_LOCALSET,
-    NEON_OP_FUNCARGOPTIONAL,
-    NEON_OP_FUNCARGSET,
-    NEON_OP_FUNCARGGET,
-    NEON_OP_UPVALUEGET,
-    NEON_OP_UPVALUESET,
-    NEON_OP_UPVALUECLOSE,
-    NEON_OP_PROPERTYGET,
-    NEON_OP_PROPERTYGETSELF,
-    NEON_OP_PROPERTYSET,
-    NEON_OP_JUMPIFFALSE,
-    NEON_OP_JUMPNOW,
-    NEON_OP_LOOP,
-    NEON_OP_EQUAL,
-    NEON_OP_PRIMGREATER,
-    NEON_OP_PRIMLESSTHAN,
-    NEON_OP_PUSHEMPTY,
-    NEON_OP_PUSHNULL,
-    NEON_OP_PUSHTRUE,
-    NEON_OP_PUSHFALSE,
-    NEON_OP_PRIMADD,
-    NEON_OP_PRIMSUBTRACT,
-    NEON_OP_PRIMMULTIPLY,
-    NEON_OP_PRIMDIVIDE,
-    NEON_OP_PRIMFLOORDIVIDE,
-    NEON_OP_PRIMMODULO,
-    NEON_OP_PRIMPOW,
-    NEON_OP_PRIMNEGATE,
-    NEON_OP_PRIMNOT,
-    NEON_OP_PRIMBITNOT,
-    NEON_OP_PRIMAND,
-    NEON_OP_PRIMOR,
-    NEON_OP_PRIMBITXOR,
-    NEON_OP_PRIMSHIFTLEFT,
-    NEON_OP_PRIMSHIFTRIGHT,
-    NEON_OP_PUSHONE,
-    /* 8-bit constant address (0 - 255) */
-    NEON_OP_PUSHCONSTANT,
-    NEON_OP_ECHO,
-    NEON_OP_POPONE,
-    NEON_OP_DUPONE,
-    NEON_OP_POPN,
-    NEON_OP_ASSERT,
-    NEON_OP_EXTHROW,
-    NEON_OP_MAKECLOSURE,
-    NEON_OP_CALLFUNCTION,
-    NEON_OP_CALLMETHOD,
-    NEON_OP_CLASSINVOKETHIS,
-    NEON_OP_RETURN,
-    NEON_OP_MAKECLASS,
-    NEON_OP_MAKEMETHOD,
-    NEON_OP_CLASSGETTHIS,
-    NEON_OP_CLASSPROPERTYDEFINE,
-    NEON_OP_CLASSINHERIT,
-    NEON_OP_CLASSGETSUPER,
-    NEON_OP_CLASSINVOKESUPER,
-    NEON_OP_CLASSINVOKESUPERSELF,
-    NEON_OP_MAKERANGE,
-    NEON_OP_MAKEARRAY,
-    NEON_OP_MAKEDICT,
-    NEON_OP_INDEXGET,
-    NEON_OP_INDEXGETRANGED,
-    NEON_OP_INDEXSET,
-    NEON_OP_IMPORTIMPORT,
-    NEON_OP_EXTRY,
-    NEON_OP_EXPOPTRY,
-    NEON_OP_EXPUBLISHTRY,
-    NEON_OP_STRINGIFY,
-    NEON_OP_SWITCH,
-    NEON_OP_TYPEOF,
-    NEON_OP_OPINSTANCEOF,
-    NEON_OP_HALT,
-    NEON_OP_BREAK_PL
-};
-
 enum NNAstTokType
 {
     NEON_ASTTOK_NEWLINE,
@@ -363,7 +282,6 @@ enum NNAstTokType
     NEON_ASTTOK_POWASSIGN,
     NEON_ASTTOK_DIVIDE,
     NEON_ASTTOK_DIVASSIGN,
-    NEON_ASTTOK_FLOOR,
     NEON_ASTTOK_ASSIGN,
     NEON_ASTTOK_EQUAL,
     NEON_ASTTOK_LESSTHAN,
@@ -438,42 +356,6 @@ enum NNAstTokType
     NEON_ASTTOK_TOKCOUNT
 };
 
-enum NNAstPrecedence
-{
-    NEON_ASTPREC_NONE,
-
-    /* =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //= */
-    NEON_ASTPREC_ASSIGNMENT,
-    /* ~= ?: */
-    NEON_ASTPREC_CONDITIONAL,
-    /* 'or' || */
-    NEON_ASTPREC_OR,
-    /* 'and' && */
-    NEON_ASTPREC_AND,
-    /* ==, != */
-    NEON_ASTPREC_EQUALITY,
-    /* <, >, <=, >= */
-    NEON_ASTPREC_COMPARISON,
-    /* | */
-    NEON_ASTPREC_BITOR,
-    /* ^ */
-    NEON_ASTPREC_BITXOR,
-    /* & */
-    NEON_ASTPREC_BITAND,
-    /* <<, >> */
-    NEON_ASTPREC_SHIFT,
-    /* .. */
-    NEON_ASTPREC_RANGE,
-    /* +, - */
-    NEON_ASTPREC_TERM,
-    /* *, /, %, **, // */
-    NEON_ASTPREC_FACTOR,
-    /* !, -, ~, (++, -- this two will now be treated as statements) */
-    NEON_ASTPREC_UNARY,
-    /* ., () */
-    NEON_ASTPREC_CALL,
-    NEON_ASTPREC_PRIMARY
-};
 
 enum NNFuncContextType
 {
@@ -602,7 +484,7 @@ struct NNValArray;
 template<typename HTKeyT, typename HTValT>
 struct NNHashTable;
 
-typedef bool(*NNValIsFuncFN)(NNValue);
+typedef bool(*NNValIsFuncFN);
 typedef NNValue (*NNNativeFN)(NNState*, NNValue, NNValue*, size_t);
 typedef void (*NNPtrFreeFN)(void*);
 typedef bool (*NNAstParsePrefixFN)(NNAstParser*, bool);
@@ -640,25 +522,25 @@ void nn_argcheck_init(NNState *state, NNArgCheck *ch, const char *name, NNValue 
 NNProperty nn_property_makewithpointer(NNValue val, NNFieldType type);
 NNProperty nn_property_makewithgetset(NNValue val, NNValue getter, NNValue setter, NNFieldType type);
 NNProperty nn_property_make(NNValue val, NNFieldType type);
-void nn_state_installmethods(NNState *state, NNObjClass *klass, NNConstClassMethodItem *listmethods);
+void nn_state_installmethods(NNObjClass *klass, NNConstClassMethodItem *listmethods);
 void nn_state_initbuiltinmethods(NNState *state);
 void nn_state_vwarn(NNState *state, const char *fmt, va_list va);
 void nn_state_warn(NNState *state, const char *fmt, ...);
 NNValue nn_except_getstacktrace(NNState *state);
 bool nn_except_propagate(NNState *state);
-bool nn_except_pushhandler(NNState *state, NNObjClass *type, int address, int finallyaddress);
+bool nn_except_pushhandler(NNObjClass *type, int address, int finallyaddress);
 bool nn_except_vthrowactual(NNState *state, NNObjClass *klass, const char *srcfile, int srcline, const char *format, va_list va);
 bool nn_except_throwactual(NNState *state, NNObjClass *klass, const char *srcfile, int srcline, const char *format, ...);
 bool nn_except_throwwithclass(NNState *state, NNObjClass *klass, const char *srcfile, int srcline, const char *format, ...);
 bool nn_except_vthrowwithclass(NNState *state, NNObjClass *exklass, const char *srcfile, int srcline, const char *format, va_list args);
-NNInstruction nn_util_makeinst(bool isop, uint8_t code, int srcline);
+NNInstruction nn_util_makeinst(bool isop, uint16_t code, int srcline);
 NNObjClass *nn_except_makeclass(NNState *state, NNObjModule *module, const char *cstrname, bool iscs);
-NNObjInstance *nn_except_makeinstance(NNState *state, NNObjClass *exklass, const char *srcfile, int srcline, NNObjString *message);
-void nn_state_raisefatalerror(NNState *state, const char *format, ...);
-bool nn_state_defglobalvalue(NNState *state, const char *name, NNValue val);
-bool nn_state_defnativefunctionptr(NNState *state, const char *name, NNNativeFN fptr, void *uptr);
-bool nn_state_defnativefunction(NNState *state, const char *name, NNNativeFN fptr);
-NNObjClass *nn_util_makeclass(NNState *state, const char *name, NNObjClass *parent);
+NNObjInstance *nn_except_makeinstance(NNObjClass *exklass, const char *srcfile, int srcline, NNObjString *message);
+void nn_state_raisefatalerror(const char *format, ...);
+bool nn_state_defglobalvalue(const char *name, NNValue val);
+bool nn_state_defnativefunctionptr(const char *name, NNNativeFN fptr, void *uptr);
+bool nn_state_defnativefunction(const char *name, NNNativeFN fptr);
+NNObjClass *nn_util_makeclass(const char *name, NNObjClass *parent);
 void nn_state_buildprocessinfo(NNState *state);
 void nn_state_updateprocessinfo(NNState *state);
 bool nn_state_makestack(NNState *pstate);
@@ -679,7 +561,7 @@ int nn_dbg_printbyteinstr(NNIOStream *pr, const char *name, NNBlob *blob, int of
 int nn_dbg_printjumpinstr(NNIOStream *pr, const char *name, int sign, NNBlob *blob, int offset);
 int nn_dbg_printtryinstr(NNIOStream *pr, const char *name, NNBlob *blob, int offset);
 int nn_dbg_printinvokeinstr(NNIOStream *pr, const char *name, NNBlob *blob, int offset);
-const char *nn_dbg_op2str(uint8_t instruc);
+const char *nn_dbg_op2str(uint16_t instruc);
 int nn_dbg_printclosureinstr(NNIOStream *pr, const char *name, NNBlob *blob, int offset);
 int nn_dbg_printinstructionat(NNIOStream *pr, NNBlob *blob, int offset);
 /* ioprinter.c */
@@ -782,12 +664,12 @@ void nn_import_loadbuiltinmodules(NNState *state);
 bool nn_state_addmodulesearchpathobj(NNState *state, NNObjString *os);
 bool nn_state_addmodulesearchpath(NNState *state, const char *path);
 void nn_state_setupmodulepaths(NNState *state);
-void nn_module_setfilefield(NNState *state, NNObjModule *module);
+void nn_module_setfilefield(NNObjModule *module);
 void nn_module_destroy(NNObjModule *module);
 NNObjModule *nn_import_loadmodulescript(NNState *state, NNObjModule *intomodule, NNObjString *modulename);
 char *nn_import_resolvepath(NNState *state, const char *modulename, const char *currentfile, char *rootfile, bool isrelative);
 bool nn_import_loadnativemodule(NNState *state, NNModInitFN init_fn, char *importname, const char *source, void *dlw);
-void nn_import_addnativemodule(NNState *state, NNObjModule *module, const char *as);
+void nn_import_addnativemodule(NNObjModule *module, const char *as);
 void nn_import_closemodule(void *hnd);
 /* libnumber.c */
 void nn_state_installobjectnumber(NNState *state);
@@ -905,7 +787,7 @@ void *nn_memory_malloc(size_t sz);
 void *nn_memory_realloc(void *p, size_t nsz);
 void *nn_memory_calloc(size_t count, size_t typsize);
 void nn_memory_free(void *ptr);
-NNObject *nn_gcmem_protect(NNState *state, NNObject *object);
+NNObject *nn_gcmem_protect(NNObject *object);
 void nn_gcmem_maybecollect(int addsize, bool wasnew);
 void *nn_gcmem_allocate(size_t newsize, size_t amount, bool retain);
 void nn_gcmem_release(void *pointer, size_t oldsize);
@@ -916,7 +798,7 @@ void nn_object_destroy(NNObject *object);
 void nn_gcmem_markroots(NNState *state);
 void nn_gcmem_tracerefs();
 void nn_gcmem_sweep();
-void nn_gcmem_destroylinkedobjects(NNState *state);
+void nn_gcmem_destroylinkedobjects();
 void nn_gcmem_collectgarbage();
 void nn_gcmem_markcompilerroots();
 /* modast.c */
@@ -961,13 +843,13 @@ NNAstRule *nn_astparser_getrule(NNAstTokType type);
 NNObjFunction *nn_astparser_compilesource(NNState *state, NNObjModule *module, const char *source, NNBlob *blob, bool fromimport, bool keeplast);
 /* utf.c */
 void nn_utf8iter_init(utf8iterator_t *iter, const char *ptr, uint32_t length);
-uint8_t nn_utf8iter_charsize(const char *character);
-uint32_t nn_utf8iter_converter(const char *character, uint8_t size);
-uint8_t nn_utf8iter_next(utf8iterator_t *iter);
+uint16_t nn_utf8iter_charsize(const char *character);
+uint32_t nn_utf8iter_converter(const char *character, uint16_t size);
+uint16_t nn_utf8iter_next(utf8iterator_t *iter);
 const char *nn_utf8iter_getchar(utf8iterator_t *iter);
 int nn_util_utf8numbytes(int value);
 char *nn_util_utf8encode(unsigned int code, size_t *dlen);
-int nn_util_utf8decode(const uint8_t *bytes, uint32_t length);
+int nn_util_utf8decode(const uint16_t *bytes, uint32_t length);
 char *nn_util_utf8codepoint(const char *str, char *outcodepoint);
 char *nn_util_utf8strstr(const char *haystack, const char *needle);
 char *nn_util_utf8index(char *s, int pos);
@@ -988,14 +870,14 @@ void nn_util_mtseed(uint32_t seed, uint32_t *binst, uint32_t *index);
 uint32_t nn_util_mtgenerate(uint32_t *binst, uint32_t *index);
 double nn_util_mtrand(double lowerlimit, double upperlimit);
 char *nn_util_filereadhandle(FILE *hnd, size_t *dlen, bool havemaxsz, size_t maxsize);
-char *nn_util_filereadfile(NNState *state, const char *filename, size_t *dlen, bool havemaxsz, size_t maxsize);
+char *nn_util_filereadfile(const char *filename, size_t *dlen, bool havemaxsz, size_t maxsize);
 char *nn_util_filegetshandle(char *s, int size, FILE *f, size_t *lendest);
 int nn_util_filegetlinehandle(char **lineptr, size_t *destlen, FILE *hnd);
 char *nn_util_strtoupper(char *str, size_t length);
 char *nn_util_strtolower(char *str, size_t length);
-NNObjString *nn_util_numbertobinstring(NNState *state, long n);
-NNObjString *nn_util_numbertooctstring(NNState *state, int64_t n, bool numeric);
-NNObjString *nn_util_numbertohexstring(NNState *state, int64_t n, bool numeric);
+NNObjString *nn_util_numbertobinstring(long n);
+NNObjString *nn_util_numbertooctstring(int64_t n, bool numeric);
+NNObjString *nn_util_numbertohexstring(int64_t n, bool numeric);
 uint32_t nn_object_hashobject(NNObject *object);
 uint32_t nn_value_hashvalue(NNValue value);
 /* value.c */
@@ -1004,7 +886,6 @@ NNValue nn_value_copystr(const char *str);
 NNObjString *nn_value_tostring(NNValue value);
 const char *nn_value_objecttypename(NNObject *object, bool detailed);
 const char *nn_value_typename(NNValue value, bool detailed);
-bool nn_value_isfalse(NNValue value);
 bool nn_value_compobjarray(NNObject *oa, NNObject *ob);
 bool nn_value_compobjstring(NNObject *oa, NNObject *ob);
 bool nn_value_compobjdict(NNObject *oa, NNObject *ob);
@@ -1015,16 +896,14 @@ NNValue nn_value_findgreater(NNValue a, NNValue b);
 void nn_value_sortvalues(NNState *state, NNValue *values, int count);
 NNValue nn_value_copyvalue(NNValue value);
 /* vm.c */
-void nn_vm_initvmstate(NNState *state);
-void nn_state_resetvmstate(NNState *state);
+void nn_vm_initvmstate();
+void nn_state_resetvmstate();
 bool nn_vm_callclosure(NNState *state, NNObjFunction *closure, NNValue thisval, int argcount, bool fromoperator);
 bool nn_vm_callvaluewithobject(NNState *state, NNValue callable, NNValue thisval, int argcount, bool fromoper);
 bool nn_vm_callvalue(NNState *state, NNValue callable, NNValue thisval, int argcount, bool fromoperator);
 NNObjClass *nn_value_getclassfor(NNState *state, NNValue receiver);
-void nn_vm_stackpush(NNState *state, NNValue value);
-NNValue nn_vm_stackpop(NNState *state);
-NNValue nn_vm_stackpopn(NNState *state, int n);
-NNValue nn_vm_stackpeek(NNState *state, int distance);
+
+NNValue nn_vm_stackpeek(int distance);
 bool nn_util_isinstanceof(NNObjClass *klass1, NNObjClass *expected);
 NNStatus nn_vm_runvm(NNState *state, int exitframe, NNValue *rv);
 int nn_nestcall_prepare(NNValue callable, NNValue mthobj, NNValue *callarr, int maxcallarr);
@@ -1140,7 +1019,7 @@ struct utf8iterator_t
     uint32_t codepoint;
 
     /* character size in bytes */
-    uint8_t charsize;
+    uint16_t charsize;
 
     /* current character position */
     uint32_t currpos;
@@ -1188,7 +1067,23 @@ struct NNFormatInfo
 	NNState* pstate;
 };
 
-struct NNValData
+
+struct NNObject
+{
+	NNObjType type;
+	bool mark;
+    /*
+    // when an object is marked as stale, it means that the
+    // GC will never collect this object. This can be useful
+    // for library/package objects that want to reuse native
+    // objects in their types/pointers. The GC cannot reach
+    // them yet, so it's best for them to be kept stale.
+    */
+	bool stale;
+	NNObject* next;    
+};
+
+struct NNValue
 {
     public:
         NNValType type;
@@ -1205,7 +1100,135 @@ struct NNValData
             return (this->type == NEON_VALTYPE_NULL);
         }
 
+        NEON_INLINE bool isObject()
+        {
+            return (this->type == NEON_VALTYPE_OBJ);
+        }
+
+        NEON_INLINE bool isObjtype(NNObjType t)
+        {
+            return this->isObject() && (asObject()->type == t);
+        }
+
+        NEON_INLINE bool isBool()
+        {
+            return (this->type == NEON_VALTYPE_BOOL);
+        }
+
+        NEON_INLINE bool isNumber()
+        {
+            return (this->type == NEON_VALTYPE_NUMBER);
+        }
+
+        NEON_INLINE bool isString()
+        {
+            return isObjtype(NEON_OBJTYPE_STRING);
+        }
+
+        NEON_INLINE bool isFuncnative()
+        {
+            return isObjtype(NEON_OBJTYPE_FUNCNATIVE);
+        }
+
+        NEON_INLINE bool isFuncscript()
+        {
+            return isObjtype(NEON_OBJTYPE_FUNCSCRIPT);
+        }
+
+        NEON_INLINE bool isFuncclosure()
+        {
+            return isObjtype(NEON_OBJTYPE_FUNCCLOSURE);
+        }
+
+        NEON_INLINE bool isFuncbound()
+        {
+            return isObjtype(NEON_OBJTYPE_FUNCBOUND);
+        }
+
+        NEON_INLINE bool isClass()
+        {
+            return isObjtype(NEON_OBJTYPE_CLASS);
+        }
+
+        NEON_INLINE bool isInstance()
+        {
+            return isObjtype(NEON_OBJTYPE_INSTANCE);
+        }
+
+        NEON_INLINE bool isArray()
+        {
+            return isObjtype(NEON_OBJTYPE_ARRAY);
+        }
+
+        NEON_INLINE bool isDict()
+        {
+            return isObjtype(NEON_OBJTYPE_DICT);
+        }
+
+        NEON_INLINE bool isFile()
+        {
+            return isObjtype(NEON_OBJTYPE_FILE);
+        }
+
+        NEON_INLINE bool isRange()
+        {
+            return isObjtype(NEON_OBJTYPE_RANGE);
+        }
+
+        NEON_INLINE bool isModule()
+        {
+            return isObjtype(NEON_OBJTYPE_MODULE);
+        }
+
+        NEON_INLINE bool isCallable()
+        {
+            return (
+                this->isClass() ||
+                this->isFuncscript() ||
+                this->isFuncclosure() ||
+                this->isFuncbound() ||
+                this->isFuncnative()
+            );
+        }
+
+
+        NEON_INLINE NNObject* asObject()
+        {
+            return (valunion.vobjpointer);
+        }
+
+        NEON_INLINE double asNumber()
+        {
+            return (this->valunion.vfltnum);
+        }
+
+        NEON_INLINE bool asBool()
+        {
+            if(this->isNumber())
+            {
+                return this->asNumber();
+            }
+            return (this->valunion.vbool);
+        }
+
+        NEON_INLINE NNObjString* asString()
+        {
+            return ((NNObjString*)this->asObject());
+        }
+
+        NEON_INLINE NNObjArray* asArray()
+        {
+            return ((NNObjArray*)this->asObject());
+        }
+
+        NEON_INLINE NNObjDict* asDict()
+        {
+            return ((NNObjDict*)this->asObject());
+        }
+
+        bool isFalse();
 };
+
 
 template<typename StoredType>
 struct NNValArray
@@ -1257,7 +1280,7 @@ struct NNValArray
 
     public:
         const char* listname = nullptr;
-        NNValData* listitems = nullptr;
+        NNValue* listitems = nullptr;
         size_t listcapacity = 0;
         size_t listcount = 0;
 
@@ -1453,15 +1476,15 @@ struct NNValArray
 
 struct NNPropGetSet
 {
-    NNValData getter;
-    NNValData setter;
+    NNValue getter;
+    NNValue setter;
 };
 
 struct NNProperty
 {
     bool havegetset;
     NNFieldType type;
-    NNValData value;
+    NNValue value;
     NNPropGetSet getset;
 };
 
@@ -1617,9 +1640,9 @@ struct NNHashTable
                         }
                     }
                 }
-                if(nn_value_isstring((HTKeyT)entry->key))
+                if(entry->key.isString())
                 {
-                    entoskey = nn_value_asstring((HTKeyT)entry->key);
+                    entoskey = entry->key.asString();
                     if(nn_string_getlength(entoskey) == klen)
                     {
                         if(memcmp(kstr, nn_string_getdata(entoskey), klen) == 0)
@@ -1757,7 +1780,7 @@ struct NNHashTable
 
         bool set(HTKeyT key, HTValT value)
         {
-            return this->setwithtype(key, value, NEON_PROPTYPE_VALUE, nn_value_isstring(key));
+            return this->setwithtype(key, value, NEON_PROPTYPE_VALUE, key.isString());
         }
 
         bool remove(HTKeyT key);
@@ -1800,10 +1823,10 @@ struct NNHashTable
             for(i = 0; i < (int)from->htcapacity; i++)
             {
                 entry = &from->htentries[i];
-                if(!entry->key.isNull() && !nn_value_ismodule((HTValT)entry->value.value))
+                if(!entry->key.isNull() && !(HTValT)entry->value.value.isModule())
                 {
                     /* Don't import private values */
-                    if(nn_value_isstring((HTKeyT)entry->key) && nn_string_getdata(nn_value_asstring((HTKeyT)entry->key))[0] == '_')
+                    if((HTKeyT)entry->key.isString() && nn_string_getdata((HTKeyT)entry->key.asString())[0] == '_')
                     {
                         continue;
                     }
@@ -1848,18 +1871,98 @@ struct NNHashTable
             }
             return defval;
         }
-
 };
-
 
 struct NNInstruction
 {
-    /* opcode or value */
-    uint8_t code;
-    /* is this instruction an opcode? */
-    uint8_t isop: 1;
-    /* line corresponding to where this instruction was emitted */
-    uint8_t fromsourceline;
+    public:
+        enum OpCode
+        {
+            OPC_GLOBALDEFINE,
+            OPC_GLOBALGET,
+            OPC_GLOBALSET,
+            OPC_LOCALGET,
+            OPC_LOCALSET,
+            OPC_FUNCARGOPTIONAL,
+            OPC_FUNCARGSET,
+            OPC_FUNCARGGET,
+            OPC_UPVALUEGET,
+            OPC_UPVALUESET,
+            OPC_UPVALUECLOSE,
+            OPC_PROPERTYGET,
+            OPC_PROPERTYGETSELF,
+            OPC_PROPERTYSET,
+            OPC_JUMPIFFALSE,
+            OPC_JUMPNOW,
+            OPC_LOOP,
+            OPC_EQUAL,
+            OPC_PRIMGREATER,
+            OPC_PRIMLESSTHAN,
+            OPC_PUSHEMPTY,
+            OPC_PUSHNULL,
+            OPC_PUSHTRUE,
+            OPC_PUSHFALSE,
+            OPC_PRIMADD,
+            OPC_PRIMSUBTRACT,
+            OPC_PRIMMULTIPLY,
+            OPC_PRIMDIVIDE,
+            OPC_PRIMMODULO,
+            OPC_PRIMPOW,
+            OPC_PRIMNEGATE,
+            OPC_PRIMNOT,
+            OPC_PRIMBITNOT,
+            OPC_PRIMAND,
+            OPC_PRIMOR,
+            OPC_PRIMBITXOR,
+            OPC_PRIMSHIFTLEFT,
+            OPC_PRIMSHIFTRIGHT,
+            OPC_PUSHONE,
+            /* 8-bit constant address (0 - 255) */
+            OPC_PUSHCONSTANT,
+            OPC_ECHO,
+            OPC_POPONE,
+            OPC_DUPONE,
+            OPC_POPN,
+            OPC_ASSERT,
+            OPC_EXTHROW,
+            OPC_MAKECLOSURE,
+            OPC_CALLFUNCTION,
+            OPC_CALLMETHOD,
+            OPC_CLASSINVOKETHIS,
+            OPC_RETURN,
+            OPC_MAKECLASS,
+            OPC_MAKEMETHOD,
+            OPC_CLASSGETTHIS,
+            OPC_CLASSPROPERTYDEFINE,
+            OPC_CLASSINHERIT,
+            OPC_CLASSGETSUPER,
+            OPC_CLASSINVOKESUPER,
+            OPC_CLASSINVOKESUPERSELF,
+            OPC_MAKERANGE,
+            OPC_MAKEARRAY,
+            OPC_MAKEDICT,
+            OPC_INDEXGET,
+            OPC_INDEXGETRANGED,
+            OPC_INDEXSET,
+            OPC_IMPORTIMPORT,
+            OPC_EXTRY,
+            OPC_EXPOPTRY,
+            OPC_EXPUBLISHTRY,
+            OPC_STRINGIFY,
+            OPC_SWITCH,
+            OPC_TYPEOF,
+            OPC_OPINSTANCEOF,
+            OPC_HALT,
+            OPC_BREAK_PL
+        };
+
+    public:
+        /* opcode or value */
+        uint16_t code;
+        /* is this instruction an opcode? */
+        uint8_t isop: 1;
+        /* line corresponding to where this instruction was emitted */
+        uint8_t fromsourceline;
 };
 
 struct NNBlob
@@ -1905,7 +2008,7 @@ struct GCSingleton
             int64_t bytesallocated;
             int64_t nextgc;
             NNObject** graystack;
-        } gcstate;
+        } m_gcstate;
 
         struct
         {
@@ -1918,7 +2021,7 @@ struct GCSingleton
             NNObjUpvalue* openupvalues;
             NNCallFrame* framevalues;
             NNValue* stackvalues;
-        } vmstate;
+        } m_vmstate;
 
         NNHashTable<NNValue, NNValue> allocatedstrings;
         NNHashTable<NNValue, NNValue> openedmodules;
@@ -1926,72 +2029,188 @@ struct GCSingleton
 
 
     private:
-        static void defVarsFor(GCSingleton* gcs)
+        static NEON_INLINE void defVarsFor(GCSingleton* gcs)
         {
             gcs->markvalue = true;
-            gcs->gcstate.bytesallocated = 0;
+            gcs->m_gcstate.bytesallocated = 0;
             /* default is 1mb. Can be modified via the -g flag. */
-            gcs->gcstate.nextgc = NEON_CONFIG_DEFAULTGCSTART;
-            gcs->gcstate.graycount = 0;
-            gcs->gcstate.graycapacity = 0;
-            gcs->gcstate.graystack = nullptr;            
+            gcs->m_gcstate.nextgc = NEON_CONFIG_DEFAULTGCSTART;
+            gcs->m_gcstate.graycount = 0;
+            gcs->m_gcstate.graycapacity = 0;
+            gcs->m_gcstate.graystack = nullptr;            
         }
 
     public:
-        static void init()
+        static NEON_INLINE void init()
         {
             GCSingleton::m_myself = new GCSingleton();
             defVarsFor(GCSingleton::m_myself);
         }
 
-        static void destroy()
+        static NEON_INLINE void destroy()
         {
             delete GCSingleton::m_myself;
         }
 
-        static GCSingleton* get()
+        static NEON_INLINE GCSingleton* get()
         {
             return GCSingleton::m_myself;
         }
 
-        static void clearGCProtect()
+        static NEON_INLINE void clearGCProtect()
         {
             size_t frpos;
             NNCallFrame* frame;
             frpos = 0;
-            if(GCSingleton::get()->vmstate.framecount > 0)
+            auto gcs = GCSingleton::get();
+            if(gcs->m_vmstate.framecount > 0)
             {
-                frpos = GCSingleton::get()->vmstate.framecount - 1;
+                frpos = gcs->m_vmstate.framecount - 1;
             }
-            frame = &GCSingleton::get()->vmstate.framevalues[frpos];
+            frame = &gcs->m_vmstate.framevalues[frpos];
             if(frame->gcprotcount > 0)
             {
                 if(frame->gcprotcount > 0)
                 {
-                    GCSingleton::get()->vmstate.stackidx -= frame->gcprotcount;
+                    gcs->m_vmstate.stackidx -= frame->gcprotcount;
                 }
                 frame->gcprotcount = 0;
             }
         }
 
+        /**
+        * grows m_vmstate.(stack|frame)values, respectively.
+        * currently it works fine with mob.js (man-or-boy test), although
+        * there are still some invalid reads regarding the closure;
+        * almost definitely because the pointer address changes.
+        *
+        * currently, the implementation really does just increase the
+        * memory block available:
+        * i.e., [NNValue x 32] -> [NNValue x <newsize>], without
+        * copying anything beyond primitive values.
+        */
+        NEON_INLINE bool resizeStack(size_t needed)
+        {
+            size_t oldsz;
+            size_t newsz;
+            size_t allocsz;
+            size_t nforvals;
+            NNValue* oldbuf;
+            NNValue* newbuf;
+            nforvals = (needed * 2);
+            oldsz = this->m_vmstate.stackcapacity;
+            newsz = oldsz + nforvals;
+            allocsz = ((newsz + 1) * sizeof(NNValue));
+            oldbuf = this->m_vmstate.stackvalues;
+            newbuf = (NNValue*)nn_memory_realloc(oldbuf, allocsz);
+            if(newbuf == nullptr)
+            {
+                fprintf(stderr, "internal error: failed to resize stackvalues!\n");
+                abort();
+            }
+            this->m_vmstate.stackvalues = (NNValue*)newbuf;
+            this->m_vmstate.stackcapacity = newsz;
+            return true;
+        }
+
+
+        NEON_INLINE bool resizeFrames(size_t needed)
+        {
+            /* return false; */
+            size_t i;
+            size_t oldsz;
+            size_t newsz;
+            size_t allocsz;
+            int oldhandlercnt;
+            NNInstruction* oldip;
+            NNObjFunction* oldclosure;
+            NNCallFrame* oldbuf;
+            NNCallFrame* newbuf;
+            (void)i;
+            oldclosure = this->m_vmstate.currentframe->closure;
+            oldip = this->m_vmstate.currentframe->inscode;
+            oldhandlercnt = this->m_vmstate.currentframe->handlercount;
+            oldsz = this->m_vmstate.framecapacity;
+            newsz = oldsz + needed;
+            allocsz = ((newsz + 1) * sizeof(NNCallFrame));
+            #if 1
+                oldbuf = this->m_vmstate.framevalues;
+                newbuf = (NNCallFrame*)nn_memory_realloc(oldbuf, allocsz);
+                if(newbuf == nullptr)
+                {
+                    fprintf(stderr, "internal error: failed to resize framevalues!\n");
+                    abort();
+                }
+            #endif
+            this->m_vmstate.framevalues = (NNCallFrame*)newbuf;
+            this->m_vmstate.framecapacity = newsz;
+            /*
+            * this bit is crucial: realloc changes pointer addresses, and to keep the
+            * current frame, re-read it from the new address.
+            */
+            this->m_vmstate.currentframe = &this->m_vmstate.framevalues[this->m_vmstate.framecount - 1];
+            this->m_vmstate.currentframe->handlercount = oldhandlercnt;
+            this->m_vmstate.currentframe->inscode = oldip;
+            this->m_vmstate.currentframe->closure = oldclosure;
+            return true;
+        }
+
+        NEON_INLINE bool checkMaybeResize()
+        {
+            if((this->m_vmstate.stackidx+1) >= this->m_vmstate.stackcapacity)
+            {
+                if(!this->resizeStack(this->m_vmstate.stackidx + 1))
+                {
+                    fprintf(stderr, "failed to resize stack due to overflow");
+                    return false;
+                }
+                return true;
+            }
+            if(this->m_vmstate.framecount >= this->m_vmstate.framecapacity)
+            {
+                if(!resizeFrames(this->m_vmstate.framecapacity + 1))
+                {
+                    fprintf(stderr, "failed to resize frames due to overflow");
+                    return false;
+                }
+                return true;
+            }
+            return false;
+        }
+
+        template<typename InputT>
+        NEON_INLINE void stackPush(InputT value)
+        {
+            checkMaybeResize();
+            this->m_vmstate.stackvalues[this->m_vmstate.stackidx] = value;
+            this->m_vmstate.stackidx++;
+        }
+
+        NEON_INLINE auto stackPop()
+        {
+            this->m_vmstate.stackidx--;
+            if(this->m_vmstate.stackidx < 0)
+            {
+                this->m_vmstate.stackidx = 0;
+            }
+            return this->m_vmstate.stackvalues[this->m_vmstate.stackidx];
+        }
+
+        NEON_INLINE auto stackPop(int n)
+        {
+            this->m_vmstate.stackidx -= n;
+            if(this->m_vmstate.stackidx < 0)
+            {
+                this->m_vmstate.stackidx = 0;
+            }
+            return this->m_vmstate.stackvalues[this->m_vmstate.stackidx];
+        }
+
+
 };
 GCSingleton* GCSingleton::m_myself = nullptr;
 
 
-struct NNObject
-{
-	NNObjType type;
-	bool mark;
-    /*
-    // when an object is marked as stale, it means that the
-    // GC will never collect this object. This can be useful
-    // for library/package objects that want to reuse native
-    // objects in their types/pointers. The GC cannot reach
-    // them yet, so it's best for them to be kept stale.
-    */
-	bool stale;
-	NNObject* next;    
-};
 
 struct NNObjString: public NNObject
 {
@@ -2002,8 +2221,8 @@ struct NNObjString: public NNObject
 struct NNObjUpvalue: public NNObject
 {
     int stackpos;
-    NNValData closed;
-    NNValData location;
+    NNValue closed;
+    NNValue location;
     NNObjUpvalue* next;
 };
 
@@ -2034,8 +2253,8 @@ struct NNObjClass: public NNObject
     * the constructor, if any. defaults to <empty>, and if not <empty>, expects to be
     * some callable value.
     */
-    NNValData constructor;
-    NNValData destructor;
+    NNValue constructor;
+    NNValue destructor;
 
     /*
     * when declaring a class, $instproperties (their names, and initial values) are
@@ -2080,7 +2299,7 @@ struct NNObjFunction: public NNObject
 	NNFuncContextType contexttype;
 	NNObjString* name;
 	int upvalcount;
-	NNValData clsthisval;
+	NNValue clsthisval;
 	union {
 		struct {
 			NNObjFunction * scriptfunc;
@@ -2097,7 +2316,7 @@ struct NNObjFunction: public NNObject
 			void* userptr;
 		} fnnativefunc;
 		struct {
-			NNValData receiver;
+			NNValue receiver;
 			NNObjFunction* method;
 		} fnmethod;
 	};
@@ -2146,10 +2365,6 @@ struct NNObjUserdata: public NNObject
     NNPtrFreeFN ondestroyfn;
 };
 
-struct NNValue: public NNValData
-{
-
-};
 
 struct NNProcessInfo
 {
@@ -2347,9 +2562,48 @@ struct NNAstParser
 
 struct NNAstRule
 {
-    NNAstParsePrefixFN prefix;
-    NNAstParseInfixFN infix;
-    NNAstPrecedence precedence;
+    public:
+        enum Precedence
+        {
+            PREC_NONE,
+
+            /* =, &=, |=, *=, +=, -=, /=, **=, %=, >>=, <<=, ^=, //= */
+            PREC_ASSIGNMENT,
+            /* ~= ?: */
+            PREC_CONDITIONAL,
+            /* 'or' || */
+            PREC_OR,
+            /* 'and' && */
+            PREC_AND,
+            /* ==, != */
+            PREC_EQUALITY,
+            /* <, >, <=, >= */
+            PREC_COMPARISON,
+            /* | */
+            PREC_BITOR,
+            /* ^ */
+            PREC_BITXOR,
+            /* & */
+            PREC_BITAND,
+            /* <<, >> */
+            PREC_SHIFT,
+            /* .. */
+            PREC_RANGE,
+            /* +, - */
+            PREC_TERM,
+            /* *, /, %, **, // */
+            PREC_FACTOR,
+            /* !, -, ~, (++, -- this two will now be treated as statements) */
+            PREC_UNARY,
+            /* ., () */
+            PREC_CALL,
+            PREC_PRIMARY
+        };
+
+    public:
+        NNAstParsePrefixFN prefix;
+        NNAstParseInfixFN infix;
+        Precedence precedence;
 };
 
 struct NNDefFunc
@@ -2427,6 +2681,48 @@ struct NNArgCheck
 
 
 /* bottom */
+
+bool NNValue::isFalse()
+{
+    if(this->isNull())
+    {
+        return true;
+    }
+    if(this->isBool())
+    {
+        return !this->asBool();
+    }
+    /* -1 is the number equivalent of false */
+    if(this->isNumber())
+    {
+        return this->asNumber() < 0;
+    }
+    /* Non-empty strings are true, empty strings are false.*/
+    if(this->isString())
+    {
+        return nn_string_getlength(this->asString()) < 1;
+    }
+    /* Non-empty lists are true, empty lists are false.*/
+    if(this->isArray())
+    {
+        return this->asArray()->varray.count() == 0;
+    }
+    /* Non-empty dicts are true, empty dicts are false. */
+    if(this->isDict())
+    {
+        return this->asDict()->htnames.count() == 0;
+    }
+    /*
+    // All classes are true
+    // All closures are true
+    // All bound methods are true
+    // All functions are in themselves true if you do not account for what they
+    // return.
+    */
+    return false;
+}
+
+
 template<typename HTKeyT, typename HTValT>
 NNProperty* NNHashTable<HTKeyT, HTValT>::getfieldbyostr(NNObjString* str)
 {
@@ -2447,9 +2743,9 @@ template<typename HTKeyT, typename HTValT>
 NNProperty* NNHashTable<HTKeyT, HTValT>::getfield(HTKeyT key)
 {
     NNObjString* oskey;
-    if(nn_value_isstring(key))
+    if(key.isString())
     {
-        oskey = nn_value_asstring(key);
+        oskey = key.asString();
         return this->getfieldbystr(key, nn_string_getdata(oskey), nn_string_getlength(oskey), oskey->hashvalue);
     }
     return this->getfieldbyvalue(key);
@@ -2511,13 +2807,13 @@ NNObjString* NNHashTable<HTKeyT, HTValT>::findstring(const char* findstr, size_t
             }
         }
         #if defined(NEON_CONF_LIBSTRINGUSEHASH) && (NEON_CONF_LIBSTRINGUSEHASH == 1)
-            dn = nn_value_asnumber(entry->key);
+            dn = entry->key.asNumber();
             if(dn == wanteddn)
             {
-                return nn_value_asstring(entry->value.value);
+                return entry->value.value.asString();
             }
         #else
-            string = nn_value_asstring((HTKeyT)entry->key);
+            string = entry->key.asString();
             slen = nn_string_getlength(string);
             sdata = nn_string_getdata(string);
             if((slen == findlen) && (string->hashvalue == findhash)) 
@@ -2538,105 +2834,11 @@ NNObjString* NNHashTable<HTKeyT, HTValT>::findstring(const char* findstr, size_t
 
 
 
-NEON_INLINE bool nn_value_isobject(NNValue v)
-{
-    return ((v).type == NEON_VALTYPE_OBJ);
-}
 
-NEON_INLINE NNObject* nn_value_asobject(NNValue v)
-{
-    return ((v).valunion.vobjpointer);
-}
-
-NEON_INLINE bool nn_value_isobjtype(NNValue v, NNObjType t)
-{
-    return nn_value_isobject(v) && (nn_value_asobject(v)->type == t);
-}
-
-
-NEON_INLINE bool nn_value_isbool(NNValue v)
-{
-    return ((v).type == NEON_VALTYPE_BOOL);
-}
-
-NEON_INLINE bool nn_value_isnumber(NNValue v)
-{
-    return ((v).type == NEON_VALTYPE_NUMBER);
-}
-
-NEON_INLINE bool nn_value_isstring(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_STRING);
-}
-
-NEON_INLINE bool nn_value_isfuncnative(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCNATIVE);
-}
-
-NEON_INLINE bool nn_value_isfuncscript(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCSCRIPT);
-}
-
-NEON_INLINE bool nn_value_isfuncclosure(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCCLOSURE);
-}
-
-NEON_INLINE bool nn_value_isfuncbound(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FUNCBOUND);
-}
-
-NEON_INLINE bool nn_value_isclass(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_CLASS);
-}
-
-NEON_INLINE bool nn_value_isinstance(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_INSTANCE);
-}
-
-NEON_INLINE bool nn_value_isarray(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_ARRAY);
-}
-
-NEON_INLINE bool nn_value_isdict(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_DICT);
-}
-
-NEON_INLINE bool nn_value_isfile(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_FILE);
-}
-
-NEON_INLINE bool nn_value_isrange(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_RANGE);
-}
-
-NEON_INLINE bool nn_value_ismodule(NNValue v)
-{
-    return nn_value_isobjtype(v, NEON_OBJTYPE_MODULE);
-}
-
-NEON_INLINE bool nn_value_iscallable(NNValue v)
-{
-    return (
-        nn_value_isclass(v) ||
-        nn_value_isfuncscript(v) ||
-        nn_value_isfuncclosure(v) ||
-        nn_value_isfuncbound(v) ||
-        nn_value_isfuncnative(v)
-    );
-}
 
 NEON_INLINE const char* nn_value_typefromfunction(NNValIsFuncFN func)
 {
+    (void)func;
     #if 0
     if(func == nn_value_isstring)
     {
@@ -2697,76 +2899,49 @@ NEON_INLINE const char* nn_value_typefromfunction(NNValIsFuncFN func)
 
 NEON_INLINE NNObjType nn_value_objtype(NNValue v)
 {
-    return nn_value_asobject(v)->type;
+    return v.asObject()->type;
 }
 
-NEON_INLINE double nn_value_asnumber(NNValue v)
-{
-    return ((v).valunion.vfltnum);
-}
-
-NEON_INLINE bool nn_value_asbool(NNValue v)
-{
-    if(nn_value_isnumber(v))
-    {
-        return nn_value_asnumber(v);
-    }
-    return ((v).valunion.vbool);
-}
-
-NEON_INLINE NNObjString* nn_value_asstring(NNValue v)
-{
-    return ((NNObjString*)nn_value_asobject(v));
-}
 
 NEON_INLINE NNObjFunction* nn_value_asfunction(NNValue v)
 {
-    return ((NNObjFunction*)nn_value_asobject(v));
+    return ((NNObjFunction*)v.asObject());
 }
 
 NEON_INLINE NNObjClass* nn_value_asclass(NNValue v)
 {
-    return ((NNObjClass*)nn_value_asobject(v));
+    return ((NNObjClass*)v.asObject());
 }
 
 NEON_INLINE NNObjInstance* nn_value_asinstance(NNValue v)
 {
-    return ((NNObjInstance*)nn_value_asobject(v));
+    return ((NNObjInstance*)v.asObject());
 }
 
 NEON_INLINE NNObjSwitch* nn_value_asswitch(NNValue v)
 {
-    return ((NNObjSwitch*)nn_value_asobject(v));
+    return ((NNObjSwitch*)v.asObject());
 }
 
 NEON_INLINE NNObjUserdata* nn_value_asuserdata(NNValue v)
 {
-    return ((NNObjUserdata*)nn_value_asobject(v));
+    return ((NNObjUserdata*)v.asObject());
 }
 
 NEON_INLINE NNObjModule* nn_value_asmodule(NNValue v)
 {
-    return ((NNObjModule*)nn_value_asobject(v));
+    return ((NNObjModule*)v.asObject());
 }
 
-NEON_INLINE NNObjArray* nn_value_asarray(NNValue v)
-{
-    return ((NNObjArray*)nn_value_asobject(v));
-}
-
-NEON_INLINE NNObjDict* nn_value_asdict(NNValue v)
-{
-    return ((NNObjDict*)nn_value_asobject(v));
-}
 
 NEON_INLINE NNObjFile* nn_value_asfile(NNValue v)
 {
-    return ((NNObjFile*)nn_value_asobject(v));
+    return ((NNObjFile*)v.asObject());
 }
 
 NEON_INLINE NNObjRange* nn_value_asrange(NNValue v)
 {
-    return ((NNObjRange*)nn_value_asobject(v));
+    return ((NNObjRange*)v.asObject());
 }
 
 NEON_INLINE NNValue nn_value_makevalue(NNValType type)
@@ -2809,32 +2984,30 @@ NEON_INLINE NNValue nn_value_fromobject_actual(NNObject* obj)
     return v;
 }
 
-
-
-
-NNObject* nn_gcmem_protect(NNState* state, NNObject* object)
+NNObject* nn_gcmem_protect(NNObject* object)
 {
     size_t frpos;
-    nn_vm_stackpush(state, nn_value_fromobject(object));
+    auto gcs = GCSingleton::get();
+    gcs->stackPush(nn_value_fromobject(object));
     frpos = 0;
-    if(GCSingleton::get()->vmstate.framecount > 0)
+    if(gcs->m_vmstate.framecount > 0)
     {
-        frpos = GCSingleton::get()->vmstate.framecount - 1;
+        frpos = gcs->m_vmstate.framecount - 1;
     }
-    GCSingleton::get()->vmstate.framevalues[frpos].gcprotcount++;
+    gcs->m_vmstate.framevalues[frpos].gcprotcount++;
     return object;
 }
 
 
-
 void nn_gcmem_maybecollect(int addsize, bool wasnew)
 {
-    GCSingleton::get()->gcstate.bytesallocated += addsize;
-    if(GCSingleton::get()->gcstate.nextgc > 0)
+    auto gcs = GCSingleton::get();
+    gcs->m_gcstate.bytesallocated += addsize;
+    if(gcs->m_gcstate.nextgc > 0)
     {
-        if(wasnew && GCSingleton::get()->gcstate.bytesallocated > GCSingleton::get()->gcstate.nextgc)
+        if(wasnew && gcs->m_gcstate.bytesallocated > gcs->m_gcstate.nextgc)
         {
-            if(GCSingleton::get()->vmstate.currentframe && GCSingleton::get()->vmstate.currentframe->gcprotcount == 0)
+            if(gcs->m_vmstate.currentframe && gcs->m_vmstate.currentframe->gcprotcount == 0)
             {
                 nn_gcmem_collectgarbage();
             }
@@ -2884,24 +3057,25 @@ void nn_gcmem_markobject(NNObject* object)
     {
         return;
     }
+    auto gcs = GCSingleton::get();
     #if defined(DEBUG_GC) && DEBUG_GC
     nn_iostream_printf(state->debugwriter, "GC: marking object at <%p> ", (void*)object);
     nn_iostream_printvalue(state->debugwriter, nn_value_fromobject(object), false);
     nn_iostream_printf(state->debugwriter, "\n");
     #endif
-    object->mark = GCSingleton::get()->markvalue;
-    if(GCSingleton::get()->gcstate.graycapacity < GCSingleton::get()->gcstate.graycount + 1)
+    object->mark = gcs->markvalue;
+    if(gcs->m_gcstate.graycapacity < gcs->m_gcstate.graycount + 1)
     {
-        GCSingleton::get()->gcstate.graycapacity = NEON_MEMORY_GROWCAPACITY(GCSingleton::get()->gcstate.graycapacity);
-        GCSingleton::get()->gcstate.graystack = (NNObject**)nn_memory_realloc(GCSingleton::get()->gcstate.graystack, sizeof(NNObject*) * GCSingleton::get()->gcstate.graycapacity);
-        if(GCSingleton::get()->gcstate.graystack == nullptr)
+        gcs->m_gcstate.graycapacity = NEON_MEMORY_GROWCAPACITY(gcs->m_gcstate.graycapacity);
+        gcs->m_gcstate.graystack = (NNObject**)nn_memory_realloc(gcs->m_gcstate.graystack, sizeof(NNObject*) * gcs->m_gcstate.graycapacity);
+        if(gcs->m_gcstate.graystack == nullptr)
         {
             fflush(stdout);
             fprintf(stderr, "GC encountered an error");
             abort();
         }
     }
-    GCSingleton::get()->gcstate.graystack[GCSingleton::get()->gcstate.graycount++] = object;
+    gcs->m_gcstate.graystack[gcs->m_gcstate.graycount++] = object;
 }
 
 
@@ -2911,7 +3085,7 @@ void nn_valarray_mark(NNValArray<NNValue>* list)
     NN_NULLPTRCHECK_RETURN(list);
     for(i=0; i<list->listcount; i++)
     {
-        nn_gcmem_markvalue((NNValue)list->listitems[i]);
+        nn_gcmem_markvalue(list->listitems[i]);
     }
 }
 
@@ -2919,9 +3093,9 @@ void nn_valarray_mark(NNValArray<NNValue>* list)
 
 void nn_gcmem_markvalue(NNValue value)
 {
-    if(nn_value_isobject(value))
+    if(value.isObject())
     {
-        nn_gcmem_markobject(nn_value_asobject(value));
+        nn_gcmem_markobject(value.asObject());
     }
 }
 
@@ -2973,7 +3147,7 @@ void nn_gcmem_blackenobject(NNObject* object)
             {
                 NNObjFunction* bound;
                 bound = (NNObjFunction*)object;
-                nn_gcmem_markvalue((NNValue)bound->fnmethod.receiver);
+                nn_gcmem_markvalue(bound->fnmethod.receiver);
                 nn_gcmem_markobject((NNObject*)bound->fnmethod.method);
             }
             break;
@@ -2985,8 +3159,8 @@ void nn_gcmem_blackenobject(NNObject* object)
                 nn_valtable_mark(&klass->instmethods);
                 nn_valtable_mark(&klass->staticmethods);
                 nn_valtable_mark(&klass->staticproperties);
-                nn_gcmem_markvalue((NNValue)klass->constructor);
-                nn_gcmem_markvalue((NNValue)klass->destructor);
+                nn_gcmem_markvalue(klass->constructor);
+                nn_gcmem_markvalue(klass->destructor);
                 if(klass->superclass != nullptr)
                 {
                     nn_gcmem_markobject((NNObject*)klass->superclass);
@@ -3024,7 +3198,7 @@ void nn_gcmem_blackenobject(NNObject* object)
         case NEON_OBJTYPE_UPVALUE:
             {
                 auto upv = (NNObjUpvalue*)object;
-                nn_gcmem_markvalue((NNValue)upv->closed);
+                nn_gcmem_markvalue(upv->closed);
             }
             break;
         case NEON_OBJTYPE_RANGE:
@@ -3171,25 +3345,26 @@ void nn_gcmem_markroots()
     NNObjUpvalue* upvalue;
     NNExceptionFrame* handler;
     (void)handler;
-    for(slot = GCSingleton::get()->vmstate.stackvalues; slot < &GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx]; slot++)
+    auto gcs = GCSingleton::get();
+    for(slot = gcs->m_vmstate.stackvalues; slot < &gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx]; slot++)
     {
         nn_gcmem_markvalue(*slot);
     }
-    for(i = 0; i < (int)GCSingleton::get()->vmstate.framecount; i++)
+    for(i = 0; i < (int)gcs->m_vmstate.framecount; i++)
     {
-        nn_gcmem_markobject((NNObject*)GCSingleton::get()->vmstate.framevalues[i].closure);
-        for(j = 0; j < (int)GCSingleton::get()->vmstate.framevalues[i].handlercount; j++)
+        nn_gcmem_markobject((NNObject*)gcs->m_vmstate.framevalues[i].closure);
+        for(j = 0; j < (int)gcs->m_vmstate.framevalues[i].handlercount; j++)
         {
-            handler = &GCSingleton::get()->vmstate.framevalues[i].handlers[j];
+            handler = &gcs->m_vmstate.framevalues[i].handlers[j];
             /*nn_gcmem_markobject((NNObject*)handler->klass);*/
         }
     }
-    for(upvalue = GCSingleton::get()->vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->next)
+    for(upvalue = gcs->m_vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->next)
     {
         nn_gcmem_markobject((NNObject*)upvalue);
     }
-    nn_valtable_mark(&GCSingleton::get()->declaredglobals);
-    nn_valtable_mark(&GCSingleton::get()->openedmodules);
+    nn_valtable_mark(&gcs->declaredglobals);
+    nn_valtable_mark(&gcs->openedmodules);
     //nn_gcmem_markobject((NNObject*)state->exceptions.stdexception);
     nn_gcmem_markcompilerroots();
 }
@@ -3197,10 +3372,11 @@ void nn_gcmem_markroots()
 void nn_gcmem_tracerefs()
 {
     NNObject* object;
-    while(GCSingleton::get()->gcstate.graycount > 0)
+    auto gcs = GCSingleton::get();
+    while(gcs->m_gcstate.graycount > 0)
     {
-        GCSingleton::get()->gcstate.graycount--;
-        object = GCSingleton::get()->gcstate.graystack[GCSingleton::get()->gcstate.graycount];
+        gcs->m_gcstate.graycount--;
+        object = gcs->m_gcstate.graystack[gcs->m_gcstate.graycount];
         nn_gcmem_blackenobject(object);
     }
 }
@@ -3211,10 +3387,11 @@ void nn_gcmem_sweep()
     NNObject* previous;
     NNObject* unreached;
     previous = nullptr;
-    object = GCSingleton::get()->linkedobjects;
+    auto gcs = GCSingleton::get();
+    object = gcs->linkedobjects;
     while(object != nullptr)
     {
-        if(object->mark == GCSingleton::get()->markvalue)
+        if(object->mark == gcs->markvalue)
         {
             previous = object;
             object = object->next;
@@ -3229,26 +3406,27 @@ void nn_gcmem_sweep()
             }
             else
             {
-                GCSingleton::get()->linkedobjects = object;
+                gcs->linkedobjects = object;
             }
             nn_object_destroy(unreached);
         }
     }
 }
 
-void nn_gcmem_destroylinkedobjects(NNState* state)
+void nn_gcmem_destroylinkedobjects()
 {
     NNObject* next;
     NNObject* object;
-    object = GCSingleton::get()->linkedobjects;
+    auto gcs = GCSingleton::get();
+    object = gcs->linkedobjects;
     while(object != nullptr)
     {
         next = object->next;
         nn_object_destroy(object);
         object = next;
     }
-    nn_memory_free(GCSingleton::get()->gcstate.graystack);
-    GCSingleton::get()->gcstate.graystack = nullptr;
+    nn_memory_free(gcs->m_gcstate.graystack);
+    gcs->m_gcstate.graystack = nullptr;
 }
 
 void nn_gcmem_collectgarbage()
@@ -3258,15 +3436,16 @@ void nn_gcmem_collectgarbage()
     /*
     //  REMOVE THE NEXT LINE TO DISABLE NESTED nn_gcmem_collectgarbage() POSSIBILITY!
     */
-    GCSingleton::get()->gcstate.nextgc = GCSingleton::get()->gcstate.bytesallocated;
+    auto gcs = GCSingleton::get();
+    gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated;
 
     nn_gcmem_markroots();
     nn_gcmem_tracerefs();
-    nn_valtable_removewhites(&GCSingleton::get()->allocatedstrings);
-    nn_valtable_removewhites(&GCSingleton::get()->openedmodules);
+    nn_valtable_removewhites(&gcs->allocatedstrings);
+    nn_valtable_removewhites(&gcs->openedmodules);
     nn_gcmem_sweep();
-    GCSingleton::get()->gcstate.nextgc = GCSingleton::get()->gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
-    GCSingleton::get()->markvalue = !GCSingleton::get()->markvalue;
+    gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
+    gcs->markvalue = !gcs->markvalue;
 }
 
 
@@ -3323,7 +3502,7 @@ void nn_utf8iter_init(utf8iterator_t* iter, const char* ptr, uint32_t length)
 }
 
 /* calculate the number of bytes a UTF8 character occupies in a string. */
-uint8_t nn_utf8iter_charsize(const char* character)
+uint16_t nn_utf8iter_charsize(const char* character)
 {
     if(character == nullptr)
     {
@@ -3360,11 +3539,11 @@ uint8_t nn_utf8iter_charsize(const char* character)
     return 0;
 }
 
-uint32_t nn_utf8iter_converter(const char* character, uint8_t size)
+uint32_t nn_utf8iter_converter(const char* character, uint16_t size)
 {
-    uint8_t i;
+    uint16_t i;
     static uint32_t codepoint = 0;
-    static const uint8_t g_utf8iter_table_unicode[] = { 0, 0, 0x1F, 0xF, 0x7, 0x3, 0x1 };
+    static const uint16_t g_utf8iter_table_unicode[] = { 0, 0, 0x1F, 0xF, 0x7, 0x3, 0x1 };
     if(size == 0)
     {
         return 0;
@@ -3391,7 +3570,7 @@ uint32_t nn_utf8iter_converter(const char* character, uint8_t size)
 }
 
 /* returns 1 if there is a character in the next position. If there is not, return 0. */
-uint8_t nn_utf8iter_next(utf8iterator_t* iter)
+uint16_t nn_utf8iter_next(utf8iterator_t* iter)
 {
     const char* pointer;
     if(iter == nullptr)
@@ -3428,7 +3607,7 @@ uint8_t nn_utf8iter_next(utf8iterator_t* iter)
 /* return current character in UFT8 - no same that iter.codepoint (not codepoint/unicode) */
 const char* nn_utf8iter_getchar(utf8iterator_t* iter)
 {
-    uint8_t i;
+    uint16_t i;
     const char* pointer;
     static char str[10];
     str[0] = '\0';
@@ -3894,7 +4073,7 @@ char* nn_util_filereadhandle(FILE* hnd, size_t* dlen, bool havemaxsz, size_t max
     return nullptr;
 }
 
-char* nn_util_filereadfile(NNState* state, const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
+char* nn_util_filereadfile(const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
 {
     char* b;
     FILE* fh;
@@ -4014,7 +4193,7 @@ char* nn_util_strtolower(char* str, size_t length)
 }
 
 
-NNObjString* nn_util_numbertobinstring(NNState* state, long n)
+NNObjString* nn_util_numbertobinstring(long n)
 {
     int i;
     int rem;
@@ -4079,7 +4258,7 @@ NNObjString* nn_util_numbertobinstring(NNState* state, long n)
     */
 }
 
-NNObjString* nn_util_numbertooctstring(NNState* state, int64_t n, bool numeric)
+NNObjString* nn_util_numbertooctstring(int64_t n, bool numeric)
 {
     int length;
     /* assume maximum of 64 bits + 2 octal indicators (0c) */
@@ -4088,7 +4267,7 @@ NNObjString* nn_util_numbertooctstring(NNState* state, int64_t n, bool numeric)
     return nn_string_copylen(str, length);
 }
 
-NNObjString* nn_util_numbertohexstring(NNState* state, int64_t n, bool numeric)
+NNObjString* nn_util_numbertohexstring(int64_t n, bool numeric)
 {
     int length;
     /* assume maximum of 64 bits + 2 hex indicators (0x) */
@@ -4146,21 +4325,21 @@ uint32_t nn_object_hashobject(NNObject* object)
 
 uint32_t nn_value_hashvalue(NNValue value)
 {
-    if(nn_value_isbool(value))
+    if(value.isBool())
     {
-        return nn_value_asbool(value) ? 3 : 5;
+        return value.asBool() ? 3 : 5;
     }
     else if(value.isNull())
     {
         return 7;
     }
-    else if(nn_value_isnumber(value))
+    else if(value.isNumber())
     {
-        return nn_util_hashdouble(nn_value_asnumber(value));
+        return nn_util_hashdouble(value.asNumber());
     }
-    else if(nn_value_isobject(value))
+    else if(value.isObject())
     {
-        return nn_object_hashobject(nn_value_asobject(value));
+        return nn_object_hashobject(value.asObject());
     }
     return 0;
 }
@@ -4231,7 +4410,7 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
                         break;
                     case 'c':
                         {
-                            ival = (int)nn_value_asnumber(cval);
+                            ival = (int)cval.asNumber();
                             nn_iostream_printf(nfi->writer, "%c", ival);
                         }
                         break;
@@ -4263,10 +4442,11 @@ bool nn_strformat_format(NNFormatInfo* nfi, int argc, int argbegin, NNValue* arg
 void nn_valtable_removewhites(NNHashTable<NNValue, NNValue>* table)
 {
     int i;
+    auto gcs = GCSingleton::get();
     for(i = 0; i < table->htcapacity; i++)
     {
         auto entry = &table->htentries[i];
-        if(nn_value_isobject(entry->key) && nn_value_asobject(entry->key)->mark != GCSingleton::get()->markvalue)
+        if(entry->key.isObject() && entry->key.asObject()->mark != gcs->markvalue)
         {
             table->remove(entry->key);
         }
@@ -4293,8 +4473,8 @@ void nn_valtable_mark(NNHashTable<NNValue, NNValue>* table)
         {
             if(!entry->key.isNull())
             {
-                nn_gcmem_markvalue((NNValue)entry->key);
-                nn_gcmem_markvalue((NNValue)entry->value.value);
+                nn_gcmem_markvalue(entry->key);
+                nn_gcmem_markvalue(entry->value.value);
             }
         }
     }
@@ -4328,10 +4508,11 @@ static NNValue nn_string_tabhashvalueobj(NNObjString* os)
 
 void nn_string_strtabstore(NNObjString* os)
 {
+    auto gcs = GCSingleton::get(); 
     #if defined(NEON_CONF_LIBSTRINGUSEHASH) && (NEON_CONF_LIBSTRINGUSEHASH == 1)
-        GCSingleton::get()->allocatedstrings.set(nn_string_tabhashvalueobj(os), nn_value_fromobject(os));    
+        gcs->allocatedstrings.set(nn_string_tabhashvalueobj(os), nn_value_fromobject(os));    
     #else
-        GCSingleton::get()->allocatedstrings.set(nn_value_fromobject(os), nn_value_makenull());
+        gcs->allocatedstrings.set(nn_value_fromobject(os), nn_value_makenull());
     #endif
 }
 
@@ -4862,9 +5043,9 @@ void nn_valtable_print(NNIOStream* pr, NNHashTable<NNValue, NNValue>* table, con
         auto entry = table->entryatindex(i);
         if(!entry->key.isNull())
         {
-            nn_iostream_printvalue(pr, (NNValue)entry->key, true, true);
+            nn_iostream_printvalue(pr, entry->key, true, true);
             nn_iostream_printf(pr, ": ");
-            nn_iostream_printvalue(pr, (NNValue)entry->value.value, true, true);
+            nn_iostream_printvalue(pr, entry->value.value, true, true);
             if(i != (hcap - 1))
             {
                 nn_iostream_printf(pr, ",\n");
@@ -4906,9 +5087,9 @@ void nn_iostream_printarray(NNIOStream* pr, NNObjArray* list)
     {
         isrecur = false;
         val = list->varray.get(i);
-        if(nn_value_isarray(val))
+        if(val.isArray())
         {
-            subarr = nn_value_asarray(val);
+            subarr = val.asArray();
             if(subarr == list)
             {
                 isrecur = true;
@@ -4950,9 +5131,9 @@ void nn_iostream_printdict(NNIOStream* pr, NNObjDict* dict)
         valisrecur = false;
         keyisrecur = false;
         val = dict->htnames.get(i);
-        if(nn_value_isdict(val))
+        if(val.isDict())
         {
-            subdict = nn_value_asdict(val);
+            subdict = val.asDict();
             if(subdict == dict)
             {
                 valisrecur = true;
@@ -4970,9 +5151,9 @@ void nn_iostream_printdict(NNIOStream* pr, NNObjDict* dict)
         auto field = dict->htab.getfield(dict->htnames.get(i));
         if(field != nullptr)
         {
-            if(nn_value_isdict((NNValue)field->value))
+            if(field->value.isDict())
             {
-                subdict = nn_value_asdict((NNValue)field->value);
+                subdict = field->value.asDict();
                 if(subdict == dict)
                 {
                     keyisrecur = true;
@@ -4984,7 +5165,7 @@ void nn_iostream_printdict(NNIOStream* pr, NNObjDict* dict)
             }
             else
             {
-                nn_iostream_printvalue(pr, (NNValue)field->value, true, true);
+                nn_iostream_printvalue(pr, field->value, true, true);
             }
         }
         if(i != dsz - 1)
@@ -5019,6 +5200,7 @@ void nn_iostream_printinstance(NNIOStream* pr, NNObjInstance* instance, bool inv
     NNObjString* os;
     NNObjArray* args;
     state = pr->pstate;
+    auto gcs = GCSingleton::get();
     if(invmethod)
     {
         field = instance->klass->instmethods.getfieldbycstr("toString");
@@ -5026,18 +5208,18 @@ void nn_iostream_printinstance(NNIOStream* pr, NNObjInstance* instance, bool inv
         {
             args = nn_object_makearray();
             thisval = nn_value_fromobject(instance);
-            arity = nn_nestcall_prepare((NNValue)field->value, thisval, nullptr, 0);
+            arity = nn_nestcall_prepare(field->value, thisval, nullptr, 0);
             fprintf(stderr, "arity = %d\n", arity);
-            nn_vm_stackpop(state);
-            nn_vm_stackpush(state, thisval);
-            if(nn_nestcall_callfunction(state, (NNValue)field->value, thisval, nullptr, 0, &resv, false))
+            gcs->stackPop();
+            gcs->stackPush(thisval);
+            if(nn_nestcall_callfunction(state, field->value, thisval, nullptr, 0, &resv, false))
             {
                 nn_iostream_makestackstring(&subw);
                 nn_iostream_printvalue(&subw, resv, false, false);
                 os = nn_iostream_takestring(&subw);
                 nn_iostream_writestringl(pr, nn_string_getdata(os), nn_string_getlength(os));
                 #if 0
-                    nn_vm_stackpop(state);
+                    gcs->stackPop();
                 #endif
                 return;
             }
@@ -5061,9 +5243,9 @@ void nn_iostream_printtable(NNIOStream* pr, NNHashTable<NNValue, NNValue>* table
         {
             continue;
         }
-        nn_iostream_printvalue(pr, (NNValue)entry->key, true, false);
+        nn_iostream_printvalue(pr, entry->key, true, false);
         nn_iostream_printf(pr, ":");
-        nn_iostream_printvalue(pr, (NNValue)entry->value.value, true, false);
+        nn_iostream_printvalue(pr, entry->value.value, true, false);
         auto nextentry = table->entryatindex(i+1);
         if((nextentry != nullptr) && !nextentry->key.isNull())
         {
@@ -5102,7 +5284,7 @@ void nn_iostream_printobjclass(NNIOStream* pr, NNValue value, bool fixstring, bo
             }
             {
                 nn_iostream_printf(pr, "constructor: ");
-                nn_iostream_printvalue(pr, (NNValue)klass->constructor, true, false);
+                nn_iostream_printvalue(pr, klass->constructor, true, false);
                 nn_iostream_printf(pr, ",");
             }
             {
@@ -5136,7 +5318,7 @@ void nn_iostream_printobjclass(NNIOStream* pr, NNValue value, bool fixstring, bo
 void nn_iostream_printobject(NNIOStream* pr, NNValue value, bool fixstring, bool invmethod)
 {
     NNObject* obj;
-    obj = nn_value_asobject(value);
+    obj = value.asObject();
     switch(obj->type)
     {
         case NEON_OBJTYPE_SWITCH:
@@ -5163,12 +5345,12 @@ void nn_iostream_printobject(NNIOStream* pr, NNValue value, bool fixstring, bool
             break;
         case NEON_OBJTYPE_DICT:
             {
-                nn_iostream_printdict(pr, nn_value_asdict(value));
+                nn_iostream_printdict(pr, value.asDict());
             }
             break;
         case NEON_OBJTYPE_ARRAY:
             {
-                nn_iostream_printarray(pr, nn_value_asarray(value));
+                nn_iostream_printarray(pr, value.asArray());
             }
             break;
         case NEON_OBJTYPE_FUNCBOUND:
@@ -5227,7 +5409,7 @@ void nn_iostream_printobject(NNIOStream* pr, NNValue value, bool fixstring, bool
         case NEON_OBJTYPE_STRING:
             {
                 NNObjString* string;
-                string = nn_value_asstring(value);
+                string = value.asString();
                 if(fixstring)
                 {
                     nn_iostream_writequotedstring(pr, nn_string_getdata(string), nn_string_getlength(string), true);
@@ -5244,7 +5426,7 @@ void nn_iostream_printobject(NNIOStream* pr, NNValue value, bool fixstring, bool
 void nn_iostream_printnumber(NNIOStream* pr, NNValue value)
 {
     double dn;
-    dn = nn_value_asnumber(value);
+    dn = value.asNumber();
     nn_iostream_printf(pr, "%.16g", dn);
 }
 
@@ -5254,11 +5436,11 @@ void nn_iostream_printvalue(NNIOStream* pr, NNValue value, bool fixstring, bool 
     {
         nn_iostream_writestring(pr, "null");
     }
-    else if(nn_value_isbool(value))
+    else if(value.isBool())
     {
-        nn_iostream_writestring(pr, nn_value_asbool(value) ? "true" : "false");
+        nn_iostream_writestring(pr, value.asBool() ? "true" : "false");
     }
-    else if(nn_value_isnumber(value))
+    else if(value.isNumber())
     {
         nn_iostream_printnumber(pr, value);
     }
@@ -5331,7 +5513,7 @@ int nn_dbg_printshortinstr(NNIOStream* pr, const char* name, NNBlob* blob, int o
 
 int nn_dbg_printbyteinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
-    uint8_t slot;
+    uint16_t slot;
     slot = blob->instrucs[offset + 1].code;
     nn_dbg_printinstrname(pr, name);
     nn_iostream_printf(pr, "%8d\n", slot);
@@ -5367,7 +5549,7 @@ int nn_dbg_printtryinstr(NNIOStream* pr, const char* name, NNBlob* blob, int off
 int nn_dbg_printinvokeinstr(NNIOStream* pr, const char* name, NNBlob* blob, int offset)
 {
     uint16_t constant;
-    uint8_t argcount;
+    uint16_t argcount;
     constant = (uint16_t)(blob->instrucs[offset + 1].code << 8);
     constant |= blob->instrucs[offset + 2].code;
     argcount = blob->instrucs[offset + 3].code;
@@ -5378,86 +5560,85 @@ int nn_dbg_printinvokeinstr(NNIOStream* pr, const char* name, NNBlob* blob, int 
     return offset + 4;
 }
 
-const char* nn_dbg_op2str(uint8_t instruc)
+const char* nn_dbg_op2str(uint16_t instruc)
 {
     switch(instruc)
     {
-        case NEON_OP_GLOBALDEFINE: return "NEON_OP_GLOBALDEFINE";
-        case NEON_OP_GLOBALGET: return "NEON_OP_GLOBALGET";
-        case NEON_OP_GLOBALSET: return "NEON_OP_GLOBALSET";
-        case NEON_OP_LOCALGET: return "NEON_OP_LOCALGET";
-        case NEON_OP_LOCALSET: return "NEON_OP_LOCALSET";
-        case NEON_OP_FUNCARGOPTIONAL: return "NEON_OP_FUNCARGOPTIONAL";
-        case NEON_OP_FUNCARGSET: return "NEON_OP_FUNCARGSET";
-        case NEON_OP_FUNCARGGET: return "NEON_OP_FUNCARGGET";
-        case NEON_OP_UPVALUEGET: return "NEON_OP_UPVALUEGET";
-        case NEON_OP_UPVALUESET: return "NEON_OP_UPVALUESET";
-        case NEON_OP_UPVALUECLOSE: return "NEON_OP_UPVALUECLOSE";
-        case NEON_OP_PROPERTYGET: return "NEON_OP_PROPERTYGET";
-        case NEON_OP_PROPERTYGETSELF: return "NEON_OP_PROPERTYGETSELF";
-        case NEON_OP_PROPERTYSET: return "NEON_OP_PROPERTYSET";
-        case NEON_OP_JUMPIFFALSE: return "NEON_OP_JUMPIFFALSE";
-        case NEON_OP_JUMPNOW: return "NEON_OP_JUMPNOW";
-        case NEON_OP_LOOP: return "NEON_OP_LOOP";
-        case NEON_OP_EQUAL: return "NEON_OP_EQUAL";
-        case NEON_OP_PRIMGREATER: return "NEON_OP_PRIMGREATER";
-        case NEON_OP_PRIMLESSTHAN: return "NEON_OP_PRIMLESSTHAN";
-        case NEON_OP_PUSHEMPTY: return "NEON_OP_PUSHEMPTY";
-        case NEON_OP_PUSHNULL: return "NEON_OP_PUSHNULL";
-        case NEON_OP_PUSHTRUE: return "NEON_OP_PUSHTRUE";
-        case NEON_OP_PUSHFALSE: return "NEON_OP_PUSHFALSE";
-        case NEON_OP_PRIMADD: return "NEON_OP_PRIMADD";
-        case NEON_OP_PRIMSUBTRACT: return "NEON_OP_PRIMSUBTRACT";
-        case NEON_OP_PRIMMULTIPLY: return "NEON_OP_PRIMMULTIPLY";
-        case NEON_OP_PRIMDIVIDE: return "NEON_OP_PRIMDIVIDE";
-        case NEON_OP_PRIMFLOORDIVIDE: return "NEON_OP_PRIMFLOORDIVIDE";
-        case NEON_OP_PRIMMODULO: return "NEON_OP_PRIMMODULO";
-        case NEON_OP_PRIMPOW: return "NEON_OP_PRIMPOW";
-        case NEON_OP_PRIMNEGATE: return "NEON_OP_PRIMNEGATE";
-        case NEON_OP_PRIMNOT: return "NEON_OP_PRIMNOT";
-        case NEON_OP_PRIMBITNOT: return "NEON_OP_PRIMBITNOT";
-        case NEON_OP_PRIMAND: return "NEON_OP_PRIMAND";
-        case NEON_OP_PRIMOR: return "NEON_OP_PRIMOR";
-        case NEON_OP_PRIMBITXOR: return "NEON_OP_PRIMBITXOR";
-        case NEON_OP_PRIMSHIFTLEFT: return "NEON_OP_PRIMSHIFTLEFT";
-        case NEON_OP_PRIMSHIFTRIGHT: return "NEON_OP_PRIMSHIFTRIGHT";
-        case NEON_OP_PUSHONE: return "NEON_OP_PUSHONE";
-        case NEON_OP_PUSHCONSTANT: return "NEON_OP_PUSHCONSTANT";
-        case NEON_OP_ECHO: return "NEON_OP_ECHO";
-        case NEON_OP_POPONE: return "NEON_OP_POPONE";
-        case NEON_OP_DUPONE: return "NEON_OP_DUPONE";
-        case NEON_OP_POPN: return "NEON_OP_POPN";
-        case NEON_OP_ASSERT: return "NEON_OP_ASSERT";
-        case NEON_OP_EXTHROW: return "NEON_OP_EXTHROW";
-        case NEON_OP_MAKECLOSURE: return "NEON_OP_MAKECLOSURE";
-        case NEON_OP_CALLFUNCTION: return "NEON_OP_CALLFUNCTION";
-        case NEON_OP_CALLMETHOD: return "NEON_OP_CALLMETHOD";
-        case NEON_OP_CLASSINVOKETHIS: return "NEON_OP_CLASSINVOKETHIS";
-        case NEON_OP_CLASSGETTHIS: return "NEON_OP_CLASSGETTHIS";
-        case NEON_OP_RETURN: return "NEON_OP_RETURN";
-        case NEON_OP_MAKECLASS: return "NEON_OP_MAKECLASS";
-        case NEON_OP_MAKEMETHOD: return "NEON_OP_MAKEMETHOD";
-        case NEON_OP_CLASSPROPERTYDEFINE: return "NEON_OP_CLASSPROPERTYDEFINE";
-        case NEON_OP_CLASSINHERIT: return "NEON_OP_CLASSINHERIT";
-        case NEON_OP_CLASSGETSUPER: return "NEON_OP_CLASSGETSUPER";
-        case NEON_OP_CLASSINVOKESUPER: return "NEON_OP_CLASSINVOKESUPER";
-        case NEON_OP_CLASSINVOKESUPERSELF: return "NEON_OP_CLASSINVOKESUPERSELF";
-        case NEON_OP_MAKERANGE: return "NEON_OP_MAKERANGE";
-        case NEON_OP_MAKEARRAY: return "NEON_OP_MAKEARRAY";
-        case NEON_OP_MAKEDICT: return "NEON_OP_MAKEDICT";
-        case NEON_OP_INDEXGET: return "NEON_OP_INDEXGET";
-        case NEON_OP_INDEXGETRANGED: return "NEON_OP_INDEXGETRANGED";
-        case NEON_OP_INDEXSET: return "NEON_OP_INDEXSET";
-        case NEON_OP_IMPORTIMPORT: return "NEON_OP_IMPORTIMPORT";
-        case NEON_OP_EXTRY: return "NEON_OP_EXTRY";
-        case NEON_OP_EXPOPTRY: return "NEON_OP_EXPOPTRY";
-        case NEON_OP_EXPUBLISHTRY: return "NEON_OP_EXPUBLISHTRY";
-        case NEON_OP_STRINGIFY: return "NEON_OP_STRINGIFY";
-        case NEON_OP_SWITCH: return "NEON_OP_SWITCH";
-        case NEON_OP_TYPEOF: return "NEON_OP_TYPEOF";
-        case NEON_OP_BREAK_PL: return "NEON_OP_BREAK_PL";
-        case NEON_OP_OPINSTANCEOF: return "NEON_OP_OPINSTANCEOF";
-        case NEON_OP_HALT: return "NEON_OP_HALT";
+        case NNInstruction::OPC_GLOBALDEFINE: return "OPC_GLOBALDEFINE";
+        case NNInstruction::OPC_GLOBALGET: return "OPC_GLOBALGET";
+        case NNInstruction::OPC_GLOBALSET: return "OPC_GLOBALSET";
+        case NNInstruction::OPC_LOCALGET: return "OPC_LOCALGET";
+        case NNInstruction::OPC_LOCALSET: return "OPC_LOCALSET";
+        case NNInstruction::OPC_FUNCARGOPTIONAL: return "OPC_FUNCARGOPTIONAL";
+        case NNInstruction::OPC_FUNCARGSET: return "OPC_FUNCARGSET";
+        case NNInstruction::OPC_FUNCARGGET: return "OPC_FUNCARGGET";
+        case NNInstruction::OPC_UPVALUEGET: return "OPC_UPVALUEGET";
+        case NNInstruction::OPC_UPVALUESET: return "OPC_UPVALUESET";
+        case NNInstruction::OPC_UPVALUECLOSE: return "OPC_UPVALUECLOSE";
+        case NNInstruction::OPC_PROPERTYGET: return "OPC_PROPERTYGET";
+        case NNInstruction::OPC_PROPERTYGETSELF: return "OPC_PROPERTYGETSELF";
+        case NNInstruction::OPC_PROPERTYSET: return "OPC_PROPERTYSET";
+        case NNInstruction::OPC_JUMPIFFALSE: return "OPC_JUMPIFFALSE";
+        case NNInstruction::OPC_JUMPNOW: return "OPC_JUMPNOW";
+        case NNInstruction::OPC_LOOP: return "OPC_LOOP";
+        case NNInstruction::OPC_EQUAL: return "OPC_EQUAL";
+        case NNInstruction::OPC_PRIMGREATER: return "OPC_PRIMGREATER";
+        case NNInstruction::OPC_PRIMLESSTHAN: return "OPC_PRIMLESSTHAN";
+        case NNInstruction::OPC_PUSHEMPTY: return "OPC_PUSHEMPTY";
+        case NNInstruction::OPC_PUSHNULL: return "OPC_PUSHNULL";
+        case NNInstruction::OPC_PUSHTRUE: return "OPC_PUSHTRUE";
+        case NNInstruction::OPC_PUSHFALSE: return "OPC_PUSHFALSE";
+        case NNInstruction::OPC_PRIMADD: return "OPC_PRIMADD";
+        case NNInstruction::OPC_PRIMSUBTRACT: return "OPC_PRIMSUBTRACT";
+        case NNInstruction::OPC_PRIMMULTIPLY: return "OPC_PRIMMULTIPLY";
+        case NNInstruction::OPC_PRIMDIVIDE: return "OPC_PRIMDIVIDE";
+        case NNInstruction::OPC_PRIMMODULO: return "OPC_PRIMMODULO";
+        case NNInstruction::OPC_PRIMPOW: return "OPC_PRIMPOW";
+        case NNInstruction::OPC_PRIMNEGATE: return "OPC_PRIMNEGATE";
+        case NNInstruction::OPC_PRIMNOT: return "OPC_PRIMNOT";
+        case NNInstruction::OPC_PRIMBITNOT: return "OPC_PRIMBITNOT";
+        case NNInstruction::OPC_PRIMAND: return "OPC_PRIMAND";
+        case NNInstruction::OPC_PRIMOR: return "OPC_PRIMOR";
+        case NNInstruction::OPC_PRIMBITXOR: return "OPC_PRIMBITXOR";
+        case NNInstruction::OPC_PRIMSHIFTLEFT: return "OPC_PRIMSHIFTLEFT";
+        case NNInstruction::OPC_PRIMSHIFTRIGHT: return "OPC_PRIMSHIFTRIGHT";
+        case NNInstruction::OPC_PUSHONE: return "OPC_PUSHONE";
+        case NNInstruction::OPC_PUSHCONSTANT: return "OPC_PUSHCONSTANT";
+        case NNInstruction::OPC_ECHO: return "OPC_ECHO";
+        case NNInstruction::OPC_POPONE: return "OPC_POPONE";
+        case NNInstruction::OPC_DUPONE: return "OPC_DUPONE";
+        case NNInstruction::OPC_POPN: return "OPC_POPN";
+        case NNInstruction::OPC_ASSERT: return "OPC_ASSERT";
+        case NNInstruction::OPC_EXTHROW: return "OPC_EXTHROW";
+        case NNInstruction::OPC_MAKECLOSURE: return "OPC_MAKECLOSURE";
+        case NNInstruction::OPC_CALLFUNCTION: return "OPC_CALLFUNCTION";
+        case NNInstruction::OPC_CALLMETHOD: return "OPC_CALLMETHOD";
+        case NNInstruction::OPC_CLASSINVOKETHIS: return "OPC_CLASSINVOKETHIS";
+        case NNInstruction::OPC_CLASSGETTHIS: return "OPC_CLASSGETTHIS";
+        case NNInstruction::OPC_RETURN: return "OPC_RETURN";
+        case NNInstruction::OPC_MAKECLASS: return "OPC_MAKECLASS";
+        case NNInstruction::OPC_MAKEMETHOD: return "OPC_MAKEMETHOD";
+        case NNInstruction::OPC_CLASSPROPERTYDEFINE: return "OPC_CLASSPROPERTYDEFINE";
+        case NNInstruction::OPC_CLASSINHERIT: return "OPC_CLASSINHERIT";
+        case NNInstruction::OPC_CLASSGETSUPER: return "OPC_CLASSGETSUPER";
+        case NNInstruction::OPC_CLASSINVOKESUPER: return "OPC_CLASSINVOKESUPER";
+        case NNInstruction::OPC_CLASSINVOKESUPERSELF: return "OPC_CLASSINVOKESUPERSELF";
+        case NNInstruction::OPC_MAKERANGE: return "OPC_MAKERANGE";
+        case NNInstruction::OPC_MAKEARRAY: return "OPC_MAKEARRAY";
+        case NNInstruction::OPC_MAKEDICT: return "OPC_MAKEDICT";
+        case NNInstruction::OPC_INDEXGET: return "OPC_INDEXGET";
+        case NNInstruction::OPC_INDEXGETRANGED: return "OPC_INDEXGETRANGED";
+        case NNInstruction::OPC_INDEXSET: return "OPC_INDEXSET";
+        case NNInstruction::OPC_IMPORTIMPORT: return "OPC_IMPORTIMPORT";
+        case NNInstruction::OPC_EXTRY: return "OPC_EXTRY";
+        case NNInstruction::OPC_EXPOPTRY: return "OPC_EXPOPTRY";
+        case NNInstruction::OPC_EXPUBLISHTRY: return "OPC_EXPUBLISHTRY";
+        case NNInstruction::OPC_STRINGIFY: return "OPC_STRINGIFY";
+        case NNInstruction::OPC_SWITCH: return "OPC_SWITCH";
+        case NNInstruction::OPC_TYPEOF: return "OPC_TYPEOF";
+        case NNInstruction::OPC_BREAK_PL: return "OPC_BREAK_PL";
+        case NNInstruction::OPC_OPINSTANCEOF: return "OPC_OPINSTANCEOF";
+        case NNInstruction::OPC_HALT: return "OPC_HALT";
     }
     return "<?unknown?>";
 }
@@ -5494,7 +5675,7 @@ int nn_dbg_printclosureinstr(NNIOStream* pr, const char* name, NNBlob* blob, int
 
 int nn_dbg_printinstructionat(NNIOStream* pr, NNBlob* blob, int offset)
 {
-    uint8_t instruction;
+    uint16_t instruction;
     const char* opname;
     nn_iostream_printf(pr, "%08d ", offset);
     if(offset > 0 && blob->instrucs[offset].fromsourceline == blob->instrucs[offset - 1].fromsourceline)
@@ -5509,157 +5690,155 @@ int nn_dbg_printinstructionat(NNIOStream* pr, NNBlob* blob, int offset)
     opname = nn_dbg_op2str(instruction);
     switch(instruction)
     {
-        case NEON_OP_JUMPIFFALSE:
+        case NNInstruction::OPC_JUMPIFFALSE:
             return nn_dbg_printjumpinstr(pr, opname, 1, blob, offset);
-        case NEON_OP_JUMPNOW:
+        case NNInstruction::OPC_JUMPNOW:
             return nn_dbg_printjumpinstr(pr, opname, 1, blob, offset);
-        case NEON_OP_EXTRY:
+        case NNInstruction::OPC_EXTRY:
             return nn_dbg_printtryinstr(pr, opname, blob, offset);
-        case NEON_OP_LOOP:
+        case NNInstruction::OPC_LOOP:
             return nn_dbg_printjumpinstr(pr, opname, -1, blob, offset);
-        case NEON_OP_GLOBALDEFINE:
+        case NNInstruction::OPC_GLOBALDEFINE:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_GLOBALGET:
+        case NNInstruction::OPC_GLOBALGET:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_GLOBALSET:
+        case NNInstruction::OPC_GLOBALSET:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_LOCALGET:
+        case NNInstruction::OPC_LOCALGET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_LOCALSET:
+        case NNInstruction::OPC_LOCALSET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_FUNCARGOPTIONAL:
+        case NNInstruction::OPC_FUNCARGOPTIONAL:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_FUNCARGGET:
+        case NNInstruction::OPC_FUNCARGGET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_FUNCARGSET:
+        case NNInstruction::OPC_FUNCARGSET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_PROPERTYGET:
+        case NNInstruction::OPC_PROPERTYGET:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_PROPERTYGETSELF:
+        case NNInstruction::OPC_PROPERTYGETSELF:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_PROPERTYSET:
+        case NNInstruction::OPC_PROPERTYSET:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_UPVALUEGET:
+        case NNInstruction::OPC_UPVALUEGET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_UPVALUESET:
+        case NNInstruction::OPC_UPVALUESET:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_EXPOPTRY:
+        case NNInstruction::OPC_EXPOPTRY:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_EXPUBLISHTRY:
+        case NNInstruction::OPC_EXPUBLISHTRY:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHCONSTANT:
+        case NNInstruction::OPC_PUSHCONSTANT:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_EQUAL:
+        case NNInstruction::OPC_EQUAL:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMGREATER:
+        case NNInstruction::OPC_PRIMGREATER:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMLESSTHAN:
+        case NNInstruction::OPC_PRIMLESSTHAN:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHEMPTY:
+        case NNInstruction::OPC_PUSHEMPTY:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHNULL:
+        case NNInstruction::OPC_PUSHNULL:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHTRUE:
+        case NNInstruction::OPC_PUSHTRUE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHFALSE:
+        case NNInstruction::OPC_PUSHFALSE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMADD:
+        case NNInstruction::OPC_PRIMADD:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMSUBTRACT:
+        case NNInstruction::OPC_PRIMSUBTRACT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMMULTIPLY:
+        case NNInstruction::OPC_PRIMMULTIPLY:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMDIVIDE:
+        case NNInstruction::OPC_PRIMDIVIDE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMFLOORDIVIDE:
+        case NNInstruction::OPC_PRIMMODULO:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMMODULO:
+        case NNInstruction::OPC_PRIMPOW:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMPOW:
+        case NNInstruction::OPC_PRIMNEGATE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMNEGATE:
+        case NNInstruction::OPC_PRIMNOT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMNOT:
+        case NNInstruction::OPC_PRIMBITNOT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMBITNOT:
+        case NNInstruction::OPC_PRIMAND:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMAND:
+        case NNInstruction::OPC_PRIMOR:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMOR:
+        case NNInstruction::OPC_PRIMBITXOR:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMBITXOR:
+        case NNInstruction::OPC_PRIMSHIFTLEFT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMSHIFTLEFT:
+        case NNInstruction::OPC_PRIMSHIFTRIGHT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PRIMSHIFTRIGHT:
+        case NNInstruction::OPC_PUSHONE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_PUSHONE:
+        case NNInstruction::OPC_IMPORTIMPORT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_IMPORTIMPORT:
+        case NNInstruction::OPC_TYPEOF:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_TYPEOF:
+        case NNInstruction::OPC_ECHO:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_ECHO:
+        case NNInstruction::OPC_STRINGIFY:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_STRINGIFY:
+        case NNInstruction::OPC_EXTHROW:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_EXTHROW:
+        case NNInstruction::OPC_POPONE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_POPONE:
+        case NNInstruction::OPC_OPINSTANCEOF:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_OPINSTANCEOF:
+        case NNInstruction::OPC_UPVALUECLOSE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_UPVALUECLOSE:
+        case NNInstruction::OPC_DUPONE:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_DUPONE:
+        case NNInstruction::OPC_ASSERT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_ASSERT:
-            return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_POPN:
+        case NNInstruction::OPC_POPN:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
             /* non-user objects... */
-        case NEON_OP_SWITCH:
+        case NNInstruction::OPC_SWITCH:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
             /* data container manipulators */
-        case NEON_OP_MAKERANGE:
+        case NNInstruction::OPC_MAKERANGE:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_MAKEARRAY:
+        case NNInstruction::OPC_MAKEARRAY:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_MAKEDICT:
+        case NNInstruction::OPC_MAKEDICT:
             return nn_dbg_printshortinstr(pr, opname, blob, offset);
-        case NEON_OP_INDEXGET:
+        case NNInstruction::OPC_INDEXGET:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-        case NEON_OP_INDEXGETRANGED:
+        case NNInstruction::OPC_INDEXGETRANGED:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-        case NEON_OP_INDEXSET:
+        case NNInstruction::OPC_INDEXSET:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_MAKECLOSURE:
+        case NNInstruction::OPC_MAKECLOSURE:
             return nn_dbg_printclosureinstr(pr, opname, blob, offset);
-        case NEON_OP_CALLFUNCTION:
+        case NNInstruction::OPC_CALLFUNCTION:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-        case NEON_OP_CALLMETHOD:
+        case NNInstruction::OPC_CALLMETHOD:
             return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-        case NEON_OP_CLASSINVOKETHIS:
+        case NNInstruction::OPC_CLASSINVOKETHIS:
             return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-        case NEON_OP_RETURN:
+        case NNInstruction::OPC_RETURN:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_CLASSGETTHIS:
+        case NNInstruction::OPC_CLASSGETTHIS:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_MAKECLASS:
+        case NNInstruction::OPC_MAKECLASS:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_MAKEMETHOD:
+        case NNInstruction::OPC_MAKEMETHOD:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_CLASSPROPERTYDEFINE:
+        case NNInstruction::OPC_CLASSPROPERTYDEFINE:
             return nn_dbg_printpropertyinstr(pr, opname, blob, offset);
-        case NEON_OP_CLASSGETSUPER:
+        case NNInstruction::OPC_CLASSGETSUPER:
             return nn_dbg_printconstinstr(pr, opname, blob, offset);
-        case NEON_OP_CLASSINHERIT:
+        case NNInstruction::OPC_CLASSINHERIT:
             return nn_dbg_printsimpleinstr(pr, opname, offset);
-        case NEON_OP_CLASSINVOKESUPER:
+        case NNInstruction::OPC_CLASSINVOKESUPER:
             return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-        case NEON_OP_CLASSINVOKESUPERSELF:
+        case NNInstruction::OPC_CLASSINVOKESUPERSELF:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-        case NEON_OP_HALT:
+        case NNInstruction::OPC_HALT:
             return nn_dbg_printbyteinstr(pr, opname, blob, offset);
         default:
             {
@@ -5758,60 +5937,21 @@ const char* nn_value_typename(NNValue value, bool detailed)
     {
         return "null";
     }
-    else if(nn_value_isbool(value))
+    else if(value.isBool())
     {
         return "boolean";
     }
-    else if(nn_value_isnumber(value))
+    else if(value.isNumber())
     {
         return "number";
     }
-    else if(nn_value_isobject(value))
+    else if(value.isObject())
     {
-        return nn_value_objecttypename(nn_value_asobject(value), detailed);
+        return nn_value_objecttypename(value.asObject(), detailed);
     }
     return "?unknown?";
 }
 
-bool nn_value_isfalse(NNValue value)
-{
-    if(value.isNull())
-    {
-        return true;
-    }
-    if(nn_value_isbool(value))
-    {
-        return !nn_value_asbool(value);
-    }
-    /* -1 is the number equivalent of false */
-    if(nn_value_isnumber(value))
-    {
-        return nn_value_asnumber(value) < 0;
-    }
-    /* Non-empty strings are true, empty strings are false.*/
-    if(nn_value_isstring(value))
-    {
-        return nn_string_getlength(nn_value_asstring(value)) < 1;
-    }
-    /* Non-empty lists are true, empty lists are false.*/
-    if(nn_value_isarray(value))
-    {
-        return nn_value_asarray(value)->varray.count() == 0;
-    }
-    /* Non-empty dicts are true, empty dicts are false. */
-    if(nn_value_isdict(value))
-    {
-        return nn_value_asdict(value)->htnames.count() == 0;
-    }
-    /*
-    // All classes are true
-    // All closures are true
-    // All bound methods are true
-    // All functions are in themselves true if you do not account for what they
-    // return.
-    */
-    return false;
-}
 
 
 bool nn_value_compobjarray(NNObject* oa, NNObject* ob)
@@ -5828,7 +5968,7 @@ bool nn_value_compobjarray(NNObject* oa, NNObject* ob)
     }
     for(i=0; i<(size_t)arra->varray.count(); i++)
     {
-        if(!nn_value_compare((NNValue)arra->varray.get(i), (NNValue)arrb->varray.get(i)))
+        if(!nn_value_compare(arra->varray.get(i), arrb->varray.get(i)))
         {
             return false;
         }
@@ -5888,7 +6028,7 @@ bool nn_value_compobjdict(NNObject* oa, NNObject* ob)
             if((fielda != nullptr) && (fieldb != nullptr))
             {
                 /* if it exists, compare their values */
-                if(!nn_value_compare((NNValue)fielda->value, (NNValue)fieldb->value))
+                if(!nn_value_compare(fielda->value, fieldb->value))
                 {
                     return false;
                 }
@@ -5905,8 +6045,8 @@ bool nn_value_compobject(NNValue a, NNValue b)
     NNObjType tb;
     NNObject* oa;
     NNObject* ob;
-    oa = nn_value_asobject(a);
-    ob = nn_value_asobject(b);
+    oa = a.asObject();
+    ob = b.asObject();
     ta = oa->type;
     tb = ob->type;
     if(ta == tb)
@@ -5944,19 +6084,19 @@ bool nn_value_compare_actual(NNValue a, NNValue b)
     {
         return true;
     }
-    else if(nn_value_isbool(a))
+    else if(a.isBool())
     {
-        return nn_value_asbool(a) == nn_value_asbool(b);
+        return a.asBool() == b.asBool();
     }
-    else if(nn_value_isnumber(a))
+    else if(a.isNumber())
     {
-        return (nn_value_asnumber(a) == nn_value_asnumber(b));
+        return (a.asNumber() == b.asNumber());
     }
     else
     {
-        if(nn_value_isobject(a) && nn_value_isobject(b))
+        if(a.isObject() && b.isObject())
         {
-            if(nn_value_asobject(a) == nn_value_asobject(b))
+            if(a.asObject() == b.asObject())
             {
                 return true;
             }
@@ -5990,9 +6130,9 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
     {
         return b;
     }
-    else if(nn_value_isbool(a))
+    else if(a.isBool())
     {
-        if(b.isNull() || (nn_value_isbool(b) && nn_value_asbool(b) == false))
+        if(b.isNull() || (b.isBool() && b.asBool() == false))
         {
             /* only null, false and false are lower than numbers */
             return a;
@@ -6002,15 +6142,15 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             return b;
         }
     }
-    else if(nn_value_isnumber(a))
+    else if(a.isNumber())
     {
-        if(b.isNull() || nn_value_isbool(b))
+        if(b.isNull() || b.isBool())
         {
             return a;
         }
-        else if(nn_value_isnumber(b))
+        else if(b.isNumber())
         {
-            if(nn_value_asnumber(a) >= nn_value_asnumber(b))
+            if(a.asNumber() >= b.asNumber())
             {
                 return a;
             }
@@ -6022,12 +6162,12 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             return b;
         }
     }
-    else if(nn_value_isobject(a))
+    else if(a.isObject())
     {
-        if(nn_value_isstring(a) && nn_value_isstring(b))
+        if(a.isString() && b.isString())
         {
-            osa = nn_value_asstring(a);
-            osb = nn_value_asstring(b);
+            osa = a.asString();
+            osb = b.asString();
             adata = nn_string_getdata(osa);
             bdata = nn_string_getdata(osb);
             alen = nn_string_getlength(osa);
@@ -6037,7 +6177,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isfuncscript(a) && nn_value_isfuncscript(b))
+        else if(a.isFuncscript() && b.isFuncscript())
         {
             if(nn_value_asfunction(a)->fnscriptfunc.arity >= nn_value_asfunction(b)->fnscriptfunc.arity)
             {
@@ -6045,7 +6185,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isfuncclosure(a) && nn_value_isfuncclosure(b))
+        else if(a.isFuncclosure() && b.isFuncclosure())
         {
             if(nn_value_asfunction(a)->fnclosure.scriptfunc->fnscriptfunc.arity >= nn_value_asfunction(b)->fnclosure.scriptfunc->fnscriptfunc.arity)
             {
@@ -6053,7 +6193,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isrange(a) && nn_value_isrange(b))
+        else if(a.isRange() && b.isRange())
         {
             if(nn_value_asrange(a)->lower >= nn_value_asrange(b)->lower)
             {
@@ -6061,7 +6201,7 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isclass(a) && nn_value_isclass(b))
+        else if(a.isClass() && b.isClass())
         {
             if(nn_value_asclass(a)->instmethods.count() >= nn_value_asclass(b)->instmethods.count())
             {
@@ -6069,23 +6209,23 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isarray(a) && nn_value_isarray(b))
+        else if(a.isArray() && b.isArray())
         {
-            if(nn_value_asarray(a)->varray.count() >= nn_value_asarray(b)->varray.count())
+            if(a.asArray()->varray.count() >= b.asArray()->varray.count())
             {
                 return a;
             }
             return b;
         }
-        else if(nn_value_isdict(a) && nn_value_isdict(b))
+        else if(a.isDict() && b.isDict())
         {
-            if(nn_value_asdict(a)->htnames.count() >= nn_value_asdict(b)->htnames.count())
+            if(a.asDict()->htnames.count() >= b.asDict()->htnames.count())
             {
                 return a;
             }
             return b;
         }
-        else if(nn_value_isfile(a) && nn_value_isfile(b))
+        else if(a.isFile() && b.isFile())
         {
             if(strcmp(nn_string_getdata(nn_value_asfile(a)->path), nn_string_getdata(nn_value_asfile(b)->path)) >= 0)
             {
@@ -6093,9 +6233,9 @@ NNValue nn_value_findgreater(NNValue a, NNValue b)
             }
             return b;
         }
-        else if(nn_value_isobject(b))
+        else if(b.isObject())
         {
-            if(nn_value_asobject(a)->type >= nn_value_asobject(b)->type)
+            if(a.asObject()->type >= b.asObject()->type)
             {
                 return a;
             }
@@ -6126,14 +6266,14 @@ void nn_value_sortvalues(NNState* state, NNValue* values, int count)
                 temp = values[i];
                 values[i] = values[j];
                 values[j] = temp;
-                if(nn_value_isarray(values[i]))
+                if(values[i].isArray())
                 {
-                    nn_value_sortvalues(state, (NNValue*)nn_value_asarray(values[i])->varray.listitems, nn_value_asarray(values[i])->varray.count());
+                    nn_value_sortvalues(state, (NNValue*)values[i].asArray()->varray.listitems, values[i].asArray()->varray.count());
                 }
 
-                if(nn_value_isarray(values[j]))
+                if(values[j].isArray())
                 {
-                    nn_value_sortvalues(state, (NNValue*)nn_value_asarray(values[j])->varray.listitems, nn_value_asarray(values[j])->varray.count());
+                    nn_value_sortvalues(state, (NNValue*)values[j].asArray()->varray.listitems, values[j].asArray()->varray.count());
                 }
             }
         }
@@ -6142,14 +6282,14 @@ void nn_value_sortvalues(NNState* state, NNValue* values, int count)
 
 NNValue nn_value_copyvalue(NNValue value)
 {
-    if(nn_value_isobject(value))
+    if(value.isObject())
     {
-        switch(nn_value_asobject(value)->type)
+        switch(value.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
                 {
                     NNObjString* string;
-                    string = nn_value_asstring(value);
+                    string = value.asString();
                     return nn_value_fromobject(nn_string_copyobject(string));
                 }
                 break;
@@ -6158,7 +6298,7 @@ NNValue nn_value_copyvalue(NNValue value)
                     size_t i;
                     NNObjArray* list;
                     NNObjArray* newlist;
-                    list = nn_value_asarray(value);
+                    list = value.asArray();
                     newlist = nn_object_makearray();
                     for(i = 0; i < list->varray.count(); i++)
                     {
@@ -6170,7 +6310,7 @@ NNValue nn_value_copyvalue(NNValue value)
             case NEON_OBJTYPE_DICT:
                 {
                     NNObjDict *dict;
-                    dict = nn_value_asdict(value);
+                    dict = value.asDict();
                     return nn_value_fromobject(nn_dict_copy(dict));
                     
                 }
@@ -6189,12 +6329,13 @@ NNValue nn_value_copyvalue(NNValue value)
 NNObject* nn_object_allocobject(size_t size, NNObjType type, bool retain)
 {
     NNObject* object;
+    auto gcs = GCSingleton::get();
     object = (NNObject*)nn_gcmem_allocate(size, 1, retain);
     object->type = type;
-    object->mark = !GCSingleton::get()->markvalue;
+    object->mark = !gcs->markvalue;
     object->stale = false;
-    object->next = GCSingleton::get()->linkedobjects;
-    GCSingleton::get()->linkedobjects = object;
+    object->next = gcs->linkedobjects;
+    gcs->linkedobjects = object;
     return object;
 }
 
@@ -6267,7 +6408,7 @@ NNObjRange* nn_object_makerange(int lower, int upper)
 NNValue nn_argcheck_vfail(NNArgCheck* ch, const char* srcfile, int srcline, const char* fmt, va_list va)
 {
     #if 0
-        nn_vm_stackpopn(ch->pstate, ch->argc);
+        GCSingleton::get()->stackPop(ch->argc);
     #endif
     if(!nn_except_vthrowwithclass(ch->pstate, ch->pstate->exceptions.argumenterror, srcfile, srcline, fmt, va))
     {
@@ -6309,8 +6450,8 @@ NNProperty nn_property_makewithgetset(NNValue val, NNValue getter, NNValue sette
     bool setisfn;
     NNProperty np;
     np = nn_property_makewithpointer(val, type);
-    setisfn = nn_value_iscallable(setter);
-    getisfn = nn_value_iscallable(getter);
+    setisfn = setter.isCallable();
+    getisfn = getter.isCallable();
     if(getisfn || setisfn)
     {
         np.getset.setter = setter;
@@ -6324,7 +6465,7 @@ NNProperty nn_property_make(NNValue val, NNFieldType type)
     return nn_property_makewithpointer(val, type);
 }
 
-void nn_state_installmethods(NNState* state, NNObjClass* klass, NNConstClassMethodItem* listmethods)
+void nn_state_installmethods(NNObjClass* klass, NNConstClassMethodItem* listmethods)
 {
     int i;
     const char* rawname;
@@ -6394,10 +6535,10 @@ NNValue nn_except_getstacktrace(NNState* state)
     NNIOStream pr;
     oa = nn_object_makearray();
     {
-        for(i = 0; i < GCSingleton::get()->vmstate.framecount; i++)
+        for(i = 0; i < GCSingleton::get()->m_vmstate.framecount; i++)
         {
             nn_iostream_makestackstring(&pr);
-            frame = &GCSingleton::get()->vmstate.framevalues[i];
+            frame = &GCSingleton::get()->m_vmstate.framevalues[i];
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
@@ -6452,29 +6593,30 @@ bool nn_except_propagate(NNState* state)
     NNObjString* tmp;
     NNObjInstance* exception;
     NNProperty* field;
-    exception = nn_value_asinstance(nn_vm_stackpeek(state, 0));
+    auto gcs = GCSingleton::get();
+    exception = nn_value_asinstance(nn_vm_stackpeek(0));
     /* look for a handler .... */
-    while(GCSingleton::get()->vmstate.framecount > 0)
+    while(gcs->m_vmstate.framecount > 0)
     {
-        GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
-        for(i = GCSingleton::get()->vmstate.currentframe->handlercount; i > 0; i--)
+        gcs->m_vmstate.currentframe = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount - 1];
+        for(i = gcs->m_vmstate.currentframe->handlercount; i > 0; i--)
         {
-            handler = &GCSingleton::get()->vmstate.currentframe->handlers[i - 1];
-            function = GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc;
+            handler = &gcs->m_vmstate.currentframe->handlers[i - 1];
+            function = gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc;
             if(handler->address != 0 /*&& nn_util_isinstanceof(exception->klass, handler->handlerklass)*/)
             {
-                GCSingleton::get()->vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->address];
+                gcs->m_vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->address];
                 return true;
             }
             else if(handler->finallyaddress != 0)
             {
                 /* continue propagating once the 'finally' block completes */
-                nn_vm_stackpush(state, nn_value_makebool(true));
-                GCSingleton::get()->vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->finallyaddress];
+                gcs->stackPush(nn_value_makebool(true));
+                gcs->m_vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->finallyaddress];
                 return true;
             }
         }
-        GCSingleton::get()->vmstate.framecount--;
+        gcs->m_vmstate.framecount--;
     }
     /* at this point, the exception is unhandled; so, print it out. */
     colred = nn_util_color(NEON_COLOR_RED);
@@ -6488,17 +6630,17 @@ bool nn_except_propagate(NNState* state)
     if(field != nullptr)
     {
         /* why does this happen? */
-        if(nn_value_isnumber((NNValue)field->value))
+        if(field->value.isNumber())
         {
-            srcline = nn_value_asnumber((NNValue)field->value);
+            srcline = field->value.asNumber();
         }
     }
     field = exception->properties.getfieldbycstr("srcfile");
     if(field != nullptr)
     {
-        if(nn_value_isstring((NNValue)field->value))
+        if(field->value.isString())
         {
-            tmp = nn_value_asstring((NNValue)field->value);
+            tmp = field->value.asString();
             srcfile = nn_string_getdata(tmp);
         }
     }
@@ -6506,7 +6648,7 @@ bool nn_except_propagate(NNState* state)
     field = exception->properties.getfieldbycstr("message");
     if(field != nullptr)
     {
-        emsg = nn_value_tostring((NNValue)field->value);
+        emsg = nn_value_tostring(field->value);
         if(nn_string_getlength(emsg) > 0)
         {
             nn_iostream_printf(state->debugwriter, ": %s", nn_string_getdata(emsg));
@@ -6521,7 +6663,7 @@ bool nn_except_propagate(NNState* state)
     if(field != nullptr)
     {
         nn_iostream_printf(state->debugwriter, "%sstacktrace%s:\n", colblue, colreset);
-        oa = nn_value_asarray((NNValue)field->value);
+        oa = field->value.asArray();
         cnt = oa->varray.count();
         i = cnt-1;
         if(cnt > 0)
@@ -6547,14 +6689,14 @@ bool nn_except_propagate(NNState* state)
 /**
 * push an exception handler, assuming it does not exceed NEON_CONFIG_MAXEXCEPTHANDLERS.
 */
-bool nn_except_pushhandler(NNState* state, NNObjClass* type, int address, int finallyaddress)
+bool nn_except_pushhandler(NNObjClass* type, int address, int finallyaddress)
 {
     NNCallFrame* frame;
     (void)type;
-    frame = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+    frame = &GCSingleton::get()->m_vmstate.framevalues[GCSingleton::get()->m_vmstate.framecount - 1];
     if(frame->handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
     {
-        nn_state_raisefatalerror(state, "too many nested exception handlers in one function");
+        nn_state_raisefatalerror("too many nested exception handlers in one function");
         return false;
     }
     frame->handlers[frame->handlercount].address = address;
@@ -6603,21 +6745,22 @@ bool nn_except_vthrowwithclass(NNState* state, NNObjClass* exklass, const char* 
     char* message;
     NNValue stacktrace;
     NNObjInstance* instance;
+    auto gcs = GCSingleton::get();
     message = (char*)nn_memory_malloc(kMaxBufSize+1);
     length = vsnprintf(message, kMaxBufSize, format, args);
-    instance = nn_except_makeinstance(state, exklass, srcfile, srcline, nn_string_takelen(message, length));
-    nn_vm_stackpush(state, nn_value_fromobject(instance));
+    instance = nn_except_makeinstance(exklass, srcfile, srcline, nn_string_takelen(message, length));
+    gcs->stackPush(nn_value_fromobject(instance));
     stacktrace = nn_except_getstacktrace(state);
-    nn_vm_stackpush(state, stacktrace);
+    gcs->stackPush(stacktrace);
     nn_instance_defproperty(instance, nn_string_intern("stacktrace"), stacktrace);
-    nn_vm_stackpop(state);
+    gcs->stackPop();
     return nn_except_propagate(state);
 }
 
 /**
 * helper for nn_except_makeclass.
 */
-NNInstruction nn_util_makeinst(bool isop, uint8_t code, int srcline)
+NNInstruction nn_util_makeinst(bool isop, uint16_t code, int srcline)
 {
     NNInstruction inst;
     inst.isop = isop;
@@ -6645,54 +6788,55 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
     {
         classname = nn_string_copycstr(cstrname);
     }
-    nn_vm_stackpush(state, nn_value_fromobject(classname));
+    auto gcs = GCSingleton::get();
+    gcs->stackPush(nn_value_fromobject(classname));
     klass = nn_object_makeclass(classname, state->classprimobject);
-    nn_vm_stackpop(state);
-    nn_vm_stackpush(state, nn_value_fromobject(klass));
+    gcs->stackPop();
+    gcs->stackPush(nn_value_fromobject(klass));
     function = nn_object_makefuncscript(module, NEON_FNCONTEXTTYPE_METHOD);
     function->fnscriptfunc.arity = 1;
     function->fnscriptfunc.isvariadic = false;
-    nn_vm_stackpush(state, nn_value_fromobject(function));
+    gcs->stackPush(nn_value_fromobject(function));
     {
         /* g_loc 0 */
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_LOCALGET, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 0 & 0xff, 0));
     }
     {
         /* g_loc 1 */
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_LOCALGET, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (1 >> 8) & 0xff, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 1 & 0xff, 0));
     }
     {
         messageconst = nn_blob_pushconst(&function->fnscriptfunc.blob, nn_value_fromobject(nn_string_intern("message")));
         /* s_prop 0 */
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_PROPERTYSET, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_PROPERTYSET, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (messageconst >> 8) & 0xff, 0));
         nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, messageconst & 0xff, 0));
     }
     {
         /* pop */
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_POPONE, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_POPONE, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_POPONE, 0));
     }
     {
         /* g_loc 0 */
         /*
-        //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_LOCALGET, 0));
+        //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_LOCALGET, 0));
         //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, (0 >> 8) & 0xff, 0));
         //  nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(false, 0 & 0xff, 0));
         */
     }
     {
         /* ret */
-        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NEON_OP_RETURN, 0));
+        nn_blob_push(&function->fnscriptfunc.blob, nn_util_makeinst(true, NNInstruction::OPC_RETURN, 0));
     }
     closure = nn_object_makefuncclosure(function, nn_value_makenull());
-    nn_vm_stackpop(state);
+    gcs->stackPop();
     /* set class constructor */
-    nn_vm_stackpush(state, nn_value_fromobject(closure));
+    gcs->stackPush(nn_value_fromobject(closure));
     klass->instmethods.set(nn_value_fromobject(classname), nn_value_fromobject(closure));
     klass->constructor = nn_value_fromobject(closure);
     /* set class properties */
@@ -6701,37 +6845,37 @@ NNObjClass* nn_except_makeclass(NNState* state, NNObjModule* module, const char*
     nn_class_defproperty(klass, nn_string_intern("srcfile"), nn_value_makenull());
     nn_class_defproperty(klass, nn_string_intern("srcline"), nn_value_makenull());
     nn_class_defproperty(klass, nn_string_intern("class"), nn_value_fromobject(klass));
-    GCSingleton::get()->declaredglobals.set(nn_value_fromobject(classname), nn_value_fromobject(klass));
+    gcs->declaredglobals.set(nn_value_fromobject(classname), nn_value_fromobject(klass));
     /* for class */
-    nn_vm_stackpop(state);
-    nn_vm_stackpop(state);
+    gcs->stackPop();
+    gcs->stackPop();
     /* assert error name */
-    /* nn_vm_stackpop(state); */
+    /* gcs->stackPop(); */
     return klass;
 }
 
 /**
 * create an instance of an exception class.
 */
-NNObjInstance* nn_except_makeinstance(NNState* state, NNObjClass* exklass, const char* srcfile, int srcline, NNObjString* message)
+NNObjInstance* nn_except_makeinstance(NNObjClass* exklass, const char* srcfile, int srcline, NNObjString* message)
 {
     NNObjInstance* instance;
     NNObjString* osfile;
     instance = nn_object_makeinstance(exklass);
     osfile = nn_string_copycstr(srcfile);
-    nn_vm_stackpush(state, nn_value_fromobject(instance));
+    GCSingleton::get()->stackPush(nn_value_fromobject(instance));
     nn_instance_defproperty(instance, nn_string_intern("class"), nn_value_fromobject(exklass));
     nn_instance_defproperty(instance, nn_string_intern("message"), nn_value_fromobject(message));
     nn_instance_defproperty(instance, nn_string_intern("srcfile"), nn_value_fromobject(osfile));
     nn_instance_defproperty(instance, nn_string_intern("srcline"), nn_value_makenumber(srcline));
-    nn_vm_stackpop(state);
+    GCSingleton::get()->stackPop();
     return instance;
 }
 
 /**
 * raise a fatal error that cannot recover.
 */
-void nn_state_raisefatalerror(NNState* state, const char* format, ...)
+void nn_state_raisefatalerror(const char* format, ...)
 {
     int i;
     int line;
@@ -6741,7 +6885,8 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
     NNObjFunction* function;
     /* flush out anything on stdout first */
     fflush(stdout);
-    frame = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+    auto gcs = GCSingleton::get();
+    frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount - 1];
     function = frame->closure->fnclosure.scriptfunc;
     instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
     line = function->fnscriptfunc.blob.instrucs[instruction].fromsourceline;
@@ -6751,12 +6896,12 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
     va_end(args);
     fprintf(stderr, " -> %s:%d ", nn_string_getdata(function->fnscriptfunc.module->physicalpath), line);
     fputs("\n", stderr);
-    if(GCSingleton::get()->vmstate.framecount > 1)
+    if(gcs->m_vmstate.framecount > 1)
     {
         fprintf(stderr, "stacktrace:\n");
-        for(i = GCSingleton::get()->vmstate.framecount - 1; i >= 0; i--)
+        for(i = gcs->m_vmstate.framecount - 1; i >= 0; i--)
         {
-            frame = &GCSingleton::get()->vmstate.framevalues[i];
+            frame = &gcs->m_vmstate.framevalues[i];
             function = frame->closure->fnclosure.scriptfunc;
             /* -1 because the IP is sitting on the next instruction to be executed */
             instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
@@ -6772,34 +6917,35 @@ void nn_state_raisefatalerror(NNState* state, const char* format, ...)
             fprintf(stderr, "\n");
         }
     }
-    nn_state_resetvmstate(state);
+    nn_state_resetvmstate();
 }
 
-bool nn_state_defglobalvalue(NNState* state, const char* name, NNValue val)
+bool nn_state_defglobalvalue(const char* name, NNValue val)
 {
     bool r;
     NNObjString* oname;
     oname = nn_string_intern(name);
-    nn_vm_stackpush(state, nn_value_fromobject(oname));
-    nn_vm_stackpush(state, val);
-    r = GCSingleton::get()->declaredglobals.set(GCSingleton::get()->vmstate.stackvalues[0], GCSingleton::get()->vmstate.stackvalues[1]);
-    nn_vm_stackpopn(state, 2);
+    auto gcs = GCSingleton::get();
+    gcs->stackPush(nn_value_fromobject(oname));
+    gcs->stackPush(val);
+    r = gcs->declaredglobals.set(gcs->m_vmstate.stackvalues[0], gcs->m_vmstate.stackvalues[1]);
+    gcs->stackPop(2);
     return r;
 }
 
-bool nn_state_defnativefunctionptr(NNState* state, const char* name, NNNativeFN fptr, void* uptr)
+bool nn_state_defnativefunctionptr(const char* name, NNNativeFN fptr, void* uptr)
 {
     NNObjFunction* func;
     func = nn_object_makefuncnative(fptr, name, uptr);
-    return nn_state_defglobalvalue(state, name, nn_value_fromobject(func));
+    return nn_state_defglobalvalue(name, nn_value_fromobject(func));
 }
 
-bool nn_state_defnativefunction(NNState* state, const char* name, NNNativeFN fptr)
+bool nn_state_defnativefunction(const char* name, NNNativeFN fptr)
 {
-    return nn_state_defnativefunctionptr(state, name, fptr, nullptr);
+    return nn_state_defnativefunctionptr(name, fptr, nullptr);
 }
 
-NNObjClass* nn_util_makeclass(NNState* state, const char* name, NNObjClass* parent)
+NNObjClass* nn_util_makeclass(const char* name, NNObjClass* parent)
 {
     NNObjClass* cl;
     NNObjString* os;
@@ -6832,15 +6978,15 @@ void nn_state_buildprocessinfo(NNState* state)
     {
         {
             state->processinfo->filestdout = nn_object_makefile(stdout, true, "<stdout>", "wb");
-            nn_state_defglobalvalue(state, "STDOUT", nn_value_fromobject(state->processinfo->filestdout));
+            nn_state_defglobalvalue("STDOUT", nn_value_fromobject(state->processinfo->filestdout));
         }
         {
             state->processinfo->filestderr = nn_object_makefile(stderr, true, "<stderr>", "wb");
-            nn_state_defglobalvalue(state, "STDERR", nn_value_fromobject(state->processinfo->filestderr));
+            nn_state_defglobalvalue("STDERR", nn_value_fromobject(state->processinfo->filestderr));
         }
         {
             state->processinfo->filestdin = nn_object_makefile(stdin, true, "<stdin>", "rb");
-            nn_state_defglobalvalue(state, "STDIN", nn_value_fromobject(state->processinfo->filestdin));
+            nn_state_defglobalvalue("STDIN", nn_value_fromobject(state->processinfo->filestdin));
         }
     }
 }
@@ -6880,8 +7026,8 @@ NNState* nn_state_makealloc()
     state->rootphysfile = nullptr;
     state->processinfo = nullptr;
     state->isrepl = false;
-    nn_vm_initvmstate(state);
-    nn_state_resetvmstate(state);
+    nn_vm_initvmstate();
+    nn_state_resetvmstate();
     /*
     * setup default config
     */
@@ -6944,16 +7090,16 @@ NNState* nn_state_makealloc()
     * declare default classes
     */
     {
-        state->classprimclass = nn_util_makeclass(state, "Class", nullptr);
-        state->classprimobject = nn_util_makeclass(state, "Object", state->classprimclass);
-        state->classprimnumber = nn_util_makeclass(state, "Number", state->classprimobject);
-        state->classprimstring = nn_util_makeclass(state, "String", state->classprimobject);
-        state->classprimarray = nn_util_makeclass(state, "Array", state->classprimobject);
-        state->classprimdict = nn_util_makeclass(state, "Dict", state->classprimobject);
-        state->classprimfile = nn_util_makeclass(state, "File", state->classprimobject);
-        state->classprimrange = nn_util_makeclass(state, "Range", state->classprimobject);
-        state->classprimcallable = nn_util_makeclass(state, "Function", state->classprimobject);
-        state->classprimprocess = nn_util_makeclass(state, "Process", state->classprimobject);
+        state->classprimclass = nn_util_makeclass("Class", nullptr);
+        state->classprimobject = nn_util_makeclass("Object", state->classprimclass);
+        state->classprimnumber = nn_util_makeclass("Number", state->classprimobject);
+        state->classprimstring = nn_util_makeclass("String", state->classprimobject);
+        state->classprimarray = nn_util_makeclass("Array", state->classprimobject);
+        state->classprimdict = nn_util_makeclass("Dict", state->classprimobject);
+        state->classprimfile = nn_util_makeclass("File", state->classprimobject);
+        state->classprimrange = nn_util_makeclass("Range", state->classprimobject);
+        state->classprimcallable = nn_util_makeclass("Function", state->classprimobject);
+        state->classprimprocess = nn_util_makeclass("Process", state->classprimobject);
     }
     /*
     * declare environment variables dictionary
@@ -7004,7 +7150,7 @@ void nn_state_destroy(NNState* state, bool onstack)
     destrdebug("destroying importpath...");
     state->importpath.deInit(false);
     destrdebug("destroying linked objects...");
-    nn_gcmem_destroylinkedobjects(state);
+    nn_gcmem_destroylinkedobjects();
     /* since object in module can exist in declaredglobals, it must come before */
     destrdebug("destroying module table...");
     GCSingleton::get()->openedmodules.deinit();
@@ -7019,9 +7165,9 @@ void nn_state_destroy(NNState* state, bool onstack)
     destrdebug("destroying debugwriter...");
     nn_iostream_destroy(state->debugwriter);
     destrdebug("destroying framevalues...");
-    nn_memory_free(GCSingleton::get()->vmstate.framevalues);
+    nn_memory_free(GCSingleton::get()->m_vmstate.framevalues);
     destrdebug("destroying stackvalues...");
-    nn_memory_free(GCSingleton::get()->vmstate.stackvalues);
+    nn_memory_free(GCSingleton::get()->m_vmstate.stackvalues);
     nn_memory_free(state->processinfo);
     destrdebug("destroying state...");
     if(!onstack)
@@ -7053,7 +7199,7 @@ NNObjFunction* nn_state_compilesource(NNState* state, NNObjModule* module, bool 
     }
     if(!fromeval)
     {
-        nn_vm_stackpush(state, nn_value_fromobject(function));
+        GCSingleton::get()->stackPush(nn_value_fromobject(function));
     }
     else
     {
@@ -7062,8 +7208,8 @@ NNObjFunction* nn_state_compilesource(NNState* state, NNObjModule* module, bool 
     closure = nn_object_makefuncclosure(function, nn_value_makenull());
     if(!fromeval)
     {
-        nn_vm_stackpop(state);
-        nn_vm_stackpush(state, nn_value_fromobject(closure));
+        GCSingleton::get()->stackPop();
+        GCSingleton::get()->stackPush(nn_value_fromobject(closure));
     }
     nn_blob_destroy(&blob);
     return closure;
@@ -7078,7 +7224,7 @@ NNStatus nn_state_execsource(NNState* state, NNObjModule* module, const char* so
     nn_state_updateprocessinfo(state);
     rp = (char*)filename;
     state->topmodule->physicalpath = nn_string_copycstr(rp);
-    nn_module_setfilefield(state, module);
+    nn_module_setfilefield(module);
     closure = nn_state_compilesource(state, module, false, source, true);
     if(closure == nullptr)
     {
@@ -7152,15 +7298,15 @@ static void nn_astparser_parseassertstmt(NNAstParser* prs);
 static void nn_astparser_parsethrowstmt(NNAstParser* prs);
 static void nn_astparser_parsetrystmt(NNAstParser* prs);
 static bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool canassign);
-static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence);
+static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstRule::Precedence precedence);
 static int nn_astparser_parsevariable(NNAstParser* prs, const char* message);
 static bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign);
-static uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs);
-static void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg);
+static uint32_t nn_astparser_parsefunccallargs(NNAstParser* prs);
+static void nn_astparser_parseassign(NNAstParser* prs, uint16_t realop, uint16_t getop, uint16_t setop, int arg);
 static bool nn_astparser_parseexpression(NNAstParser* prs);
 static bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign);
 static bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool canassign);
-static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstPrecedence precedence);
+static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstRule::Precedence precedence);
 static bool nn_astparser_ruleanonclass(NNAstParser* prs, bool canassign);
 static void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler* fnc);
 
@@ -7335,7 +7481,6 @@ const char* nn_astutil_toktype2str(int t)
         case NEON_ASTTOK_POWASSIGN: return "NEON_ASTTOK_POWASSIGN";
         case NEON_ASTTOK_DIVIDE: return "NEON_ASTTOK_DIVIDE";
         case NEON_ASTTOK_DIVASSIGN: return "NEON_ASTTOK_DIVASSIGN";
-        case NEON_ASTTOK_FLOOR: return "NEON_ASTTOK_FLOOR";
         case NEON_ASTTOK_ASSIGN: return "NEON_ASTTOK_ASSIGN";
         case NEON_ASTTOK_EQUAL: return "NEON_ASTTOK_EQUAL";
         case NEON_ASTTOK_LESSTHAN: return "NEON_ASTTOK_LESSTHAN";
@@ -8460,94 +8605,93 @@ static void nn_astparser_ignorewhitespace(NNAstParser* prs)
 static int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NNValue* constants, int ip)
 {
     int constant;
-    NNOpCode code;
+    NNInstruction::OpCode code;
     NNObjFunction* fn;
-    code = (NNOpCode)bytecode[ip].code;
+    code = (NNInstruction::OpCode)bytecode[ip].code;
     switch(code)
     {
-        case NEON_OP_EQUAL:
-        case NEON_OP_PRIMGREATER:
-        case NEON_OP_PRIMLESSTHAN:
-        case NEON_OP_PUSHNULL:
-        case NEON_OP_PUSHTRUE:
-        case NEON_OP_PUSHFALSE:
-        case NEON_OP_PRIMADD:
-        case NEON_OP_PRIMSUBTRACT:
-        case NEON_OP_PRIMMULTIPLY:
-        case NEON_OP_PRIMDIVIDE:
-        case NEON_OP_PRIMFLOORDIVIDE:
-        case NEON_OP_PRIMMODULO:
-        case NEON_OP_PRIMPOW:
-        case NEON_OP_PRIMNEGATE:
-        case NEON_OP_PRIMNOT:
-        case NEON_OP_ECHO:
-        case NEON_OP_TYPEOF:
-        case NEON_OP_POPONE:
-        case NEON_OP_UPVALUECLOSE:
-        case NEON_OP_DUPONE:
-        case NEON_OP_RETURN:
-        case NEON_OP_CLASSINHERIT:
-        case NEON_OP_CLASSGETSUPER:
-        case NEON_OP_PRIMAND:
-        case NEON_OP_PRIMOR:
-        case NEON_OP_PRIMBITXOR:
-        case NEON_OP_PRIMSHIFTLEFT:
-        case NEON_OP_PRIMSHIFTRIGHT:
-        case NEON_OP_PRIMBITNOT:
-        case NEON_OP_PUSHONE:
-        case NEON_OP_INDEXSET:
-        case NEON_OP_ASSERT:
-        case NEON_OP_EXTHROW:
-        case NEON_OP_EXPOPTRY:
-        case NEON_OP_MAKERANGE:
-        case NEON_OP_STRINGIFY:
-        case NEON_OP_PUSHEMPTY:
-        case NEON_OP_EXPUBLISHTRY:
-        case NEON_OP_CLASSGETTHIS:
-        case NEON_OP_HALT:
+        case NNInstruction::OPC_EQUAL:
+        case NNInstruction::OPC_PRIMGREATER:
+        case NNInstruction::OPC_PRIMLESSTHAN:
+        case NNInstruction::OPC_PUSHNULL:
+        case NNInstruction::OPC_PUSHTRUE:
+        case NNInstruction::OPC_PUSHFALSE:
+        case NNInstruction::OPC_PRIMADD:
+        case NNInstruction::OPC_PRIMSUBTRACT:
+        case NNInstruction::OPC_PRIMMULTIPLY:
+        case NNInstruction::OPC_PRIMDIVIDE:
+        case NNInstruction::OPC_PRIMMODULO:
+        case NNInstruction::OPC_PRIMPOW:
+        case NNInstruction::OPC_PRIMNEGATE:
+        case NNInstruction::OPC_PRIMNOT:
+        case NNInstruction::OPC_ECHO:
+        case NNInstruction::OPC_TYPEOF:
+        case NNInstruction::OPC_POPONE:
+        case NNInstruction::OPC_UPVALUECLOSE:
+        case NNInstruction::OPC_DUPONE:
+        case NNInstruction::OPC_RETURN:
+        case NNInstruction::OPC_CLASSINHERIT:
+        case NNInstruction::OPC_CLASSGETSUPER:
+        case NNInstruction::OPC_PRIMAND:
+        case NNInstruction::OPC_PRIMOR:
+        case NNInstruction::OPC_PRIMBITXOR:
+        case NNInstruction::OPC_PRIMSHIFTLEFT:
+        case NNInstruction::OPC_PRIMSHIFTRIGHT:
+        case NNInstruction::OPC_PRIMBITNOT:
+        case NNInstruction::OPC_PUSHONE:
+        case NNInstruction::OPC_INDEXSET:
+        case NNInstruction::OPC_ASSERT:
+        case NNInstruction::OPC_EXTHROW:
+        case NNInstruction::OPC_EXPOPTRY:
+        case NNInstruction::OPC_MAKERANGE:
+        case NNInstruction::OPC_STRINGIFY:
+        case NNInstruction::OPC_PUSHEMPTY:
+        case NNInstruction::OPC_EXPUBLISHTRY:
+        case NNInstruction::OPC_CLASSGETTHIS:
+        case NNInstruction::OPC_HALT:
             return 0;
-        case NEON_OP_CALLFUNCTION:
-        case NEON_OP_CLASSINVOKESUPERSELF:
-        case NEON_OP_INDEXGET:
-        case NEON_OP_INDEXGETRANGED:
+        case NNInstruction::OPC_CALLFUNCTION:
+        case NNInstruction::OPC_CLASSINVOKESUPERSELF:
+        case NNInstruction::OPC_INDEXGET:
+        case NNInstruction::OPC_INDEXGETRANGED:
             return 1;
-        case NEON_OP_GLOBALDEFINE:
-        case NEON_OP_GLOBALGET:
-        case NEON_OP_GLOBALSET:
-        case NEON_OP_LOCALGET:
-        case NEON_OP_LOCALSET:
-        case NEON_OP_FUNCARGOPTIONAL:
-        case NEON_OP_FUNCARGSET:
-        case NEON_OP_FUNCARGGET:
-        case NEON_OP_UPVALUEGET:
-        case NEON_OP_UPVALUESET:
-        case NEON_OP_JUMPIFFALSE:
-        case NEON_OP_JUMPNOW:
-        case NEON_OP_BREAK_PL:
-        case NEON_OP_LOOP:
-        case NEON_OP_PUSHCONSTANT:
-        case NEON_OP_POPN:
-        case NEON_OP_MAKECLASS:
-        case NEON_OP_PROPERTYGET:
-        case NEON_OP_PROPERTYGETSELF:
-        case NEON_OP_PROPERTYSET:
-        case NEON_OP_MAKEARRAY:
-        case NEON_OP_MAKEDICT:
-        case NEON_OP_IMPORTIMPORT:
-        case NEON_OP_SWITCH:
-        case NEON_OP_MAKEMETHOD:
+        case NNInstruction::OPC_GLOBALDEFINE:
+        case NNInstruction::OPC_GLOBALGET:
+        case NNInstruction::OPC_GLOBALSET:
+        case NNInstruction::OPC_LOCALGET:
+        case NNInstruction::OPC_LOCALSET:
+        case NNInstruction::OPC_FUNCARGOPTIONAL:
+        case NNInstruction::OPC_FUNCARGSET:
+        case NNInstruction::OPC_FUNCARGGET:
+        case NNInstruction::OPC_UPVALUEGET:
+        case NNInstruction::OPC_UPVALUESET:
+        case NNInstruction::OPC_JUMPIFFALSE:
+        case NNInstruction::OPC_JUMPNOW:
+        case NNInstruction::OPC_BREAK_PL:
+        case NNInstruction::OPC_LOOP:
+        case NNInstruction::OPC_PUSHCONSTANT:
+        case NNInstruction::OPC_POPN:
+        case NNInstruction::OPC_MAKECLASS:
+        case NNInstruction::OPC_PROPERTYGET:
+        case NNInstruction::OPC_PROPERTYGETSELF:
+        case NNInstruction::OPC_PROPERTYSET:
+        case NNInstruction::OPC_MAKEARRAY:
+        case NNInstruction::OPC_MAKEDICT:
+        case NNInstruction::OPC_IMPORTIMPORT:
+        case NNInstruction::OPC_SWITCH:
+        case NNInstruction::OPC_MAKEMETHOD:
         #if 0
-        case NEON_OP_FUNCOPTARG:
+        case NNInstruction::OPC_FUNCOPTARG:
         #endif
             return 2;
-        case NEON_OP_CALLMETHOD:
-        case NEON_OP_CLASSINVOKETHIS:
-        case NEON_OP_CLASSINVOKESUPER:
-        case NEON_OP_CLASSPROPERTYDEFINE:
+        case NNInstruction::OPC_CALLMETHOD:
+        case NNInstruction::OPC_CLASSINVOKETHIS:
+        case NNInstruction::OPC_CLASSINVOKESUPER:
+        case NNInstruction::OPC_CLASSPROPERTYDEFINE:
             return 3;
-        case NEON_OP_EXTRY:
+        case NNInstruction::OPC_EXTRY:
             return 6;
-        case NEON_OP_MAKECLOSURE:
+        case NNInstruction::OPC_MAKECLOSURE:
             {
                 constant = (bytecode[ip + 1].code << 8) | bytecode[ip + 2].code;
                 fn = nn_value_asfunction(constants[constant]);
@@ -8561,7 +8705,7 @@ static int nn_astparser_getcodeargscount(const NNInstruction* bytecode, const NN
     return 0;
 }
 
-static void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
+static void nn_astemit_emit(NNAstParser* prs, uint16_t byte, int line, bool isop)
 {
     NNInstruction ins;
     ins.code = byte;
@@ -8570,17 +8714,17 @@ static void nn_astemit_emit(NNAstParser* prs, uint8_t byte, int line, bool isop)
     nn_blob_push(nn_astparser_currentblob(prs), ins);
 }
 
-static void nn_astemit_patchat(NNAstParser* prs, size_t idx, uint8_t byte)
+static void nn_astemit_patchat(NNAstParser* prs, size_t idx, uint16_t byte)
 {
     nn_astparser_currentblob(prs)->instrucs[idx].code = byte;
 }
 
-static void nn_astemit_emitinstruc(NNAstParser* prs, uint8_t byte)
+static void nn_astemit_emitinstruc(NNAstParser* prs, uint16_t byte)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, true);
 }
 
-static void nn_astemit_emit1byte(NNAstParser* prs, uint8_t byte)
+static void nn_astemit_emit1byte(NNAstParser* prs, uint16_t byte)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
 }
@@ -8591,13 +8735,13 @@ static void nn_astemit_emit1short(NNAstParser* prs, uint16_t byte)
     nn_astemit_emit(prs, byte & 0xff, prs->prevtoken.line, false);
 }
 
-static void nn_astemit_emit2byte(NNAstParser* prs, uint8_t byte, uint8_t byte2)
+static void nn_astemit_emit2byte(NNAstParser* prs, uint16_t byte, uint16_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
     nn_astemit_emit(prs, byte2, prs->prevtoken.line, false);
 }
 
-static void nn_astemit_emitbyteandshort(NNAstParser* prs, uint8_t byte, uint16_t byte2)
+static void nn_astemit_emitbyteandshort(NNAstParser* prs, uint16_t byte, uint16_t byte2)
 {
     nn_astemit_emit(prs, byte, prs->prevtoken.line, false);
     nn_astemit_emit(prs, (byte2 >> 8) & 0xff, prs->prevtoken.line, false);
@@ -8607,7 +8751,7 @@ static void nn_astemit_emitbyteandshort(NNAstParser* prs, uint8_t byte, uint16_t
 static void nn_astemit_emitloop(NNAstParser* prs, int loopstart)
 {
     int offset;
-    nn_astemit_emitinstruc(prs, NEON_OP_LOOP);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_LOOP);
     offset = nn_astparser_currentblob(prs)->count - loopstart + 2;
     if(offset > UINT16_MAX)
     {
@@ -8621,11 +8765,11 @@ static void nn_astemit_emitreturn(NNAstParser* prs)
 {
     if(prs->istrying)
     {
-        nn_astemit_emitinstruc(prs, NEON_OP_EXPOPTRY);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXPOPTRY);
     }
     if(prs->currentfunccompiler->contexttype == NEON_FNCONTEXTTYPE_INITIALIZER)
     {
-        nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, 0);
+        nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALGET, 0);
     }
     else
     {
@@ -8633,15 +8777,15 @@ static void nn_astemit_emitreturn(NNAstParser* prs)
         {
             if(prs->currentfunccompiler->fromimport)
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
             }
             else
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_PUSHEMPTY);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHEMPTY);
             }
         }
     }
-    nn_astemit_emitinstruc(prs, NEON_OP_RETURN);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_RETURN);
 }
 
 static int nn_astparser_pushconst(NNAstParser* prs, NNValue value)
@@ -8655,10 +8799,10 @@ static void nn_astemit_emitconst(NNAstParser* prs, NNValue value)
 {
     int constant;
     constant = nn_astparser_pushconst(prs, value);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_PUSHCONSTANT, (uint16_t)constant);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_PUSHCONSTANT, (uint16_t)constant);
 }
 
-static int nn_astemit_emitjump(NNAstParser* prs, uint8_t instruction)
+static int nn_astemit_emitjump(NNAstParser* prs, uint16_t instruction)
 {
     nn_astemit_emitinstruc(prs, instruction);
     /* placeholders */
@@ -8669,7 +8813,7 @@ static int nn_astemit_emitjump(NNAstParser* prs, uint8_t instruction)
 
 static int nn_astemit_emitswitch(NNAstParser* prs)
 {
-    nn_astemit_emitinstruc(prs, NEON_OP_SWITCH);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_SWITCH);
     /* placeholders */
     nn_astemit_emit1byte(prs, 0xff);
     nn_astemit_emit1byte(prs, 0xff);
@@ -8678,7 +8822,7 @@ static int nn_astemit_emitswitch(NNAstParser* prs)
 
 static int nn_astemit_emittry(NNAstParser* prs)
 {
-    nn_astemit_emitinstruc(prs, NEON_OP_EXTRY);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXTRY);
     /* type placeholders */
     nn_astemit_emit1byte(prs, 0xff);
     nn_astemit_emit1byte(prs, 0xff);
@@ -8740,7 +8884,7 @@ static void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NN
     prs->currentfunccompiler = fnc;
     if(type != NEON_FNCONTEXTTYPE_SCRIPT)
     {
-        nn_vm_stackpush(prs->pstate, nn_value_fromobject(fnc->targetfunc));
+        GCSingleton::get()->stackPush(nn_value_fromobject(fnc->targetfunc));
         if(isanon)
         {
             nn_iostream_makestackstring(&wtmp);
@@ -8753,7 +8897,7 @@ static void nn_astfunccompiler_init(NNAstParser* prs, NNAstFuncCompiler* fnc, NN
             fname = nn_string_copylen(prs->prevtoken.start, prs->prevtoken.length);
         }
         prs->currentfunccompiler->targetfunc->name = fname;
-        nn_vm_stackpop(prs->pstate);
+        GCSingleton::get()->stackPop();
     }
     /* claiming slot zero for use in class methods */
     local = &prs->currentfunccompiler->locals[0];
@@ -8945,7 +9089,7 @@ static void nn_astparser_definevariable(NNAstParser* prs, int global)
         nn_astparser_markinitialized(prs);
         return;
     }
-    nn_astemit_emitbyteandshort(prs, NEON_OP_GLOBALDEFINE, global);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_GLOBALDEFINE, global);
 }
 
 static NNAstToken nn_astparser_synthtoken(const char* name)
@@ -9023,11 +9167,11 @@ static void nn_astparser_scopeend(NNAstParser* prs)
     {
         if(prs->currentfunccompiler->locals[prs->currentfunccompiler->localcount - 1].iscaptured)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_UPVALUECLOSE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_UPVALUECLOSE);
         }
         else
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
         }
         prs->currentfunccompiler->localcount--;
     }
@@ -9051,11 +9195,11 @@ static int nn_astparser_discardlocals(NNAstParser* prs, int depth)
     {
         if(prs->currentfunccompiler->locals[local].iscaptured)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_UPVALUECLOSE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_UPVALUECLOSE);
         }
         else
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
         }
         local--;
     }
@@ -9068,14 +9212,14 @@ static void nn_astparser_endloop(NNAstParser* prs)
     NNInstruction* bcode;
     NNValue* cvals;
     /*
-    // find all NEON_OP_BREAK_PL placeholder and replace with the appropriate jump...
+    // find all NNInstruction::OPC_BREAK_PL placeholder and replace with the appropriate jump...
     */
     i = prs->innermostloopstart;
     while(i < prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.count)
     {
-        if(prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code == NEON_OP_BREAK_PL)
+        if(prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code == NNInstruction::OPC_BREAK_PL)
         {
-            prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code = NEON_OP_JUMPNOW;
+            prs->currentfunccompiler->targetfunc->fnscriptfunc.blob.instrucs[i].code = NNInstruction::OPC_JUMPNOW;
             nn_astemit_patchjump(prs, i + 1);
             i += 3;
         }
@@ -9097,69 +9241,66 @@ static bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool 
     op = prs->prevtoken.type;
     /* compile the right operand */
     rule = nn_astparser_getrule(op);
-    nn_astparser_parseprecedence(prs, (NNAstPrecedence)(rule->precedence + 1));
+    nn_astparser_parseprecedence(prs, (NNAstRule::Precedence)(rule->precedence + 1));
     /* emit the operator instruction */
     switch(op)
     {
         case NEON_ASTTOK_PLUS:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMADD);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMADD);
             break;
         case NEON_ASTTOK_MINUS:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMSUBTRACT);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMSUBTRACT);
             break;
         case NEON_ASTTOK_MULTIPLY:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMMULTIPLY);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMMULTIPLY);
             break;
         case NEON_ASTTOK_DIVIDE:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMDIVIDE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMDIVIDE);
             break;
         case NEON_ASTTOK_MODULO:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMMODULO);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMMODULO);
             break;
         case NEON_ASTTOK_POWEROF:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMPOW);
-            break;
-        case NEON_ASTTOK_FLOOR:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMFLOORDIVIDE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMPOW);
             break;
             /* equality */
         case NEON_ASTTOK_EQUAL:
-            nn_astemit_emitinstruc(prs, NEON_OP_EQUAL);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_EQUAL);
             break;
         case NEON_ASTTOK_NOTEQUAL:
-            nn_astemit_emit2byte(prs, NEON_OP_EQUAL, NEON_OP_PRIMNOT);
+            nn_astemit_emit2byte(prs, NNInstruction::OPC_EQUAL, NNInstruction::OPC_PRIMNOT);
             break;
         case NEON_ASTTOK_GREATERTHAN:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMGREATER);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMGREATER);
             break;
         case NEON_ASTTOK_GREATER_EQ:
-            nn_astemit_emit2byte(prs, NEON_OP_PRIMLESSTHAN, NEON_OP_PRIMNOT);
+            nn_astemit_emit2byte(prs, NNInstruction::OPC_PRIMLESSTHAN, NNInstruction::OPC_PRIMNOT);
             break;
         case NEON_ASTTOK_LESSTHAN:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMLESSTHAN);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMLESSTHAN);
             break;
         case NEON_ASTTOK_LESSEQUAL:
-            nn_astemit_emit2byte(prs, NEON_OP_PRIMGREATER, NEON_OP_PRIMNOT);
+            nn_astemit_emit2byte(prs, NNInstruction::OPC_PRIMGREATER, NNInstruction::OPC_PRIMNOT);
             break;
             /* bitwise */
         case NEON_ASTTOK_AMP:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMAND);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMAND);
             break;
         case NEON_ASTTOK_BAR:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMOR);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMOR);
             break;
         case NEON_ASTTOK_XOR:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMBITXOR);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMBITXOR);
             break;
         case NEON_ASTTOK_LEFTSHIFT:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMSHIFTLEFT);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMSHIFTLEFT);
             break;
         case NEON_ASTTOK_RIGHTSHIFT:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMSHIFTRIGHT);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMSHIFTRIGHT);
             break;
             /* range */
         case NEON_ASTTOK_DOUBLEDOT:
-            nn_astemit_emitinstruc(prs, NEON_OP_MAKERANGE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_MAKERANGE);
             break;
         default:
             break;
@@ -9169,11 +9310,11 @@ static bool nn_astparser_rulebinary(NNAstParser* prs, NNAstToken previous, bool 
 
 static bool nn_astparser_rulecall(NNAstParser* prs, NNAstToken previous, bool canassign)
 {
-    uint8_t argcount;
+    uint32_t argcount;
     (void)previous;
     (void)canassign;
     argcount = nn_astparser_parsefunccallargs(prs);
-    nn_astemit_emit2byte(prs, NEON_OP_CALLFUNCTION, argcount);
+    nn_astemit_emit2byte(prs, NNInstruction::OPC_CALLFUNCTION, argcount);
     return true;
 }
 
@@ -9183,13 +9324,13 @@ static bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
     switch(prs->prevtoken.type)
     {
         case NEON_ASTTOK_KWNULL:
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
             break;
         case NEON_ASTTOK_KWTRUE:
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHTRUE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHTRUE);
             break;
         case NEON_ASTTOK_KWFALSE:
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHFALSE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHFALSE);
             break;
         default:
             /* TODO: assuming this is correct behaviour ... */
@@ -9198,12 +9339,12 @@ static bool nn_astparser_ruleliteral(NNAstParser* prs, bool canassign)
     return true;
 }
 
-static void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t getop, uint8_t setop, int arg)
+static void nn_astparser_parseassign(NNAstParser* prs, uint16_t realop, uint16_t getop, uint16_t setop, int arg)
 {
     prs->replcanecho = false;
-    if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
+    if(getop == NNInstruction::OPC_PROPERTYGET || getop == NNInstruction::OPC_PROPERTYGETSELF)
     {
-        nn_astemit_emitinstruc(prs, NEON_OP_DUPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_DUPONE);
     }
     if(arg != -1)
     {
@@ -9225,7 +9366,7 @@ static void nn_astparser_parseassign(NNAstParser* prs, uint8_t realop, uint8_t g
     }
 }
 
-static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t setop, int arg, bool canassign)
+static void nn_astparser_assignment(NNAstParser* prs, uint16_t getop, uint16_t setop, int arg, bool canassign)
 {
     if(canassign && nn_astparser_match(prs, NEON_ASTTOK_ASSIGN))
     {
@@ -9242,58 +9383,58 @@ static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t set
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_PLUSASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMADD, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMADD, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_MINUSASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMSUBTRACT, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMSUBTRACT, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_MULTASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMMULTIPLY, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMMULTIPLY, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_DIVASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMDIVIDE, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMDIVIDE, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_POWASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMPOW, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMPOW, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_PERCENT_EQ))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMMODULO, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMMODULO, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_AMP_EQ))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMAND, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMAND, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_BAR_EQ))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMOR, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMOR, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_TILDE_EQ))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMBITNOT, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMBITNOT, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_XOR_EQ))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMBITXOR, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMBITXOR, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_LEFTSHIFTASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMSHIFTLEFT, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMSHIFTLEFT, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_RIGHTSHIFTASSIGN))
     {
-        nn_astparser_parseassign(prs, NEON_OP_PRIMSHIFTRIGHT, getop, setop, arg);
+        nn_astparser_parseassign(prs, NNInstruction::OPC_PRIMSHIFTRIGHT, getop, setop, arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_INCREMENT))
     {
         prs->replcanecho = false;
-        if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
+        if(getop == NNInstruction::OPC_PROPERTYGET || getop == NNInstruction::OPC_PROPERTYGETSELF)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_DUPONE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_DUPONE);
         }
         if(arg != -1)
         {
@@ -9303,15 +9444,15 @@ static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t set
         {
             nn_astemit_emit2byte(prs, getop, 1);
         }
-        nn_astemit_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMADD);
+        nn_astemit_emit2byte(prs, NNInstruction::OPC_PUSHONE, NNInstruction::OPC_PRIMADD);
         nn_astemit_emitbyteandshort(prs, setop, (uint16_t)arg);
     }
     else if(canassign && nn_astparser_match(prs, NEON_ASTTOK_DECREMENT))
     {
         prs->replcanecho = false;
-        if(getop == NEON_OP_PROPERTYGET || getop == NEON_OP_PROPERTYGETSELF)
+        if(getop == NNInstruction::OPC_PROPERTYGET || getop == NNInstruction::OPC_PROPERTYGETSELF)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_DUPONE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_DUPONE);
         }
 
         if(arg != -1)
@@ -9323,16 +9464,16 @@ static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t set
             nn_astemit_emit2byte(prs, getop, 1);
         }
 
-        nn_astemit_emit2byte(prs, NEON_OP_PUSHONE, NEON_OP_PRIMSUBTRACT);
+        nn_astemit_emit2byte(prs, NNInstruction::OPC_PUSHONE, NNInstruction::OPC_PRIMSUBTRACT);
         nn_astemit_emitbyteandshort(prs, setop, (uint16_t)arg);
     }
     else
     {
         if(arg != -1)
         {
-            if(getop == NEON_OP_INDEXGET || getop == NEON_OP_INDEXGETRANGED)
+            if(getop == NNInstruction::OPC_INDEXGET || getop == NNInstruction::OPC_INDEXGETRANGED)
             {
-                nn_astemit_emit2byte(prs, getop, (uint8_t)0);
+                nn_astemit_emit2byte(prs, getop, (uint16_t)0);
             }
             else
             {
@@ -9341,7 +9482,7 @@ static void nn_astparser_assignment(NNAstParser* prs, uint8_t getop, uint8_t set
         }
         else
         {
-            nn_astemit_emit2byte(prs, getop, (uint8_t)0);
+            nn_astemit_emit2byte(prs, getop, (uint16_t)0);
         }
     }
 }
@@ -9350,9 +9491,9 @@ static bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool can
 {
     int name;
     bool caninvoke;
-    uint8_t argcount;
-    NNOpCode getop;
-    NNOpCode setop;
+    uint16_t argcount;
+    NNInstruction::OpCode getop;
+    NNInstruction::OpCode setop;
     nn_astparser_ignorewhitespace(prs);
     if(!nn_astparser_consume(prs, NEON_ASTTOK_IDENTNORMAL, "expected property name after '.'"))
     {
@@ -9371,21 +9512,21 @@ static bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool can
         );
         if(caninvoke)
         {
-            nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSINVOKETHIS, name);
+            nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CLASSINVOKETHIS, name);
         }
         else
         {
-            nn_astemit_emitbyteandshort(prs, NEON_OP_CALLMETHOD, name);
+            nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CALLMETHOD, name);
         }
         nn_astemit_emit1byte(prs, argcount);
     }
     else
     {
-        getop = NEON_OP_PROPERTYGET;
-        setop = NEON_OP_PROPERTYSET;
+        getop = NNInstruction::OPC_PROPERTYGET;
+        setop = NNInstruction::OPC_PROPERTYSET;
         if(prs->currentclasscompiler != nullptr && (previous.type == NEON_ASTTOK_KWTHIS || nn_astparser_identsequal(&prs->prevtoken, &prs->currentclasscompiler->name)))
         {
-            getop = NEON_OP_PROPERTYGETSELF;
+            getop = NNInstruction::OPC_PROPERTYGETSELF;
         }
         nn_astparser_assignment(prs, getop, setop, name, canassign);
     }
@@ -9395,8 +9536,8 @@ static bool nn_astparser_ruledot(NNAstParser* prs, NNAstToken previous, bool can
 static void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canassign)
 {
     bool fromclass;
-    uint8_t getop;
-    uint8_t setop;
+    uint16_t getop;
+    uint16_t setop;
     int arg;
     (void)fromclass;
     fromclass = prs->currentclasscompiler != nullptr;
@@ -9405,13 +9546,13 @@ static void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canass
     {
         if(prs->infunction)
         {
-            getop = NEON_OP_FUNCARGGET;
-            setop = NEON_OP_FUNCARGSET;
+            getop = NNInstruction::OPC_FUNCARGGET;
+            setop = NNInstruction::OPC_FUNCARGSET;
         }
         else
         {
-            getop = NEON_OP_LOCALGET;
-            setop = NEON_OP_LOCALSET;
+            getop = NNInstruction::OPC_LOCALGET;
+            setop = NNInstruction::OPC_LOCALSET;
         }
     }
     else
@@ -9419,14 +9560,14 @@ static void nn_astparser_namedvar(NNAstParser* prs, NNAstToken name, bool canass
         arg = nn_astfunccompiler_resolveupvalue(prs, prs->currentfunccompiler, &name);
         if((arg != -1) && (name.isglobal == false))
         {
-            getop = NEON_OP_UPVALUEGET;
-            setop = NEON_OP_UPVALUESET;
+            getop = NNInstruction::OPC_UPVALUEGET;
+            setop = NNInstruction::OPC_UPVALUESET;
         }
         else
         {
             arg = nn_astparser_makeidentconst(prs, &name);
-            getop = NEON_OP_GLOBALGET;
-            setop = NEON_OP_GLOBALSET;
+            getop = NNInstruction::OPC_GLOBALGET;
+            setop = NNInstruction::OPC_GLOBALSET;
         }
     }
     nn_astparser_assignment(prs, getop, setop, arg, canassign);
@@ -9439,11 +9580,11 @@ static void nn_astparser_createdvar(NNAstParser* prs, NNAstToken name)
     {
         local = nn_astparser_addlocal(prs, name) - 1;
         nn_astparser_markinitialized(prs);
-        nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, (uint16_t)local);
+        nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALSET, (uint16_t)local);
     }
     else
     {
-        nn_astemit_emitbyteandshort(prs, NEON_OP_GLOBALDEFINE, (uint16_t)nn_astparser_makeidentconst(prs, &name));
+        nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_GLOBALDEFINE, (uint16_t)nn_astparser_makeidentconst(prs, &name));
     }
 }
 
@@ -9452,7 +9593,7 @@ static bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
     int count;
     (void)canassign;
     /* placeholder for the list */
-    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
     count = 0;
     nn_astparser_ignorewhitespace(prs);
     if(!nn_astparser_check(prs, NEON_ASTTOK_BRACKETCLOSE))
@@ -9472,7 +9613,7 @@ static bool nn_astparser_rulearray(NNAstParser* prs, bool canassign)
     }
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_BRACKETCLOSE, "expected ']' at end of list");
-    nn_astemit_emitbyteandshort(prs, NEON_OP_MAKEARRAY, count);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_MAKEARRAY, count);
     return true;
 }
 
@@ -9482,7 +9623,7 @@ static bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
     int itemcount;
     (void)canassign;
     /* placeholder for the dictionary */
-    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
     itemcount = 0;
     nn_astparser_ignorewhitespace(prs);
     if(!nn_astparser_check(prs, NEON_ASTTOK_BRACECLOSE))
@@ -9530,7 +9671,7 @@ static bool nn_astparser_ruledictionary(NNAstParser* prs, bool canassign)
     }
     nn_astparser_ignorewhitespace(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_BRACECLOSE, "expected '}' after dictionary");
-    nn_astemit_emitbyteandshort(prs, NEON_OP_MAKEDICT, itemcount);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_MAKEDICT, itemcount);
     return true;
 }
 
@@ -9538,17 +9679,17 @@ static bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, boo
 {
     bool assignable;
     bool commamatch;
-    uint8_t getop;
+    uint16_t getop;
     (void)previous;
     (void)canassign;
     assignable = true;
     commamatch = false;
-    getop = NEON_OP_INDEXGET;
+    getop = NNInstruction::OPC_INDEXGET;
     if(nn_astparser_match(prs, NEON_ASTTOK_COMMA))
     {
-        nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
         commamatch = true;
-        getop = NEON_OP_INDEXGETRANGED;
+        getop = NNInstruction::OPC_INDEXGETRANGED;
     }
     else
     {
@@ -9556,14 +9697,14 @@ static bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, boo
     }
     if(!nn_astparser_match(prs, NEON_ASTTOK_BRACKETCLOSE))
     {
-        getop = NEON_OP_INDEXGETRANGED;
+        getop = NNInstruction::OPC_INDEXGETRANGED;
         if(!commamatch)
         {
             nn_astparser_consume(prs, NEON_ASTTOK_COMMA, "expecting ',' or ']'");
         }
         if(nn_astparser_match(prs, NEON_ASTTOK_BRACKETCLOSE))
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
         }
         else
         {
@@ -9576,10 +9717,10 @@ static bool nn_astparser_ruleindexing(NNAstParser* prs, NNAstToken previous, boo
     {
         if(commamatch)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
         }
     }
-    nn_astparser_assignment(prs, getop, NEON_OP_INDEXSET, -1, assignable);
+    nn_astparser_assignment(prs, getop, NNInstruction::OPC_INDEXSET, -1, assignable);
     return true;
 }
 
@@ -9610,7 +9751,7 @@ static bool nn_astparser_rulethis(NNAstParser* prs, bool canassign)
         #endif
     }
     #if 0
-        nn_astemit_emitinstruc(prs, NEON_OP_CLASSGETTHIS);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_CLASSGETTHIS);
     #endif
     return true;
 }
@@ -9619,7 +9760,7 @@ static bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
 {
     int name;
     bool invokeself;
-    uint8_t argcount;
+    uint16_t argcount;
     (void)canassign;
     if(prs->currentclasscompiler == nullptr)
     {
@@ -9650,18 +9791,18 @@ static bool nn_astparser_rulesuper(NNAstParser* prs, bool canassign)
         nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strsuper), false);
         if(!invokeself)
         {
-            nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSINVOKESUPER, name);
+            nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CLASSINVOKESUPER, name);
             nn_astemit_emit1byte(prs, argcount);
         }
         else
         {
-            nn_astemit_emit2byte(prs, NEON_OP_CLASSINVOKESUPERSELF, argcount);
+            nn_astemit_emit2byte(prs, NNInstruction::OPC_CLASSINVOKESUPERSELF, argcount);
         }
     }
     else
     {
         nn_astparser_namedvar(prs, nn_astparser_synthtoken(g_strsuper), false);
-        nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSGETSUPER, name);
+        nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CLASSGETSUPER, name);
     }
     return true;
 }
@@ -10017,14 +10158,14 @@ static bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
             stringmatched = true;
             if(count > 0)
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_PRIMADD);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMADD);
             }
         }
         nn_astparser_parseexpression(prs);
-        nn_astemit_emitinstruc(prs, NEON_OP_STRINGIFY);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_STRINGIFY);
         if(doadd || (count >= 1 && stringmatched == false))
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMADD);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMADD);
         }
         count++;
     } while(nn_astparser_match(prs, NEON_ASTTOK_INTERPOLATION));
@@ -10032,7 +10173,7 @@ static bool nn_astparser_ruleinterpolstring(NNAstParser* prs, bool canassign)
     if(prs->prevtoken.length - 2 > 0)
     {
         nn_astparser_rulestring(prs, canassign);
-        nn_astemit_emitinstruc(prs, NEON_OP_PRIMADD);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMADD);
     }
     return true;
 }
@@ -10043,18 +10184,18 @@ static bool nn_astparser_ruleunary(NNAstParser* prs, bool canassign)
     (void)canassign;
     op = prs->prevtoken.type;
     /* compile the expression */
-    nn_astparser_parseprecedence(prs, NEON_ASTPREC_UNARY);
+    nn_astparser_parseprecedence(prs, NNAstRule::PREC_UNARY);
     /* emit instruction */
     switch(op)
     {
         case NEON_ASTTOK_MINUS:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMNEGATE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMNEGATE);
             break;
         case NEON_ASTTOK_EXCLMARK:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMNOT);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMNOT);
             break;
         case NEON_ASTTOK_TILDE:
-            nn_astemit_emitinstruc(prs, NEON_OP_PRIMBITNOT);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PRIMBITNOT);
             break;
         default:
             break;
@@ -10067,9 +10208,9 @@ static bool nn_astparser_ruleand(NNAstParser* prs, NNAstToken previous, bool can
     int endjump;
     (void)previous;
     (void)canassign;
-    endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
-    nn_astparser_parseprecedence(prs, NEON_ASTPREC_AND);
+    endjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
+    nn_astparser_parseprecedence(prs, NNAstRule::PREC_AND);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
@@ -10081,11 +10222,11 @@ static bool nn_astparser_ruleor(NNAstParser* prs, NNAstToken previous, bool cana
     int elsejump;
     (void)previous;
     (void)canassign;
-    elsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    endjump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+    elsejump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    endjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
     nn_astemit_patchjump(prs, elsejump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
-    nn_astparser_parseprecedence(prs, NEON_ASTPREC_OR);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
+    nn_astparser_parseprecedence(prs, NNAstRule::PREC_OR);
     nn_astemit_patchjump(prs, endjump);
     return true;
 }
@@ -10095,7 +10236,7 @@ static bool nn_astparser_ruleinstanceof(NNAstParser* prs, NNAstToken previous, b
     (void)previous;
     (void)canassign;
     nn_astparser_parseexpression(prs);
-    nn_astemit_emitinstruc(prs, NEON_OP_OPINSTANCEOF);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_OPINSTANCEOF);
 
     return true;
 }
@@ -10106,23 +10247,23 @@ static bool nn_astparser_ruleconditional(NNAstParser* prs, NNAstToken previous, 
     int elsejump;
     (void)previous;
     (void)canassign;
-    thenjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    thenjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_ignorewhitespace(prs);
     /* compile the then expression */
-    nn_astparser_parseprecedence(prs, NEON_ASTPREC_CONDITIONAL);
+    nn_astparser_parseprecedence(prs, NNAstRule::PREC_CONDITIONAL);
     nn_astparser_ignorewhitespace(prs);
-    elsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+    elsejump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_consume(prs, NEON_ASTTOK_COLON, "expected matching ':' after '?' conditional");
     nn_astparser_ignorewhitespace(prs);
     /*
     // compile the else expression
-    // here we parse at NEON_ASTPREC_ASSIGNMENT precedence as
+    // here we parse at NNAstRule::PREC_ASSIGNMENT precedence as
     // linear conditionals can be nested.
     */
-    nn_astparser_parseprecedence(prs, NEON_ASTPREC_ASSIGNMENT);
+    nn_astparser_parseprecedence(prs, NNAstRule::PREC_ASSIGNMENT);
     nn_astemit_patchjump(prs, elsejump);
     return true;
 }
@@ -10131,7 +10272,7 @@ static bool nn_astparser_ruleimport(NNAstParser* prs, bool canassign)
 {
     (void)canassign;
     nn_astparser_parseexpression(prs);
-    nn_astemit_emitinstruc(prs, NEON_OP_IMPORTIMPORT);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_IMPORTIMPORT);
     return true;
 }
 
@@ -10147,7 +10288,7 @@ static bool nn_astparser_ruletypeof(NNAstParser* prs, bool canassign)
     nn_astparser_consume(prs, NEON_ASTTOK_PARENOPEN, "expected '(' after 'typeof'");
     nn_astparser_parseexpression(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'typeof'");
-    nn_astemit_emitinstruc(prs, NEON_OP_TYPEOF);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_TYPEOF);
     return true;
 }
 
@@ -10166,7 +10307,7 @@ static bool nn_astparser_rulenothinginfix(NNAstParser* prs, NNAstToken previous,
     return true;
 }
 
-static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstPrecedence precedence)
+static NNAstRule* nn_astparser_putrule(NNAstRule* dest, NNAstParsePrefixFN prefix, NNAstParseInfixFN infix, NNAstRule::Precedence precedence)
 {
     dest->prefix = prefix;
     dest->infix = infix;
@@ -10182,104 +10323,102 @@ NNAstRule* nn_astparser_getrule(NNAstTokType type)
     static NNAstRule dest;
     switch(type)
     {
-        dorule(NEON_ASTTOK_NEWLINE, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_PARENOPEN, nn_astparser_rulegrouping, nn_astparser_rulecall, NEON_ASTPREC_CALL );
-        dorule(NEON_ASTTOK_PARENCLOSE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_BRACKETOPEN, nn_astparser_rulearray, nn_astparser_ruleindexing, NEON_ASTPREC_CALL );
-        dorule(NEON_ASTTOK_BRACKETCLOSE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_BRACEOPEN, nn_astparser_ruledictionary, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_BRACECLOSE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_SEMICOLON, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_COMMA, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_BACKSLASH, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_EXCLMARK, nn_astparser_ruleunary, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_NOTEQUAL, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_EQUALITY );
-        dorule(NEON_ASTTOK_COLON, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_AT, nn_astparser_ruleanonfunc, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_DOT, nullptr, nn_astparser_ruledot, NEON_ASTPREC_CALL );
-        dorule(NEON_ASTTOK_DOUBLEDOT, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_RANGE );
-        dorule(NEON_ASTTOK_TRIPLEDOT, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_PLUS, nn_astparser_ruleunary, nn_astparser_rulebinary, NEON_ASTPREC_TERM );
-        dorule(NEON_ASTTOK_PLUSASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_INCREMENT, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_MINUS, nn_astparser_ruleunary, nn_astparser_rulebinary, NEON_ASTPREC_TERM );
-        dorule(NEON_ASTTOK_MINUSASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_DECREMENT, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_MULTIPLY, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_FACTOR );
-        dorule(NEON_ASTTOK_MULTASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_POWEROF, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_FACTOR );
-        dorule(NEON_ASTTOK_POWASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_DIVIDE, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_FACTOR );
-        dorule(NEON_ASTTOK_DIVASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_FLOOR, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_FACTOR );
-        dorule(NEON_ASTTOK_ASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_EQUAL, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_EQUALITY );
-        dorule(NEON_ASTTOK_LESSTHAN, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_COMPARISON );
-        dorule(NEON_ASTTOK_LESSEQUAL, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_COMPARISON );
-        dorule(NEON_ASTTOK_LEFTSHIFT, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_SHIFT );
-        dorule(NEON_ASTTOK_LEFTSHIFTASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_GREATERTHAN, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_COMPARISON );
-        dorule(NEON_ASTTOK_GREATER_EQ, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_COMPARISON );
-        dorule(NEON_ASTTOK_RIGHTSHIFT, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_SHIFT );
-        dorule(NEON_ASTTOK_RIGHTSHIFTASSIGN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_MODULO, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_FACTOR );
-        dorule(NEON_ASTTOK_PERCENT_EQ, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_AMP, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_BITAND );
-        dorule(NEON_ASTTOK_AMP_EQ, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_BAR, /*nn_astparser_ruleanoncompat*/ nullptr, nn_astparser_rulebinary, NEON_ASTPREC_BITOR );
-        dorule(NEON_ASTTOK_BAR_EQ, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_TILDE, nn_astparser_ruleunary, nullptr, NEON_ASTPREC_UNARY );
-        dorule(NEON_ASTTOK_TILDE_EQ, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_XOR, nullptr, nn_astparser_rulebinary, NEON_ASTPREC_BITXOR );
-        dorule(NEON_ASTTOK_XOR_EQ, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_QUESTION, nullptr, nn_astparser_ruleconditional, NEON_ASTPREC_CONDITIONAL );
-        dorule(NEON_ASTTOK_KWAND, nullptr, nn_astparser_ruleand, NEON_ASTPREC_AND );
-        dorule(NEON_ASTTOK_KWAS, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWASSERT, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWBREAK, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWCLASS, nn_astparser_ruleanonclass, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWCONTINUE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWFUNCTION, nn_astparser_ruleanonfunc, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWDEFAULT, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWTHROW, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWDO, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWECHO, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWELSE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWFALSE, nn_astparser_ruleliteral, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWFOREACH, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWIF, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWIMPORT, nn_astparser_ruleimport, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWIN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWINSTANCEOF, nullptr, nn_astparser_ruleinstanceof, NEON_ASTPREC_OR );
-        dorule(NEON_ASTTOK_KWFOR, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWVAR, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWNULL, nn_astparser_ruleliteral, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWNEW, nn_astparser_rulenew, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWTYPEOF, nn_astparser_ruletypeof, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWOR, nullptr, nn_astparser_ruleor, NEON_ASTPREC_OR );
-        dorule(NEON_ASTTOK_KWSUPER, nn_astparser_rulesuper, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWRETURN, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWTHIS, nn_astparser_rulethis, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWSTATIC, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWTRUE, nn_astparser_ruleliteral, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWSWITCH, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWCASE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWWHILE, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWTRY, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWCATCH, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWFINALLY, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITERALSTRING, nn_astparser_rulestring, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITERALRAWSTRING, nn_astparser_rulerawstring, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITNUMREG, nn_astparser_rulenumber, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITNUMBIN, nn_astparser_rulenumber, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITNUMOCT, nn_astparser_rulenumber, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_LITNUMHEX, nn_astparser_rulenumber, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_IDENTNORMAL, nn_astparser_rulevarnormal, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_INTERPOLATION, nn_astparser_ruleinterpolstring, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_EOF, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_ERROR, nullptr, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_KWEMPTY, nn_astparser_ruleliteral, nullptr, NEON_ASTPREC_NONE );
-        dorule(NEON_ASTTOK_UNDEFINED, nullptr, nullptr, NEON_ASTPREC_NONE );
+        dorule(NEON_ASTTOK_NEWLINE, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_PARENOPEN, nn_astparser_rulegrouping, nn_astparser_rulecall, NNAstRule::PREC_CALL );
+        dorule(NEON_ASTTOK_PARENCLOSE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_BRACKETOPEN, nn_astparser_rulearray, nn_astparser_ruleindexing, NNAstRule::PREC_CALL );
+        dorule(NEON_ASTTOK_BRACKETCLOSE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_BRACEOPEN, nn_astparser_ruledictionary, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_BRACECLOSE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_SEMICOLON, nn_astparser_rulenothingprefix, nn_astparser_rulenothinginfix, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_COMMA, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_BACKSLASH, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_EXCLMARK, nn_astparser_ruleunary, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_NOTEQUAL, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_EQUALITY );
+        dorule(NEON_ASTTOK_COLON, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_AT, nn_astparser_ruleanonfunc, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_DOT, nullptr, nn_astparser_ruledot, NNAstRule::PREC_CALL );
+        dorule(NEON_ASTTOK_DOUBLEDOT, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_RANGE );
+        dorule(NEON_ASTTOK_TRIPLEDOT, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_PLUS, nn_astparser_ruleunary, nn_astparser_rulebinary, NNAstRule::PREC_TERM );
+        dorule(NEON_ASTTOK_PLUSASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_INCREMENT, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_MINUS, nn_astparser_ruleunary, nn_astparser_rulebinary, NNAstRule::PREC_TERM );
+        dorule(NEON_ASTTOK_MINUSASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_DECREMENT, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_MULTIPLY, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_FACTOR );
+        dorule(NEON_ASTTOK_MULTASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_POWEROF, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_FACTOR );
+        dorule(NEON_ASTTOK_POWASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_DIVIDE, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_FACTOR );
+        dorule(NEON_ASTTOK_DIVASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_EQUAL, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_EQUALITY );
+        dorule(NEON_ASTTOK_LESSTHAN, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_COMPARISON );
+        dorule(NEON_ASTTOK_LESSEQUAL, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_COMPARISON );
+        dorule(NEON_ASTTOK_LEFTSHIFT, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_SHIFT );
+        dorule(NEON_ASTTOK_LEFTSHIFTASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_GREATERTHAN, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_COMPARISON );
+        dorule(NEON_ASTTOK_GREATER_EQ, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_COMPARISON );
+        dorule(NEON_ASTTOK_RIGHTSHIFT, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_SHIFT );
+        dorule(NEON_ASTTOK_RIGHTSHIFTASSIGN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_MODULO, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_FACTOR );
+        dorule(NEON_ASTTOK_PERCENT_EQ, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_AMP, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_BITAND );
+        dorule(NEON_ASTTOK_AMP_EQ, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_BAR, /*nn_astparser_ruleanoncompat*/ nullptr, nn_astparser_rulebinary, NNAstRule::PREC_BITOR );
+        dorule(NEON_ASTTOK_BAR_EQ, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_TILDE, nn_astparser_ruleunary, nullptr, NNAstRule::PREC_UNARY );
+        dorule(NEON_ASTTOK_TILDE_EQ, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_XOR, nullptr, nn_astparser_rulebinary, NNAstRule::PREC_BITXOR );
+        dorule(NEON_ASTTOK_XOR_EQ, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_QUESTION, nullptr, nn_astparser_ruleconditional, NNAstRule::PREC_CONDITIONAL );
+        dorule(NEON_ASTTOK_KWAND, nullptr, nn_astparser_ruleand, NNAstRule::PREC_AND );
+        dorule(NEON_ASTTOK_KWAS, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWASSERT, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWBREAK, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWCLASS, nn_astparser_ruleanonclass, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWCONTINUE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWFUNCTION, nn_astparser_ruleanonfunc, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWDEFAULT, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWTHROW, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWDO, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWECHO, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWELSE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWFALSE, nn_astparser_ruleliteral, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWFOREACH, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWIF, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWIMPORT, nn_astparser_ruleimport, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWIN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWINSTANCEOF, nullptr, nn_astparser_ruleinstanceof, NNAstRule::PREC_OR );
+        dorule(NEON_ASTTOK_KWFOR, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWVAR, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWNULL, nn_astparser_ruleliteral, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWNEW, nn_astparser_rulenew, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWTYPEOF, nn_astparser_ruletypeof, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWOR, nullptr, nn_astparser_ruleor, NNAstRule::PREC_OR );
+        dorule(NEON_ASTTOK_KWSUPER, nn_astparser_rulesuper, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWRETURN, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWTHIS, nn_astparser_rulethis, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWSTATIC, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWTRUE, nn_astparser_ruleliteral, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWSWITCH, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWCASE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWWHILE, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWTRY, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWCATCH, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWFINALLY, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITERALSTRING, nn_astparser_rulestring, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITERALRAWSTRING, nn_astparser_rulerawstring, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITNUMREG, nn_astparser_rulenumber, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITNUMBIN, nn_astparser_rulenumber, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITNUMOCT, nn_astparser_rulenumber, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_LITNUMHEX, nn_astparser_rulenumber, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_IDENTNORMAL, nn_astparser_rulevarnormal, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_INTERPOLATION, nn_astparser_ruleinterpolstring, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_EOF, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_ERROR, nullptr, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_KWEMPTY, nn_astparser_ruleliteral, nullptr, NNAstRule::PREC_NONE );
+        dorule(NEON_ASTTOK_UNDEFINED, nullptr, nullptr, NNAstRule::PREC_NONE );
         default:
             fprintf(stderr, "missing rule?\n");
             break;
@@ -10288,7 +10427,7 @@ NNAstRule* nn_astparser_getrule(NNAstTokType type)
 }
 #undef dorule
 
-static bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence precedence/*, NNAstExpression* dest*/)
+static bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstRule::Precedence precedence/*, NNAstExpression* dest*/)
 {
     bool canassign;
     NNAstRule* rule;
@@ -10306,7 +10445,7 @@ static bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence pre
         nn_astparser_raiseerror(prs, "expected expression");
         return false;
     }
-    canassign = precedence <= NEON_ASTPREC_ASSIGNMENT;
+    canassign = precedence <= NNAstRule::PREC_ASSIGNMENT;
     prefixrule(prs, canassign);
     while(true)
     {
@@ -10336,7 +10475,7 @@ static bool nn_astparser_doparseprecedence(NNAstParser* prs, NNAstPrecedence pre
     return true;
 }
 
-static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence precedence)
+static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstRule::Precedence precedence)
 {
     if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
@@ -10351,7 +10490,7 @@ static bool nn_astparser_parseprecedence(NNAstParser* prs, NNAstPrecedence prece
     return nn_astparser_doparseprecedence(prs, precedence);
 }
 
-static bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence precedence)
+static bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstRule::Precedence precedence)
 {
     if(nn_astlex_isatend(prs->lexer) && prs->pstate->isrepl)
     {
@@ -10367,7 +10506,7 @@ static bool nn_astparser_parseprecnoadvance(NNAstParser* prs, NNAstPrecedence pr
 
 static bool nn_astparser_parseexpression(NNAstParser* prs)
 {
-    return nn_astparser_parseprecedence(prs, NEON_ASTPREC_ASSIGNMENT);
+    return nn_astparser_parseprecedence(prs, NNAstRule::PREC_ASSIGNMENT);
 }
 
 static bool nn_astparser_parseblock(NNAstParser* prs)
@@ -10431,9 +10570,9 @@ static int nn_astparser_parsefuncparamvar(NNAstParser* prs, const char* message)
     return nn_astparser_makeidentconst(prs, &prs->prevtoken);
 }
 
-static uint8_t nn_astparser_parsefunccallargs(NNAstParser* prs)
+static uint32_t nn_astparser_parsefunccallargs(NNAstParser* prs)
 {
-    uint8_t argcount;
+    uint16_t argcount;
     argcount = 0;
     if(!nn_astparser_check(prs, NEON_ASTTOK_PARENCLOSE))
     {
@@ -10501,10 +10640,10 @@ static void nn_astparser_parsefuncparamlist(NNAstParser* prs, NNAstFuncCompiler*
             #endif
             #if 1
                 #if 1
-                    nn_astemit_emitbyteandshort(prs, NEON_OP_FUNCARGOPTIONAL, defvalconst);
+                    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_FUNCARGOPTIONAL, defvalconst);
                     //nn_astemit_emit1short(prs, paramid);
                 #else
-                    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, defvalconst);
+                    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALSET, defvalconst);
                 #endif
             #endif
         }
@@ -10530,14 +10669,14 @@ static void nn_astfunccompiler_compilebody(NNAstParser* prs, NNAstFuncCompiler* 
         nn_astparser_scopeend(prs);
     }
     function = nn_astparser_endcompiler(prs, false);
-    nn_vm_stackpush(prs->pstate, nn_value_fromobject(function));
-    nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLOSURE, nn_astparser_pushconst(prs, nn_value_fromobject(function)));
+    GCSingleton::get()->stackPush(nn_value_fromobject(function));
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_MAKECLOSURE, nn_astparser_pushconst(prs, nn_value_fromobject(function)));
     for(i = 0; i < function->upvalcount; i++)
     {
         nn_astemit_emit1byte(prs, fnc->upvalues[i].islocal ? 1 : 0);
         nn_astemit_emit1short(prs, fnc->upvalues[i].index);
     }
-    nn_vm_stackpop(prs->pstate);
+    GCSingleton::get()->stackPop();
 }
 
 static void nn_astparser_parsefuncfull(NNAstParser* prs, NNFuncContextType type, bool isanon)
@@ -10592,7 +10731,7 @@ static void nn_astparser_parsemethod(NNAstParser* prs, NNAstToken classname, NNA
         type = NEON_FNCONTEXTTYPE_PRIVATE;
     }
     nn_astparser_parsefuncfull(prs, type, false);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_MAKEMETHOD, constant);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_MAKEMETHOD, constant);
 }
 
 static bool nn_astparser_ruleanonfunc(NNAstParser* prs, bool canassign)
@@ -10638,7 +10777,7 @@ static bool nn_astparser_parsefield(NNAstParser* prs, NNAstToken* nametokendest,
             nn_astparser_consume(prs, NEON_ASTTOK_ASSIGN, "expected '=' after ident");
             fieldconstant = nn_astparser_makeidentconst(prs, &fieldname);
             nn_astparser_parseexpression(prs);
-            nn_astemit_emitbyteandshort(prs, NEON_OP_CLASSPROPERTYDEFINE, fieldconstant);
+            nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CLASSPROPERTYDEFINE, fieldconstant);
             nn_astemit_emit1byte(prs, isstatic ? 1 : 0);
             nn_astparser_consumestmtend(prs);
             nn_astparser_ignorewhitespace(prs);
@@ -10693,7 +10832,7 @@ static void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
         classname = nn_astparser_synthtoken("<anonclass>");
     }
     nameconst = nn_astparser_makeidentconst(prs, &classname);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_MAKECLASS, nameconst);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_MAKECLASS, nameconst);
     if(named)
     {
         nn_astparser_definevariable(prs, nameconst);
@@ -10716,7 +10855,7 @@ static void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
         nn_astparser_addlocal(prs, nn_astparser_synthtoken(g_strsuper));
         nn_astparser_definevariable(prs, 0);
         nn_astparser_namedvar(prs, classname, false);
-        nn_astemit_emitinstruc(prs, NEON_OP_CLASSINHERIT);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_CLASSINHERIT);
         classcompiler.hassuperclass = true;
     }
     if(named)
@@ -10753,7 +10892,7 @@ static void nn_astparser_parseclassdeclaration(NNAstParser* prs, bool named)
     }
     if(named)
     {
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     }
     if(classcompiler.hassuperclass)
     {
@@ -10782,7 +10921,7 @@ static void nn_astparser_parsevardecl(NNAstParser* prs, bool isinitializer, bool
         }
         else
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
         }
         nn_astparser_definevariable(prs, global);
         totalparsed++;
@@ -10810,13 +10949,13 @@ static void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, boo
     }
     else
     {
-        nn_astparser_parseprecnoadvance(prs, NEON_ASTPREC_ASSIGNMENT);
+        nn_astparser_parseprecnoadvance(prs, NNAstRule::PREC_ASSIGNMENT);
     }
     if(!isinitializer)
     {
         if(prs->replcanecho && prs->pstate->isrepl)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_ECHO);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_ECHO);
             prs->replcanecho = false;
         }
         else
@@ -10825,7 +10964,7 @@ static void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, boo
             if(!prs->keeplastvalue)
             #endif
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
             }
         }
         nn_astparser_consumestmtend(prs);
@@ -10834,7 +10973,7 @@ static void nn_astparser_parseexprstmt(NNAstParser* prs, bool isinitializer, boo
     {
         nn_astparser_consume(prs, NEON_ASTTOK_SEMICOLON, "expected ';' after initializer");
         nn_astparser_ignorewhitespace(prs);
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     }
 }
 
@@ -10893,18 +11032,18 @@ static void nn_astparser_parseforstmt(NNAstParser* prs)
         nn_astparser_consume(prs, NEON_ASTTOK_SEMICOLON, "expected ';' after condition");
         nn_astparser_ignorewhitespace(prs);
         /* jump out of the loop if the condition is false... */
-        exitjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        exitjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
         /* pop the condition */
     }
     /* the iterator... */
     if(!nn_astparser_check(prs, NEON_ASTTOK_BRACEOPEN))
     {
-        bodyjump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+        bodyjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
         incrstart = nn_astparser_currentblob(prs)->count;
         nn_astparser_parseexpression(prs);
         nn_astparser_ignorewhitespace(prs);
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
         nn_astemit_emitloop(prs, prs->innermostloopstart);
         prs->innermostloopstart = incrstart;
         nn_astemit_patchjump(prs, bodyjump);
@@ -10915,7 +11054,7 @@ static void nn_astparser_parseforstmt(NNAstParser* prs)
     if(exitjump != -1)
     {
         nn_astemit_patchjump(prs, exitjump);
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     }
     nn_astparser_endloop(prs);
     /* reset the loop start and scope depth to the surrounding value */
@@ -11021,11 +11160,11 @@ static void nn_astparser_parseforeachstmt(NNAstParser* prs)
     iteratorslot = nn_astparser_addlocal(prs, iteratortoken) - 1;
     nn_astparser_definevariable(prs, 0);
     /* Create the key local variable. */
-    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
     keyslot = nn_astparser_addlocal(prs, keytoken) - 1;
     nn_astparser_definevariable(prs, keyslot);
     /* create the local value slot */
-    nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
     valueslot = nn_astparser_addlocal(prs, valuetoken) - 1;
     nn_astparser_definevariable(prs, 0);
     surroundingloopstart = prs->innermostloopstart;
@@ -11037,17 +11176,17 @@ static void nn_astparser_parseforeachstmt(NNAstParser* prs)
     prs->innermostloopstart = nn_astparser_currentblob(prs)->count;
     prs->innermostloopscopedepth = prs->currentfunccompiler->scopedepth;
     /* key = iterable.iter_n__(key) */
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, iteratorslot);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, keyslot);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_CALLMETHOD, citern);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALGET, iteratorslot);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALGET, keyslot);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CALLMETHOD, citern);
     nn_astemit_emit1byte(prs, 1);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, keyslot);
-    falsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALSET, keyslot);
+    falsejump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     /* value = iterable.iter__(key) */
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, iteratorslot);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALGET, keyslot);
-    nn_astemit_emitbyteandshort(prs, NEON_OP_CALLMETHOD, citer);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALGET, iteratorslot);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALGET, keyslot);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_CALLMETHOD, citer);
     nn_astemit_emit1byte(prs, 1);
     /*
     // Bind the loop value in its own scope. This ensures we get a fresh
@@ -11055,13 +11194,13 @@ static void nn_astparser_parseforeachstmt(NNAstParser* prs)
     */
     nn_astparser_scopebegin(prs);
     /* update the value */
-    nn_astemit_emitbyteandshort(prs, NEON_OP_LOCALSET, valueslot);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_LOCALSET, valueslot);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_parsestmt(prs);
     nn_astparser_scopeend(prs);
     nn_astemit_emitloop(prs, prs->innermostloopstart);
     nn_astemit_patchjump(prs, falsejump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_endloop(prs);
     prs->innermostloopstart = surroundingloopstart;
     prs->innermostloopscopedepth = surroundingscopedepth;
@@ -11105,9 +11244,9 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
     swstate = 0;
     casecount = 0;
     sw = nn_object_makeswitch();
-    nn_vm_stackpush(prs->pstate, nn_value_fromobject(sw));
+    GCSingleton::get()->stackPush(nn_value_fromobject(sw));
     switchcode = nn_astemit_emitswitch(prs);
-    /* nn_astemit_emitbyteandshort(prs, NEON_OP_SWITCH, nn_astparser_pushconst(prs, nn_value_fromobject(sw))); */
+    /* nn_astemit_emitbyteandshort(prs, NNInstruction::OPC_SWITCH, nn_astparser_pushconst(prs, nn_value_fromobject(sw))); */
     startoffset = nn_astparser_currentblob(prs)->count;
     prs->inswitch = true;
     while(!nn_astparser_match(prs, NEON_ASTTOK_BRACECLOSE) && !nn_astparser_check(prs, NEON_ASTTOK_EOF))
@@ -11122,7 +11261,7 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
             if(swstate == 1)
             {
                 /* at the end of the previous case, jump over the others... */
-                caseends[casecount++] = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+                caseends[casecount++] = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
             }
             if(casetype == NEON_ASTTOK_KWCASE)
             {
@@ -11145,10 +11284,10 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
                         str = nn_astparser_compilestring(prs, &length, true);
                         string = nn_string_takelen(str, length);
                         /* gc fix */
-                        nn_vm_stackpush(prs->pstate, nn_value_fromobject(string));
+                        GCSingleton::get()->stackPush(nn_value_fromobject(string));
                         sw->table.set(nn_value_fromobject(string), jump);
                         /* gc fix */
-                        nn_vm_stackpop(prs->pstate);
+                        GCSingleton::get()->stackPop();
                     }
                     else if(nn_astparser_checknumber(prs))
                     {
@@ -11157,7 +11296,7 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
                     else
                     {
                         /* pop the switch */
-                        nn_vm_stackpop(prs->pstate);
+                        GCSingleton::get()->stackPop();
                         nn_astparser_raiseerror(prs, "only constants can be used in 'case' expressions");
                         return;
                     }
@@ -11185,7 +11324,7 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
     /* if we ended without a default case, patch its condition jump */
     if(swstate == 1)
     {
-        caseends[casecount++] = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+        caseends[casecount++] = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
     }
     /* patch all the case jumps to the end */
     for(i = 0; i < casecount; i++)
@@ -11195,7 +11334,7 @@ static void nn_astparser_parseswitchstmt(NNAstParser* prs)
     sw->exitjump = nn_astparser_currentblob(prs)->count - startoffset;
     nn_astemit_patchswitch(prs, switchcode, nn_astparser_pushconst(prs, nn_value_fromobject(sw)));
     /* pop the switch */  
-    nn_vm_stackpop(prs->pstate);
+    GCSingleton::get()->stackPop();
 }
 
 static void nn_astparser_parseifstmt(NNAstParser* prs)
@@ -11203,12 +11342,12 @@ static void nn_astparser_parseifstmt(NNAstParser* prs)
     int elsejump;
     int thenjump;
     nn_astparser_parseexpression(prs);
-    thenjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    thenjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_parsestmt(prs);
-    elsejump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+    elsejump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
     nn_astemit_patchjump(prs, thenjump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     if(nn_astparser_match(prs, NEON_ASTTOK_KWELSE))
     {
         nn_astparser_parsestmt(prs);
@@ -11219,14 +11358,14 @@ static void nn_astparser_parseifstmt(NNAstParser* prs)
 static void nn_astparser_parseechostmt(NNAstParser* prs)
 {
     nn_astparser_parseexpression(prs);
-    nn_astemit_emitinstruc(prs, NEON_OP_ECHO);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_ECHO);
     nn_astparser_consumestmtend(prs);
 }
 
 static void nn_astparser_parsethrowstmt(NNAstParser* prs)
 {
     nn_astparser_parseexpression(prs);
-    nn_astemit_emitinstruc(prs, NEON_OP_EXTHROW);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXTHROW);
     nn_astparser_discardlocals(prs, prs->currentfunccompiler->scopedepth - 1);
     nn_astparser_consumestmtend(prs);
 }
@@ -11242,9 +11381,9 @@ static void nn_astparser_parseassertstmt(NNAstParser* prs)
     }
     else
     {
-        nn_astemit_emitinstruc(prs, NEON_OP_PUSHNULL);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHNULL);
     }
-    nn_astemit_emitinstruc(prs, NEON_OP_ASSERT);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_ASSERT);
     nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'assert'");
     nn_astparser_consumestmtend(prs);
 }
@@ -11271,8 +11410,8 @@ static void nn_astparser_parsetrystmt(NNAstParser* prs)
     trybegins = nn_astemit_emittry(prs);
     /* compile the try body */
     nn_astparser_parsestmt(prs);
-    nn_astemit_emitinstruc(prs, NEON_OP_EXPOPTRY);
-    exitjump = nn_astemit_emitjump(prs, NEON_OP_JUMPNOW);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXPOPTRY);
+    exitjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPNOW);
     prs->istrying = false;
     /*
     // we can safely use 0 because a program cannot start with a
@@ -11300,10 +11439,10 @@ static void nn_astparser_parsetrystmt(NNAstParser* prs)
         }
         else
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
         }
         nn_astparser_consume(prs, NEON_ASTTOK_PARENCLOSE, "expected ')' after 'catch'");
-        nn_astemit_emitinstruc(prs, NEON_OP_EXPOPTRY);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXPOPTRY);
         nn_astparser_ignorewhitespace(prs);
         nn_astparser_parsestmt(prs);
         nn_astparser_scopeend(prs);
@@ -11320,16 +11459,16 @@ static void nn_astparser_parsetrystmt(NNAstParser* prs)
         // if we arrived here from either the try or handler block,
         // we don't want to continue propagating the exception
         */
-        nn_astemit_emitinstruc(prs, NEON_OP_PUSHFALSE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_PUSHFALSE);
         finally = nn_astparser_currentblob(prs)->count;
         nn_astparser_ignorewhitespace(prs);
         nn_astparser_parsestmt(prs);
-        continueexecutionaddress = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
+        continueexecutionaddress = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
         /* pop the bool off the stack */
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
-        nn_astemit_emitinstruc(prs, NEON_OP_EXPUBLISHTRY);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXPUBLISHTRY);
         nn_astemit_patchjump(prs, continueexecutionaddress);
-        nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     }
     if(!finalexists && !catchexists)
     {
@@ -11359,10 +11498,10 @@ static void nn_astparser_parsereturnstmt(NNAstParser* prs)
         }
         if(prs->istrying)
         {
-            nn_astemit_emitinstruc(prs, NEON_OP_EXPOPTRY);
+            nn_astemit_emitinstruc(prs, NNInstruction::OPC_EXPOPTRY);
         }
         nn_astparser_parseexpression(prs);
-        nn_astemit_emitinstruc(prs, NEON_OP_RETURN);
+        nn_astemit_emitinstruc(prs, NNInstruction::OPC_RETURN);
         nn_astparser_consumestmtend(prs);
     }
     prs->isreturning = false;
@@ -11382,12 +11521,12 @@ static void nn_astparser_parsewhilestmt(NNAstParser* prs)
     prs->innermostloopstart = nn_astparser_currentblob(prs)->count;
     prs->innermostloopscopedepth = prs->currentfunccompiler->scopedepth;
     nn_astparser_parseexpression(prs);
-    exitjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    exitjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_parsestmt(prs);
     nn_astemit_emitloop(prs, prs->innermostloopstart);
     nn_astemit_patchjump(prs, exitjump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_endloop(prs);
     prs->innermostloopstart = surroundingloopstart;
     prs->innermostloopscopedepth = surroundingscopedepth;
@@ -11409,11 +11548,11 @@ static void nn_astparser_parsedo_whilestmt(NNAstParser* prs)
     nn_astparser_parsestmt(prs);
     nn_astparser_consume(prs, NEON_ASTTOK_KWWHILE, "expecting 'while' statement");
     nn_astparser_parseexpression(prs);
-    exitjump = nn_astemit_emitjump(prs, NEON_OP_JUMPIFFALSE);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    exitjump = nn_astemit_emitjump(prs, NNInstruction::OPC_JUMPIFFALSE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astemit_emitloop(prs, prs->innermostloopstart);
     nn_astemit_patchjump(prs, exitjump);
-    nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+    nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
     nn_astparser_endloop(prs);
     prs->innermostloopstart = surroundingloopstart;
     prs->innermostloopscopedepth = surroundingscopedepth;
@@ -11450,16 +11589,16 @@ static void nn_astparser_parsebreakstmt(NNAstParser* prs)
         {
             if (prs->currentfunccompiler->locals[i].iscaptured)
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_UPVALUECLOSE);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_UPVALUECLOSE);
             }
             else
             {
-                nn_astemit_emitinstruc(prs, NEON_OP_POPONE);
+                nn_astemit_emitinstruc(prs, NNInstruction::OPC_POPONE);
             }
         }
         #endif
         nn_astparser_discardlocals(prs, prs->innermostloopscopedepth + 1);
-        nn_astemit_emitjump(prs, NEON_OP_BREAK_PL);
+        nn_astemit_emitjump(prs, NNInstruction::OPC_BREAK_PL);
     }
     nn_astparser_consumestmtend(prs);
 }
@@ -11565,9 +11704,9 @@ NNObjArray* nn_object_makearray()
 
 void nn_array_push(NNObjArray* list, NNValue value)
 {
-    /*nn_vm_stackpush(state, value);*/
+    /*GCSingleton::get()->stackPush(value);*/
     list->varray.push(value);
-    /*nn_vm_stackpop(state); */
+    /*GCSingleton::get()->stackPop(); */
 }
 
 bool nn_array_get(NNObjArray* list, size_t idx, NNValue* vdest)
@@ -11618,7 +11757,7 @@ static NNValue nn_objfnarray_constructor(NNState* state, NNValue thisval, NNValu
     {
         filler = argv[1];
     }
-    cnt = nn_value_asnumber(argv[0]);
+    cnt = argv[0].asNumber();
     arr = nn_array_makefilled(cnt, filler);
     return nn_value_fromobject(arr);
 }
@@ -11634,15 +11773,16 @@ static NNValue nn_objfnarray_join(NNState* state, NNValue thisval, NNValue* argv
     NNObjArray* selfarr;
     NNObjString* joinee;
     NNValue* list;
-    selfarr = nn_value_asarray(thisval);
+    (void)state;
+    selfarr = thisval.asArray();
     joinee = nullptr;
     havejoinee = false;
     if(argc > 0)
     {
         vjoinee = argv[0];
-        if(nn_value_isstring(vjoinee))
+        if(vjoinee.isString())
         {
-            joinee = nn_value_asstring(vjoinee);
+            joinee = vjoinee.asString();
             havejoinee = true;
         }
         else
@@ -11678,7 +11818,7 @@ static NNValue nn_objfnarray_length(NNState* state, NNValue thisval, NNValue* ar
     SCRIPTFN_UNUSED(state);
     NNArgCheck check;
     nn_argcheck_init(state, &check, "length", argv, argc);
-    selfarr = nn_value_asarray(thisval);
+    selfarr = thisval.asArray();
     return nn_value_makenumber(selfarr->varray.count());
 }
 
@@ -11688,7 +11828,7 @@ static NNValue nn_objfnarray_append(NNState* state, NNValue thisval, NNValue* ar
     SCRIPTFN_UNUSED(state);
     for(i = 0; i < argc; i++)
     {
-        nn_array_push(nn_value_asarray(thisval), argv[i]);
+        nn_array_push(thisval.asArray(), argv[i]);
     }
     return nn_value_makenull();
 }
@@ -11698,7 +11838,7 @@ static NNValue nn_objfnarray_clear(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "clear", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    nn_value_asarray(thisval)->varray.deInit(false);
+    thisval.asArray()->varray.deInit(false);
     return nn_value_makenull();
 }
 
@@ -11708,7 +11848,7 @@ static NNValue nn_objfnarray_clone(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "clone", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     return nn_value_fromobject(nn_array_copy(list, 0, list->varray.count()));
 }
 
@@ -11720,11 +11860,11 @@ static NNValue nn_objfnarray_count(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "count", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     count = 0;
     for(i = 0; i < list->varray.count(); i++)
     {
-        if(nn_value_compare((NNValue)list->varray.get(i), argv[0]))
+        if(nn_value_compare(list->varray.get(i), argv[0]))
         {
             count++;
         }
@@ -11741,8 +11881,8 @@ static NNValue nn_objfnarray_extend(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "extend", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isarray);
-    list = nn_value_asarray(thisval);
-    list2 = nn_value_asarray(argv[0]);
+    list = thisval.asArray();
+    list2 = argv[0].asArray();
     for(i = 0; i < list2->varray.count(); i++)
     {
         nn_array_push(list, list2->varray.get(i));
@@ -11757,16 +11897,16 @@ static NNValue nn_objfnarray_indexof(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "indexOf", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     i = 0;
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        i = nn_value_asnumber(argv[1]);
+        i = argv[1].asNumber();
     }
     for(; i < list->varray.count(); i++)
     {
-        if(nn_value_compare((NNValue)list->varray.get(i), argv[0]))
+        if(nn_value_compare(list->varray.get(i), argv[0]))
         {
             return nn_value_makenumber(i);
         }
@@ -11782,8 +11922,8 @@ static NNValue nn_objfnarray_insert(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "insert", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    list = nn_value_asarray(thisval);
-    index = (int)nn_value_asnumber(argv[1]);
+    list = thisval.asArray();
+    index = (int)argv[1].asNumber();
     list->varray.insert(argv[0], index);
     return nn_value_makenull();
 }
@@ -11796,7 +11936,7 @@ static NNValue nn_objfnarray_pop(NNState* state, NNValue thisval, NNValue* argv,
     NNArgCheck check;
     nn_argcheck_init(state, &check, "pop", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(list->varray.count() > 0)
     {
         value = list->varray.get(list->varray.count() - 1);
@@ -11820,9 +11960,9 @@ static NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* arg
     if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        count = nn_value_asnumber(argv[0]);
+        count = argv[0].asNumber();
     }
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(count >= list->varray.count() || list->varray.count() == 1)
     {
         list->varray.setCount(0);
@@ -11830,7 +11970,7 @@ static NNValue nn_objfnarray_shift(NNState* state, NNValue thisval, NNValue* arg
     }
     else if(count > 0)
     {
-        newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+        newlist = (NNObjArray*) ((NNObject*)nn_object_makearray());
         for(i = 0; i < count; i++)
         {
             nn_array_push(newlist, list->varray.get(0));
@@ -11862,8 +12002,8 @@ static NNValue nn_objfnarray_removeat(NNState* state, NNValue thisval, NNValue* 
     nn_argcheck_init(state, &check, "removeAt", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(thisval);
-    index = nn_value_asnumber(argv[0]);
+    list = thisval.asArray();
+    index = argv[0].asNumber();
     if(((int)index < 0) || index >= list->varray.count())
     {
         NEON_RETURNERROR("list index %d out of range at remove_at()", index);
@@ -11885,11 +12025,11 @@ static NNValue nn_objfnarray_remove(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "remove", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     index = -1;
     for(i = 0; i < list->varray.count(); i++)
     {
-        if(nn_value_compare((NNValue)list->varray.get(i), argv[0]))
+        if(nn_value_compare(list->varray.get(i), argv[0]))
         {
             index = i;
             break;
@@ -11914,8 +12054,8 @@ static NNValue nn_objfnarray_reverse(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "reverse", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
-    nlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = thisval.asArray();
+    nlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     /* in-place reversal:*/
     /*
     int start = 0;
@@ -11942,7 +12082,7 @@ static NNValue nn_objfnarray_sort(NNState* state, NNValue thisval, NNValue* argv
     NNArgCheck check;
     nn_argcheck_init(state, &check, "sort", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     nn_value_sortvalues(state, (NNValue*)list->varray.listitems, list->varray.count());
     return nn_value_makenull();
 }
@@ -11954,10 +12094,10 @@ static NNValue nn_objfnarray_contains(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "contains", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     for(i = 0; i < list->varray.count(); i++)
     {
-        if(nn_value_compare(argv[0], (NNValue)list->varray.get(i)))
+        if(nn_value_compare(argv[0], list->varray.get(i)))
         {
             return nn_value_makebool(true);
         }
@@ -11975,14 +12115,14 @@ static NNValue nn_objfnarray_delete(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "delete", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    idxlower = nn_value_asnumber(argv[0]);
+    idxlower = argv[0].asNumber();
     idxupper = idxlower;
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        idxupper = nn_value_asnumber(argv[1]);
+        idxupper = argv[1].asNumber();
     }
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(((int)idxlower < 0) || idxlower >= list->varray.count())
     {
         NEON_RETURNERROR("list index %d out of range at delete()", idxlower);
@@ -12005,7 +12145,7 @@ static NNValue nn_objfnarray_first(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "first", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(list->varray.count() > 0)
     {
         return list->varray.get(0);
@@ -12019,7 +12159,7 @@ static NNValue nn_objfnarray_last(NNState* state, NNValue thisval, NNValue* argv
     NNArgCheck check;
     nn_argcheck_init(state, &check, "last", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(list->varray.count() > 0)
     {
         return list->varray.get(list->varray.count() - 1);
@@ -12032,7 +12172,7 @@ static NNValue nn_objfnarray_isempty(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isEmpty", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makebool(nn_value_asarray(thisval)->varray.count() == 0);
+    return nn_value_makebool(thisval.asArray()->varray.count() == 0);
 }
 
 
@@ -12044,8 +12184,8 @@ static NNValue nn_objfnarray_take(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "take", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(thisval);
-    count = nn_value_asnumber(argv[0]);
+    list = thisval.asArray();
+    count = argv[0].asNumber();
     if((int)count < 0)
     {
         count = list->varray.count() + count;
@@ -12065,8 +12205,8 @@ static NNValue nn_objfnarray_get(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "get", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(thisval);
-    index = nn_value_asnumber(argv[0]);
+    list = thisval.asArray();
+    index = argv[0].asNumber();
     if((int)index < 0 || index >= list->varray.count())
     {
         return nn_value_makenull();
@@ -12082,13 +12222,13 @@ static NNValue nn_objfnarray_compact(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "compact", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
-    newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = thisval.asArray();
+    newlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < list->varray.count(); i++)
     {
-        if(!nn_value_compare((NNValue)list->varray.get(i), nn_value_makenull()))
+        if(!nn_value_compare(list->varray.get(i), nn_value_makenull()))
         {
-            nn_array_push(newlist, (NNValue)list->varray.get(i));
+            nn_array_push(newlist, list->varray.get(i));
         }
     }
     return nn_value_fromobject(newlist);
@@ -12105,14 +12245,14 @@ static NNValue nn_objfnarray_unique(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "unique", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    list = nn_value_asarray(thisval);
-    newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = thisval.asArray();
+    newlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < list->varray.count(); i++)
     {
         found = false;
         for(j = 0; j < newlist->varray.count(); j++)
         {
-            if(nn_value_compare((NNValue)newlist->varray.get(j), (NNValue)list->varray.get(i)))
+            if(nn_value_compare(newlist->varray.get(j), list->varray.get(i)))
             {
                 found = true;
                 continue;
@@ -12136,17 +12276,17 @@ static NNValue nn_objfnarray_zip(NNState* state, NNValue thisval, NNValue* argv,
     NNObjArray** arglist;
     NNArgCheck check;
     nn_argcheck_init(state, &check, "zip", argv, argc);
-    list = nn_value_asarray(thisval);
-    newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = thisval.asArray();
+    newlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     arglist = (NNObjArray**)nn_gcmem_allocate(sizeof(NNObjArray*), argc, false);
     for(i = 0; i < argc; i++)
     {
         NEON_ARGS_CHECKTYPE(&check, i, nn_value_isarray);
-        arglist[i] = nn_value_asarray(argv[i]);
+        arglist[i] = argv[i].asArray();
     }
     for(i = 0; i < list->varray.count(); i++)
     {
-        alist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+        alist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
         /* item of main list*/
         nn_array_push(alist, list->varray.get(i));
         for(j = 0; j < argc; j++)
@@ -12178,25 +12318,25 @@ static NNValue nn_objfnarray_zipfrom(NNState* state, NNValue thisval, NNValue* a
     nn_argcheck_init(state, &check, "zipFrom", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isarray);
-    list = nn_value_asarray(thisval);
-    newlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
-    arglist = nn_value_asarray(argv[0]);
+    list = thisval.asArray();
+    newlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
+    arglist = argv[0].asArray();
     for(i = 0; i < arglist->varray.count(); i++)
     {
-        if(!nn_value_isarray(arglist->varray.get(i)))
+        if(!arglist->varray.get(i).isArray())
         {
             NEON_RETURNERROR("invalid list in zip entries");
         }
     }
     for(i = 0; i < list->varray.count(); i++)
     {
-        alist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+        alist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
         nn_array_push(alist, list->varray.get(i));
         for(j = 0; j < arglist->varray.count(); j++)
         {
-            if(i < nn_value_asarray(arglist->varray.get(j))->varray.count())
+            if(i < arglist->varray.get(j).asArray()->varray.count())
             {
-                nn_array_push(alist, nn_value_asarray(arglist->varray.get(j))->varray.get(i));
+                nn_array_push(alist, arglist->varray.get(j).asArray()->varray.get(i));
             }
             else
             {
@@ -12216,8 +12356,8 @@ static NNValue nn_objfnarray_todict(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "toDict", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict());
-    list = nn_value_asarray(thisval);
+    dict = (NNObjDict*)nn_gcmem_protect((NNObject*)nn_object_makedict());
+    list = thisval.asArray();
     for(i = 0; i < list->varray.count(); i++)
     {
         nn_dict_setentry(dict, nn_value_makenumber(i), list->varray.get(i));
@@ -12233,8 +12373,8 @@ static NNValue nn_objfnarray_iter(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "iter", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    list = nn_value_asarray(thisval);   
-    index = nn_value_asnumber(argv[0]);
+    list = thisval.asArray();   
+    index = argv[0].asNumber();
     if(((int)index > -1) && index < list->varray.count())
     {
         return list->varray.get(index);
@@ -12249,7 +12389,7 @@ static NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "itern", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     if(argv[0].isNull())
     {
         if(list->varray.count() == 0)
@@ -12258,11 +12398,11 @@ static NNValue nn_objfnarray_itern(NNState* state, NNValue thisval, NNValue* arg
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(argv[0]))
+    if(!argv[0].isNumber())
     {
         NEON_RETURNERROR("lists are numerically indexed");
     }
-    index = nn_value_asnumber(argv[0]);
+    index = argv[0].asNumber();
     if(index < list->varray.count() - 1)
     {
         return nn_value_makenumber((double)index + 1);
@@ -12283,7 +12423,7 @@ static NNValue nn_objfnarray_each(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "each", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     for(i = 0; i < list->varray.count(); i++)
@@ -12319,10 +12459,10 @@ static NNValue nn_objfnarray_map(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "map", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
-    resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    resultlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < list->varray.count(); i++)
     {
         passi = 0;
@@ -12364,10 +12504,10 @@ static NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "filter", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
-    resultlist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    resultlist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < list->varray.count(); i++)
     {
         passi = 0;
@@ -12384,7 +12524,7 @@ static NNValue nn_objfnarray_filter(NNState* state, NNValue thisval, NNValue* ar
                 }
             }
             nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-            if(!nn_value_isfalse(result))
+            if(!result.isFalse())
             {
                 nn_array_push(resultlist, list->varray.get(i));
             }
@@ -12406,7 +12546,7 @@ static NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "some", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     for(i = 0; i < list->varray.count(); i++)
@@ -12425,7 +12565,7 @@ static NNValue nn_objfnarray_some(NNState* state, NNValue thisval, NNValue* argv
                 }
             }
             nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-            if(!nn_value_isfalse(result))
+            if(!result.isFalse())
             {
                 return nn_value_makebool(true);
             }
@@ -12448,7 +12588,7 @@ static NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "every", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     for(i = 0; i < list->varray.count(); i++)
@@ -12467,7 +12607,7 @@ static NNValue nn_objfnarray_every(NNState* state, NNValue thisval, NNValue* arg
                 }
             }
             nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-            if(nn_value_isfalse(result))
+            if(result.isFalse())
             {
                 return nn_value_makebool(false);
             }
@@ -12490,7 +12630,7 @@ static NNValue nn_objfnarray_reduce(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "reduce", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    list = nn_value_asarray(thisval);
+    list = thisval.asArray();
     callable = argv[0];
     startindex = 0;
     accumulator = nn_value_makenull();
@@ -12551,10 +12691,10 @@ static NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "slice", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfarr = nn_value_asarray(thisval);
+    selfarr = thisval.asArray();
     salen = selfarr->varray.count();
     end = salen;
-    start = nn_value_asnumber(argv[0]);
+    start = argv[0].asNumber();
     backwards = false;
     if(start < 0)
     {
@@ -12562,7 +12702,7 @@ static NNValue nn_objfnarray_slice(NNState* state, NNValue thisval, NNValue* arg
     }
     if(argc > 1)
     {
-        end = nn_value_asnumber(argv[1]);
+        end = argv[1].asNumber();
     }
     narr = nn_object_makearray();
     i = 0;
@@ -12631,7 +12771,7 @@ void nn_state_installobjectarray(NNState* state)
     };
     nn_class_defnativeconstructor(state->classprimarray, nn_objfnarray_constructor);
     nn_class_defcallablefield(state->classprimarray, nn_string_intern("length"), nn_objfnarray_length);
-    nn_state_installmethods(state, state->classprimarray, arraymethods);
+    nn_state_installmethods(state->classprimarray, arraymethods);
 
 }
 
@@ -12859,7 +12999,7 @@ void nn_instance_destroy(NNObjInstance* instance)
 {
     if(!instance->klass->destructor.isNull())
     {
-        //if(!nn_vm_callvaluewithobject(state, (NNValue)instance->klass->destructor, nn_value_fromobject(instance), 0, false))
+        //if(!nn_vm_callvaluewithobject(state, instance->klass->destructor, nn_value_fromobject(instance), 0, false))
         {
             
         }
@@ -12986,7 +13126,7 @@ NNObjDict* nn_dict_copy(NNObjDict* dict)
         key = dict->htnames.get(i);
         field = dict->htab.getfield(dict->htnames.get(i));
         ndict->htnames.push(key);
-        ndict->htab.setwithtype(key, (NNValue)field->value, field->type, nn_value_isstring(key));        
+        ndict->htab.setwithtype(key, field->value, field->type, key.isString());        
     }
     return ndict;
 }
@@ -12996,7 +13136,7 @@ static NNValue nn_objfndict_length(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "length", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makenumber(nn_value_asdict(thisval)->htnames.count());
+    return nn_value_makenumber(thisval.asDict()->htnames.count());
 }
 
 static NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -13006,7 +13146,7 @@ static NNValue nn_objfndict_add(NNState* state, NNValue thisval, NNValue* argv, 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "add", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     if(dict->htab.get(argv[0], &tempvalue))
     {
         NEON_RETURNERROR("duplicate key %s at add()", nn_string_getdata(nn_value_tostring(argv[0])));
@@ -13022,7 +13162,7 @@ static NNValue nn_objfndict_set(NNState* state, NNValue thisval, NNValue* argv, 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "set", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 2);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     if(!dict->htab.get(argv[0], &value))
     {
         nn_dict_addentry(dict, argv[0], argv[1]);
@@ -13040,7 +13180,7 @@ static NNValue nn_objfndict_clear(NNState* state, NNValue thisval, NNValue* argv
     NNArgCheck check;
     nn_argcheck_init(state, &check, "clear", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     dict->htnames.deInit(false);
     dict->htab.deinit();
     return nn_value_makenull();
@@ -13054,8 +13194,8 @@ static NNValue nn_objfndict_clone(NNState* state, NNValue thisval, NNValue* argv
     NNArgCheck check;
     nn_argcheck_init(state, &check, "clone", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
-    newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict());
+    dict = thisval.asDict();
+    newdict = (NNObjDict*)nn_gcmem_protect((NNObject*)nn_object_makedict());
     if(!dict->htab.copyTo(&newdict->htab, true))
     {
         nn_except_throwclass(state, state->exceptions.argumenterror, "failed to copy table");
@@ -13077,8 +13217,8 @@ static NNValue nn_objfndict_compact(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "compact", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
-    newdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict());
+    dict = thisval.asDict();
+    newdict = (NNObjDict*)nn_gcmem_protect((NNObject*)nn_object_makedict());
     tmpvalue = nn_value_makenull();
     for(i = 0; i < dict->htnames.count(); i++)
     {
@@ -13098,7 +13238,7 @@ static NNValue nn_objfndict_contains(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "contains", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     return nn_value_makebool(dict->htab.get(argv[0], &value));
 }
 
@@ -13112,8 +13252,8 @@ static NNValue nn_objfndict_extend(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "extend", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isdict);
-    dict = nn_value_asdict(thisval);
-    dictcpy = nn_value_asdict(argv[0]);
+    dict = thisval.asDict();
+    dictcpy = argv[0].asDict();
     for(i = 0; i < dictcpy->htnames.count(); i++)
     {
         if(!dict->htab.get(dictcpy->htnames.get(i), &tmp))
@@ -13132,7 +13272,7 @@ static NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "get", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     field = nn_dict_getentry(dict, argv[0]);
     if(field == nullptr)
     {
@@ -13145,7 +13285,7 @@ static NNValue nn_objfndict_get(NNState* state, NNValue thisval, NNValue* argv, 
             return argv[1];
         }
     }
-    return (NNValue)field->value;
+    return field->value;
 }
 
 static NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -13156,8 +13296,8 @@ static NNValue nn_objfndict_keys(NNState* state, NNValue thisval, NNValue* argv,
     NNArgCheck check;
     nn_argcheck_init(state, &check, "keys", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    dict = thisval.asDict();
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < dict->htnames.count(); i++)
     {
         nn_array_push(list, dict->htnames.get(i));
@@ -13174,12 +13314,12 @@ static NNValue nn_objfndict_values(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "values", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    dict = thisval.asDict();
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < dict->htnames.count(); i++)
     {
         field = nn_dict_getentry(dict, dict->htnames.get(i));
-        nn_array_push(list, (NNValue)field->value);
+        nn_array_push(list, field->value);
     }
     return nn_value_fromobject(list);
 }
@@ -13193,14 +13333,14 @@ static NNValue nn_objfndict_remove(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "remove", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     if(dict->htab.get(argv[0], &value))
     {
         dict->htab.remove(argv[0]);
         index = -1;
         for(i = 0; i < dict->htnames.count(); i++)
         {
-            if(nn_value_compare((NNValue)dict->htnames.get(i), argv[0]))
+            if(nn_value_compare(dict->htnames.get(i), argv[0]))
             {
                 index = i;
                 break;
@@ -13221,7 +13361,7 @@ static NNValue nn_objfndict_isempty(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isempty", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    return nn_value_makebool(nn_value_asdict(thisval)->htnames.count() == 0);
+    return nn_value_makebool(thisval.asDict()->htnames.count() == 0);
 }
 
 static NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -13229,7 +13369,7 @@ static NNValue nn_objfndict_findkey(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "findkey", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    auto ht = nn_value_asdict(thisval)->htab;
+    auto ht = thisval.asDict()->htab;
     return ht.findkey(argv[0], nn_value_makenull());
 }
 
@@ -13243,9 +13383,9 @@ static NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* arg
     NNArgCheck check;
     nn_argcheck_init(state, &check, "tolist", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    dict = nn_value_asdict(thisval);
-    namelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
-    valuelist = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    dict = thisval.asDict();
+    namelist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
+    valuelist = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     for(i = 0; i < dict->htnames.count(); i++)
     {
         nn_array_push(namelist, dict->htnames.get(i));
@@ -13260,7 +13400,7 @@ static NNValue nn_objfndict_tolist(NNState* state, NNValue thisval, NNValue* arg
             nn_array_push(valuelist, nn_value_makenull());
         }
     }
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     nn_array_push(list, nn_value_fromobject(namelist));
     nn_array_push(list, nn_value_fromobject(valuelist));
     return nn_value_fromobject(list);
@@ -13273,7 +13413,7 @@ static NNValue nn_objfndict_iter(NNState* state, NNValue thisval, NNValue* argv,
     NNArgCheck check;
     nn_argcheck_init(state, &check, "iter", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     if(dict->htab.get(argv[0], &result))
     {
         return result;
@@ -13288,7 +13428,7 @@ static NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv
     NNArgCheck check;
     nn_argcheck_init(state, &check, "itern", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     if(argv[0].isNull())
     {
         if(dict->htnames.count() == 0)
@@ -13299,7 +13439,7 @@ static NNValue nn_objfndict_itern(NNState* state, NNValue thisval, NNValue* argv
     }
     for(i = 0; i < dict->htnames.count(); i++)
     {
-        if(nn_value_compare(argv[0], (NNValue)dict->htnames.get(i)) && (i + 1) < dict->htnames.count())
+        if(nn_value_compare(argv[0], dict->htnames.get(i)) && (i + 1) < dict->htnames.count())
         {
             return dict->htnames.get(i + 1);
         }
@@ -13321,7 +13461,7 @@ static NNValue nn_objfndict_each(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "each", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     value = nn_value_makenull();
@@ -13359,10 +13499,10 @@ static NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "filter", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
-    resultdict = (NNObjDict*)nn_gcmem_protect(state, (NNObject*)nn_object_makedict());
+    resultdict = (NNObjDict*)nn_gcmem_protect((NNObject*)nn_object_makedict());
     value = nn_value_makenull();
     for(i = 0; i < dict->htnames.count(); i++)
     {
@@ -13379,7 +13519,7 @@ static NNValue nn_objfndict_filter(NNState* state, NNValue thisval, NNValue* arg
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-        if(!nn_value_isfalse(result))
+        if(!result.isFalse())
         {
             nn_dict_addentry(resultdict, dict->htnames.get(i), value);
         }
@@ -13402,7 +13542,7 @@ static NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "some", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     value = nn_value_makenull();
@@ -13421,7 +13561,7 @@ static NNValue nn_objfndict_some(NNState* state, NNValue thisval, NNValue* argv,
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-        if(!nn_value_isfalse(result))
+        if(!result.isFalse())
         {
             /* pop the call list */
             return nn_value_makebool(true);
@@ -13445,7 +13585,7 @@ static NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "every", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     value = nn_value_makenull();
@@ -13464,7 +13604,7 @@ static NNValue nn_objfndict_every(NNState* state, NNValue thisval, NNValue* argv
             }
         }
         nn_nestcall_callfunction(state, callable, thisval, nestargs, passi, &result, false);
-        if(nn_value_isfalse(result))
+        if(result.isFalse())
         {
             /* pop the call list */
             return nn_value_makebool(false);
@@ -13488,7 +13628,7 @@ static NNValue nn_objfndict_reduce(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "reduce", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    dict = nn_value_asdict(thisval);
+    dict = thisval.asDict();
     callable = argv[0];
     startindex = 0;
     accumulator = nn_value_makenull();
@@ -13568,7 +13708,7 @@ void nn_state_installobjectdict(NNState* state)
     nn_class_defnativeconstructor(state->classprimdict, nn_objfndict_constructor);
     nn_class_defstaticnativemethod(state->classprimdict, nn_string_copycstr("keys"), nn_objfndict_keys);
     #endif
-    nn_state_installmethods(state, state->classprimdict, dictmethods);
+    nn_state_installmethods(state->classprimdict, dictmethods);
 }
 
 
@@ -13752,7 +13892,7 @@ static NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue
     nn_argcheck_init(state, &check, "constructor", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    opath = nn_value_asstring(argv[0]);
+    opath = argv[0].asString();
     if(nn_string_getlength(opath) == 0)
     {
         NEON_RETURNERROR("file path cannot be empty");
@@ -13761,10 +13901,10 @@ static NNValue nn_objfnfile_constructor(NNState* state, NNValue thisval, NNValue
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        mode = nn_string_getdata(nn_value_asstring(argv[1]));
+        mode = nn_string_getdata(argv[1].asString());
     }
     path = nn_string_getdata(opath);
-    file = (NNObjFile*)nn_gcmem_protect(state, (NNObject*)nn_object_makefile(nullptr, false, path, mode));
+    file = (NNObjFile*)nn_gcmem_protect((NNObject*)nn_object_makefile(nullptr, false, path, mode));
     nn_fileobject_open(file);
     return nn_value_fromobject(file);
 }
@@ -13777,7 +13917,7 @@ static NNValue nn_objfnfile_exists(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "exists", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(argv[0]);
+    file = argv[0].asString();
     return nn_value_makebool(nn_util_fsfileexists(nn_string_getdata(file)));
 }
 
@@ -13789,7 +13929,7 @@ static NNValue nn_objfnfile_isfile(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "isfile", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(argv[0]);
+    file = argv[0].asString();
     return nn_value_makebool(nn_util_fsfileisfile(nn_string_getdata(file)));
 }
 
@@ -13801,7 +13941,7 @@ static NNValue nn_objfnfile_isdirectory(NNState* state, NNValue thisval, NNValue
     nn_argcheck_init(state, &check, "isdirectory", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    file = nn_value_asstring(argv[0]);
+    file = argv[0].asString();
     return nn_value_makebool(nn_util_fsfileisdirectory(nn_string_getdata(file)));
 }
 
@@ -13820,10 +13960,10 @@ static NNValue nn_objfnfile_readstatic(NNState* state, NNValue thisval, NNValue*
     if(argc > 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        thismuch = (size_t)nn_value_asnumber(argv[1]);
+        thismuch = (size_t)argv[1].asNumber();
     }
-    filepath = nn_value_asstring(argv[0]);
-    buf = nn_util_filereadfile(state, nn_string_getdata(filepath), &actualsz, true, thismuch);
+    filepath = argv[0].asString();
+    buf = nn_util_filereadfile(nn_string_getdata(filepath), &actualsz, true, thismuch);
     if(buf == nullptr)
     {
         nn_except_throwclass(state, state->exceptions.ioerror, "%s: %s", nn_string_getdata(filepath), strerror(errno));
@@ -13851,14 +13991,14 @@ static NNValue nn_objfnfile_writestatic(NNState* state, NNValue thisval, NNValue
     if(argc > 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 2, nn_value_isbool);
-        appending = nn_value_asbool(argv[2]);
+        appending = argv[2].asBool();
     }
     if(appending)
     {
         mode = "ab";
     }
-    filepath = nn_value_asstring(argv[0]);
-    data = nn_value_asstring(argv[1]);
+    filepath = argv[0].asString();
+    data = argv[1].asString();
     fh = fopen(nn_string_getdata(filepath), mode);
     if(fh == nullptr)
     {
@@ -13923,7 +14063,7 @@ static NNValue nn_objfnfile_readmethod(NNState* state, NNValue thisval, NNValue*
     if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        readhowmuch = (size_t)nn_value_asnumber(argv[0]);
+        readhowmuch = (size_t)argv[0].asNumber();
     }
     file = nn_value_asfile(thisval);
     if(!nn_file_read(file, readhowmuch, &res))
@@ -13987,7 +14127,7 @@ static NNValue nn_objfnfile_gets(NNState* state, NNValue thisval, NNValue* argv,
     if(argc == 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        length = (size_t)nn_value_asnumber(argv[0]);
+        length = (size_t)argv[0].asNumber();
     }
     file = nn_value_asfile(thisval);
     if(!file->isstd)
@@ -14061,7 +14201,7 @@ static NNValue nn_objfnfile_write(NNState* state, NNValue thisval, NNValue* argv
     NEON_ARGS_CHECKCOUNT(&check, 1);
     file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(argv[0]);
+    string = argv[0].asString();
     data = (unsigned char*)nn_string_getdata(string);
     length = nn_string_getlength(string);
     if(!file->isstd)
@@ -14139,7 +14279,7 @@ static NNValue nn_objfnfile_puts(NNState* state, NNValue thisval, NNValue* argv,
     for(i=0; i<argc; i++)
     {
         NEON_ARGS_CHECKTYPE(&check, i, nn_value_isstring);
-        string = nn_value_asstring(argv[i]);
+        string = argv[i].asString();
         data = (unsigned char*)nn_string_getdata(string);
         length = nn_string_getlength(string);
         count = fwrite(data, sizeof(unsigned char), length, file->handle);
@@ -14187,7 +14327,7 @@ static NNValue nn_objfnfile_putc(NNState* state, NNValue thisval, NNValue* argv,
     for(i=0; i<argc; i++)
     {
         NEON_ARGS_CHECKTYPE(&check, i, nn_value_isnumber);
-        int cv = nn_value_asnumber(argv[i]);
+        int cv = argv[i].asNumber();
         rc += fputc(cv, file->handle);
     }
     return nn_value_makenumber(rc);
@@ -14205,7 +14345,7 @@ static NNValue nn_objfnfile_printf(NNState* state, NNValue thisval, NNValue* arg
     file = nn_value_asfile(thisval);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(argv[0]);
+    ofmt = argv[0].asString();
     nn_iostream_makestackio(&pr, file->handle, false);
     nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
@@ -14314,8 +14454,8 @@ static NNValue nn_objfnfile_seek(NNState* state, NNValue thisval, NNValue* argv,
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
     file = nn_value_asfile(thisval);
     DENY_STD();
-    position = (long)nn_value_asnumber(argv[0]);
-    seektype = nn_value_asnumber(argv[1]);
+    position = (long)argv[0].asNumber();
+    seektype = argv[1].asNumber();
     RETURN_STATUS(fseek(file->handle, position, seektype));
 }
 
@@ -14369,7 +14509,7 @@ void nn_state_installobjectfile(NNState* state)
     nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr("isFile"), nn_objfnfile_isfile);
     nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr("isDirectory"), nn_objfnfile_isdirectory);
     nn_class_defstaticnativemethod(state->classprimfile, nn_string_copycstr("stat"), nn_modfn_os_stat);
-    nn_state_installmethods(state, state->classprimfile, filemethods);
+    nn_state_installmethods(state->classprimfile, filemethods);
 }
 
 
@@ -14502,7 +14642,7 @@ void nn_state_setupmodulepaths(NNState* state)
     }
 }
 
-void nn_module_setfilefield(NNState* state, NNObjModule* module)
+void nn_module_setfilefield(NNObjModule* module)
 {
     return;
     module->deftable.set(nn_value_fromobject(nn_string_intern("__file__")), nn_value_fromobject(nn_string_copyobject(module->physicalpath)));
@@ -14547,7 +14687,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
     field = GCSingleton::get()->openedmodules.getfieldbyostr(modulename);
     if(field != nullptr)
     {
-        return nn_value_asmodule((NNValue)field->value);
+        return nn_value_asmodule(field->value);
     }
     physpath = nn_import_resolvepath(state, nn_string_getdata(modulename), nn_string_getdata(intomodule->physicalpath), nullptr, false);
     if(physpath == nullptr)
@@ -14556,7 +14696,7 @@ NNObjModule* nn_import_loadmodulescript(NNState* state, NNObjModule* intomodule,
         return nullptr;
     }
     fprintf(stderr, "loading module from '%s'\n", physpath);
-    source = nn_util_filereadfile(state, physpath, &fsz, false, 0);
+    source = nn_util_filereadfile(physpath, &fsz, false, 0);
     if(source == nullptr)
     {
         nn_except_throwclass(state, state->exceptions.importerror, "could not read import file %s", physpath);
@@ -14602,7 +14742,7 @@ char* nn_import_resolvepath(NNState* state, const   char* modulename, const char
     pathbuf = nn_strbuf_makebasicempty(nullptr, 0);
     for(i=0; i<splen; i++)
     {
-        pitem = nn_value_asstring(state->importpath.get(i));
+        pitem = state->importpath.get(i).asString();
         nn_strbuf_reset(pathbuf);
         nn_strbuf_appendstrn(pathbuf, nn_string_getdata(pitem), nn_string_getlength(pitem));
         if(nn_strbuf_containschar(pathbuf, '@'))
@@ -14700,7 +14840,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     defmod = init_fn();
     if(defmod != nullptr)
     {
-        targetmod = (NNObjModule*)nn_gcmem_protect(state, (NNObject*)nn_module_make((char*)defmod->name, source, false, true));
+        targetmod = (NNObjModule*)nn_gcmem_protect((NNObject*)nn_module_make((char*)defmod->name, source, false, true));
         targetmod->fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
         targetmod->fnunloaderptr = (void*)defmod->fnunloaderfunc;
         if(defmod->definedfields != nullptr)
@@ -14708,11 +14848,11 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
             for(j = 0; defmod->definedfields[j].name != nullptr; j++)
             {
                 field = defmod->definedfields[j];
-                fieldname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(field.name)));
+                fieldname = nn_value_fromobject(nn_gcmem_protect((NNObject*)nn_string_copycstr(field.name)));
                 v = field.fieldvalfn(state, nn_value_makenull(), nullptr, 0);
-                nn_vm_stackpush(state, v);
+                GCSingleton::get()->stackPush(v);
                 targetmod->deftable.set(fieldname, v);
-                nn_vm_stackpop(state);
+                GCSingleton::get()->stackPop();
             }
         }
         if(defmod->definedfunctions != nullptr)
@@ -14720,11 +14860,11 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
             for(j = 0; defmod->definedfunctions[j].name != nullptr; j++)
             {
                 func = defmod->definedfunctions[j];
-                funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(func.name)));
-                funcrealvalue = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(func.function, func.name, nullptr)));
-                nn_vm_stackpush(state, funcrealvalue);
+                funcname = nn_value_fromobject(nn_gcmem_protect((NNObject*)nn_string_copycstr(func.name)));
+                funcrealvalue = nn_value_fromobject(nn_gcmem_protect((NNObject*)nn_object_makefuncnative(func.function, func.name, nullptr)));
+                GCSingleton::get()->stackPush(funcrealvalue);
                 targetmod->deftable.set(funcname, funcrealvalue);
-                nn_vm_stackpop(state);
+                GCSingleton::get()->stackPop();
             }
         }
         if(defmod->definedclasses != nullptr)
@@ -14732,16 +14872,16 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
             for(j = 0; ((defmod->definedclasses[j].name != nullptr) && (defmod->definedclasses[j].defpubfunctions != nullptr)); j++)
             {
                 klassreg = defmod->definedclasses[j];
-                classname = (NNObjString*)nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(klassreg.name));
-                klass = (NNObjClass*)nn_gcmem_protect(state, (NNObject*)nn_object_makeclass(classname, state->classprimobject));
+                classname = (NNObjString*)nn_gcmem_protect((NNObject*)nn_string_copycstr(klassreg.name));
+                klass = (NNObjClass*)nn_gcmem_protect((NNObject*)nn_object_makeclass(classname, state->classprimobject));
                 if(klassreg.defpubfunctions != nullptr)
                 {
                     for(k = 0; klassreg.defpubfunctions[k].name != nullptr; k++)
                     {
                         func = klassreg.defpubfunctions[k];
                         slen = strlen(func.name);
-                        funcname = nn_value_fromobject(nn_gcmem_protect(state, (NNObject*)nn_string_copycstr(func.name)));
-                        native = (NNObjFunction*)nn_gcmem_protect(state, (NNObject*)nn_object_makefuncnative(func.function, func.name, nullptr));
+                        funcname = nn_value_fromobject(nn_gcmem_protect((NNObject*)nn_string_copycstr(func.name)));
+                        native = (NNObjFunction*)nn_gcmem_protect((NNObject*)nn_object_makefuncnative(func.function, func.name, nullptr));
                         if(func.isstatic)
                         {
                             native->contexttype = NEON_FNCONTEXTTYPE_STATIC;
@@ -14784,7 +14924,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
         {
             targetmod->handle = dlw;
         }
-        nn_import_addnativemodule(state, targetmod, nn_string_getdata(targetmod->name));
+        nn_import_addnativemodule(targetmod, nn_string_getdata(targetmod->name));
         GCSingleton::clearGCProtect();
         return true;
     }
@@ -14795,7 +14935,7 @@ bool nn_import_loadnativemodule(NNState* state, NNModInitFN init_fn, char* impor
     return false;
 }
 
-void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* as)
+void nn_import_addnativemodule(NNObjModule* module, const char* as)
 {
     NNValue name;
     if(as != nullptr)
@@ -14803,10 +14943,10 @@ void nn_import_addnativemodule(NNState* state, NNObjModule* module, const char* 
         module->name = nn_string_copycstr(as);
     }
     name = nn_value_fromobject(nn_string_copyobject(module->name));
-    nn_vm_stackpush(state, name);
-    nn_vm_stackpush(state, nn_value_fromobject(module));
+    GCSingleton::get()->stackPush(name);
+    GCSingleton::get()->stackPush(nn_value_fromobject(module));
     GCSingleton::get()->openedmodules.set(name, nn_value_fromobject(module));
-    nn_vm_stackpopn(state, 2);
+    GCSingleton::get()->stackPop(2);
 }
 
 
@@ -14819,9 +14959,10 @@ void nn_import_closemodule(void* hnd)
 
 static NNValue nn_objfnnumber_tohexstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    (void)state;
     (void)argv;
     (void)argc;
-    return nn_value_fromobject(nn_util_numbertohexstring(state, nn_value_asnumber(thisval), false));
+    return nn_value_fromobject(nn_util_numbertohexstring(thisval.asNumber(), false));
 }
 
 
@@ -14830,7 +14971,7 @@ static NNValue nn_objfnmath_hypot(NNState* state, NNValue thisval, NNValue* argv
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(hypot(nn_value_asnumber(argv[0]), nn_value_asnumber(argv[1])));
+    return nn_value_makenumber(hypot(argv[0].asNumber(), argv[1].asNumber()));
 }
 
 
@@ -14839,7 +14980,7 @@ static NNValue nn_objfnmath_abs(NNState* state, NNValue thisval, NNValue* argv, 
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(fabs(nn_value_asnumber(argv[0])));
+    return nn_value_makenumber(fabs(argv[0].asNumber()));
 }
 
 static NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14847,7 +14988,7 @@ static NNValue nn_objfnmath_round(NNState* state, NNValue thisval, NNValue* argv
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(round(nn_value_asnumber(argv[0])));
+    return nn_value_makenumber(round(argv[0].asNumber()));
 }
 
 static NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14855,7 +14996,7 @@ static NNValue nn_objfnmath_sqrt(NNState* state, NNValue thisval, NNValue* argv,
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(sqrt(nn_value_asnumber(argv[0])));
+    return nn_value_makenumber(sqrt(argv[0].asNumber()));
 }
 
 static NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14863,7 +15004,7 @@ static NNValue nn_objfnmath_ceil(NNState* state, NNValue thisval, NNValue* argv,
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(ceil(nn_value_asnumber(argv[0])));
+    return nn_value_makenumber(ceil(argv[0].asNumber()));
 }
 
 static NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14871,7 +15012,7 @@ static NNValue nn_objfnmath_floor(NNState* state, NNValue thisval, NNValue* argv
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    return nn_value_makenumber(floor(nn_value_asnumber(argv[0])));
+    return nn_value_makenumber(floor(argv[0].asNumber()));
 }
 
 static NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14882,24 +15023,26 @@ static NNValue nn_objfnmath_min(NNState* state, NNValue thisval, NNValue* argv, 
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    x = nn_value_asnumber(argv[0]);
-    y = nn_value_asnumber(argv[1]);
+    x = argv[0].asNumber();
+    y = argv[1].asNumber();
     b = (x < y) ? x : y;
     return nn_value_makenumber(b);
 }
 
 static NNValue nn_objfnnumber_tobinstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    (void)state;
     (void)argv;
     (void)argc;
-    return nn_value_fromobject(nn_util_numbertobinstring(state, nn_value_asnumber(thisval)));
+    return nn_value_fromobject(nn_util_numbertobinstring(thisval.asNumber()));
 }
 
 static NNValue nn_objfnnumber_tooctstring(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
+    (void)state;
     (void)argv;
     (void)argc;
-    return nn_value_fromobject(nn_util_numbertooctstring(state, nn_value_asnumber(thisval), false));
+    return nn_value_fromobject(nn_util_numbertooctstring(thisval.asNumber(), false));
 }
 
 static NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -14913,7 +15056,7 @@ static NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNVal
         return nn_value_makenumber(0);
     }
     val = argv[0];
-    if(nn_value_isnumber(val))
+    if(val.isNumber())
     {
         return val;
     }
@@ -14921,13 +15064,13 @@ static NNValue nn_objfnnumber_constructor(NNState* state, NNValue thisval, NNVal
     {
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isstring(val))
+    if(!val.isString())
     {
         NEON_RETURNERROR("Number() expects no arguments, or number, or string");
     }
     NNAstToken tok;
     NNAstLexer lex;
-    os = nn_value_asstring(val);
+    os = val.asString();
     nn_astlex_init(&lex, state, nn_string_getdata(os));
     tok = nn_astlex_scannumber(&lex);
     rtval = nn_astparser_compilestrnumber(tok.type, tok.start);
@@ -14944,13 +15087,13 @@ void nn_state_installobjectnumber(NNState* state)
         {nullptr, nullptr},
     };
     nn_class_defnativeconstructor(state->classprimnumber, nn_objfnnumber_constructor);
-    nn_state_installmethods(state, state->classprimnumber, numbermethods);
+    nn_state_installmethods(state->classprimnumber, numbermethods);
 }
 
 void nn_state_installmodmath(NNState* state)
 {
     NNObjClass* klass;
-    klass = nn_util_makeclass(state, "Math", state->classprimobject);
+    klass = nn_util_makeclass("Math", state->classprimobject);
     nn_class_defstaticnativemethod(klass, nn_string_intern("hypot"), nn_objfnmath_hypot);
     nn_class_defstaticnativemethod(klass, nn_string_intern("abs"), nn_objfnmath_abs);
     nn_class_defstaticnativemethod(klass, nn_string_intern("round"), nn_objfnmath_round);
@@ -14960,17 +15103,13 @@ void nn_state_installmodmath(NNState* state)
     nn_class_defstaticnativemethod(klass, nn_string_intern("min"), nn_objfnmath_min);
 }
 
-
-
-
-
-
 static NNValue nn_objfnobject_dumpself(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNValue v;
     NNIOStream pr;
     NNObjString* os;
     v = thisval;
+    (void)state;
     (void)argv;
     (void)argc;
     nn_iostream_makestackstring(&pr);
@@ -14985,6 +15124,7 @@ static NNValue nn_objfnobject_tostring(NNState* state, NNValue thisval, NNValue*
     NNValue v;
     NNIOStream pr;
     NNObjString* os;
+    (void)state;
     (void)argv;
     (void)argc;
     v = thisval;
@@ -14999,6 +15139,7 @@ static NNValue nn_objfnobject_typename(NNState* state, NNValue thisval, NNValue*
 {
     NNValue v;
     NNObjString* os;
+    (void)state;
     (void)thisval;
     (void)argc;
     v = argv[0];
@@ -15022,7 +15163,7 @@ static NNValue nn_objfnobject_getselfclass(NNState* state, NNValue thisval, NNVa
     #if 0
         nn_vmdebug_printvalue(state, thisval, "<object>.class:thisval=");
     #endif
-    if(nn_value_isinstance(thisval))
+    if(thisval.isInstance())
     {
         return nn_value_fromobject(nn_value_asinstance(thisval)->klass);
     }
@@ -15037,7 +15178,7 @@ static NNValue nn_objfnobject_isstring(NNState* state, NNValue thisval, NNValue*
     (void)argv;
     (void)argc;
     v = thisval;
-    return nn_value_makebool(nn_value_isstring(v));
+    return nn_value_makebool(v.isString());
 }
 
 static NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15047,7 +15188,7 @@ static NNValue nn_objfnobject_isarray(NNState* state, NNValue thisval, NNValue* 
     (void)argv;
     (void)argc;
     v = thisval;
-    return nn_value_makebool(nn_value_isarray(v));
+    return nn_value_makebool(v.isArray());
 }
 
 static NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15060,7 +15201,7 @@ static NNValue nn_objfnobject_isa(NNState* state, NNValue thisval, NNValue* argv
     (void)argc;
     v = thisval;
     otherclval = argv[0];
-    if(nn_value_isclass(otherclval))
+    if(otherclval.isClass())
     {
         oclass = nn_value_asclass(otherclval);
         selfclass = nn_value_getclassfor(state, v);
@@ -15080,11 +15221,11 @@ static NNValue nn_objfnobject_iscallable(NNState* state, NNValue thisval, NNValu
     (void)argc;
     selfval = thisval;
     return (nn_value_makebool(
-        nn_value_isclass(selfval) ||
-        nn_value_isfuncscript(selfval) ||
-        nn_value_isfuncclosure(selfval) ||
-        nn_value_isfuncbound(selfval) ||
-        nn_value_isfuncnative(selfval)
+        selfval.isClass() ||
+        selfval.isFuncscript() ||
+        selfval.isFuncclosure() ||
+        selfval.isFuncbound() ||
+        selfval.isFuncnative()
     ));
 }
 
@@ -15095,7 +15236,7 @@ static NNValue nn_objfnobject_isbool(NNState* state, NNValue thisval, NNValue* a
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isbool(selfval));
+    return nn_value_makebool(selfval.isBool());
 }
 
 static NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15105,7 +15246,7 @@ static NNValue nn_objfnobject_isnumber(NNState* state, NNValue thisval, NNValue*
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isnumber(selfval));
+    return nn_value_makebool(selfval.isNumber());
 }
 
 static NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15115,7 +15256,7 @@ static NNValue nn_objfnobject_isint(NNState* state, NNValue thisval, NNValue* ar
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isnumber(selfval) && (((int)nn_value_asnumber(selfval)) == nn_value_asnumber(selfval)));
+    return nn_value_makebool(selfval.isNumber() && (((int)selfval.asNumber()) == selfval.asNumber()));
 }
 
 static NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15125,7 +15266,7 @@ static NNValue nn_objfnobject_isdict(NNState* state, NNValue thisval, NNValue* a
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isdict(selfval));
+    return nn_value_makebool(selfval.isDict());
 }
 
 static NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15135,7 +15276,7 @@ static NNValue nn_objfnobject_isobject(NNState* state, NNValue thisval, NNValue*
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isobject(selfval));
+    return nn_value_makebool(selfval.isObject());
 }
 
 static NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15146,10 +15287,10 @@ static NNValue nn_objfnobject_isfunction(NNState* state, NNValue thisval, NNValu
     (void)argc;
     selfval = thisval;
     return nn_value_makebool(
-        nn_value_isfuncscript(selfval) ||
-        nn_value_isfuncclosure(selfval) ||
-        nn_value_isfuncbound(selfval) ||
-        nn_value_isfuncnative(selfval)
+        selfval.isFuncscript() ||
+        selfval.isFuncclosure() ||
+        selfval.isFuncbound() ||
+        selfval.isFuncnative()
     );
 }
 
@@ -15163,8 +15304,8 @@ static NNValue nn_objfnobject_isiterable(NNState* state, NNValue thisval, NNValu
     (void)argv;
     (void)argc;
     selfval = thisval;
-    isiterable = nn_value_isarray(selfval) || nn_value_isdict(selfval) || nn_value_isstring(selfval);
-    if(!isiterable && nn_value_isinstance(selfval))
+    isiterable = selfval.isArray() || selfval.isDict() || selfval.isString();
+    if(!isiterable && selfval.isInstance())
     {
         klass = nn_value_asinstance(selfval)->klass;
         isiterable = klass->instmethods.get(nn_value_fromobject(nn_string_intern("@iter")), &dummy)
@@ -15180,7 +15321,7 @@ static NNValue nn_objfnobject_isclass(NNState* state, NNValue thisval, NNValue* 
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isclass(selfval));
+    return nn_value_makebool(selfval.isClass());
 }
 
 static NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15190,7 +15331,7 @@ static NNValue nn_objfnobject_isfile(NNState* state, NNValue thisval, NNValue* a
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isfile(selfval));
+    return nn_value_makebool(selfval.isFile());
 }
 
 static NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15200,7 +15341,7 @@ static NNValue nn_objfnobject_isinstance(NNState* state, NNValue thisval, NNValu
     (void)argv;
     (void)argc;
     selfval = thisval;
-    return nn_value_makebool(nn_value_isinstance(selfval));
+    return nn_value_makebool(selfval.isInstance());
 }
 
 
@@ -15244,7 +15385,7 @@ void nn_state_installobjectobject(NNState* state)
 
     nn_class_defstaticnativemethod(state->classprimobject, nn_string_intern("typename"), nn_objfnobject_typename);
     nn_class_defstaticcallablefield(state->classprimobject, nn_string_intern("prototype"), nn_objfnobject_getselfinstance);
-    nn_state_installmethods(state, state->classprimobject, objectmethods);
+    nn_state_installmethods(state->classprimobject, objectmethods);
     {
         nn_class_defstaticcallablefield(state->classprimclass, nn_string_intern("name"), nn_objfnclass_getselfname);
     }
@@ -15296,7 +15437,7 @@ static NNValue nn_objfnprocess_exit(NNState* state, NNValue thisval, NNValue* ar
     rc = 0;
     if(argc > 0)
     {
-        rc = nn_value_asnumber(argv[0]);
+        rc = argv[0].asNumber();
     }
     exit(rc);
     return nn_value_makenull();
@@ -15309,8 +15450,8 @@ static NNValue nn_objfnprocess_kill(NNState* state, NNValue thisval, NNValue* ar
     SCRIPTFN_UNUSED(state);
     (void)thisval;
     (void)argc;
-    pid = nn_value_asnumber(argv[0]);
-    code = nn_value_asnumber(argv[1]);
+    pid = argv[0].asNumber();
+    code = argv[1].asNumber();
     osfn_kill(pid, code);
     return nn_value_makenull();
 }
@@ -15368,7 +15509,7 @@ static NNValue nn_objfnrange_iter(NNState* state, NNValue thisval, NNValue* argv
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     range = nn_value_asrange(thisval);
-    index = nn_value_asnumber(argv[0]);
+    index = argv[0].asNumber();
     if(index >= 0 && index < range->range)
     {
         if(index == 0)
@@ -15404,11 +15545,11 @@ static NNValue nn_objfnrange_itern(NNState* state, NNValue thisval, NNValue* arg
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(argv[0]))
+    if(!argv[0].isNumber())
     {
         NEON_RETURNERROR("ranges are numerically indexed");
     }
-    index = (int)nn_value_asnumber(argv[0]) + 1;
+    index = (int)argv[0].asNumber() + 1;
     if(index < range->range)
     {
         return nn_value_makenumber(index);
@@ -15422,6 +15563,7 @@ static NNValue nn_objfnrange_expand(NNState* state, NNValue thisval, NNValue* ar
     NNValue val;
     NNObjRange* range;
     NNObjArray* oa;
+    (void)state;
     (void)argv;
     (void)argc;
     range = nn_value_asrange(thisval);
@@ -15439,10 +15581,11 @@ static NNValue nn_objfnrange_constructor(NNState* state, NNValue thisval, NNValu
     int a;
     int b;
     NNObjRange* orng;
+    (void)state;
     (void)thisval;
     (void)argc;
-    a = nn_value_asnumber(argv[0]);
-    b = nn_value_asnumber(argv[1]);
+    a = argv[0].asNumber();
+    b = argv[1].asNumber();
     orng = nn_object_makerange(a, b);
     return nn_value_fromobject(orng);
 }
@@ -15461,7 +15604,7 @@ void nn_state_installobjectrange(NNState* state)
         {nullptr, nullptr},
     };
     nn_class_defnativeconstructor(state->classprimrange, nn_objfnrange_constructor);
-    nn_state_installmethods(state, state->classprimrange, rangemethods);    
+    nn_state_installmethods(state->classprimrange, rangemethods);    
 }
 
 static NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -15473,7 +15616,7 @@ static NNValue nn_objfnstring_utf8numbytes(NNState* state, NNValue thisval, NNVa
     nn_argcheck_init(state, &check, "utf8NumBytes", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    incode = nn_value_asnumber(argv[0]);
+    incode = argv[0].asNumber();
     res = nn_util_utf8numbytes(incode);
     return nn_value_makenumber(res);
 }
@@ -15487,7 +15630,7 @@ static NNValue nn_objfnstring_utf8decode(NNState* state, NNValue thisval, NNValu
     nn_argcheck_init(state, &check, "utf8Decode", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    instr = nn_value_asstring(argv[0]);
+    instr = argv[0].asString();
     res = nn_util_utf8decode((const uint8_t*)nn_string_getdata(instr), nn_string_getlength(instr));
     return nn_value_makenumber(res);
 }
@@ -15503,13 +15646,13 @@ static NNValue nn_objfnstring_utf8encode(NNState* state, NNValue thisval, NNValu
     nn_argcheck_init(state, &check, "utf8Encode", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    incode = nn_value_asnumber(argv[0]);
+    incode = argv[0].asNumber();
     buf = nn_util_utf8encode(incode, &len);
     res = nn_string_takelen(buf, len);
     return nn_value_fromobject(res);
 }
 
-static NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc, bool onlycodepoint)
+static NNValue nn_objfnutilstring_utf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc, bool onlycodepoint)
 {
     int cp;
     bool havemax;
@@ -15520,12 +15663,13 @@ static NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue*
     NNObjString* os;
     NNObjString* instr;
     utf8iterator_t iter;
+    (void)state;
     havemax = false;
-    instr = nn_value_asstring(thisval);
+    instr = thisval.asString();
     if(argc > 0)
     {
         havemax = true;
-        maxamount = nn_value_asnumber(argv[0]);
+        maxamount = argv[0].asNumber();
     }
     res = nn_array_make();
     nn_utf8iter_init(&iter, nn_string_getdata(instr), nn_string_getlength (instr));
@@ -15558,12 +15702,12 @@ static NNValue nn_util_stringutf8chars(NNState* state, NNValue thisval, NNValue*
 
 static NNValue nn_objfnstring_utf8chars(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_util_stringutf8chars(state, thisval, argv, argc, false);
+    return nn_objfnutilstring_utf8chars(state, thisval, argv, argc, false);
 }
 
 static NNValue nn_objfnstring_utf8codepoints(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
-    return nn_util_stringutf8chars(state, thisval, argv, argc, true);
+    return nn_objfnutilstring_utf8chars(state, thisval, argv, argc, true);
 }
 
 
@@ -15576,7 +15720,7 @@ static NNValue nn_objfnstring_fromcharcode(NNState* state, NNValue thisval, NNVa
     nn_argcheck_init(state, &check, "fromCharCode", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    ch = nn_value_asnumber(argv[0]);
+    ch = argv[0].asNumber();
     os = nn_string_copylen(&ch, 1);
     return nn_value_fromobject(os);
 }
@@ -15598,11 +15742,11 @@ static NNValue nn_objfnstring_length(NNState* state, NNValue thisval, NNValue* a
     NNObjString* selfstr;
     nn_argcheck_init(state, &check, "length", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     return nn_value_makenumber(nn_string_getlength(selfstr));
 }
 
-static NNValue nn_string_fromrange(NNState* state, const char* buf, int len)
+static NNValue nn_string_fromrange(const char* buf, int len)
 {
     NNObjString* str;
     if(len <= 0)
@@ -15659,15 +15803,15 @@ static NNValue nn_objfnstring_substring(NNState* state, NNValue thisval, NNValue
     NNObjString* selfstr;
     NNArgCheck check;
     nn_argcheck_init(state, &check, "substring", argv, argc);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
     maxlen = nn_string_getlength(selfstr);
     end = maxlen;
-    start = nn_value_asnumber(argv[0]);
+    start = argv[0].asNumber();
     if(argc > 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        end = nn_value_asnumber(argv[1]);
+        end = argv[1].asNumber();
     }
     nos = nn_string_substring(selfstr, start, end, true);
     return nn_value_fromobject(nos);
@@ -15683,8 +15827,8 @@ static NNValue nn_objfnstring_charcodeat(NNState* state, NNValue thisval, NNValu
     nn_argcheck_init(state, &check, "charCodeAt", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(thisval);
-    idx = nn_value_asnumber(argv[0]);
+    selfstr = thisval.asString();
+    idx = argv[0].asNumber();
     selflen = (int)nn_string_getlength(selfstr);
     if((idx < 0) || (idx >= selflen))
     {
@@ -15707,8 +15851,8 @@ static NNValue nn_objfnstring_charat(NNState* state, NNValue thisval, NNValue* a
     nn_argcheck_init(state, &check, "charAt", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    selfstr = nn_value_asstring(thisval);
-    idx = nn_value_asnumber(argv[0]);
+    selfstr = thisval.asString();
+    idx = argv[0].asNumber();
     selflen = (int)nn_string_getlength(selfstr);
     if((idx < 0) || (idx >= selflen))
     {
@@ -15729,7 +15873,7 @@ static NNValue nn_objfnstring_upper(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "upper", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(thisval);
+    str = thisval.asString();
     slen = nn_string_getlength(str);
     string = nn_util_strtoupper(nn_string_mutdata(str), slen);
     return nn_value_fromobject(nn_string_copylen(string, slen));
@@ -15743,7 +15887,7 @@ static NNValue nn_objfnstring_lower(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "lower", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    str = nn_value_asstring(thisval);
+    str = thisval.asString();
     slen = nn_string_getlength(str);
     string = nn_util_strtolower(nn_string_mutdata(str), slen);
     return nn_value_fromobject(nn_string_copylen(string, slen));
@@ -15757,7 +15901,7 @@ static NNValue nn_objfnstring_isalpha(NNState* state, NNValue thisval, NNValue* 
     NNObjString* selfstr;
     nn_argcheck_init(state, &check, "isAlpha", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
     {
@@ -15777,7 +15921,7 @@ static NNValue nn_objfnstring_isalnum(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isAlnum", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
     {
@@ -15798,7 +15942,7 @@ static NNValue nn_objfnstring_isfloat(NNState* state, NNValue thisval, NNValue* 
     (void)f;
     nn_argcheck_init(state, &check, "isFloat", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     errno = 0;
     if(nn_string_getlength(selfstr) ==0)
     {
@@ -15827,7 +15971,7 @@ static NNValue nn_objfnstring_isnumber(NNState* state, NNValue thisval, NNValue*
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isNumber", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
     {
@@ -15848,7 +15992,7 @@ static NNValue nn_objfnstring_islower(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isLower", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     alphafound = false;
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
@@ -15874,7 +16018,7 @@ static NNValue nn_objfnstring_isupper(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isUpper", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     alphafound = false;
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
@@ -15899,7 +16043,7 @@ static NNValue nn_objfnstring_isspace(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "isSpace", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     len = nn_string_getlength(selfstr);
     for(i = 0; i < len; i++)
     {
@@ -15923,9 +16067,9 @@ static NNValue nn_objfnstring_trim(NNState* state, NNValue thisval, NNValue* arg
     trimmer = '\0';
     if(argc == 1)
     {
-        trimmer = (char)nn_string_get(nn_value_asstring(argv[0]), 0);
+        trimmer = (char)nn_string_get(argv[0].asString(), 0);
     }
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     string = nn_string_mutdata(selfstr);
     end = nullptr;
     /* Trim leading space*/
@@ -15980,9 +16124,9 @@ static NNValue nn_objfnstring_ltrim(NNState* state, NNValue thisval, NNValue* ar
     trimmer = '\0';
     if(argc == 1)
     {
-        trimmer = (char)nn_string_get(nn_value_asstring(argv[0]), 0);
+        trimmer = (char)nn_string_get(argv[0].asString(), 0);
     }
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     string = nn_string_mutdata(selfstr);
     end = nullptr;
     /* Trim leading space */
@@ -16022,9 +16166,9 @@ static NNValue nn_objfnstring_rtrim(NNState* state, NNValue thisval, NNValue* ar
     trimmer = '\0';
     if(argc == 1)
     {
-        trimmer = (char)nn_string_get(nn_value_asstring(argv[0]), 0);
+        trimmer = (char)nn_string_get(argv[0].asString(), 0);
     }
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     string = nn_string_mutdata(selfstr);
     end = nullptr;
     /* All spaces? */
@@ -16063,13 +16207,13 @@ static NNValue nn_objfnstring_indexof(NNState* state, NNValue thisval, NNValue* 
     nn_argcheck_init(state, &check, "indexOf", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    needle = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    needle = argv[0].asString();
     startindex = 0;
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        startindex = nn_value_asnumber(argv[1]);
+        startindex = argv[1].asNumber();
     }
     if(nn_string_getlength(string) > 0 && nn_string_getlength(needle) > 0)
     {
@@ -16091,8 +16235,8 @@ static NNValue nn_objfnstring_startswith(NNState* state, NNValue thisval, NNValu
     nn_argcheck_init(state, &check, "startsWith", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    substr = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    substr = argv[0].asString();
     if(nn_string_getlength(string) == 0 || nn_string_getlength(substr) == 0 || nn_string_getlength(substr) > nn_string_getlength(string))
     {
         return nn_value_makebool(false);
@@ -16109,8 +16253,8 @@ static NNValue nn_objfnstring_endswith(NNState* state, NNValue thisval, NNValue*
     nn_argcheck_init(state, &check, "endsWith", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    substr = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    substr = argv[0].asString();
     if(nn_string_getlength(string) == 0 || nn_string_getlength(substr) == 0 || nn_string_getlength(substr) > nn_string_getlength(string))
     {
         return nn_value_makebool(false);
@@ -16202,8 +16346,8 @@ static NNValue nn_objfnstring_matchcapture(NNState* state, NNValue thisval, NNVa
     nn_argcheck_init(state, &check, "match", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    pattern = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    pattern = argv[0].asString();
     return nn_util_stringregexmatch(state, string, pattern, true);
 }
 
@@ -16215,8 +16359,8 @@ static NNValue nn_objfnstring_matchonly(NNState* state, NNValue thisval, NNValue
     nn_argcheck_init(state, &check, "match", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    pattern = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    pattern = argv[0].asString();
     return nn_util_stringregexmatch(state, string, pattern, false);
 }
 
@@ -16230,8 +16374,8 @@ static NNValue nn_objfnstring_count(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "count", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    substr = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    substr = argv[0].asString();
     if(nn_string_getlength(substr) == 0 || nn_string_getlength(string) == 0)
     {
         return nn_value_makenumber(0);
@@ -16252,7 +16396,7 @@ static NNValue nn_objfnstring_tonumber(NNState* state, NNValue thisval, NNValue*
     NNArgCheck check;
     nn_argcheck_init(state, &check, "toNumber", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    selfstr = nn_value_asstring(thisval);
+    selfstr = thisval.asString();
     return nn_value_makenumber(strtod(nn_string_getdata(selfstr), nullptr));
 }
 
@@ -16266,7 +16410,7 @@ static NNValue nn_objfnstring_isascii(NNState* state, NNValue thisval, NNValue* 
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isbool);
     }
-    string = nn_value_asstring(thisval);
+    string = thisval.asString();
     return nn_value_fromobject(string);
 }
 
@@ -16281,8 +16425,8 @@ static NNValue nn_objfnstring_tolist(NNState* state, NNValue thisval, NNValue* a
     NNArgCheck check;
     nn_argcheck_init(state, &check, "toList", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    string = nn_value_asstring(thisval);
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    string = thisval.asString();
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     length = nn_string_getlength(string);
     if(length > 0)
     {
@@ -16305,8 +16449,8 @@ static NNValue nn_objfnstring_tobytes(NNState* state, NNValue thisval, NNValue* 
     NNArgCheck check;
     nn_argcheck_init(state, &check, "toBytes", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 0);
-    string = nn_value_asstring(thisval);
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    string = thisval.asString();
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     length = nn_string_getlength(string);
     if(length > 0)
     {
@@ -16334,12 +16478,12 @@ static NNValue nn_objfnstring_lpad(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "lpad", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(thisval);
-    width = nn_value_asnumber(argv[0]);
+    string = thisval.asString();
+    width = argv[0].asNumber();
     fillchar = ' ';
     if(argc == 2)
     {
-        ofillstr = nn_value_asstring(argv[1]);
+        ofillstr = argv[1].asString();
         fillchar = nn_string_get(ofillstr, 0);
     }
     if(width <= nn_string_getlength(string))
@@ -16379,12 +16523,12 @@ static NNValue nn_objfnstring_rpad(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "rpad", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(thisval);
-    width = nn_value_asnumber(argv[0]);
+    string = thisval.asString();
+    width = argv[0].asNumber();
     fillchar = ' ';
     if(argc == 2)
     {
-        ofillstr = nn_value_asstring(argv[1]);
+        ofillstr = argv[1].asString();
         fillchar = nn_string_get(ofillstr, 0);
     }
     if(width <= nn_string_getlength(string))
@@ -16421,14 +16565,14 @@ static NNValue nn_objfnstring_split(NNState* state, NNValue thisval, NNValue* ar
     nn_argcheck_init(state, &check, "split", argv, argc);
     NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    delimeter = nn_value_asstring(argv[0]);
+    string = thisval.asString();
+    delimeter = argv[0].asString();
     /* empty string matches empty string to empty list */
     if(((nn_string_getlength(string) == 0) && (nn_string_getlength(delimeter) == 0)) || (nn_string_getlength(string) == 0) || (nn_string_getlength(delimeter) == 0))
     {
         return nn_value_fromobject(nn_object_makearray());
     }
-    list = (NNObjArray*)nn_gcmem_protect(state, (NNObject*)nn_object_makearray());
+    list = (NNObjArray*)nn_gcmem_protect((NNObject*)nn_object_makearray());
     if(nn_string_getlength(delimeter) > 0)
     {
         start = 0;
@@ -16471,9 +16615,9 @@ static NNValue nn_objfnstring_replace(NNState* state, NNValue thisval, NNValue* 
     NEON_ARGS_CHECKCOUNTRANGE(&check, 2, 3);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-    string = nn_value_asstring(thisval);
-    substr = nn_value_asstring(argv[0]);
-    repsubstr = nn_value_asstring(argv[1]);
+    string = thisval.asString();
+    substr = argv[0].asString();
+    repsubstr = argv[1].asString();
     if((nn_string_getlength(string) == 0 && nn_string_getlength(substr) == 0) || nn_string_getlength(string) == 0 || nn_string_getlength(substr) == 0)
     {
         return nn_value_fromobject(nn_string_copylen(nn_string_getdata(string), nn_string_getlength(string)));
@@ -16511,9 +16655,9 @@ static NNValue nn_objfnstring_iter(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "iter", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    string = nn_value_asstring(thisval);
+    string = thisval.asString();
     length = nn_string_getlength(string);
-    index = nn_value_asnumber(argv[0]);
+    index = argv[0].asNumber();
     if(((int)index > -1) && (index < length))
     {
         result = nn_string_copylen(&nn_string_getdata(string)[index], 1);
@@ -16530,7 +16674,7 @@ static NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "itern", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    string = nn_value_asstring(thisval);
+    string = thisval.asString();
     length = nn_string_getlength(string);
     if(argv[0].isNull())
     {
@@ -16540,11 +16684,11 @@ static NNValue nn_objfnstring_itern(NNState* state, NNValue thisval, NNValue* ar
         }
         return nn_value_makenumber(0);
     }
-    if(!nn_value_isnumber(argv[0]))
+    if(!argv[0].isNumber())
     {
         NEON_RETURNERROR("strings are numerically indexed");
     }
-    index = nn_value_asnumber(argv[0]);
+    index = argv[0].asNumber();
     if(index < length - 1)
     {
         return nn_value_makenumber((double)index + 1);
@@ -16565,7 +16709,7 @@ static NNValue nn_objfnstring_each(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "each", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_iscallable);
-    string = nn_value_asstring(thisval);
+    string = thisval.asString();
     callable = argv[0];
     arity = nn_nestcall_prepare(callable, thisval, nestargs, 2);
     for(i = 0; i < nn_string_getlength(string); i++)
@@ -16593,13 +16737,14 @@ static NNValue nn_objfnstring_appendany(NNState* state, NNValue thisval, NNValue
     NNValue arg;
     NNObjString* oss;
     NNObjString* selfstring;
-    selfstring = nn_value_asstring(thisval);
+    (void)state;
+    selfstring = thisval.asString();
     for(i = 0; i < argc; i++)
     {
         arg = argv[i];
-        if(nn_value_isnumber(arg))
+        if(arg.isNumber())
         {
-            nn_string_appendbyte(selfstring, nn_value_asnumber(arg));
+            nn_string_appendbyte(selfstring, arg.asNumber());
         }
         else
         {
@@ -16616,13 +16761,13 @@ static NNValue nn_objfnstring_appendbytes(NNState* state, NNValue thisval, NNVal
     size_t i;
     NNValue arg;
     NNObjString* selfstring;
-    selfstring = nn_value_asstring(thisval);
+    selfstring = thisval.asString();
     for(i = 0; i < argc; i++)
     {
         arg = argv[i];
-        if(nn_value_isnumber(arg))
+        if(arg.isNumber())
         {
-            nn_string_appendbyte(selfstring, nn_value_asnumber(arg));
+            nn_string_appendbyte(selfstring, arg.asNumber());
         }
         else
         {
@@ -16686,7 +16831,7 @@ void nn_state_installobjectstring(NNState* state)
     nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern("utf8Encode"), nn_objfnstring_utf8encode);
     nn_class_defstaticnativemethod(state->classprimstring, nn_string_intern("utf8NumBytes"), nn_objfnstring_utf8numbytes);
     nn_class_defcallablefield(state->classprimstring, nn_string_intern("length"), nn_objfnstring_length);
-    nn_state_installmethods(state, state->classprimstring, stringmethods);
+    nn_state_installmethods(state->classprimstring, stringmethods);
 
 }
 
@@ -16709,7 +16854,7 @@ static NNValue nn_modfn_astscan_scan(NNState* state, NNValue thisval, NNValue* a
     (void)thisval;
     nn_argcheck_init(state, &check, "scan", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    insrc = nn_value_asstring(argv[0]);
+    insrc = argv[0].asString();
     scn = nn_astlex_make(state, nn_string_getdata(insrc));
     arr = nn_array_make();
     while(!nn_astlex_isatend(scn))
@@ -16761,7 +16906,7 @@ struct NNUClassComplex
     double im;
 };
 
-static NNValue nn_pcomplex_makeinstance(NNState* state, NNObjClass* klass, double re, double im)
+static NNValue nn_pcomplex_makeinstance(NNObjClass* klass, double re, double im)
 {
     NNUClassComplex* inst;
     inst = (NNUClassComplex*)nn_object_makeinstancesize(klass, sizeof(NNUClassComplex));
@@ -16774,11 +16919,12 @@ static NNValue nn_pcomplex_makeinstance(NNState* state, NNObjClass* klass, doubl
 static NNValue nn_complexclass_constructor(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
 {
     NNUClassComplex* inst;
+    (void)state;
     (void)thisval;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
-    return nn_pcomplex_makeinstance(state, ((NNObjInstance*)inst)->klass, nn_value_asnumber(argv[0]), nn_value_asnumber(argv[1]));
+    return nn_pcomplex_makeinstance(((NNObjInstance*)inst)->klass, argv[0].asNumber(), argv[1].asNumber());
 }
 
 static NNValue nn_complexclass_opadd(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16787,13 +16933,14 @@ static NNValue nn_complexclass_opadd(NNState* state, NNValue thisval, NNValue* a
     NNUClassComplex* inst;
     NNUClassComplex* pv;
     NNUClassComplex* other;
+    (void)state;
     (void)argc;
     vother = argv[0];
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
     other = (NNUClassComplex*)nn_value_asinstance(vother);
-    return nn_pcomplex_makeinstance(state, ((NNObjInstance*)inst)->klass, pv->re + other->re, pv->im + other->im);
+    return nn_pcomplex_makeinstance(((NNObjInstance*)inst)->klass, pv->re + other->re, pv->im + other->im);
 }
 
 static NNValue nn_complexclass_opsub(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16802,13 +16949,14 @@ static NNValue nn_complexclass_opsub(NNState* state, NNValue thisval, NNValue* a
     NNUClassComplex* inst;
     NNUClassComplex* pv;
     NNUClassComplex* other;
+    (void)state;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     vother = argv[0];
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
     other = (NNUClassComplex*)nn_value_asinstance(vother);
-    return nn_pcomplex_makeinstance(state, ((NNObjInstance*)inst)->klass, pv->re - other->re, pv->im - other->im);
+    return nn_pcomplex_makeinstance(((NNObjInstance*)inst)->klass, pv->re - other->re, pv->im - other->im);
 }
 
 static NNValue nn_complexclass_opmul(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16819,15 +16967,16 @@ static NNValue nn_complexclass_opmul(NNState* state, NNValue thisval, NNValue* a
     NNUClassComplex* inst;
     NNUClassComplex* pv;
     NNUClassComplex* other;
+    (void)state;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     vother = argv[0];
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
     other = (NNUClassComplex*)nn_value_asinstance(vother);
     vre = (pv->re * other->re - pv->im * other->im);
     vim = (pv->re * other->im + pv->im * other->re);
-    return nn_pcomplex_makeinstance(state, ((NNObjInstance*)inst)->klass, vre, vim);
+    return nn_pcomplex_makeinstance(((NNObjInstance*)inst)->klass, vre, vim);
 }
 
 static NNValue nn_complexclass_opdiv(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16840,8 +16989,9 @@ static NNValue nn_complexclass_opdiv(NNState* state, NNValue thisval, NNValue* a
     NNUClassComplex* inst;
     NNUClassComplex* pv;
     NNUClassComplex* other;
+    (void)state;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     vother = argv[0];
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
@@ -16864,7 +17014,7 @@ static NNValue nn_complexclass_opdiv(NNState* state, NNValue thisval, NNValue* a
         r = -pv->im;
         i = pv->re;
     }
-    return nn_pcomplex_makeinstance(state, ((NNObjInstance*)inst)->klass, (r * ti + i) / tr, (i * ti - r) / tr);
+    return nn_pcomplex_makeinstance(((NNObjInstance*)inst)->klass, (r * ti + i) / tr, (i * ti - r) / tr);
 }
 
 static NNValue nn_complexclass_getre(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16874,7 +17024,7 @@ static NNValue nn_complexclass_getre(NNState* state, NNValue thisval, NNValue* a
     SCRIPTFN_UNUSED(state);
     (void)argv;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
     return nn_value_makenumber(pv->re);
@@ -16887,7 +17037,7 @@ static NNValue nn_complexclass_getim(NNState* state, NNValue thisval, NNValue* a
     SCRIPTFN_UNUSED(state);
     (void)argv;
     (void)argc;
-    assert(nn_value_isinstance(thisval));
+    assert(thisval.isInstance());
     inst = (NNUClassComplex*)nn_value_asinstance(thisval);
     pv = (NNUClassComplex*)inst;
     return nn_value_makenumber(pv->im);
@@ -16978,7 +17128,7 @@ static NNValue nn_nativefn_int(NNState* state, NNValue thisval, NNValue* argv, s
         return nn_value_makenumber(0);
     }
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    return nn_value_makenumber((double)((int)nn_value_asnumber(argv[0])));
+    return nn_value_makenumber((double)((int)argv[0].asNumber()));
 }
 
 static NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, size_t argc)
@@ -16991,7 +17141,7 @@ static NNValue nn_nativefn_chr(NNState* state, NNValue thisval, NNValue* argv, s
     nn_argcheck_init(state, &check, "chr", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-    ch = nn_value_asnumber(argv[0]);
+    ch = argv[0].asNumber();
     string = nn_util_utf8encode(ch, &len);
     return nn_value_fromobject(nn_string_takelen(string, len));
 }
@@ -17006,7 +17156,7 @@ static NNValue nn_nativefn_ord(NNState* state, NNValue thisval, NNValue* argv, s
     nn_argcheck_init(state, &check, "ord", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    string = nn_value_asstring(argv[0]);
+    string = argv[0].asString();
     length = nn_string_getlength(string);
     if(length > 1)
     {
@@ -17034,12 +17184,12 @@ static NNValue nn_nativefn_rand(NNState* state, NNValue thisval, NNValue* argv, 
     if(argc > 0)
     {
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
-        lowerlimit = nn_value_asnumber(argv[0]);
+        lowerlimit = argv[0].asNumber();
     }
     if(argc == 2)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-        upperlimit = nn_value_asnumber(argv[1]);
+        upperlimit = argv[1].asNumber();
     }
     if(lowerlimit > upperlimit)
     {
@@ -17058,7 +17208,7 @@ static NNValue nn_nativefn_eval(NNState* state, NNValue thisval, NNValue* argv, 
     (void)thisval;
     nn_argcheck_init(state, &check, "eval", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(argv[0]);
+    os = argv[0].asString();
     /*fprintf(stderr, "eval:src=%s\n", nn_string_getdata(os));*/
     result = nn_state_evalsource(state, nn_string_getdata(os));
     return result;
@@ -17072,7 +17222,7 @@ static NNValue nn_nativefn_loadfile(NNState* state, NNValue thisval, NNValue* ar
     NNArgCheck check;
     nn_argcheck_init(state, &check, "loadfile", argv, argc);
     NEON_ARGS_CHECKCOUNT(&check, 1);
-    os = nn_value_asstring(argv[0]);
+    os = argv[0].asString();
     fprintf(stderr, "eval:src=%s\n", nn_string_getdata(os));
     result = nn_state_evalsource(state, nn_string_getdata(os));
     return result;
@@ -17101,7 +17251,7 @@ static NNValue nn_nativefn_sprintf(NNState* state, NNValue thisval, NNValue* arg
     nn_argcheck_init(state, &check, "sprintf", argv, argc);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(argv[0]);
+    ofmt = argv[0].asString();
     nn_iostream_makestackstring(&pr);
     nn_strformat_init(state, &nfi, &pr, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
@@ -17122,7 +17272,7 @@ static NNValue nn_nativefn_printf(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "printf", argv, argc);
     NEON_ARGS_CHECKMINARG(&check, 1);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    ofmt = nn_value_asstring(argv[0]);
+    ofmt = argv[0].asString();
     nn_strformat_init(state, &nfi, state->stdoutprinter, nn_string_getdata(ofmt), nn_string_getlength(ofmt));
     if(!nn_strformat_format(&nfi, argc, 1, argv))
     {
@@ -17164,6 +17314,7 @@ static NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* 
     NNValue v;
     NNIOStream pr;
     NNObjString* os;
+    (void)state;
     (void)thisval;
     (void)argc;
     v = argv[0];
@@ -17181,22 +17332,22 @@ static NNValue nn_objfnjson_stringify(NNState* state, NNValue thisval, NNValue* 
 void nn_state_initbuiltinfunctions(NNState* state)
 {
     NNObjClass* klass;
-    nn_state_defnativefunction(state, "chr", nn_nativefn_chr);
-    nn_state_defnativefunction(state, "id", nn_nativefn_id);
-    nn_state_defnativefunction(state, "int", nn_nativefn_int);
-    nn_state_defnativefunction(state, "instanceof", nn_nativefn_instanceof);
-    nn_state_defnativefunction(state, "ord", nn_nativefn_ord);
-    nn_state_defnativefunction(state, "sprintf", nn_nativefn_sprintf);
-    nn_state_defnativefunction(state, "printf", nn_nativefn_printf);
-    nn_state_defnativefunction(state, "print", nn_nativefn_print);
-    nn_state_defnativefunction(state, "println", nn_nativefn_println);
-    nn_state_defnativefunction(state, "rand", nn_nativefn_rand);
-    nn_state_defnativefunction(state, "eval", nn_nativefn_eval);
-    nn_state_defnativefunction(state, "isNaN", nn_nativefn_isnan);
-    nn_state_defnativefunction(state, "microtime", nn_nativefn_microtime);
-    nn_state_defnativefunction(state, "time", nn_nativefn_time);
+    nn_state_defnativefunction("chr", nn_nativefn_chr);
+    nn_state_defnativefunction("id", nn_nativefn_id);
+    nn_state_defnativefunction("int", nn_nativefn_int);
+    nn_state_defnativefunction("instanceof", nn_nativefn_instanceof);
+    nn_state_defnativefunction("ord", nn_nativefn_ord);
+    nn_state_defnativefunction("sprintf", nn_nativefn_sprintf);
+    nn_state_defnativefunction("printf", nn_nativefn_printf);
+    nn_state_defnativefunction("print", nn_nativefn_print);
+    nn_state_defnativefunction("println", nn_nativefn_println);
+    nn_state_defnativefunction("rand", nn_nativefn_rand);
+    nn_state_defnativefunction("eval", nn_nativefn_eval);
+    nn_state_defnativefunction("isNaN", nn_nativefn_isnan);
+    nn_state_defnativefunction("microtime", nn_nativefn_microtime);
+    nn_state_defnativefunction("time", nn_nativefn_time);
     {
-        klass = nn_util_makeclass(state, "JSON", state->classprimobject);
+        klass = nn_util_makeclass("JSON", state->classprimobject);
         nn_class_defstaticnativemethod(klass, nn_string_copycstr("stringify"), nn_objfnjson_stringify);
     }
 }
@@ -17254,7 +17405,7 @@ static NNValue nn_modfn_os_readdir(NNState* state, NNValue thisval, NNValue* arg
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_iscallable);
 
-    os = nn_value_asstring(argv[0]);
+    os = argv[0].asString();
     callable = argv[1];
     dirn = nn_string_getdata(os);
     if(fslib_diropen(&rd, dirn))
@@ -17291,8 +17442,8 @@ static NNValue nn_modfn_os_$template(NNState* state, NNValue thisval, NNValue* a
     nn_argcheck_init(state, &check, "chmod", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    path = nn_value_asstring(argv[0]);
-    mod = nn_value_asnumber(argv[1]);
+    path = argv[0].asString();
+    mod = argv[1].asNumber();
     r = osfn_chmod(nn_string_getdata(path), mod);
     return nn_value_makenumber(r);
 }
@@ -17308,8 +17459,8 @@ static NNValue nn_modfn_os_chmod(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "chmod", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    path = nn_value_asstring(argv[0]);
-    mod = nn_value_asnumber(argv[1]);
+    path = argv[0].asString();
+    mod = argv[1].asNumber();
     r = osfn_chmod(nn_string_getdata(path), mod);
     return nn_value_makenumber(r);
 }
@@ -17324,8 +17475,8 @@ static NNValue nn_modfn_os_mkdir(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "mkdir", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    path = nn_value_asstring(argv[0]);
-    mod = nn_value_asnumber(argv[1]);
+    path = argv[0].asString();
+    mod = argv[1].asNumber();
     r = osfn_mkdir(nn_string_getdata(path), mod);
     return nn_value_makenumber(r);
 }
@@ -17339,7 +17490,7 @@ static NNValue nn_modfn_os_chdir(NNState* state, NNValue thisval, NNValue* argv,
     (void)thisval;
     nn_argcheck_init(state, &check, "chdir", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     r = osfn_chdir(nn_string_getdata(path));
     return nn_value_makenumber(r);
 }
@@ -17353,7 +17504,7 @@ static NNValue nn_modfn_os_rmdir(NNState* state, NNValue thisval, NNValue* argv,
     nn_argcheck_init(state, &check, "rmdir", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     r = osfn_rmdir(nn_string_getdata(path));
     return nn_value_makenumber(r);
 }
@@ -17366,7 +17517,7 @@ static NNValue nn_modfn_os_unlink(NNState* state, NNValue thisval, NNValue* argv
     (void)thisval;
     nn_argcheck_init(state, &check, "unlink", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     r = osfn_unlink(nn_string_getdata(path));
     return nn_value_makenumber(r);
 }
@@ -17379,7 +17530,7 @@ static NNValue nn_modfn_os_getenv(NNState* state, NNValue thisval, NNValue* argv
     (void)thisval;
     nn_argcheck_init(state, &check, "getenv", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    key = nn_value_asstring(argv[0]);
+    key = argv[0].asString();
     r = osfn_getenv(nn_string_getdata(key));
     if(r == nullptr)
     {
@@ -17397,8 +17548,8 @@ static NNValue nn_modfn_os_setenv(NNState* state, NNValue thisval, NNValue* argv
     nn_argcheck_init(state, &check, "setenv", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
     NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-    key = nn_value_asstring(argv[0]);
-    value = nn_value_asstring(argv[1]);
+    key = argv[0].asString();
+    value = argv[1].asString();
     return nn_value_makebool(osfn_setenv(nn_string_getdata(key), nn_string_getdata(value), true));
 }
 
@@ -17436,7 +17587,7 @@ static NNValue nn_modfn_os_basename(NNState* state, NNValue thisval, NNValue* ar
     (void)thisval;
     nn_argcheck_init(state, &check, "basename", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     r = osfn_basename(nn_string_getdata(path));
     if(r == nullptr)
     {
@@ -17453,7 +17604,7 @@ static NNValue nn_modfn_os_dirname(NNState* state, NNValue thisval, NNValue* arg
     (void)thisval;
     nn_argcheck_init(state, &check, "dirname", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     r = osfn_dirname(nn_string_getdata(path));
     if(r == nullptr)
     {
@@ -17470,7 +17621,7 @@ static NNValue nn_modfn_os_touch(NNState* state, NNValue thisval, NNValue* argv,
     (void)thisval;
     nn_argcheck_init(state, &check, "touch", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     fh = fopen(nn_string_getdata(path), "rb");
     if(fh == nullptr)
     {
@@ -17511,11 +17662,11 @@ NNValue nn_modfn_os_stat(NNState* state, NNValue thisval, NNValue* argv, size_t 
     md = nullptr;
     nn_argcheck_init(state, &check, "stat", argv, argc);
     NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isstring);
-    path = nn_value_asstring(argv[0]);
+    path = argv[0].asString();
     if(argc > 1)
     {
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isstring);
-        keywanted = nn_value_asstring(argv[1]);
+        keywanted = argv[1].asString();
         havekey = true;
     }
     strp = nn_string_getdata(path);
@@ -17592,32 +17743,33 @@ NNDefModule* nn_natmodule_load_os()
 /* initial amount of stack values (will grow dynamically if needed) */
 #define NEON_CONFIG_INITSTACKCOUNT (4 * 1)
 
-void nn_vm_initvmstate(NNState* state)
+void nn_vm_initvmstate()
 {
     size_t finalsz;
-    GCSingleton::get()->linkedobjects = nullptr;
-    GCSingleton::get()->vmstate.currentframe = nullptr;
+    auto gcs = GCSingleton::get();
+    gcs->linkedobjects = nullptr;
+    gcs->m_vmstate.currentframe = nullptr;
     {
-        GCSingleton::get()->vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
+        gcs->m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
         finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(NNValue);
-        GCSingleton::get()->vmstate.stackvalues = (NNValue*)nn_memory_malloc(finalsz);
-        if(GCSingleton::get()->vmstate.stackvalues == nullptr)
+        gcs->m_vmstate.stackvalues = (NNValue*)nn_memory_malloc(finalsz);
+        if(gcs->m_vmstate.stackvalues == nullptr)
         {
             fprintf(stderr, "error: failed to allocate stackvalues!\n");
             abort();
         }
-        memset(GCSingleton::get()->vmstate.stackvalues, 0, finalsz);
+        memset(gcs->m_vmstate.stackvalues, 0, finalsz);
     }
     {
-        GCSingleton::get()->vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
+        gcs->m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
         finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(NNCallFrame);
-        GCSingleton::get()->vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(finalsz);
-        if(GCSingleton::get()->vmstate.framevalues == nullptr)
+        gcs->m_vmstate.framevalues = (NNCallFrame*)nn_memory_malloc(finalsz);
+        if(gcs->m_vmstate.framevalues == nullptr)
         {
             fprintf(stderr, "error: failed to allocate framevalues!\n");
             abort();
         }
-        memset(GCSingleton::get()->vmstate.framevalues, 0, finalsz);
+        memset(gcs->m_vmstate.framevalues, 0, finalsz);
     }
 }
 
@@ -17642,130 +17794,13 @@ NEON_INLINE void nn_vm_resizeinfo(const char* context, NNObjFunction* closure, s
 }
 
 
-/**
-* grows vmstate.(stack|frame)values, respectively.
-* currently it works fine with mob.js (man-or-boy test), although
-* there are still some invalid reads regarding the closure;
-* almost definitely because the pointer address changes.
-*
-* currently, the implementation really does just increase the
-* memory block available:
-* i.e., [NNValue x 32] -> [NNValue x <newsize>], without
-* copying anything beyond primitive values.
-*/
-NEON_INLINE bool nn_vm_resizestack(NNState* state, NNObjFunction* closure, size_t needed)
-{
-    size_t oldsz;
-    size_t newsz;
-    size_t allocsz;
-    size_t nforvals;
-    NNValue* oldbuf;
-    NNValue* newbuf;
-    nforvals = (needed * 2);
-    oldsz = GCSingleton::get()->vmstate.stackcapacity;
-    newsz = oldsz + nforvals;
-    allocsz = ((newsz + 1) * sizeof(NNValue));
-    if(nn_util_unlikely(state->conf.enableapidebug))
-    {
-        if(closure != nullptr)
-        {
-            nn_vm_resizeinfo("stack", closure, needed);
-        }
-        fprintf(stderr, "*** resizing stack: needed %ld, from %ld to %ld, allocating %ld ***\n", (long)nforvals, (long)oldsz, (long)newsz, (long)allocsz);
-    }
-    oldbuf = GCSingleton::get()->vmstate.stackvalues;
-    newbuf = (NNValue*)nn_memory_realloc(oldbuf, allocsz);
-    if(newbuf == nullptr)
-    {
-        fprintf(stderr, "internal error: failed to resize stackvalues!\n");
-        abort();
-    }
-    GCSingleton::get()->vmstate.stackvalues = (NNValue*)newbuf;
-    GCSingleton::get()->vmstate.stackcapacity = newsz;
-    return true;
-}
 
-NEON_INLINE bool nn_vm_resizeframes(NNState* state, NNObjFunction* closure, size_t needed)
+void nn_state_resetvmstate()
 {
-    /* return false; */
-    size_t i;
-    size_t oldsz;
-    size_t newsz;
-    size_t allocsz;
-    int oldhandlercnt;
-    NNInstruction* oldip;
-    NNObjFunction* oldclosure;
-    NNCallFrame* oldbuf;
-    NNCallFrame* newbuf;
-    (void)i;
-    if(nn_util_unlikely(state->conf.enableapidebug))
-    {
-        if(closure != nullptr)
-        {
-            nn_vm_resizeinfo("frames", closure, needed);
-        }
-        fprintf(stderr, "*** resizing frames ***\n");
-    }
-    oldclosure = GCSingleton::get()->vmstate.currentframe->closure;
-    oldip = GCSingleton::get()->vmstate.currentframe->inscode;
-    oldhandlercnt = GCSingleton::get()->vmstate.currentframe->handlercount;
-    oldsz = GCSingleton::get()->vmstate.framecapacity;
-    newsz = oldsz + needed;
-    allocsz = ((newsz + 1) * sizeof(NNCallFrame));
-    #if 1
-        oldbuf = GCSingleton::get()->vmstate.framevalues;
-        newbuf = (NNCallFrame*)nn_memory_realloc(oldbuf, allocsz);
-        if(newbuf == nullptr)
-        {
-            fprintf(stderr, "internal error: failed to resize framevalues!\n");
-            abort();
-        }
-    #endif
-    GCSingleton::get()->vmstate.framevalues = (NNCallFrame*)newbuf;
-    GCSingleton::get()->vmstate.framecapacity = newsz;
-    /*
-    * this bit is crucial: realloc changes pointer addresses, and to keep the
-    * current frame, re-read it from the new address.
-    */
-    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
-    GCSingleton::get()->vmstate.currentframe->handlercount = oldhandlercnt;
-    GCSingleton::get()->vmstate.currentframe->inscode = oldip;
-    GCSingleton::get()->vmstate.currentframe->closure = oldclosure;
-    return true;
-}
-
-NEON_INLINE bool nn_vm_checkmayberesize(NNState* state)
-{
-    NNObjFunction* closure;
-    closure = nullptr;
-    if(GCSingleton::get()->vmstate.currentframe != nullptr)
-    {
-        closure = GCSingleton::get()->vmstate.currentframe->closure;
-    }
-    if((GCSingleton::get()->vmstate.stackidx+1) >= GCSingleton::get()->vmstate.stackcapacity)
-    {
-        if(!nn_vm_resizestack(state, closure, GCSingleton::get()->vmstate.stackidx + 1))
-        {
-            return nn_except_throw(state, "failed to resize stack due to overflow");
-        }
-        return true;
-    }
-    if(GCSingleton::get()->vmstate.framecount >= GCSingleton::get()->vmstate.framecapacity)
-    {
-        if(!nn_vm_resizeframes(state, closure, GCSingleton::get()->vmstate.framecapacity + 1))
-        {
-            return nn_except_throw(state, "failed to resize frames due to overflow");
-        }
-        return true;
-    }
-    return false;
-}
-
-void nn_state_resetvmstate(NNState* state)
-{
-    GCSingleton::get()->vmstate.framecount = 0;
-    GCSingleton::get()->vmstate.stackidx = 0;
-    GCSingleton::get()->vmstate.openupvalues = nullptr;
+    auto gcs = GCSingleton::get();
+    gcs->m_vmstate.framecount = 0;
+    gcs->m_vmstate.stackidx = 0;
+    gcs->m_vmstate.openupvalues = nullptr;
 }
 
 bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, int argcount, bool fromoperator)
@@ -17776,29 +17811,30 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
     NNObjArray* argslist;
     //closure->clsthisval = thisval;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
+    auto gcs = GCSingleton::get();
     /* fill empty parameters if not variadic */
     for(; !closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && argcount < closure->fnclosure.scriptfunc->fnscriptfunc.arity; argcount++)
     {
-        nn_vm_stackpush(state, nn_value_makenull());
+        gcs->stackPush(nn_value_makenull());
     }
     /* handle variadic arguments... */
     if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && argcount >= closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1)
     {
         startva = argcount - closure->fnclosure.scriptfunc->fnscriptfunc.arity;
         argslist = nn_object_makearray();
-        nn_vm_stackpush(state, nn_value_fromobject(argslist));
+        gcs->stackPush(nn_value_fromobject(argslist));
         for(i = startva; i >= 0; i--)
         {
-            argslist->varray.push(nn_vm_stackpeek(state, i + 1));
+            argslist->varray.push(nn_vm_stackpeek(i + 1));
         }
         argcount -= startva;
         /* +1 for the gc protection push above */
-        nn_vm_stackpopn(state, startva + 2);
-        nn_vm_stackpush(state, nn_value_fromobject(argslist));
+        gcs->stackPop(startva + 2);
+        gcs->stackPush(nn_value_fromobject(argslist));
     }
     if(argcount != closure->fnclosure.scriptfunc->fnscriptfunc.arity)
     {
-        nn_vm_stackpopn(state, argcount);
+        gcs->stackPop(argcount);
         if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic)
         {
             return nn_except_throw(state, "function '%s' expected at least %d arguments but got %d", nn_string_getdata(closure->name), closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1, argcount);
@@ -17808,31 +17844,31 @@ bool nn_vm_callclosure(NNState* state, NNObjFunction* closure, NNValue thisval, 
             return nn_except_throw(state, "function '%s' expected %d arguments but got %d", nn_string_getdata(closure->name), closure->fnclosure.scriptfunc->fnscriptfunc.arity, argcount);
         }
     }
-    if(nn_vm_checkmayberesize(state))
+    if(gcs->checkMaybeResize())
     {
         #if 0
-            nn_vm_stackpopn(state, argcount);
+            gcs->stackPop(argcount);
         #endif
     }
     if(fromoperator)
     {
         #if 0
-            nn_vm_stackpop(state);
-            nn_vm_stackpush(state, thisval);
+            gcs->stackPop();
+            gcs->stackPush(thisval);
         #else
             int64_t spos;
-            spos = (GCSingleton::get()->vmstate.stackidx + (-argcount - 1));
+            spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
             #if 0
-                GCSingleton::get()->vmstate.stackvalues[spos] = closure->clsthisval;
+                gcs->m_vmstate.stackvalues[spos] = closure->clsthisval;
             #else
-                GCSingleton::get()->vmstate.stackvalues[spos] = thisval;
+                gcs->m_vmstate.stackvalues[spos] = thisval;
             #endif
         #endif
     }
-    frame = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount++];
+    frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount++];
     frame->closure = closure;
     frame->inscode = closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs;
-    frame->stackslotpos = GCSingleton::get()->vmstate.stackidx + (-argcount - 1);
+    frame->stackslotpos = gcs->m_vmstate.stackidx + (-argcount - 1);
     return true;
 }
 
@@ -17842,12 +17878,13 @@ NEON_INLINE bool nn_vm_callnative(NNState* state, NNObjFunction* native, NNValue
     NNValue r;
     NNValue* vargs;
     NEON_APIDEBUG(state, "thisval.type=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
-    spos = GCSingleton::get()->vmstate.stackidx + (-argcount);
-    vargs = &GCSingleton::get()->vmstate.stackvalues[spos];
+    auto gcs = GCSingleton::get();
+    spos = gcs->m_vmstate.stackidx + (-argcount);
+    vargs = &gcs->m_vmstate.stackvalues[spos];
     r = native->fnnativefunc.natfunc(state, thisval, vargs, argcount);
     {
-        GCSingleton::get()->vmstate.stackvalues[spos - 1] = r;
-        GCSingleton::get()->vmstate.stackidx -= argcount;
+        gcs->m_vmstate.stackvalues[spos - 1] = r;
+        gcs->m_vmstate.stackidx -= argcount;
     }
     GCSingleton::clearGCProtect();
     return true;
@@ -17864,8 +17901,8 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
         #define NEON_APIPRINT(state, ...)
     #endif
     NEON_APIPRINT(state, "*callvaluewithobject*: thisval.type=%s, callable.type=%s, argcount=%d", nn_value_typename(thisval, true), nn_value_typename(callable, true), argcount);
-
-    if(nn_value_isobject(callable))
+    auto gcs = GCSingleton::get();
+    if(callable.isObject())
     {
         switch(nn_value_objtype(callable))
         {
@@ -17883,8 +17920,8 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                 {
                     NNObjFunction* bound;
                     bound = ofn;
-                    spos = (GCSingleton::get()->vmstate.stackidx + (-argcount - 1));
-                    GCSingleton::get()->vmstate.stackvalues[spos] = thisval;
+                    spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
+                    gcs->m_vmstate.stackvalues[spos] = thisval;
                     return nn_vm_callclosure(state, bound->fnmethod.method, thisval, argcount, fromoper);
                 }
                 break;
@@ -17892,15 +17929,15 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                 {
                     NNObjClass* klass;
                     klass = nn_value_asclass(callable);
-                    spos = (GCSingleton::get()->vmstate.stackidx + (-argcount - 1));
-                    GCSingleton::get()->vmstate.stackvalues[spos] = thisval;
+                    spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
+                    gcs->m_vmstate.stackvalues[spos] = thisval;
                     if(!klass->constructor.isNull())
                     {
-                        return nn_vm_callvaluewithobject(state, (NNValue)klass->constructor, thisval, argcount, false);
+                        return nn_vm_callvaluewithobject(state, klass->constructor, thisval, argcount, false);
                     }
                     else if(klass->superclass != nullptr && !klass->superclass->constructor.isNull())
                     {
-                        return nn_vm_callvaluewithobject(state, (NNValue)klass->superclass->constructor, thisval, argcount, false);
+                        return nn_vm_callvaluewithobject(state, klass->superclass->constructor, thisval, argcount, false);
                     }
                     else if(argcount != 0)
                     {
@@ -17917,7 +17954,7 @@ bool nn_vm_callvaluewithobject(NNState* state, NNValue callable, NNValue thisval
                     field = module->deftable.getfieldbyostr(module->name);
                     if(field != nullptr)
                     {
-                        return nn_vm_callvalue(state, (NNValue)field->value, thisval, argcount, false);
+                        return nn_vm_callvalue(state, field->value, thisval, argcount, false);
                     }
                     return nn_except_throw(state, "module %s does not export a default function", module->name);
                 }
@@ -17933,7 +17970,7 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
 {
     NNValue actualthisval;
     NNObjFunction* ofn;
-    if(nn_value_isobject(callable))
+    if(callable.isObject())
     {
         ofn = nn_value_asfunction(callable);
         switch(nn_value_objtype(callable))
@@ -17942,7 +17979,7 @@ bool nn_vm_callvalue(NNState* state, NNValue callable, NNValue thisval, int argc
                 {
                     NNObjFunction* bound;
                     bound = ofn;
-                    actualthisval = (NNValue)bound->fnmethod.receiver;
+                    actualthisval = bound->fnmethod.receiver;
                     if(!thisval.isNull())
                     {
                         actualthisval = thisval;
@@ -17994,13 +18031,13 @@ NEON_INLINE NNFuncContextType nn_value_getmethodtype(NNValue method)
 
 NNObjClass* nn_value_getclassfor(NNState* state, NNValue receiver)
 {
-    if(nn_value_isnumber(receiver))
+    if(receiver.isNumber())
     {
         return state->classprimnumber;
     }
-    if(nn_value_isobject(receiver))
+    if(receiver.isObject())
     {
-        switch(nn_value_asobject(receiver)->type)
+        switch(receiver.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
                 return state->classprimstring;
@@ -18032,64 +18069,16 @@ NNObjClass* nn_value_getclassfor(NNState* state, NNValue receiver)
 * used in the main VM engine.
 */
 
-NEON_INLINE void nn_vmbits_stackpush(NNState* state, NNValue value)
-{
-    nn_vm_checkmayberesize(state);
-    GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx] = value;
-    GCSingleton::get()->vmstate.stackidx++;
-}
 
-void nn_vm_stackpush(NNState* state, NNValue value)
-{
-    nn_vmbits_stackpush(state, value);
-}
-
-NEON_INLINE NNValue nn_vmbits_stackpop(NNState* state)
+NEON_INLINE NNValue nn_vm_stackpeek(int distance)
 {
     NNValue v;
-    GCSingleton::get()->vmstate.stackidx--;
-    if(GCSingleton::get()->vmstate.stackidx < 0)
-    {
-        GCSingleton::get()->vmstate.stackidx = 0;
-    }
-    v = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx];
-    return v;
-}
-
-NNValue nn_vm_stackpop(NNState* state)
-{
-    return nn_vmbits_stackpop(state);
-}
-
-NEON_INLINE NNValue nn_vmbits_stackpopn(NNState* state, int n)
-{
-    NNValue v;
-    GCSingleton::get()->vmstate.stackidx -= n;
-    if(GCSingleton::get()->vmstate.stackidx < 0)
-    {
-        GCSingleton::get()->vmstate.stackidx = 0;
-    }
-    v = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx];
-    return v;
-}
-
-NNValue nn_vm_stackpopn(NNState* state, int n)
-{
-    return nn_vmbits_stackpopn(state, n);
-}
-
-NEON_INLINE NNValue nn_vmbits_stackpeek(NNState* state, int distance)
-{
-    NNValue v;
-    v = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx + (-1 - distance)];
+    auto gcs = GCSingleton::get();
+    v = gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-1 - distance)];
     return v;
 
 }
 
-NNValue nn_vm_stackpeek(NNState* state, int distance)
-{
-    return nn_vmbits_stackpeek(state, distance);
-}
 
 /*
 * this macro cannot (rather, should not) be used outside of nn_vm_runvm().
@@ -18115,42 +18104,45 @@ NNValue nn_vm_stackpeek(NNState* state, int distance)
 * are now inlined functions.
 */
 
-NEON_FORCEINLINE uint8_t nn_vmbits_readbyte(NNState* state)
+NEON_FORCEINLINE uint16_t nn_vmbits_readbyte()
 {
-    uint8_t r;
-    r = GCSingleton::get()->vmstate.currentframe->inscode->code;
-    GCSingleton::get()->vmstate.currentframe->inscode++;
+    uint16_t r;
+    auto gcs = GCSingleton::get();
+    r = gcs->m_vmstate.currentframe->inscode->code;
+    gcs->m_vmstate.currentframe->inscode++;
     return r;
 }
 
-NEON_FORCEINLINE NNInstruction nn_vmbits_readinstruction(NNState* state)
+NEON_FORCEINLINE NNInstruction nn_vmbits_readinstruction()
 {
     NNInstruction r;
-    r = *GCSingleton::get()->vmstate.currentframe->inscode;
-    GCSingleton::get()->vmstate.currentframe->inscode++;
+    auto gcs = GCSingleton::get();
+    r = *gcs->m_vmstate.currentframe->inscode;
+    gcs->m_vmstate.currentframe->inscode++;
     return r;
 }
 
-NEON_FORCEINLINE uint16_t nn_vmbits_readshort(NNState* state)
+NEON_FORCEINLINE uint16_t nn_vmbits_readshort()
 {
-    uint8_t b;
-    uint8_t a;
-    a = GCSingleton::get()->vmstate.currentframe->inscode[0].code;
-    b = GCSingleton::get()->vmstate.currentframe->inscode[1].code;
-    GCSingleton::get()->vmstate.currentframe->inscode += 2;
+    uint16_t b;
+    uint16_t a;
+    auto gcs = GCSingleton::get();
+    a = gcs->m_vmstate.currentframe->inscode[0].code;
+    b = gcs->m_vmstate.currentframe->inscode[1].code;
+    gcs->m_vmstate.currentframe->inscode += 2;
     return (uint16_t)((a << 8) | b);
 }
 
-NEON_FORCEINLINE NNValue nn_vmbits_readconst(NNState* state)
+NEON_FORCEINLINE NNValue nn_vmbits_readconst()
 {
     uint16_t idx;
-    idx = nn_vmbits_readshort(state);
-    return GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.constants.get(idx);
+    idx = nn_vmbits_readshort();
+    return GCSingleton::get()->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.constants.get(idx);
 }
 
-NEON_FORCEINLINE NNObjString* nn_vmbits_readstring(NNState* state)
+NEON_FORCEINLINE NNObjString* nn_vmbits_readstring()
 {
-    return nn_value_asstring(nn_vmbits_readconst(state));
+    return nn_vmbits_readconst().asString();
 }
 
 NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass* klass, NNObjString* name, int argcount)
@@ -18160,11 +18152,11 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodfromclass(NNState* state, NNObjClass
     field = klass->instmethods.getfieldbyostr(name);
     if(field != nullptr)
     {
-        if(nn_value_getmethodtype((NNValue)field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
+        if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
             return nn_except_throw(state, "cannot call private method '%s' from instance of %s", nn_string_getdata(name), nn_string_getdata(klass->name));
         }
-        return nn_vm_callvaluewithobject(state, (NNValue)field->value, nn_value_fromobject(klass), argcount, false);
+        return nn_vm_callvaluewithobject(state, field->value, nn_value_fromobject(klass), argcount, false);
     }
     return nn_except_throw(state, "undefined method '%s' in %s", nn_string_getdata(name), nn_string_getdata(klass->name));
 }
@@ -18176,31 +18168,31 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodself(NNState* state, NNObjString* na
     NNObjInstance* instance;
     NNProperty* field;
     NEON_APIDEBUG(state, "argcount=%d", argcount);
-    receiver = nn_vmbits_stackpeek(state, argcount);
-    if(nn_value_isinstance(receiver))
+    receiver = nn_vm_stackpeek(argcount);
+    if(receiver.isInstance())
     {
         instance = nn_value_asinstance(receiver);
         field = instance->klass->instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
         }
         field = instance->properties.getfieldbyostr(name);
         if(field != nullptr)
         {
-            spos = (GCSingleton::get()->vmstate.stackidx + (-argcount - 1));
-            GCSingleton::get()->vmstate.stackvalues[spos] = receiver;
-            return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+            spos = (GCSingleton::get()->m_vmstate.stackidx + (-argcount - 1));
+            GCSingleton::get()->m_vmstate.stackvalues[spos] = receiver;
+            return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
         }
     }
-    else if(nn_value_isclass(receiver))
+    else if(receiver.isClass())
     {
         field = nn_value_asclass(receiver)->instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            if(nn_value_getmethodtype((NNValue)field->value) == NEON_FNCONTEXTTYPE_STATIC)
+            if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
             {
-                return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
             }
             return nn_except_throw(state, "cannot call non-static method %s() on non instance", nn_string_getdata(name));
         }
@@ -18215,11 +18207,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     NNValue receiver;
     NNProperty* field;
     NNObjClass* klass;
-    receiver = nn_vmbits_stackpeek(state, argcount);
+    receiver = nn_vm_stackpeek(argcount);
     NEON_APIDEBUG(state, "receiver.type=%s, argcount=%d", nn_value_typename(receiver, true), argcount);
-    if(nn_value_isobject(receiver))
+    auto gcs = GCSingleton::get();
+    if(receiver.isObject())
     {
-        rectype = nn_value_asobject(receiver)->type;
+        rectype = receiver.asObject()->type;
         switch(rectype)
         {
             case NEON_OBJTYPE_MODULE:
@@ -18234,7 +18227,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         {
                             return nn_except_throw(state, "cannot call private module method '%s'", nn_string_getdata(name));
                         }
-                        return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     return nn_except_throw(state, "module '%s' does not have a field named '%s'", nn_string_getdata(module->name), nn_string_getdata(name));
                 }
@@ -18246,12 +18239,12 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     field = nn_class_getstaticproperty(klass, name);
                     if(field != nullptr)
                     {
-                        return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     field = nn_class_getstaticmethodfield(klass, name);
                     if(field != nullptr)
                     {
-                        return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     /*
                     * TODO:
@@ -18265,7 +18258,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                         field = klass->instmethods.getfieldbyostr(name);
                         if(field != nullptr)
                         {
-                            fntyp = nn_value_getmethodtype((NNValue)field->value);
+                            fntyp = nn_value_getmethodtype(field->value);
                             fprintf(stderr, "fntyp: %d\n", fntyp);
                             if(fntyp == NEON_FNCONTEXTTYPE_PRIVATE)
                             {
@@ -18273,7 +18266,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                             }
                             if(fntyp == NEON_FNCONTEXTTYPE_STATIC)
                             {
-                                return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                             }
                         }
                     }
@@ -18288,9 +18281,9 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     field = instance->properties.getfieldbyostr(name);
                     if(field != nullptr)
                     {
-                        spos = (GCSingleton::get()->vmstate.stackidx + (-argcount - 1));
-                        GCSingleton::get()->vmstate.stackvalues[spos] = receiver;
-                        return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                        spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
+                        gcs->m_vmstate.stackvalues[spos] = receiver;
+                        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                     }
                     return nn_vmutil_invokemethodfromclass(state, instance->klass, name, argcount);
                 }
@@ -18301,17 +18294,17 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
                     field = nn_class_getmethodfield(state->classprimdict, name);
                     if(field != nullptr)
                     {
-                        return nn_vm_callnative(state, nn_value_asfunction((NNValue)field->value), receiver, argcount);
+                        return nn_vm_callnative(state, nn_value_asfunction(field->value), receiver, argcount);
                     }
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
                     {
-                        field = nn_value_asdict(receiver)->htab.getfieldbyostr(name);
+                        field = receiver.asDict()->htab.getfieldbyostr(name);
                         if(field != nullptr)
                         {
-                            if(nn_value_iscallable((NNValue)field->value))
+                            if(field->value.isCallable())
                             {
-                                return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+                                return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
                             }
                         }
                     }
@@ -18332,7 +18325,7 @@ NEON_FORCEINLINE bool nn_vmutil_invokemethodnormal(NNState* state, NNObjString* 
     field = nn_class_getmethodfield(klass, name);
     if(field != nullptr)
     {
-        return nn_vm_callvaluewithobject(state, (NNValue)field->value, receiver, argcount, false);
+        return nn_vm_callvaluewithobject(state, field->value, receiver, argcount, false);
     }
     return nn_except_throw(state, "'%s' has no method %s()", nn_string_getdata(klass->name), nn_string_getdata(name));
 }
@@ -18345,26 +18338,26 @@ NEON_FORCEINLINE bool nn_vmutil_bindmethod(NNState* state, NNObjClass* klass, NN
     field = klass->instmethods.getfieldbyostr(name);
     if(field != nullptr)
     {
-        if(nn_value_getmethodtype((NNValue)field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
+        if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_PRIVATE)
         {
             return nn_except_throw(state, "cannot get private property '%s' from instance", nn_string_getdata(name));
         }
-        val = nn_vmbits_stackpeek(state, 0);
-        bound = nn_object_makefuncbound(val, nn_value_asfunction((NNValue)field->value));
-        nn_vmbits_stackpop(state);
-        nn_vmbits_stackpush(state, nn_value_fromobject(bound));
+        val = nn_vm_stackpeek(0);
+        bound = nn_object_makefuncbound(val, nn_value_asfunction(field->value));
+        GCSingleton::get()->stackPop();
+        GCSingleton::get()->stackPush(nn_value_fromobject(bound));
         return true;
     }
     return nn_except_throw(state, "undefined property '%s'", nn_string_getdata(name));
 }
 
-NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNState* state, NNValue* local, int stackpos)
+NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNValue* local, int stackpos)
 {
     NNObjUpvalue* upvalue;
     NNObjUpvalue* prevupvalue;
     NNObjUpvalue* createdupvalue;
     prevupvalue = nullptr;
-    upvalue = GCSingleton::get()->vmstate.openupvalues;
+    upvalue = GCSingleton::get()->m_vmstate.openupvalues;
     while(upvalue != nullptr && (&upvalue->location) > local)
     {
         prevupvalue = upvalue;
@@ -18378,7 +18371,7 @@ NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNState* state, NNValue
     createdupvalue->next = upvalue;
     if(prevupvalue == nullptr)
     {
-        GCSingleton::get()->vmstate.openupvalues = createdupvalue;
+        GCSingleton::get()->m_vmstate.openupvalues = createdupvalue;
     }
     else
     {
@@ -18387,38 +18380,38 @@ NEON_FORCEINLINE NNObjUpvalue* nn_vmutil_upvaluescapture(NNState* state, NNValue
     return createdupvalue;
 }
 
-NEON_FORCEINLINE void nn_vmutil_upvaluesclose(NNState* state, const NNValue* last)
+NEON_FORCEINLINE void nn_vmutil_upvaluesclose(const NNValue* last)
 {
     NNObjUpvalue* upvalue;
-    while(GCSingleton::get()->vmstate.openupvalues != nullptr && (&GCSingleton::get()->vmstate.openupvalues->location) >= last)
+    while(GCSingleton::get()->m_vmstate.openupvalues != nullptr && (&GCSingleton::get()->m_vmstate.openupvalues->location) >= last)
     {
-        upvalue = GCSingleton::get()->vmstate.openupvalues;
+        upvalue = GCSingleton::get()->m_vmstate.openupvalues;
         upvalue->closed = upvalue->location;
         upvalue->location = upvalue->closed;
-        GCSingleton::get()->vmstate.openupvalues = upvalue->next;
+        GCSingleton::get()->m_vmstate.openupvalues = upvalue->next;
     }
 }
 
-NEON_FORCEINLINE void nn_vmutil_definemethod(NNState* state, NNObjString* name)
+NEON_FORCEINLINE void nn_vmutil_definemethod(NNObjString* name)
 {
     NNValue method;
     NNObjClass* klass;
-    method = nn_vmbits_stackpeek(state, 0);
-    klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
+    method = nn_vm_stackpeek(0);
+    klass = nn_value_asclass(nn_vm_stackpeek(1));
     klass->instmethods.set(nn_value_fromobject(name), method);
     if(nn_value_getmethodtype(method) == NEON_FNCONTEXTTYPE_INITIALIZER)
     {
         klass->constructor = method;
     }
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
 }
 
-NEON_FORCEINLINE void nn_vmutil_defineproperty(NNState* state, NNObjString* name, bool isstatic)
+NEON_FORCEINLINE void nn_vmutil_defineproperty(NNObjString* name, bool isstatic)
 {
     NNValue property;
     NNObjClass* klass;
-    property = nn_vmbits_stackpeek(state, 0);
-    klass = nn_value_asclass(nn_vmbits_stackpeek(state, 1));
+    property = nn_vm_stackpeek(0);
+    klass = nn_value_asclass(nn_vm_stackpeek(1));
     if(!isstatic)
     {
         nn_class_defproperty(klass, name, property);
@@ -18427,7 +18420,7 @@ NEON_FORCEINLINE void nn_vmutil_defineproperty(NNState* state, NNObjString* name
     {
         nn_class_setstaticproperty(klass, name, property);
     }
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
 }
 
 /*
@@ -18463,7 +18456,7 @@ bool nn_util_isinstanceof(NNObjClass* klass1, NNObjClass* expected)
 * the strings are; inevitably it will always be <length-of-string> * number.
 * not preallocating also means that the allocator only allocates as much as actually needed.
 */
-NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjString* str, double number)
+NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNObjString* str, double number)
 {
     size_t i;
     size_t times;
@@ -18490,12 +18483,12 @@ NEON_FORCEINLINE NNObjString* nn_vmutil_multiplystring(NNState* state, NNObjStri
     return os;
 }
 
-NEON_FORCEINLINE NNObjArray* nn_vmutil_combinearrays(NNState* state, NNObjArray* a, NNObjArray* b)
+NEON_FORCEINLINE NNObjArray* nn_vmutil_combinearrays(NNObjArray* a, NNObjArray* b)
 {
     size_t i;
     NNObjArray* list;
     list = nn_object_makearray();
-    nn_vmbits_stackpush(state, nn_value_fromobject(list));
+    GCSingleton::get()->stackPush(nn_value_fromobject(list));
     for(i = 0; i < a->varray.count(); i++)
     {
         list->varray.push(a->varray.get(i));
@@ -18504,7 +18497,7 @@ NEON_FORCEINLINE NNObjArray* nn_vmutil_combinearrays(NNState* state, NNObjArray*
     {
         list->varray.push(b->varray.get(i));
     }
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
     return list;
 }
 
@@ -18529,17 +18522,17 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
     NNValue valupper;
     NNValue vallower;
     NNObjArray* newlist;
-    valupper = nn_vmbits_stackpeek(state, 0);
-    vallower = nn_vmbits_stackpeek(state, 1);
-    if(!(vallower.isNull() || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || valupper.isNull()))
+    valupper = nn_vm_stackpeek(0);
+    vallower = nn_vm_stackpeek(1);
+    if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
     {
-        nn_vmbits_stackpopn(state, 2);
+        GCSingleton::get()->stackPop(2);
         return nn_except_throw(state, "list range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower, false), nn_value_typename(valupper, false));
     }
     idxlower = 0;
-    if(nn_value_isnumber(vallower))
+    if(vallower.isNumber())
     {
-        idxlower = nn_value_asnumber(vallower);
+        idxlower = vallower.asNumber();
     }
     if(valupper.isNull())
     {
@@ -18547,7 +18540,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
     }
     else
     {
-        idxupper = nn_value_asnumber(valupper);
+        idxupper = valupper.asNumber();
     }
     if((idxlower < 0) || ((idxupper < 0) && ((long)(list->varray.count() + idxupper) < 0)) || (idxlower >= (long)list->varray.count()))
     {
@@ -18555,9 +18548,9 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
         if(!willassign)
         {
             /* +1 for the list itself */
-            nn_vmbits_stackpopn(state, 3);
+            GCSingleton::get()->stackPop(3);
         }
-        nn_vmbits_stackpush(state, nn_value_fromobject(nn_object_makearray()));
+        GCSingleton::get()->stackPush(nn_value_fromobject(nn_object_makearray()));
         return true;
     }
     if(idxupper < 0)
@@ -18569,19 +18562,19 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofarray(NNState* state, NNObjArr
         idxupper = list->varray.count();
     }
     newlist = nn_object_makearray();
-    nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
+    GCSingleton::get()->stackPush(nn_value_fromobject(newlist));
     for(i = idxlower; i < idxupper; i++)
     {
         newlist->varray.push(list->varray.get(i));
     }
     /* clear gc protect */
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
     if(!willassign)
     {
         /* +1 for the list itself */
-        nn_vmbits_stackpopn(state, 3);
+        GCSingleton::get()->stackPop(3);
     }
-    nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
+    GCSingleton::get()->stackPush(nn_value_fromobject(newlist));
     return true;
 }
 
@@ -18594,18 +18587,18 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
     int idxlower;
     NNValue valupper;
     NNValue vallower;
-    valupper = nn_vmbits_stackpeek(state, 0);
-    vallower = nn_vmbits_stackpeek(state, 1);
-    if(!(vallower.isNull() || nn_value_isnumber(vallower)) || !(nn_value_isnumber(valupper) || valupper.isNull()))
+    valupper = nn_vm_stackpeek(0);
+    vallower = nn_vm_stackpeek(1);
+    if(!(vallower.isNull() || vallower.isNumber()) || !(valupper.isNumber() || valupper.isNull()))
     {
-        nn_vmbits_stackpopn(state, 2);
+        GCSingleton::get()->stackPop(2);
         return nn_except_throw(state, "string range index expects upper and lower to be numbers, but got '%s', '%s'", nn_value_typename(vallower, false), nn_value_typename(valupper, false));
     }
     length = nn_string_getlength(string);
     idxlower = 0;
-    if(nn_value_isnumber(vallower))
+    if(vallower.isNumber())
     {
-        idxlower = nn_value_asnumber(vallower);
+        idxlower = vallower.asNumber();
     }
     if(valupper.isNull())
     {
@@ -18613,7 +18606,7 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
     }
     else
     {
-        idxupper = nn_value_asnumber(valupper);
+        idxupper = valupper.asNumber();
     }
     if(idxlower < 0 || (idxupper < 0 && ((length + idxupper) < 0)) || idxlower >= length)
     {
@@ -18621,9 +18614,9 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
         if(!willassign)
         {
             /* +1 for the string itself */
-            nn_vmbits_stackpopn(state, 3);
+            GCSingleton::get()->stackPop(3);
         }
-        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_internlen("", 0)));
+        GCSingleton::get()->stackPush(nn_value_fromobject(nn_string_internlen("", 0)));
         return true;
     }
     if(idxupper < 0)
@@ -18639,27 +18632,27 @@ NEON_FORCEINLINE bool nn_vmutil_dogetrangedindexofstring(NNState* state, NNObjSt
     if(!willassign)
     {
         /* +1 for the string itself */
-        nn_vmbits_stackpopn(state, 3);
+        GCSingleton::get()->stackPop(3);
     }
-    nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(nn_string_getdata(string) + start, end - start)));
+    GCSingleton::get()->stackPush(nn_value_fromobject(nn_string_copylen(nn_string_getdata(string) + start, end - start)));
     return true;
 }
 
 NEON_FORCEINLINE bool nn_vmdo_getrangedindex(NNState* state)
 {
     bool isgotten;
-    uint8_t willassign;
+    uint16_t willassign;
     NNValue vfrom;
-    willassign = nn_vmbits_readbyte(state);
+    willassign = nn_vmbits_readbyte();
     isgotten = true;
-    vfrom = nn_vmbits_stackpeek(state, 2);
-    if(nn_value_isobject(vfrom))
+    vfrom = nn_vm_stackpeek(2);
+    if(vfrom.isObject())
     {
-        switch(nn_value_asobject(vfrom)->type)
+        switch(vfrom.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
             {
-                if(!nn_vmutil_dogetrangedindexofstring(state, nn_value_asstring(vfrom), willassign))
+                if(!nn_vmutil_dogetrangedindexofstring(state, vfrom.asString(), willassign))
                 {
                     return false;
                 }
@@ -18667,7 +18660,7 @@ NEON_FORCEINLINE bool nn_vmdo_getrangedindex(NNState* state)
             }
             case NEON_OBJTYPE_ARRAY:
             {
-                if(!nn_vmutil_dogetrangedindexofarray(state, nn_value_asarray(vfrom), willassign))
+                if(!nn_vmutil_dogetrangedindexofarray(state, vfrom.asArray(), willassign))
                 {
                     return false;
                 }
@@ -18691,24 +18684,24 @@ NEON_FORCEINLINE bool nn_vmdo_getrangedindex(NNState* state)
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_doindexgetdict(NNState* state, NNObjDict* dict, bool willassign)
+NEON_FORCEINLINE bool nn_vmutil_doindexgetdict(NNObjDict* dict, bool willassign)
 {
     NNValue vindex;
     NNProperty* field;
-    vindex = nn_vmbits_stackpeek(state, 0);
+    vindex = nn_vm_stackpeek(0);
     field = nn_dict_getentry(dict, vindex);
     if(field != nullptr)
     {
         if(!willassign)
         {
             /* we can safely get rid of the index from the stack */
-            nn_vmbits_stackpopn(state, 2);
+            GCSingleton::get()->stackPop(2);
         }
-        nn_vmbits_stackpush(state, (NNValue)field->value);
+        GCSingleton::get()->stackPush(field->value);
         return true;
     }
-    nn_vmbits_stackpopn(state, 1);
-    nn_vmbits_stackpush(state, nn_value_makenull());
+    GCSingleton::get()->stackPop(1);
+    GCSingleton::get()->stackPush(nn_value_makenull());
     return true;
 }
 
@@ -18716,18 +18709,18 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetmodule(NNState* state, NNObjModule* mo
 {
     NNValue vindex;
     NNValue result;
-    vindex = nn_vmbits_stackpeek(state, 0);
+    vindex = nn_vm_stackpeek(0);
     if(module->deftable.get(vindex, &result))
     {
         if(!willassign)
         {
             /* we can safely get rid of the index from the stack */
-            nn_vmbits_stackpopn(state, 2);
+            GCSingleton::get()->stackPop(2);
         }
-        nn_vmbits_stackpush(state, result);
+        GCSingleton::get()->stackPush(result);
         return true;
     }
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
     return nn_except_throw(state, "%s is undefined in module %s", nn_string_getdata(nn_value_tostring(vindex)), module->name);
 }
 
@@ -18743,21 +18736,21 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
     NNObjRange* rng;
     (void)realindex;
     okindex = false;
-    vindex = nn_vmbits_stackpeek(state, 0);
-    if(!nn_value_isnumber(vindex))
+    vindex = nn_vm_stackpeek(0);
+    if(!vindex.isNumber())
     {
-        if(nn_value_isrange(vindex))
+        if(vindex.isRange())
         {
             rng = nn_value_asrange(vindex);
-            nn_vmbits_stackpop(state);
-            nn_vmbits_stackpush(state, nn_value_makenumber(rng->lower));
-            nn_vmbits_stackpush(state, nn_value_makenumber(rng->upper));
+            GCSingleton::get()->stackPop();
+            GCSingleton::get()->stackPush(nn_value_makenumber(rng->lower));
+            GCSingleton::get()->stackPush(nn_value_makenumber(rng->upper));
             return nn_vmutil_dogetrangedindexofstring(state, string, willassign);
         }
-        nn_vmbits_stackpopn(state, 1);
+        GCSingleton::get()->stackPop(1);
         return nn_except_throw(state, "strings are numerically indexed");
     }
-    index = nn_value_asnumber(vindex);
+    index = vindex.asNumber();
     maxlength = nn_string_getlength(string);
     realindex = index;
     if(index < 0)
@@ -18776,23 +18769,23 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetstring(NNState* state, NNObjString* st
         // we can safely get rid of the index from the stack
         // +1 for the string itself
         */
-        nn_vmbits_stackpopn(state, 2);
+        GCSingleton::get()->stackPop(2);
     }
     if(okindex)
     {
-        nn_vmbits_stackpush(state, nn_value_fromobject(nn_string_copylen(nn_string_getdata(string) + start, end - start)));
+        GCSingleton::get()->stackPush(nn_value_fromobject(nn_string_copylen(nn_string_getdata(string) + start, end - start)));
     }
     else
     {
-        nn_vmbits_stackpush(state, nn_value_makenull());
+        GCSingleton::get()->stackPush(nn_value_makenull());
     }
     return true;
 
-    nn_vmbits_stackpopn(state, 1);
+    GCSingleton::get()->stackPop(1);
     #if 0
         return nn_except_throw(state, "string index %d out of range of %d", realindex, maxlength);
     #else
-        nn_vmbits_stackpush(state, nn_value_makenull());
+        GCSingleton::get()->stackPush(nn_value_makenull());
         return true;
     #endif
 }
@@ -18803,21 +18796,21 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
     NNValue finalval;
     NNValue vindex;
     NNObjRange* rng;
-    vindex = nn_vmbits_stackpeek(state, 0);
-    if(nn_util_unlikely(!nn_value_isnumber(vindex)))
+    vindex = nn_vm_stackpeek(0);
+    if(nn_util_unlikely(!vindex.isNumber()))
     {
-        if(nn_value_isrange(vindex))
+        if(vindex.isRange())
         {
             rng = nn_value_asrange(vindex);
-            nn_vmbits_stackpop(state);
-            nn_vmbits_stackpush(state, nn_value_makenumber(rng->lower));
-            nn_vmbits_stackpush(state, nn_value_makenumber(rng->upper));
+            GCSingleton::get()->stackPop();
+            GCSingleton::get()->stackPush(nn_value_makenumber(rng->lower));
+            GCSingleton::get()->stackPush(nn_value_makenumber(rng->upper));
             return nn_vmutil_dogetrangedindexofarray(state, list, willassign);
         }
-        nn_vmbits_stackpop(state);
+        GCSingleton::get()->stackPop();
         return nn_except_throw(state, "list are numerically indexed");
     }
-    index = nn_value_asnumber(vindex);
+    index = vindex.asNumber();
     if(nn_util_unlikely(index < 0))
     {
         index = list->varray.count() + index;
@@ -18836,16 +18829,16 @@ NEON_FORCEINLINE bool nn_vmutil_doindexgetarray(NNState* state, NNObjArray* list
         // we can safely get rid of the index from the stack
         // +1 for the list itself
         */
-        nn_vmbits_stackpopn(state, 2);
+        GCSingleton::get()->stackPop(2);
     }
-    nn_vmbits_stackpush(state, finalval);
+    GCSingleton::get()->stackPush(finalval);
     return true;
 }
 
 static NNProperty* nn_vmutil_checkoverloadrequirements(const char* ccallername, NNValue target, NNObjString* name)
 {
     NNProperty* field;
-    if(!nn_value_isinstance(target))
+    if(!target.isInstance())
     {
         fprintf(stderr, "%s: not an instance\n", ccallername);
         return nullptr;
@@ -18856,7 +18849,7 @@ static NNProperty* nn_vmutil_checkoverloadrequirements(const char* ccallername, 
         fprintf(stderr, "%s: failed to get '%s'\n", ccallername, nn_string_getdata(name));
         return nullptr;
     }
-    if(!nn_value_iscallable((NNValue)field->value))
+    if(!field->value.isCallable())
     {
         fprintf(stderr, "%s: field not callable\n", ccallername);
         return nullptr;
@@ -18879,13 +18872,13 @@ NEON_FORCEINLINE bool nn_vmutil_tryoverloadbasic(NNState* state, NNObjString* na
         scrargv[1] = firstargvval;
         nargc = 2;
     }
-    if(nn_nestcall_callfunction(state, (NNValue)field->value, target, scrargv, nargc, &finalval, true))
+    if(nn_nestcall_callfunction(state, field->value, target, scrargv, nargc, &finalval, true))
     {
         if(!willassign)
         {
-            nn_vmbits_stackpopn(state, 2);
+            GCSingleton::get()->stackPop(2);
         }
-        nn_vmbits_stackpush(state, finalval);
+        GCSingleton::get()->stackPush(finalval);
         return true;
     }
     return false;
@@ -18900,8 +18893,8 @@ NEON_FORCEINLINE bool nn_vmutil_tryoverloadgeneric(NNState* state, NNObjString* 
 {
     NNValue setval;
     NNValue firstargval;
-    firstargval = nn_vmbits_stackpeek(state, 0);
-    setval = nn_vmbits_stackpeek(state, 1);
+    firstargval = nn_vm_stackpeek(0);
+    setval = nn_vm_stackpeek(1);
     return nn_vmutil_tryoverloadbasic(state, name, target, firstargval, setval, willassign);
 }
 
@@ -18909,25 +18902,25 @@ NEON_FORCEINLINE bool nn_vmutil_tryoverloadgeneric(NNState* state, NNObjString* 
 NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
 {
     bool isgotten;
-    uint8_t willassign;
+    uint16_t willassign;
     NNValue thisval;
-    willassign = nn_vmbits_readbyte(state);
+    willassign = nn_vmbits_readbyte();
     isgotten = true;
-    thisval = nn_vmbits_stackpeek(state, 1);
-    if(nn_util_unlikely(nn_value_isinstance(thisval)))
+    thisval = nn_vm_stackpeek(1);
+    if(nn_util_unlikely(thisval.isInstance()))
     {
         if(nn_vmutil_tryoverloadgeneric(state, state->defaultstrings.nmindexget, thisval, willassign))
         {
             return true;
         }
     }
-    if(nn_util_likely(nn_value_isobject(thisval)))
+    if(nn_util_likely(thisval.isObject()))
     {
-        switch(nn_value_asobject(thisval)->type)
+        switch(thisval.asObject()->type)
         {
             case NEON_OBJTYPE_STRING:
             {
-                if(!nn_vmutil_doindexgetstring(state, nn_value_asstring(thisval), willassign))
+                if(!nn_vmutil_doindexgetstring(state, thisval.asString(), willassign))
                 {
                     return false;
                 }
@@ -18935,7 +18928,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
             }
             case NEON_OBJTYPE_ARRAY:
             {
-                if(!nn_vmutil_doindexgetarray(state, nn_value_asarray(thisval), willassign))
+                if(!nn_vmutil_doindexgetarray(state, thisval.asArray(), willassign))
                 {
                     return false;
                 }
@@ -18943,7 +18936,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
             }
             case NEON_OBJTYPE_DICT:
             {
-                if(!nn_vmutil_doindexgetdict(state, nn_value_asdict(thisval), willassign))
+                if(!nn_vmutil_doindexgetdict(thisval.asDict(), willassign))
                 {
                     return false;
                 }
@@ -18976,29 +18969,29 @@ NEON_FORCEINLINE bool nn_vmdo_indexget(NNState* state)
 }
 
 
-NEON_FORCEINLINE bool nn_vmutil_dosetindexdict(NNState* state, NNObjDict* dict, NNValue index, NNValue value)
+NEON_FORCEINLINE bool nn_vmutil_dosetindexdict(NNObjDict* dict, NNValue index, NNValue value)
 {
     nn_dict_setentry(dict, index, value);
     /* pop the value, index and dict out */
-    nn_vmbits_stackpopn(state, 3);
+    GCSingleton::get()->stackPop(3);
     /*
     // leave the value on the stack for consumption
     // e.g. variable = dict[index] = 10
     */
-    nn_vmbits_stackpush(state, value);
+    GCSingleton::get()->stackPush(value);
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_dosetindexmodule(NNState* state, NNObjModule* module, NNValue index, NNValue value)
+NEON_FORCEINLINE bool nn_vmutil_dosetindexmodule(NNObjModule* module, NNValue index, NNValue value)
 {
     module->deftable.set(index, value);
     /* pop the value, index and dict out */
-    nn_vmbits_stackpopn(state, 3);
+    GCSingleton::get()->stackPop(3);
     /*
     // leave the value on the stack for consumption
     // e.g. variable = dict[index] = 10
     */
-    nn_vmbits_stackpush(state, value);
+    GCSingleton::get()->stackPush(value);
     return true;
 }
 
@@ -19010,15 +19003,15 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     int ocnt;
     int ocap;
     int vasz;
-    if(nn_util_unlikely(!nn_value_isnumber(index)))
+    if(nn_util_unlikely(!index.isNumber()))
     {
-        nn_vmbits_stackpopn(state, 3);
+        GCSingleton::get()->stackPop(3);
         /* pop the value, index and list out */
         return nn_except_throw(state, "list are numerically indexed");
     }
     ocap = list->varray.capacity();
     ocnt = list->varray.count();
-    rawpos = nn_value_asnumber(index);
+    rawpos = index.asNumber();
     position = rawpos;
     if(rawpos < 0)
     {
@@ -19061,18 +19054,18 @@ NEON_FORCEINLINE bool nn_vmutil_doindexsetarray(NNState* state, NNObjArray* list
     }
     list->varray.set(position, value);
     /* pop the value, index and list out */
-    nn_vmbits_stackpopn(state, 3);
+    GCSingleton::get()->stackPop(3);
     /*
     // leave the value on the stack for consumption
     // e.g. variable = list[index] = 10    
     */
-    nn_vmbits_stackpush(state, value);
+    GCSingleton::get()->stackPush(value);
     return true;
     /*
     // pop the value, index and list out
-    //nn_vmbits_stackpopn(state, 3);
+    //GCSingleton::get()->stackPop(3);
     //return nn_except_throw(state, "lists index %d out of range", rawpos);
-    //nn_vmbits_stackpush(state, nn_value_makenull());
+    //GCSingleton::get()->stackPush(nn_value_makenull());
     //return true;
     */
 }
@@ -19083,14 +19076,14 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     int rawpos;
     int position;
     int oslen;
-    if(!nn_value_isnumber(index))
+    if(!index.isNumber())
     {
-        nn_vmbits_stackpopn(state, 3);
+        GCSingleton::get()->stackPop(3);
         /* pop the value, index and list out */
         return nn_except_throw(state, "strings are numerically indexed");
     }
-    iv = nn_value_asnumber(value);
-    rawpos = nn_value_asnumber(index);
+    iv = value.asNumber();
+    rawpos = index.asNumber();
     oslen = nn_string_getlength(os);
     position = rawpos;
     if(rawpos < 0)
@@ -19101,19 +19094,19 @@ NEON_FORCEINLINE bool nn_vmutil_dosetindexstring(NNState* state, NNObjString* os
     {
         nn_string_set(os, position, iv);
         /* pop the value, index and list out */
-        nn_vmbits_stackpopn(state, 3);
+        GCSingleton::get()->stackPop(3);
         /*
         // leave the value on the stack for consumption
         // e.g. variable = list[index] = 10
         */
-        nn_vmbits_stackpush(state, value);
+        GCSingleton::get()->stackPush(value);
         return true;
     }
     else
     {
         nn_string_appendbyte(os, iv);
-        nn_vmbits_stackpopn(state, 3);
-        nn_vmbits_stackpush(state, value);
+        GCSingleton::get()->stackPop(3);
+        GCSingleton::get()->stackPush(value);
     }
     return true;
 }
@@ -19125,23 +19118,23 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     NNValue index;
     NNValue thisval;
     isset = true;
-    thisval = nn_vmbits_stackpeek(state, 2);
-    if(nn_util_unlikely(nn_value_isinstance(thisval)))
+    thisval = nn_vm_stackpeek(2);
+    if(nn_util_unlikely(thisval.isInstance()))
     {
         if(nn_vmutil_tryoverloadgeneric(state, state->defaultstrings.nmindexset, thisval, true))
         {
             return true;
         }
     }
-    if(nn_util_likely(nn_value_isobject(thisval)))
+    if(nn_util_likely(thisval.isObject()))
     {
-        value = nn_vmbits_stackpeek(state, 0);
-        index = nn_vmbits_stackpeek(state, 1);
-        switch(nn_value_asobject(thisval)->type)
+        value = nn_vm_stackpeek(0);
+        index = nn_vm_stackpeek(1);
+        switch(thisval.asObject()->type)
         {
             case NEON_OBJTYPE_ARRAY:
                 {
-                    if(!nn_vmutil_doindexsetarray(state, nn_value_asarray(thisval), index, value))
+                    if(!nn_vmutil_doindexsetarray(state, thisval.asArray(), index, value))
                     {
                         return false;
                     }
@@ -19149,7 +19142,7 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
                 break;
             case NEON_OBJTYPE_STRING:
                 {
-                    if(!nn_vmutil_dosetindexstring(state, nn_value_asstring(thisval), index, value))
+                    if(!nn_vmutil_dosetindexstring(state, thisval.asString(), index, value))
                     {
                         return false;
                     }
@@ -19157,12 +19150,12 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
                 break;
             case NEON_OBJTYPE_DICT:
                 {
-                    return nn_vmutil_dosetindexdict(state, nn_value_asdict(thisval), index, value);
+                    return nn_vmutil_dosetindexdict(thisval.asDict(), index, value);
                 }
                 break;
             case NEON_OBJTYPE_MODULE:
                 {
-                    return nn_vmutil_dosetindexmodule(state, nn_value_asmodule(thisval), index, value);
+                    return nn_vmutil_dosetindexmodule(nn_value_asmodule(thisval), index, value);
                 }
                 break;
             default:
@@ -19178,26 +19171,26 @@ NEON_FORCEINLINE bool nn_vmdo_indexset(NNState* state)
     }
     if(!isset)
     {
-        return nn_except_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vmbits_stackpeek(state, 3), false));
+        return nn_except_throw(state, "type of %s is not a valid iterable", nn_value_typename(nn_vm_stackpeek(3), false));
     }
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmutil_concatenate(NNState* state)
+NEON_FORCEINLINE bool nn_vmutil_concatenate()
 {
     NNValue vleft;
     NNValue vright;
     NNIOStream pr;
     NNObjString* result;
-    vright = nn_vmbits_stackpeek(state, 0);
-    vleft = nn_vmbits_stackpeek(state, 1);
+    vright = nn_vm_stackpeek(0);
+    vleft = nn_vm_stackpeek(1);
     nn_iostream_makestackstring(&pr);
     nn_iostream_printvalue(&pr, vleft, false, true);
     nn_iostream_printvalue(&pr, vright, false, true);
     result = nn_iostream_takestring(&pr);
     nn_iostream_destroy(&pr);
-    nn_vmbits_stackpopn(state, 2);
-    nn_vmbits_stackpush(state, nn_value_fromobject(result));
+    GCSingleton::get()->stackPop(2);
+    GCSingleton::get()->stackPush(nn_value_fromobject(result));
     return true;
 }
 
@@ -19236,7 +19229,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getclassproperty(NNState* state, NNObjCla
     field = klass->instmethods.getfieldbyostr(name);
     if(field != nullptr)
     {
-        if(nn_value_getmethodtype((NNValue)field->value) == NEON_FNCONTEXTTYPE_STATIC)
+        if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
         {
             if(nn_util_methodisprivate(name))
             {
@@ -19286,7 +19279,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getclassproperty(NNState* state, NNObjCla
 NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeked, NNObjString* name)
 {
     NNProperty* field;
-    switch(nn_value_asobject(peeked)->type)
+    switch(peeked.asObject()->type)
     {
         case NEON_OBJTYPE_MODULE:
             {
@@ -19393,7 +19386,7 @@ NEON_FORCEINLINE NNProperty* nn_vmutil_getproperty(NNState* state, NNValue peeke
             break;
         case NEON_OBJTYPE_DICT:
             {
-                field = nn_value_asdict(peeked)->htab.getfieldbyostr(name);
+                field = peeked.asDict()->htab.getfieldbyostr(name);
                 if(field == nullptr)
                 {
                     field = nn_class_getpropertyfield(state->classprimdict, name);
@@ -19458,9 +19451,9 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
     NNValue peeked;
     NNProperty* field;
     NNObjString* name;
-    name = nn_vmbits_readstring(state);
-    peeked = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isobject(peeked))
+    name = nn_vmbits_readstring();
+    peeked = nn_vm_stackpeek(0);
+    if(peeked.isObject())
     {
         field = nn_vmutil_getproperty(state, peeked, name);
         if(field == nullptr)
@@ -19471,12 +19464,12 @@ NEON_FORCEINLINE bool nn_vmdo_propertyget(NNState* state)
         {
             if(field->type == NEON_PROPTYPE_FUNCTION)
             {
-                nn_vm_callvaluewithobject(state, (NNValue)field->value, peeked, 0, false);
+                nn_vm_callvaluewithobject(state, field->value, peeked, 0, false);
             }
             else
             {
-                nn_vmbits_stackpop(state);
-                nn_vmbits_stackpush(state, (NNValue)field->value);
+                GCSingleton::get()->stackPop();
+                GCSingleton::get()->stackPush(field->value);
             }
         }
         return true;
@@ -19497,17 +19490,17 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
     NNObjInstance* instance;
     NNObjModule* module;
     NNProperty* field;
-    name = nn_vmbits_readstring(state);
-    peeked = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isinstance(peeked))
+    name = nn_vmbits_readstring();
+    peeked = nn_vm_stackpeek(0);
+    if(peeked.isInstance())
     {
         instance = nn_value_asinstance(peeked);
         field = instance->properties.getfieldbyostr(name);
         if(field != nullptr)
         {
             /* pop the instance... */
-            nn_vmbits_stackpop(state);
-            nn_vmbits_stackpush(state, (NNValue)field->value);
+            GCSingleton::get()->stackPop();
+            GCSingleton::get()->stackPush(field->value);
             return true;
         }
         if(nn_vmutil_bindmethod(state, instance->klass, name))
@@ -19518,17 +19511,17 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
             nn_string_getdata(nn_value_asinstance(peeked)->klass->name), nn_string_getdata(name));
         return false;
     }
-    else if(nn_value_isclass(peeked))
+    else if(peeked.isClass())
     {
         klass = nn_value_asclass(peeked);
         field = klass->instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            if(nn_value_getmethodtype((NNValue)field->value) == NEON_FNCONTEXTTYPE_STATIC)
+            if(nn_value_getmethodtype(field->value) == NEON_FNCONTEXTTYPE_STATIC)
             {
                 /* pop the class... */
-                nn_vmbits_stackpop(state);
-                nn_vmbits_stackpush(state, (NNValue)field->value);
+                GCSingleton::get()->stackPop();
+                GCSingleton::get()->stackPush(field->value);
                 return true;
             }
         }
@@ -19538,23 +19531,23 @@ NEON_FORCEINLINE bool nn_vmdo_propertygetself(NNState* state)
             if(field != nullptr)
             {
                 /* pop the class... */
-                nn_vmbits_stackpop(state);
-                nn_vmbits_stackpush(state, (NNValue)field->value);
+                GCSingleton::get()->stackPop();
+                GCSingleton::get()->stackPush(field->value);
                 return true;
             }
         }
         nn_vmmac_tryraise(state, false, "class %s does not have a static property or method named '%s'", nn_string_getdata(klass->name), nn_string_getdata(name));
         return false;
     }
-    else if(nn_value_ismodule(peeked))
+    else if(peeked.isModule())
     {
         module = nn_value_asmodule(peeked);
         field = module->deftable.getfieldbyostr(name);
         if(field != nullptr)
         {
             /* pop the module... */
-            nn_vmbits_stackpop(state);
-            nn_vmbits_stackpush(state, (NNValue)field->value);
+            GCSingleton::get()->stackPop();
+            GCSingleton::get()->stackPush(field->value);
             return true;
         }
         nn_vmmac_tryraise(state, false, "module '%s' does not have a field named '%s'", nn_string_getdata(module->name), nn_string_getdata(name));
@@ -19574,36 +19567,36 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
     NNObjString* name;
     NNObjDict* dict;
     NNObjInstance* instance;
-    vtarget = nn_vmbits_stackpeek(state, 1);
-    name = nn_vmbits_readstring(state);
-    vpeek = nn_vmbits_stackpeek(state, 0);
-    if(nn_value_isinstance(vtarget))
+    vtarget = nn_vm_stackpeek(1);
+    name = nn_vmbits_readstring();
+    vpeek = nn_vm_stackpeek(0);
+    if(vtarget.isInstance())
     {
         instance = nn_value_asinstance(vtarget);
         nn_instance_defproperty(instance, name, vpeek);
-        value = nn_vmbits_stackpop(state);
+        value = GCSingleton::get()->stackPop();
         /* removing the instance object */
-        nn_vmbits_stackpop(state);
-        nn_vmbits_stackpush(state, value);
+        GCSingleton::get()->stackPop();
+        GCSingleton::get()->stackPush(value);
     }
-    else if(nn_value_isdict(vtarget))
+    else if(vtarget.isDict())
     {
-        dict = nn_value_asdict(vtarget);
+        dict = vtarget.asDict();
         nn_dict_setentry(dict, nn_value_fromobject(name), vpeek);
-        value = nn_vmbits_stackpop(state);
+        value = GCSingleton::get()->stackPop();
         /* removing the dictionary object */
-        nn_vmbits_stackpop(state);
-        nn_vmbits_stackpush(state, value);
+        GCSingleton::get()->stackPop();
+        GCSingleton::get()->stackPush(value);
     }
-    /* nn_value_isclass(...) */
+    /* ....isClass() */
     else
     {
         klass = nullptr;
-        if(nn_value_isclass(vtarget))
+        if(vtarget.isClass())
         {
             klass = nn_value_asclass(vtarget);
         }
-        else if(nn_value_isinstance(vtarget))
+        else if(vtarget.isInstance())
         {
             klass = nn_value_asinstance(vtarget)->klass;
         }
@@ -19617,7 +19610,7 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
                 return false;
             }
         }
-        if(nn_value_iscallable(vpeek))
+        if(vpeek.isCallable())
         {
             nn_class_defmethod(klass, name, vpeek);
         }
@@ -19625,10 +19618,10 @@ NEON_FORCEINLINE bool nn_vmdo_propertyset(NNState* state)
         {
             nn_class_defproperty(klass, name, vpeek);
         }
-        value = nn_vmbits_stackpop(state);
+        value = GCSingleton::get()->stackPop();
         /* removing the class object */
-        nn_vmbits_stackpop(state);
-        nn_vmbits_stackpush(state, value);
+        GCSingleton::get()->stackPop();
+        GCSingleton::get()->stackPush(value);
     }
 
     return true;
@@ -19640,15 +19633,15 @@ NEON_FORCEINLINE double nn_vmutil_valtonum(NNValue v)
     {
         return 0;
     }
-    if(nn_value_isbool(v))
+    if(v.isBool())
     {
-        if(nn_value_asbool(v))
+        if(v.asBool())
         {
             return 1;
         }
         return 0;
     }
-    return nn_value_asnumber(v);
+    return v.asNumber();
 }
 
 
@@ -19658,15 +19651,15 @@ NEON_FORCEINLINE uint32_t nn_vmutil_valtouint(NNValue v)
     {
         return 0;
     }
-    if(nn_value_isbool(v))
+    if(v.isBool())
     {
-        if(nn_value_asbool(v))
+        if(v.asBool())
         {
             return 1;
         }
         return 0;
     }
-    return nn_value_asnumber(v);
+    return v.asNumber();
 }
 
 NEON_FORCEINLINE long nn_vmutil_valtoint(NNValue v)
@@ -19684,19 +19677,20 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
     uint32_t ubinleft;
     double dbinright;
     double dbinleft;
-    NNOpCode instruction;
+    NNInstruction::OpCode instruction;
     NNValue res;
     NNValue binvalleft;
     NNValue binvalright;
     willassign = false;
-    instruction = (NNOpCode)GCSingleton::get()->vmstate.currentinstr.code;
-    binvalright = nn_vmbits_stackpeek(state, 0);
-    binvalleft = nn_vmbits_stackpeek(state, 1);
-    if(nn_util_unlikely(nn_value_isinstance(binvalleft)))
+    auto gcs = GCSingleton::get();
+    instruction = (NNInstruction::OpCode)gcs->m_vmstate.currentinstr.code;
+    binvalright = nn_vm_stackpeek(0);
+    binvalleft = nn_vm_stackpeek(1);
+    if(nn_util_unlikely(binvalleft.isInstance()))
     {
         switch(instruction)
         {
-            case NEON_OP_PRIMADD:
+            case NNInstruction::OPC_PRIMADD:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmadd, binvalleft, binvalright, willassign))
                     {
@@ -19704,7 +19698,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMSUBTRACT:
+            case NNInstruction::OPC_PRIMSUBTRACT:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmsub, binvalleft, binvalright, willassign))
                     {
@@ -19712,7 +19706,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMDIVIDE:
+            case NNInstruction::OPC_PRIMDIVIDE:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmdiv, binvalleft, binvalright, willassign))
                     {
@@ -19720,7 +19714,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMMULTIPLY:
+            case NNInstruction::OPC_PRIMMULTIPLY:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmmul, binvalleft, binvalright, willassign))
                     {
@@ -19728,7 +19722,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMAND:
+            case NNInstruction::OPC_PRIMAND:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmband, binvalleft, binvalright, willassign))
                     {
@@ -19736,7 +19730,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMOR:
+            case NNInstruction::OPC_PRIMOR:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmbor, binvalleft, binvalright, willassign))
                     {
@@ -19744,7 +19738,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                     }
                 }
                 break;
-            case NEON_OP_PRIMBITXOR:
+            case NNInstruction::OPC_PRIMBITXOR:
                 {
                     if(nn_vmutil_tryoverloadmath(state, state->defaultstrings.nmbxor, binvalleft, binvalright, willassign))
                     {
@@ -19759,69 +19753,69 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
         }
     }
     isfail = (
-        (!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright) && !binvalright.isNull()) ||
-        (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft) && !binvalleft.isNull())
+        (!binvalright.isNumber() && !binvalright.isBool() && !binvalright.isNull()) ||
+        (!binvalleft.isNumber() && !binvalleft.isBool() && !binvalleft.isNull())
     );
     if(isfail)
     {
         nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", nn_dbg_op2str(instruction), nn_value_typename(binvalleft, false), nn_value_typename(binvalright, false));
         return false;
     }
-    binvalright = nn_vmbits_stackpop(state);
-    binvalleft = nn_vmbits_stackpop(state);
+    binvalright = gcs->stackPop();
+    binvalleft = gcs->stackPop();
     res = nn_value_makenull();
     switch(instruction)
     {
-        case NEON_OP_PRIMADD:
+        case NNInstruction::OPC_PRIMADD:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
                 res = nn_value_makenumber(dbinleft + dbinright);
             }
             break;
-        case NEON_OP_PRIMSUBTRACT:
+        case NNInstruction::OPC_PRIMSUBTRACT:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
                 res = nn_value_makenumber(dbinleft - dbinright);
             }
             break;
-        case NEON_OP_PRIMDIVIDE:
+        case NNInstruction::OPC_PRIMDIVIDE:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
                 res = nn_value_makenumber(dbinleft / dbinright);
             }
             break;
-        case NEON_OP_PRIMMULTIPLY:
+        case NNInstruction::OPC_PRIMMULTIPLY:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
                 res = nn_value_makenumber(dbinleft * dbinright);
             }
             break;
-        case NEON_OP_PRIMAND:
+        case NNInstruction::OPC_PRIMAND:
             {
                 ibinright = nn_vmutil_valtoint(binvalright);
                 ibinleft = nn_vmutil_valtoint(binvalleft);
                 res = nn_value_makenumber(ibinleft & ibinright);
             }
             break;
-        case NEON_OP_PRIMOR:
+        case NNInstruction::OPC_PRIMOR:
             {
                 ibinright = nn_vmutil_valtoint(binvalright);
                 ibinleft = nn_vmutil_valtoint(binvalleft);
                 res = nn_value_makenumber(ibinleft | ibinright);
             }
             break;
-        case NEON_OP_PRIMBITXOR:
+        case NNInstruction::OPC_PRIMBITXOR:
             {
                 ibinright = nn_vmutil_valtoint(binvalright);
                 ibinleft = nn_vmutil_valtoint(binvalleft);
                 res = nn_value_makenumber(ibinleft ^ ibinright);
             }
             break;
-        case NEON_OP_PRIMSHIFTLEFT:
+        case NNInstruction::OPC_PRIMSHIFTLEFT:
             {
                 /*
                 via quickjs:
@@ -19839,7 +19833,7 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
 
             }
             break;
-        case NEON_OP_PRIMSHIFTRIGHT:
+        case NNInstruction::OPC_PRIMSHIFTRIGHT:
             {
                 /*
                     uint32_t v2;
@@ -19853,14 +19847,14 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
                 res = nn_value_makenumber(ubinleft >> ubinright);
             }
             break;
-        case NEON_OP_PRIMGREATER:
+        case NNInstruction::OPC_PRIMGREATER:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
                 res = nn_value_makebool(dbinleft > dbinright);
             }
             break;
-        case NEON_OP_PRIMLESSTHAN:
+        case NNInstruction::OPC_PRIMLESSTHAN:
             {
                 dbinright = nn_vmutil_valtonum(binvalright);
                 dbinleft = nn_vmutil_valtonum(binvalleft);
@@ -19874,21 +19868,22 @@ NEON_FORCEINLINE bool nn_vmdo_dobinarydirect(NNState* state)
             }
             break;
     }
-    nn_vmbits_stackpush(state, res);
+    gcs->stackPush(res);
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_globaldefine(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_globaldefine()
 {
     NNValue val;
     NNObjString* name;
-    name = nn_vmbits_readstring(state);
-    val = nn_vmbits_stackpeek(state, 0);
-    auto tab = &GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
+    name = nn_vmbits_readstring();
+    val = nn_vm_stackpeek(0);
+    auto gcs = GCSingleton::get();
+    auto tab = &gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
     tab->set(nn_value_fromobject(name), val);
-    nn_vmbits_stackpop(state);
+    gcs->stackPop();
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
-    state->print(state->debugwriter, &GCSingleton::get()->declaredglobals, "globals");
+    state->print(state->debugwriter, &gcs->declaredglobals, "globals");
     #endif
     return true;
 }
@@ -19897,19 +19892,20 @@ NEON_FORCEINLINE bool nn_vmdo_globalget(NNState* state)
 {
     NNObjString* name;
     NNProperty* field;
-    name = nn_vmbits_readstring(state);
-    auto tab = &GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
+    name = nn_vmbits_readstring();
+    auto gcs = GCSingleton::get();
+    auto tab = &gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
     field = tab->getfieldbyostr(name);
     if(field == nullptr)
     {
-        field = GCSingleton::get()->declaredglobals.getfieldbyostr(name);
+        field = gcs->declaredglobals.getfieldbyostr(name);
         if(field == nullptr)
         {
             nn_except_throwclass(state, state->exceptions.stdexception, "global name '%s' is not defined", nn_string_getdata(name));
             return false;
         }
     }
-    nn_vmbits_stackpush(state, (NNValue)field->value);
+    gcs->stackPush(field->value);
     return true;
 }
 
@@ -19917,10 +19913,11 @@ NEON_FORCEINLINE bool nn_vmdo_globalset(NNState* state)
 {
     NNObjString* name;
     NNObjModule* module;
-    name = nn_vmbits_readstring(state);
-    module = GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module;
+    name = nn_vmbits_readstring();
+    auto gcs = GCSingleton::get();
+    module = gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module;
     auto table = &module->deftable;
-    if(table->set(nn_value_fromobject(name), nn_vmbits_stackpeek(state, 0)))
+    if(table->set(nn_value_fromobject(name), nn_vm_stackpeek(0)))
     {
         if(state->conf.enablestrictmode)
         {
@@ -19932,32 +19929,33 @@ NEON_FORCEINLINE bool nn_vmdo_globalset(NNState* state)
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_localget(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_localget()
 {
     size_t ssp;
     uint16_t slot;
     NNValue val;
-    slot = nn_vmbits_readshort(state);
-    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-    val = GCSingleton::get()->vmstate.stackvalues[ssp + slot];
-    nn_vmbits_stackpush(state, val);
+    slot = nn_vmbits_readshort();
+    auto gcs = GCSingleton::get(); 
+    ssp = gcs->m_vmstate.currentframe->stackslotpos;
+    val = gcs->m_vmstate.stackvalues[ssp + slot];
+    gcs->stackPush(val);
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_localset(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_localset()
 {
     size_t ssp;
     uint16_t slot;
     NNValue peeked;
-    slot = nn_vmbits_readshort(state);
-    peeked = nn_vmbits_stackpeek(state, 0);
-    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-    GCSingleton::get()->vmstate.stackvalues[ssp + slot] = peeked;
-
+    slot = nn_vmbits_readshort();
+    peeked = nn_vm_stackpeek(0);
+    auto gcs = GCSingleton::get();
+    ssp = gcs->m_vmstate.currentframe->stackslotpos;
+    gcs->m_vmstate.stackvalues[ssp + slot] = peeked;
     return true;
 }
 
-/*NEON_OP_FUNCARGOPTIONAL*/
+/*NNInstruction::OPC_FUNCARGOPTIONAL*/
 NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
 {
     size_t ssp;
@@ -19965,20 +19963,20 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
     uint16_t slot;
     NNValue cval;
     NNValue peeked;
-    slot = nn_vmbits_readshort(state);
-    peeked = nn_vmbits_stackpeek(state, 1);
-    cval = nn_vmbits_stackpeek(state, 2);
+    slot = nn_vmbits_readshort();
+    peeked = nn_vm_stackpeek(1);
+    cval = nn_vm_stackpeek(2);
 
-        ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
+        ssp = GCSingleton::get()->m_vmstate.currentframe->stackslotpos;
 
         #if 0
-            putpos = (GCSingleton::get()->vmstate.stackidx + (-1 - 1)) ;
+            putpos = (GCSingleton::get()->m_vmstate.stackidx + (-1 - 1)) ;
         #else
             #if 0
-                putpos = GCSingleton::get()->vmstate.stackidx + (slot - 0);
+                putpos = GCSingleton::get()->m_vmstate.stackidx + (slot - 0);
             #else
                 #if 0
-                    putpos = GCSingleton::get()->vmstate.stackidx + (slot);
+                    putpos = GCSingleton::get()->m_vmstate.stackidx + (slot);
                 #else
                     putpos = (ssp + slot) + 0;
                 #endif
@@ -19996,94 +19994,98 @@ NEON_FORCEINLINE bool nn_vmdo_funcargoptional(NNState* state)
     #endif
     if(cval.isNull())
     {
-        GCSingleton::get()->vmstate.stackvalues[putpos] = peeked;
+        GCSingleton::get()->m_vmstate.stackvalues[putpos] = peeked;
     }
     /*
     else
     {
         #if 0
-            nn_vmbits_stackpop(state);
+            GCSingleton::get()->stackPop();
         #endif
     }
     */
-    nn_vmbits_stackpop(state);
+    GCSingleton::get()->stackPop();
 
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_funcargget(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_funcargget()
 {
     size_t ssp;
     uint16_t slot;
     NNValue val;
-    slot = nn_vmbits_readshort(state);
-    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-    val = GCSingleton::get()->vmstate.stackvalues[ssp + slot];
-    nn_vmbits_stackpush(state, val);
+    slot = nn_vmbits_readshort();
+    auto gcs = GCSingleton::get();
+    ssp = gcs->m_vmstate.currentframe->stackslotpos;
+    val = gcs->m_vmstate.stackvalues[ssp + slot];
+    gcs->stackPush(val);
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_funcargset(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_funcargset()
 {
     size_t ssp;
     uint16_t slot;
     NNValue peeked;
-    slot = nn_vmbits_readshort(state);
-    peeked = nn_vmbits_stackpeek(state, 0);
-    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-    GCSingleton::get()->vmstate.stackvalues[ssp + slot] = peeked;
+    slot = nn_vmbits_readshort();
+    peeked = nn_vm_stackpeek(0);
+    auto gcs = GCSingleton::get(); 
+    ssp = gcs->m_vmstate.currentframe->stackslotpos;
+    gcs->m_vmstate.stackvalues[ssp + slot] = peeked;
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_makeclosure(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_makeclosure()
 {
     size_t i;
     int upvidx;
     size_t ssp;
-    uint8_t islocal;
+    uint16_t islocal;
     NNValue thisval;
     NNValue* upvals;
     NNObjFunction* function;
     NNObjFunction* closure;
-    function = nn_value_asfunction(nn_vmbits_readconst(state));
+    function = nn_value_asfunction(nn_vmbits_readconst());
     #if 0
-        thisval = nn_vmbits_stackpeek(state, 3);
+        thisval = nn_vm_stackpeek(3);
     #else
         thisval = nn_value_makenull();
     #endif
     closure = nn_object_makefuncclosure(function, thisval);
-    nn_vmbits_stackpush(state, nn_value_fromobject(closure));
+    auto gcs = GCSingleton::get();
+    gcs->stackPush(nn_value_fromobject(closure));
     for(i = 0; i < (size_t)closure->upvalcount; i++)
     {
-        islocal = nn_vmbits_readbyte(state);
-        upvidx = nn_vmbits_readshort(state);
+        islocal = nn_vmbits_readbyte();
+        upvidx = nn_vmbits_readshort();
         if(islocal)
         {
-            ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-            upvals = &GCSingleton::get()->vmstate.stackvalues[ssp + upvidx];
-            closure->fnclosure.upvalues[i] = nn_vmutil_upvaluescapture(state, upvals, upvidx);
+            ssp = gcs->m_vmstate.currentframe->stackslotpos;
+            upvals = &gcs->m_vmstate.stackvalues[ssp + upvidx];
+            closure->fnclosure.upvalues[i] = nn_vmutil_upvaluescapture(upvals, upvidx);
         }
         else
         {
-            closure->fnclosure.upvalues[i] = GCSingleton::get()->vmstate.currentframe->closure->fnclosure.upvalues[upvidx];
+            closure->fnclosure.upvalues[i] = gcs->m_vmstate.currentframe->closure->fnclosure.upvalues[upvidx];
         }
     }
     return true;
 }
 
-NEON_FORCEINLINE bool nn_vmdo_makearray(NNState* state)
+NEON_FORCEINLINE bool nn_vmdo_makearray()
 {
     int i;
     int count;
     NNObjArray* array;
-    count = nn_vmbits_readshort(state);
+    count = nn_vmbits_readshort();
     array = nn_object_makearray();
-    GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx + (-count - 1)] = nn_value_fromobject(array);
+    auto gcs = GCSingleton::get();
+    gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count - 1)] = nn_value_fromobject(array);
     for(i = count - 1; i >= 0; i--)
     {
-        nn_array_push(array, nn_vmbits_stackpeek(state, i));
+        nn_array_push(array, nn_vm_stackpeek(i));
     }
-    nn_vmbits_stackpopn(state, count);
+    gcs->stackPop(count);
     return true;
 }
 
@@ -20096,22 +20098,23 @@ NEON_FORCEINLINE bool nn_vmdo_makedict(NNState* state)
     NNValue value;
     NNObjDict* dict;
     /* 1 for key, 1 for value */
-    realcount = nn_vmbits_readshort(state);
+    realcount = nn_vmbits_readshort();
     count = realcount * 2;
     dict = nn_object_makedict();
-    GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx + (-count - 1)] = nn_value_fromobject(dict);
+    auto gcs = GCSingleton::get();
+    gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count - 1)] = nn_value_fromobject(dict);
     for(i = 0; i < count; i += 2)
     {
-        name = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx + (-count + i)];
-        if(!nn_value_isstring(name) && !nn_value_isnumber(name) && !nn_value_isbool(name))
+        name = gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count + i)];
+        if(!name.isString() && !name.isNumber() && !name.isBool())
         {
             nn_vmmac_tryraise(state, false, "dictionary key must be one of string, number or boolean");
             return false;
         }
-        value = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx + (-count + i + 1)];
+        value = gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count + i + 1)];
         nn_dict_setentry(dict, name, value);
     }
-    nn_vmbits_stackpopn(state, count);
+    gcs->stackPop(count);
     return true;
 }
 
@@ -20121,19 +20124,20 @@ NEON_FORCEINLINE bool nn_vmdo_dobinaryfunc(NNState* state, const char* opname, n
     double dbinleft;
     NNValue binvalright;
     NNValue binvalleft;
-    binvalright = nn_vmbits_stackpeek(state, 0);
-    binvalleft = nn_vmbits_stackpeek(state, 1);
-    if((!nn_value_isnumber(binvalright) && !nn_value_isbool(binvalright))
-    || (!nn_value_isnumber(binvalleft) && !nn_value_isbool(binvalleft)))
+    binvalright = nn_vm_stackpeek(0);
+    binvalleft = nn_vm_stackpeek(1);
+    auto gcs = GCSingleton::get();
+    if((!binvalright.isNumber() && !binvalright.isBool())
+    || (!binvalleft.isNumber() && !binvalleft.isBool()))
     {
         nn_vmmac_tryraise(state, false, "unsupported operand %s for %s and %s", opname, nn_value_typename(binvalleft, false), nn_value_typename(binvalright, false));
         return false;
     }
-    binvalright = nn_vmbits_stackpop(state);
-    dbinright = nn_value_isbool(binvalright) ? (nn_value_asbool(binvalright) ? 1 : 0) : nn_value_asnumber(binvalright);
-    binvalleft = nn_vmbits_stackpop(state);
-    dbinleft = nn_value_isbool(binvalleft) ? (nn_value_asbool(binvalleft) ? 1 : 0) : nn_value_asnumber(binvalleft);
-    nn_vmbits_stackpush(state, opfn(dbinleft, dbinright));
+    binvalright = gcs->stackPop();
+    dbinright = binvalright.isBool() ? (binvalright.asBool() ? 1 : 0) : binvalright.asNumber();
+    binvalleft = gcs->stackPop();
+    dbinleft = binvalleft.isBool() ? (binvalleft.asBool() ? 1 : 0) : binvalleft.asNumber();
+    gcs->stackPush(opfn(dbinleft, dbinright));
     return true;
 }
 
@@ -20151,35 +20155,33 @@ static void nn_vmdebug_printvalue(NNState* state, NNValue val, const char* fmt, 
     nn_iostream_printf(pr, "\n");
 }
 
-#define NEON_CONFIG_USECOMPUTEDGOTO 0
 
 /*
 * something about using computed goto is currently breaking some scripts, specifically
 * code generated for things like `somevar[idx]++`
 * no issue with switch/case, though.
 */
-#if 0
-    #if defined(__GNUC__)
-        #if defined(NEON_CONFIG_USECOMPUTEDGOTO)
-            #undef NEON_CONFIG_USECOMPUTEDGOTO
-        #endif
+
+#define NEON_CONFIG_USECOMPUTEDGOTO 0
+/*
+#if defined(__GNUC__)
+    #if defined(NEON_CONFIG_USECOMPUTEDGOTO)
+        #undef NEON_CONFIG_USECOMPUTEDGOTO
         #define NEON_CONFIG_USECOMPUTEDGOTO 1
-        #if defined(__STRICT_ANSI__)
-            #define NEON_SETDISPATCHIDX(idx, val) val
-        #else
-            #define NEON_SETDISPATCHIDX(idx, val) [idx] = val
-        #endif
     #endif
 #endif
-
+*/
 #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
+    #define NEON_SETDISPATCHIDX(idx, val) [NNInstruction::idx] = val
     #define VM_MAKELABEL(op) LABEL_##op
-    #define VM_CASE(op) LABEL_##op:
-    //#define VM_DISPATCH() goto readnextinstruction
-    #define VM_DISPATCH() continue
-    
+    #define VM_CASE(op) VM_MAKELABEL(op):
+    #if 1
+        #define VM_DISPATCH() goto readnextinstruction
+    #else
+        #define VM_DISPATCH() continue
+    #endif
 #else
-    #define VM_CASE(op) case op:
+    #define VM_CASE(op) case NNInstruction::op:
     #define VM_DISPATCH() break
 #endif
 
@@ -20193,97 +20195,90 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
     * switch tree are not calling nn_vmmac_exitvm(), as its behavior could be undefined.
     */
     bool you_are_calling_exit_vm_outside_of_runvm;
-    #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
-        void* computedaddr;
-    #endif
     NNValue* dbgslot;
     NNInstruction currinstr;
+    auto vmgcs = GCSingleton::get();
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
         static void* dispatchtable[] =
         {
-
-            NEON_SETDISPATCHIDX(NEON_OP_GLOBALDEFINE, &&VM_MAKELABEL(NEON_OP_GLOBALDEFINE)),
-            NEON_SETDISPATCHIDX(NEON_OP_GLOBALGET, &&VM_MAKELABEL(NEON_OP_GLOBALGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_GLOBALSET, &&VM_MAKELABEL(NEON_OP_GLOBALSET)),
-            NEON_SETDISPATCHIDX(NEON_OP_LOCALGET, &&VM_MAKELABEL(NEON_OP_LOCALGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_LOCALSET, &&VM_MAKELABEL(NEON_OP_LOCALSET)),
-            NEON_SETDISPATCHIDX(NEON_OP_FUNCARGOPTIONAL, &&VM_MAKELABEL(NEON_OP_FUNCARGOPTIONAL)),
-            NEON_SETDISPATCHIDX(NEON_OP_FUNCARGSET, &&VM_MAKELABEL(NEON_OP_FUNCARGSET)),
-            NEON_SETDISPATCHIDX(NEON_OP_FUNCARGGET, &&VM_MAKELABEL(NEON_OP_FUNCARGGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_UPVALUEGET, &&VM_MAKELABEL(NEON_OP_UPVALUEGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_UPVALUESET, &&VM_MAKELABEL(NEON_OP_UPVALUESET)),
-            NEON_SETDISPATCHIDX(NEON_OP_UPVALUECLOSE, &&VM_MAKELABEL(NEON_OP_UPVALUECLOSE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PROPERTYGET, &&VM_MAKELABEL(NEON_OP_PROPERTYGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_PROPERTYGETSELF, &&VM_MAKELABEL(NEON_OP_PROPERTYGETSELF)),
-            NEON_SETDISPATCHIDX(NEON_OP_PROPERTYSET, &&VM_MAKELABEL(NEON_OP_PROPERTYSET)),
-            NEON_SETDISPATCHIDX(NEON_OP_JUMPIFFALSE, &&VM_MAKELABEL(NEON_OP_JUMPIFFALSE)),
-            NEON_SETDISPATCHIDX(NEON_OP_JUMPNOW, &&VM_MAKELABEL(NEON_OP_JUMPNOW)),
-            NEON_SETDISPATCHIDX(NEON_OP_LOOP, &&VM_MAKELABEL(NEON_OP_LOOP)),
-            NEON_SETDISPATCHIDX(NEON_OP_EQUAL, &&VM_MAKELABEL(NEON_OP_EQUAL)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMGREATER, &&VM_MAKELABEL(NEON_OP_PRIMGREATER)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMLESSTHAN, &&VM_MAKELABEL(NEON_OP_PRIMLESSTHAN)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHEMPTY, &&VM_MAKELABEL(NEON_OP_PUSHEMPTY)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHNULL, &&VM_MAKELABEL(NEON_OP_PUSHNULL)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHTRUE, &&VM_MAKELABEL(NEON_OP_PUSHTRUE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHFALSE, &&VM_MAKELABEL(NEON_OP_PUSHFALSE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMADD, &&VM_MAKELABEL(NEON_OP_PRIMADD)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMSUBTRACT, &&VM_MAKELABEL(NEON_OP_PRIMSUBTRACT)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMMULTIPLY, &&VM_MAKELABEL(NEON_OP_PRIMMULTIPLY)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMDIVIDE, &&VM_MAKELABEL(NEON_OP_PRIMDIVIDE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMFLOORDIVIDE, &&VM_MAKELABEL(NEON_OP_PRIMFLOORDIVIDE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMMODULO, &&VM_MAKELABEL(NEON_OP_PRIMMODULO)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMPOW, &&VM_MAKELABEL(NEON_OP_PRIMPOW)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMNEGATE, &&VM_MAKELABEL(NEON_OP_PRIMNEGATE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMNOT, &&VM_MAKELABEL(NEON_OP_PRIMNOT)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMBITNOT, &&VM_MAKELABEL(NEON_OP_PRIMBITNOT)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMAND, &&VM_MAKELABEL(NEON_OP_PRIMAND)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMOR, &&VM_MAKELABEL(NEON_OP_PRIMOR)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMBITXOR, &&VM_MAKELABEL(NEON_OP_PRIMBITXOR)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMSHIFTLEFT, &&VM_MAKELABEL(NEON_OP_PRIMSHIFTLEFT)),
-            NEON_SETDISPATCHIDX(NEON_OP_PRIMSHIFTRIGHT, &&VM_MAKELABEL(NEON_OP_PRIMSHIFTRIGHT)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHONE, &&VM_MAKELABEL(NEON_OP_PUSHONE)),
-            NEON_SETDISPATCHIDX(NEON_OP_PUSHCONSTANT, &&VM_MAKELABEL(NEON_OP_PUSHCONSTANT)),
-            NEON_SETDISPATCHIDX(NEON_OP_ECHO, &&VM_MAKELABEL(NEON_OP_ECHO)),
-            NEON_SETDISPATCHIDX(NEON_OP_POPONE, &&VM_MAKELABEL(NEON_OP_POPONE)),
-            NEON_SETDISPATCHIDX(NEON_OP_DUPONE, &&VM_MAKELABEL(NEON_OP_DUPONE)),
-            NEON_SETDISPATCHIDX(NEON_OP_POPN, &&VM_MAKELABEL(NEON_OP_POPN)),
-            NEON_SETDISPATCHIDX(NEON_OP_ASSERT, &&VM_MAKELABEL(NEON_OP_ASSERT)),
-            NEON_SETDISPATCHIDX(NEON_OP_EXTHROW, &&VM_MAKELABEL(NEON_OP_EXTHROW)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKECLOSURE, &&VM_MAKELABEL(NEON_OP_MAKECLOSURE)),
-            NEON_SETDISPATCHIDX(NEON_OP_CALLFUNCTION, &&VM_MAKELABEL(NEON_OP_CALLFUNCTION)),
-            NEON_SETDISPATCHIDX(NEON_OP_CALLMETHOD, &&VM_MAKELABEL(NEON_OP_CALLMETHOD)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSINVOKETHIS, &&VM_MAKELABEL(NEON_OP_CLASSINVOKETHIS)),
-            NEON_SETDISPATCHIDX(NEON_OP_RETURN, &&VM_MAKELABEL(NEON_OP_RETURN)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKECLASS, &&VM_MAKELABEL(NEON_OP_MAKECLASS)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKEMETHOD, &&VM_MAKELABEL(NEON_OP_MAKEMETHOD)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSGETTHIS, &&VM_MAKELABEL(NEON_OP_CLASSGETTHIS)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSPROPERTYDEFINE, &&VM_MAKELABEL(NEON_OP_CLASSPROPERTYDEFINE)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSINHERIT, &&VM_MAKELABEL(NEON_OP_CLASSINHERIT)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSGETSUPER, &&VM_MAKELABEL(NEON_OP_CLASSGETSUPER)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSINVOKESUPER, &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPER)),
-            NEON_SETDISPATCHIDX(NEON_OP_CLASSINVOKESUPERSELF, &&VM_MAKELABEL(NEON_OP_CLASSINVOKESUPERSELF)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKERANGE, &&VM_MAKELABEL(NEON_OP_MAKERANGE)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKEARRAY, &&VM_MAKELABEL(NEON_OP_MAKEARRAY)),
-            NEON_SETDISPATCHIDX(NEON_OP_MAKEDICT, &&VM_MAKELABEL(NEON_OP_MAKEDICT)),
-            NEON_SETDISPATCHIDX(NEON_OP_INDEXGET, &&VM_MAKELABEL(NEON_OP_INDEXGET)),
-            NEON_SETDISPATCHIDX(NEON_OP_INDEXGETRANGED, &&VM_MAKELABEL(NEON_OP_INDEXGETRANGED)),
-            NEON_SETDISPATCHIDX(NEON_OP_INDEXSET, &&VM_MAKELABEL(NEON_OP_INDEXSET)),
-            NEON_SETDISPATCHIDX(NEON_OP_IMPORTIMPORT, &&VM_MAKELABEL(NEON_OP_IMPORTIMPORT)),
-            NEON_SETDISPATCHIDX(NEON_OP_EXTRY, &&VM_MAKELABEL(NEON_OP_EXTRY)),
-            NEON_SETDISPATCHIDX(NEON_OP_EXPOPTRY, &&VM_MAKELABEL(NEON_OP_EXPOPTRY)),
-            NEON_SETDISPATCHIDX(NEON_OP_EXPUBLISHTRY, &&VM_MAKELABEL(NEON_OP_EXPUBLISHTRY)),
-            NEON_SETDISPATCHIDX(NEON_OP_STRINGIFY, &&VM_MAKELABEL(NEON_OP_STRINGIFY)),
-            NEON_SETDISPATCHIDX(NEON_OP_SWITCH, &&VM_MAKELABEL(NEON_OP_SWITCH)),
-            NEON_SETDISPATCHIDX(NEON_OP_TYPEOF, &&VM_MAKELABEL(NEON_OP_TYPEOF)),
-            NEON_SETDISPATCHIDX(NEON_OP_OPINSTANCEOF, &&VM_MAKELABEL(NEON_OP_OPINSTANCEOF)),
-            NEON_SETDISPATCHIDX(NEON_OP_HALT, &&VM_MAKELABEL(NEON_OP_HALT)),
-
-
+            NEON_SETDISPATCHIDX(OPC_GLOBALDEFINE, &&VM_MAKELABEL(OPC_GLOBALDEFINE)),
+            NEON_SETDISPATCHIDX(OPC_GLOBALGET, &&VM_MAKELABEL(OPC_GLOBALGET)),
+            NEON_SETDISPATCHIDX(OPC_GLOBALSET, &&VM_MAKELABEL(OPC_GLOBALSET)),
+            NEON_SETDISPATCHIDX(OPC_LOCALGET, &&VM_MAKELABEL(OPC_LOCALGET)),
+            NEON_SETDISPATCHIDX(OPC_LOCALSET, &&VM_MAKELABEL(OPC_LOCALSET)),
+            NEON_SETDISPATCHIDX(OPC_FUNCARGOPTIONAL, &&VM_MAKELABEL(OPC_FUNCARGOPTIONAL)),
+            NEON_SETDISPATCHIDX(OPC_FUNCARGSET, &&VM_MAKELABEL(OPC_FUNCARGSET)),
+            NEON_SETDISPATCHIDX(OPC_FUNCARGGET, &&VM_MAKELABEL(OPC_FUNCARGGET)),
+            NEON_SETDISPATCHIDX(OPC_UPVALUEGET, &&VM_MAKELABEL(OPC_UPVALUEGET)),
+            NEON_SETDISPATCHIDX(OPC_UPVALUESET, &&VM_MAKELABEL(OPC_UPVALUESET)),
+            NEON_SETDISPATCHIDX(OPC_UPVALUECLOSE, &&VM_MAKELABEL(OPC_UPVALUECLOSE)),
+            NEON_SETDISPATCHIDX(OPC_PROPERTYGET, &&VM_MAKELABEL(OPC_PROPERTYGET)),
+            NEON_SETDISPATCHIDX(OPC_PROPERTYGETSELF, &&VM_MAKELABEL(OPC_PROPERTYGETSELF)),
+            NEON_SETDISPATCHIDX(OPC_PROPERTYSET, &&VM_MAKELABEL(OPC_PROPERTYSET)),
+            NEON_SETDISPATCHIDX(OPC_JUMPIFFALSE, &&VM_MAKELABEL(OPC_JUMPIFFALSE)),
+            NEON_SETDISPATCHIDX(OPC_JUMPNOW, &&VM_MAKELABEL(OPC_JUMPNOW)),
+            NEON_SETDISPATCHIDX(OPC_LOOP, &&VM_MAKELABEL(OPC_LOOP)),
+            NEON_SETDISPATCHIDX(OPC_EQUAL, &&VM_MAKELABEL(OPC_EQUAL)),
+            NEON_SETDISPATCHIDX(OPC_PRIMGREATER, &&VM_MAKELABEL(OPC_PRIMGREATER)),
+            NEON_SETDISPATCHIDX(OPC_PRIMLESSTHAN, &&VM_MAKELABEL(OPC_PRIMLESSTHAN)),
+            NEON_SETDISPATCHIDX(OPC_PUSHEMPTY, &&VM_MAKELABEL(OPC_PUSHEMPTY)),
+            NEON_SETDISPATCHIDX(OPC_PUSHNULL, &&VM_MAKELABEL(OPC_PUSHNULL)),
+            NEON_SETDISPATCHIDX(OPC_PUSHTRUE, &&VM_MAKELABEL(OPC_PUSHTRUE)),
+            NEON_SETDISPATCHIDX(OPC_PUSHFALSE, &&VM_MAKELABEL(OPC_PUSHFALSE)),
+            NEON_SETDISPATCHIDX(OPC_PRIMADD, &&VM_MAKELABEL(OPC_PRIMADD)),
+            NEON_SETDISPATCHIDX(OPC_PRIMSUBTRACT, &&VM_MAKELABEL(OPC_PRIMSUBTRACT)),
+            NEON_SETDISPATCHIDX(OPC_PRIMMULTIPLY, &&VM_MAKELABEL(OPC_PRIMMULTIPLY)),
+            NEON_SETDISPATCHIDX(OPC_PRIMDIVIDE, &&VM_MAKELABEL(OPC_PRIMDIVIDE)),
+            NEON_SETDISPATCHIDX(OPC_PRIMMODULO, &&VM_MAKELABEL(OPC_PRIMMODULO)),
+            NEON_SETDISPATCHIDX(OPC_PRIMPOW, &&VM_MAKELABEL(OPC_PRIMPOW)),
+            NEON_SETDISPATCHIDX(OPC_PRIMNEGATE, &&VM_MAKELABEL(OPC_PRIMNEGATE)),
+            NEON_SETDISPATCHIDX(OPC_PRIMNOT, &&VM_MAKELABEL(OPC_PRIMNOT)),
+            NEON_SETDISPATCHIDX(OPC_PRIMBITNOT, &&VM_MAKELABEL(OPC_PRIMBITNOT)),
+            NEON_SETDISPATCHIDX(OPC_PRIMAND, &&VM_MAKELABEL(OPC_PRIMAND)),
+            NEON_SETDISPATCHIDX(OPC_PRIMOR, &&VM_MAKELABEL(OPC_PRIMOR)),
+            NEON_SETDISPATCHIDX(OPC_PRIMBITXOR, &&VM_MAKELABEL(OPC_PRIMBITXOR)),
+            NEON_SETDISPATCHIDX(OPC_PRIMSHIFTLEFT, &&VM_MAKELABEL(OPC_PRIMSHIFTLEFT)),
+            NEON_SETDISPATCHIDX(OPC_PRIMSHIFTRIGHT, &&VM_MAKELABEL(OPC_PRIMSHIFTRIGHT)),
+            NEON_SETDISPATCHIDX(OPC_PUSHONE, &&VM_MAKELABEL(OPC_PUSHONE)),
+            NEON_SETDISPATCHIDX(OPC_PUSHCONSTANT, &&VM_MAKELABEL(OPC_PUSHCONSTANT)),
+            NEON_SETDISPATCHIDX(OPC_ECHO, &&VM_MAKELABEL(OPC_ECHO)),
+            NEON_SETDISPATCHIDX(OPC_POPONE, &&VM_MAKELABEL(OPC_POPONE)),
+            NEON_SETDISPATCHIDX(OPC_DUPONE, &&VM_MAKELABEL(OPC_DUPONE)),
+            NEON_SETDISPATCHIDX(OPC_POPN, &&VM_MAKELABEL(OPC_POPN)),
+            NEON_SETDISPATCHIDX(OPC_ASSERT, &&VM_MAKELABEL(OPC_ASSERT)),
+            NEON_SETDISPATCHIDX(OPC_EXTHROW, &&VM_MAKELABEL(OPC_EXTHROW)),
+            NEON_SETDISPATCHIDX(OPC_MAKECLOSURE, &&VM_MAKELABEL(OPC_MAKECLOSURE)),
+            NEON_SETDISPATCHIDX(OPC_CALLFUNCTION, &&VM_MAKELABEL(OPC_CALLFUNCTION)),
+            NEON_SETDISPATCHIDX(OPC_CALLMETHOD, &&VM_MAKELABEL(OPC_CALLMETHOD)),
+            NEON_SETDISPATCHIDX(OPC_CLASSINVOKETHIS, &&VM_MAKELABEL(OPC_CLASSINVOKETHIS)),
+            NEON_SETDISPATCHIDX(OPC_RETURN, &&VM_MAKELABEL(OPC_RETURN)),
+            NEON_SETDISPATCHIDX(OPC_MAKECLASS, &&VM_MAKELABEL(OPC_MAKECLASS)),
+            NEON_SETDISPATCHIDX(OPC_MAKEMETHOD, &&VM_MAKELABEL(OPC_MAKEMETHOD)),
+            NEON_SETDISPATCHIDX(OPC_CLASSGETTHIS, &&VM_MAKELABEL(OPC_CLASSGETTHIS)),
+            NEON_SETDISPATCHIDX(OPC_CLASSPROPERTYDEFINE, &&VM_MAKELABEL(OPC_CLASSPROPERTYDEFINE)),
+            NEON_SETDISPATCHIDX(OPC_CLASSINHERIT, &&VM_MAKELABEL(OPC_CLASSINHERIT)),
+            NEON_SETDISPATCHIDX(OPC_CLASSGETSUPER, &&VM_MAKELABEL(OPC_CLASSGETSUPER)),
+            NEON_SETDISPATCHIDX(OPC_CLASSINVOKESUPER, &&VM_MAKELABEL(OPC_CLASSINVOKESUPER)),
+            NEON_SETDISPATCHIDX(OPC_CLASSINVOKESUPERSELF, &&VM_MAKELABEL(OPC_CLASSINVOKESUPERSELF)),
+            NEON_SETDISPATCHIDX(OPC_MAKERANGE, &&VM_MAKELABEL(OPC_MAKERANGE)),
+            NEON_SETDISPATCHIDX(OPC_MAKEARRAY, &&VM_MAKELABEL(OPC_MAKEARRAY)),
+            NEON_SETDISPATCHIDX(OPC_MAKEDICT, &&VM_MAKELABEL(OPC_MAKEDICT)),
+            NEON_SETDISPATCHIDX(OPC_INDEXGET, &&VM_MAKELABEL(OPC_INDEXGET)),
+            NEON_SETDISPATCHIDX(OPC_INDEXGETRANGED, &&VM_MAKELABEL(OPC_INDEXGETRANGED)),
+            NEON_SETDISPATCHIDX(OPC_INDEXSET, &&VM_MAKELABEL(OPC_INDEXSET)),
+            NEON_SETDISPATCHIDX(OPC_IMPORTIMPORT, &&VM_MAKELABEL(OPC_IMPORTIMPORT)),
+            NEON_SETDISPATCHIDX(OPC_EXTRY, &&VM_MAKELABEL(OPC_EXTRY)),
+            NEON_SETDISPATCHIDX(OPC_EXPOPTRY, &&VM_MAKELABEL(OPC_EXPOPTRY)),
+            NEON_SETDISPATCHIDX(OPC_EXPUBLISHTRY, &&VM_MAKELABEL(OPC_EXPUBLISHTRY)),
+            NEON_SETDISPATCHIDX(OPC_STRINGIFY, &&VM_MAKELABEL(OPC_STRINGIFY)),
+            NEON_SETDISPATCHIDX(OPC_SWITCH, &&VM_MAKELABEL(OPC_SWITCH)),
+            NEON_SETDISPATCHIDX(OPC_TYPEOF, &&VM_MAKELABEL(OPC_TYPEOF)),
+            NEON_SETDISPATCHIDX(OPC_OPINSTANCEOF, &&VM_MAKELABEL(OPC_OPINSTANCEOF)),
+            NEON_SETDISPATCHIDX(OPC_HALT, &&VM_MAKELABEL(OPC_HALT)),
         };
     #endif
     you_are_calling_exit_vm_outside_of_runvm = false;
-    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
-
+    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
     while(true)
     {
         #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
@@ -20295,18 +20290,18 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
         // can cause us to go into an invalid mode where frame count == 0
         // to fix this, we need to exit with an appropriate mode here.
         */
-        if(GCSingleton::get()->vmstate.framecount == 0)
+        if(vmgcs->m_vmstate.framecount == 0)
         {
             return NEON_STATUS_FAILRUNTIME;
         }
         if(nn_util_unlikely(state->conf.shoulddumpstack))
         {
-            ofs = (int)(GCSingleton::get()->vmstate.currentframe->inscode - GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs);
-            nn_dbg_printinstructionat(state->debugwriter, &GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob, ofs);
+            ofs = (int)(vmgcs->m_vmstate.currentframe->inscode - vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs);
+            nn_dbg_printinstructionat(state->debugwriter, &vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob, ofs);
             fprintf(stderr, "stack (before)=[\n");
             iterpos = 0;
-            dbgslot = GCSingleton::get()->vmstate.stackvalues;
-            while(dbgslot < &GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx])
+            dbgslot = vmgcs->m_vmstate.stackvalues;
+            while(dbgslot < &vmgcs->m_vmstate.stackvalues[vmgcs->m_vmstate.stackidx])
             {
                 printpos = iterpos + 1;
                 iterpos++;
@@ -20324,84 +20319,75 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                 trynext:
             #endif
         #endif
-        currinstr = nn_vmbits_readinstruction(state);
-        GCSingleton::get()->vmstate.currentinstr = currinstr;
+        currinstr = nn_vmbits_readinstruction();
+        vmgcs->m_vmstate.currentinstr = currinstr;
         #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
-            computedaddr = dispatchtable[currinstr.code];
-            /* TODO: figure out why this happens (failing instruction is 255) */
-            if(nn_util_unlikely(computedaddr == nullptr))
-            {
-                #if 0
-                    goto trynext;
-                #else
-                    fprintf(stderr, "computedaddr is nullptr!!\n");
-                    return NEON_STATUS_FAILRUNTIME;
-                #endif
-            }
-            goto* computedaddr;
+            auto address = dispatchtable[currinstr.code];
+            fprintf(stderr, "gotoaddress=%p (for %s (%d))\n", address, nn_dbg_op2str(currinstr.code), currinstr.code);
+            goto* address;
         #else
             switch(currinstr.code)
         #endif
         {
-            VM_CASE(NEON_OP_RETURN)
+            VM_CASE(OPC_RETURN)
                 {
                     size_t ssp;
                     NNValue result;
-                    result = nn_vmbits_stackpop(state);
+                    result = vmgcs->stackPop();
                     if(rv != nullptr)
                     {
                         *rv = result;
                     }
-                    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-                    nn_vmutil_upvaluesclose(state, &GCSingleton::get()->vmstate.stackvalues[ssp]);
-                    GCSingleton::get()->vmstate.framecount--;
-                    if(GCSingleton::get()->vmstate.framecount == 0)
+                    ssp = vmgcs->m_vmstate.currentframe->stackslotpos;
+                    nn_vmutil_upvaluesclose(&vmgcs->m_vmstate.stackvalues[ssp]);
+                    vmgcs->m_vmstate.framecount--;
+                    if(vmgcs->m_vmstate.framecount == 0)
                     {
-                        nn_vmbits_stackpop(state);
+                        vmgcs->stackPop();
                         return NEON_STATUS_OK;
                     }
-                    ssp = GCSingleton::get()->vmstate.currentframe->stackslotpos;
-                    GCSingleton::get()->vmstate.stackidx = ssp;
-                    nn_vmbits_stackpush(state, result);
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
-                    if(GCSingleton::get()->vmstate.framecount == (int64_t)exitframe)
+                    ssp = vmgcs->m_vmstate.currentframe->stackslotpos;
+                    vmgcs->m_vmstate.stackidx = ssp;
+                    vmgcs->stackPush(result);
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
+                    if(vmgcs->m_vmstate.framecount == (int64_t)exitframe)
                     {
                         return NEON_STATUS_OK;
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_HALT)
+            VM_CASE(OPC_HALT)
                 {
                     printf("**halting vm**\n");
                 }
                 goto finished;
-            VM_CASE(NEON_OP_PUSHCONSTANT)
+            VM_CASE(OPC_PUSHCONSTANT)
                 {
                     NNValue constant;
-                    constant = nn_vmbits_readconst(state);
-                    nn_vmbits_stackpush(state, constant);
+                    constant = nn_vmbits_readconst();
+                    vmgcs->stackPush(constant);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMADD)
+            VM_CASE(OPC_PRIMADD)
                 {
                     NNValue valright;
                     NNValue valleft;
                     NNValue result;
-                    valright = nn_vmbits_stackpeek(state, 0);
-                    valleft = nn_vmbits_stackpeek(state, 1);
-                    if(nn_value_isstring(valright) || nn_value_isstring(valleft))
+                    valright = nn_vm_stackpeek(0);
+                    valleft = nn_vm_stackpeek(1);
+                    if(valright.isString() || valleft.isString())
                     {
-                        if(nn_util_unlikely(!nn_vmutil_concatenate(state)))
+                        if(nn_util_unlikely(!nn_vmutil_concatenate()))
                         {
                             nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "unsupported operand + for %s and %s", nn_value_typename(valleft, false), nn_value_typename(valright, false));
                             VM_DISPATCH();
                         }
                     }
-                    else if(nn_value_isarray(valleft) && nn_value_isarray(valright))
+                    else if(valleft.isArray() && valright.isArray())
                     {
-                        result = nn_value_fromobject(nn_vmutil_combinearrays(state, nn_value_asarray(valleft), nn_value_asarray(valright)));
-                        nn_vmbits_stackpopn(state, 2);
-                        nn_vmbits_stackpush(state, result);
+                        result = nn_value_fromobject(nn_vmutil_combinearrays(valleft.asArray(), valright.asArray()));
+                        vmgcs->stackPop(2);
+                        vmgcs->stackPush(result);
                     }
                     else
                     {
@@ -20409,12 +20395,12 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMSUBTRACT)
+            VM_CASE(OPC_PRIMSUBTRACT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMMULTIPLY)
+            VM_CASE(OPC_PRIMMULTIPLY)
                 {
                     int intnum;
                     double dbnum;
@@ -20424,27 +20410,27 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjString* string;
                     NNObjArray* list;
                     NNObjArray* newlist;
-                    peekright = nn_vmbits_stackpeek(state, 0);
-                    peekleft = nn_vmbits_stackpeek(state, 1);
-                    if(nn_value_isstring(peekleft) && nn_value_isnumber(peekright))
+                    peekright = nn_vm_stackpeek(0);
+                    peekleft = nn_vm_stackpeek(1);
+                    if(peekleft.isString() && peekright.isNumber())
                     {
-                        dbnum = nn_value_asnumber(peekright);
-                        string = nn_value_asstring(peekleft);
-                        result = nn_value_fromobject(nn_vmutil_multiplystring(state, string, dbnum));
-                        nn_vmbits_stackpopn(state, 2);
-                        nn_vmbits_stackpush(state, result);
+                        dbnum = peekright.asNumber();
+                        string = peekleft.asString();
+                        result = nn_value_fromobject(nn_vmutil_multiplystring(string, dbnum));
+                        vmgcs->stackPop(2);
+                        vmgcs->stackPush(result);
                         VM_DISPATCH();
                     }
-                    else if(nn_value_isarray(peekleft) && nn_value_isnumber(peekright))
+                    else if(peekleft.isArray() && peekright.isNumber())
                     {
-                        intnum = (int)nn_value_asnumber(peekright);
-                        nn_vmbits_stackpop(state);
-                        list = nn_value_asarray(peekleft);
+                        intnum = (int)peekright.asNumber();
+                        vmgcs->stackPop();
+                        list = peekleft.asArray();
                         newlist = nn_object_makearray();
-                        nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
+                        vmgcs->stackPush(nn_value_fromobject(newlist));
                         nn_vmutil_multiplyarray(list, newlist, intnum);
-                        nn_vmbits_stackpopn(state, 2);
-                        nn_vmbits_stackpush(state, nn_value_fromobject(newlist));
+                        vmgcs->stackPop(2);
+                        vmgcs->stackPush(nn_value_fromobject(newlist));
                         VM_DISPATCH();
                     }
                     else
@@ -20453,221 +20439,212 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMDIVIDE)
+            VM_CASE(OPC_PRIMDIVIDE)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMMODULO)
+            VM_CASE(OPC_PRIMMODULO)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "%", (nnbinopfunc_t)nn_vmutil_modulo))
                     {
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMPOW)
+            VM_CASE(OPC_PRIMPOW)
                 {
                     if(nn_vmdo_dobinaryfunc(state, "**", (nnbinopfunc_t)nn_vmutil_pow))
                     {
                     }
                 }
                 VM_DISPATCH();
-            #if 0
-            VM_CASE(NEON_OP_PRIMFLOORDIVIDE)
-                {
-                    if(nn_vmdo_dobinaryfunc(state, "//", (nnbinopfunc_t)nn_vmutil_floordiv))
-                    {
-                    }
-                }
-                VM_DISPATCH();
-            #endif
-            VM_CASE(NEON_OP_PRIMNEGATE)
+            VM_CASE(OPC_PRIMNEGATE)
                 {
                     NNValue peeked;
-                    peeked = nn_vmbits_stackpeek(state, 0);
-                    if(!nn_value_isnumber(peeked))
+                    peeked = nn_vm_stackpeek(0);
+                    if(!peeked.isNumber())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator - not defined for object of type %s", nn_value_typename(peeked, false));
                         VM_DISPATCH();
                     }
-                    peeked = nn_vmbits_stackpop(state);
-                    nn_vmbits_stackpush(state, nn_value_makenumber(-nn_value_asnumber(peeked)));
+                    peeked = vmgcs->stackPop();
+                    vmgcs->stackPush(nn_value_makenumber(-peeked.asNumber()));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMBITNOT)
+            VM_CASE(OPC_PRIMBITNOT)
             {
                 NNValue peeked;
-                peeked = nn_vmbits_stackpeek(state, 0);
-                if(!nn_value_isnumber(peeked))
+                peeked = nn_vm_stackpeek(0);
+                if(!peeked.isNumber())
                 {
                     nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "operator ~ not defined for object of type %s", nn_value_typename(peeked, false));
                     VM_DISPATCH();
                 }
-                peeked = nn_vmbits_stackpop(state);
-                nn_vmbits_stackpush(state, nn_value_makenumber(~((int)nn_value_asnumber(peeked))));
+                peeked = vmgcs->stackPop();
+                vmgcs->stackPush(nn_value_makenumber(~((int)peeked.asNumber())));
                 VM_DISPATCH();
             }
-            VM_CASE(NEON_OP_PRIMAND)
+            VM_CASE(OPC_PRIMAND)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMOR)
+            VM_CASE(OPC_PRIMOR)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMBITXOR)
+            VM_CASE(OPC_PRIMBITXOR)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMSHIFTLEFT)
+            VM_CASE(OPC_PRIMSHIFTLEFT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMSHIFTRIGHT)
+            VM_CASE(OPC_PRIMSHIFTRIGHT)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PUSHONE)
+            VM_CASE(OPC_PUSHONE)
                 {
-                    nn_vmbits_stackpush(state, nn_value_makenumber(1));
+                    vmgcs->stackPush(nn_value_makenumber(1));
                 }
                 VM_DISPATCH();
             /* comparisons */
-            VM_CASE(NEON_OP_EQUAL)
+            VM_CASE(OPC_EQUAL)
                 {
                     NNValue a;
                     NNValue b;
-                    b = nn_vmbits_stackpop(state);
-                    a = nn_vmbits_stackpop(state);
-                    nn_vmbits_stackpush(state, nn_value_makebool(nn_value_compare(a, b)));
+                    b = vmgcs->stackPop();
+                    a = vmgcs->stackPop();
+                    vmgcs->stackPush(nn_value_makebool(nn_value_compare(a, b)));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMGREATER)
+            VM_CASE(OPC_PRIMGREATER)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMLESSTHAN)
+            VM_CASE(OPC_PRIMLESSTHAN)
                 {
                     nn_vmdo_dobinarydirect(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PRIMNOT)
+            VM_CASE(OPC_PRIMNOT)
                 {
                     NNValue val;
-                    val = nn_vmbits_stackpop(state);
-                    nn_vmbits_stackpush(state, nn_value_makebool(nn_value_isfalse(val)));
+                    val = vmgcs->stackPop();
+                    vmgcs->stackPush(nn_value_makebool(val.isFalse()));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PUSHNULL)
+            VM_CASE(OPC_PUSHNULL)
                 {
-                    nn_vmbits_stackpush(state, nn_value_makenull());
+                    vmgcs->stackPush(nn_value_makenull());
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PUSHEMPTY)
+            VM_CASE(OPC_PUSHEMPTY)
                 {
-                    nn_vmbits_stackpush(state, nn_value_makenull());
+                    vmgcs->stackPush(nn_value_makenull());
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PUSHTRUE)
+            VM_CASE(OPC_PUSHTRUE)
                 {
-                    nn_vmbits_stackpush(state, nn_value_makebool(true));
+                    vmgcs->stackPush(nn_value_makebool(true));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PUSHFALSE)
+            VM_CASE(OPC_PUSHFALSE)
                 {
-                    nn_vmbits_stackpush(state, nn_value_makebool(false));
+                    vmgcs->stackPush(nn_value_makebool(false));
                 }
                 VM_DISPATCH();
 
-            VM_CASE(NEON_OP_JUMPNOW)
+            VM_CASE(OPC_JUMPNOW)
                 {
                     uint16_t offset;
-                    offset = nn_vmbits_readshort(state);
-                    GCSingleton::get()->vmstate.currentframe->inscode += offset;
+                    offset = nn_vmbits_readshort();
+                    vmgcs->m_vmstate.currentframe->inscode += offset;
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_JUMPIFFALSE)
+            VM_CASE(OPC_JUMPIFFALSE)
                 {
                     uint16_t offset;
                     NNValue val;
-                    offset = nn_vmbits_readshort(state);
-                    val = nn_vmbits_stackpeek(state, 0);
-                    if(nn_value_isfalse(val))
+                    offset = nn_vmbits_readshort();
+                    val = nn_vm_stackpeek(0);
+                    if(val.isFalse())
                     {
-                        GCSingleton::get()->vmstate.currentframe->inscode += offset;
+                        vmgcs->m_vmstate.currentframe->inscode += offset;
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_LOOP)
+            VM_CASE(OPC_LOOP)
                 {
                     uint16_t offset;
-                    offset = nn_vmbits_readshort(state);
-                    GCSingleton::get()->vmstate.currentframe->inscode -= offset;
+                    offset = nn_vmbits_readshort();
+                    vmgcs->m_vmstate.currentframe->inscode -= offset;
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_ECHO)
+            VM_CASE(OPC_ECHO)
                 {
                     NNValue val;
-                    val = nn_vmbits_stackpeek(state, 0);
+                    val = nn_vm_stackpeek(0);
                     nn_iostream_printvalue(state->stdoutprinter, val, state->isrepl, true);
                     if(!val.isNull())
                     {
                         nn_iostream_writestring(state->stdoutprinter, "\n");
                     }
-                    nn_vmbits_stackpop(state);
+                    vmgcs->stackPop();
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_STRINGIFY)
+            VM_CASE(OPC_STRINGIFY)
                 {
                     NNValue peeked;
                     NNValue popped;
                     NNObjString* os;
-                    peeked = nn_vmbits_stackpeek(state, 0);
-                    if(!nn_value_isstring(peeked) && !peeked.isNull())
+                    peeked = nn_vm_stackpeek(0);
+                    if(!peeked.isString() && !peeked.isNull())
                     {
-                        popped = nn_vmbits_stackpop(state);
+                        popped = vmgcs->stackPop();
                         os = nn_value_tostring(popped);
                         if(nn_string_getlength(os) != 0)
                         {
-                            nn_vmbits_stackpush(state, nn_value_fromobject(os));
+                            vmgcs->stackPush(nn_value_fromobject(os));
                         }
                         else
                         {
-                            nn_vmbits_stackpush(state, nn_value_makenull());
+                            vmgcs->stackPush(nn_value_makenull());
                         }
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_DUPONE)
+            VM_CASE(OPC_DUPONE)
                 {
                     NNValue val;
-                    val = nn_vmbits_stackpeek(state, 0);
-                    nn_vmbits_stackpush(state, val);
+                    val = nn_vm_stackpeek(0);
+                    vmgcs->stackPush(val);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_POPONE)
+            VM_CASE(OPC_POPONE)
                 {
-                    nn_vmbits_stackpop(state);
+                    vmgcs->stackPop();
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_POPN)
+            VM_CASE(OPC_POPN)
                 {
-                    nn_vmbits_stackpopn(state, nn_vmbits_readshort(state));
+                    vmgcs->stackPop(nn_vmbits_readshort());
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_UPVALUECLOSE)
+            VM_CASE(OPC_UPVALUECLOSE)
                 {
-                    nn_vmutil_upvaluesclose(state, &GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx - 1]);
-                    nn_vmbits_stackpop(state);
+                    nn_vmutil_upvaluesclose(&vmgcs->m_vmstate.stackvalues[vmgcs->m_vmstate.stackidx - 1]);
+                    vmgcs->stackPop();
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_OPINSTANCEOF)
+            VM_CASE(OPC_OPINSTANCEOF)
                 {
                     bool rt;
                     NNValue first;
@@ -20675,13 +20652,13 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjClass* vclass;
                     NNObjClass* checkclass;
                     rt = false;
-                    first = nn_vmbits_stackpop(state);
-                    second = nn_vmbits_stackpop(state);
+                    first = vmgcs->stackPop();
+                    second = vmgcs->stackPop();
                     #if 0
                     nn_vmdebug_printvalue(state, first, "first value");
                     nn_vmdebug_printvalue(state, second, "second value");
                     #endif
-                    if(!nn_value_isclass(first))
+                    if(!first.isClass())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "invalid use of 'is' on non-class");
                     }
@@ -20691,18 +20668,18 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     {
                         rt = nn_util_isinstanceof(vclass, checkclass);
                     }
-                    nn_vmbits_stackpush(state, nn_value_makebool(rt));
+                    vmgcs->stackPush(nn_value_makebool(rt));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_GLOBALDEFINE)
+            VM_CASE(OPC_GLOBALDEFINE)
                 {
-                    if(!nn_vmdo_globaldefine(state))
+                    if(!nn_vmdo_globaldefine())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_GLOBALGET)
+            VM_CASE(OPC_GLOBALGET)
                 {
                     if(!nn_vmdo_globalget(state))
                     {
@@ -20710,7 +20687,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_GLOBALSET)
+            VM_CASE(OPC_GLOBALSET)
                 {
                     if(!nn_vmdo_globalset(state))
                     {
@@ -20718,31 +20695,31 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_LOCALGET)
+            VM_CASE(OPC_LOCALGET)
                 {
-                    if(!nn_vmdo_localget(state))
+                    if(!nn_vmdo_localget())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_LOCALSET)
+            VM_CASE(OPC_LOCALSET)
                 {
-                    if(!nn_vmdo_localset(state))
+                    if(!nn_vmdo_localset())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_FUNCARGGET)
+            VM_CASE(OPC_FUNCARGGET)
                 {
-                    if(!nn_vmdo_funcargget(state))
+                    if(!nn_vmdo_funcargget())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_FUNCARGOPTIONAL)
+            VM_CASE(OPC_FUNCARGOPTIONAL)
                 {
                     if(!nn_vmdo_funcargoptional(state))
                     {
@@ -20750,16 +20727,16 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_FUNCARGSET)
+            VM_CASE(OPC_FUNCARGSET)
                 {
-                    if(!nn_vmdo_funcargset(state))
+                    if(!nn_vmdo_funcargset())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
 
-            VM_CASE(NEON_OP_PROPERTYGET)
+            VM_CASE(OPC_PROPERTYGET)
                 {
                     if(!nn_vmdo_propertyget(state))
                     {
@@ -20767,7 +20744,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PROPERTYSET)
+            VM_CASE(OPC_PROPERTYSET)
                 {
                     if(!nn_vmdo_propertyset(state))
                     {
@@ -20775,7 +20752,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_PROPERTYGETSELF)
+            VM_CASE(OPC_PROPERTYGETSELF)
                 {
                     if(!nn_vmdo_propertygetself(state))
                     {
@@ -20783,95 +20760,95 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_MAKECLOSURE)
+            VM_CASE(OPC_MAKECLOSURE)
                 {
-                    if(!nn_vmdo_makeclosure(state))
+                    if(!nn_vmdo_makeclosure())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_UPVALUEGET)
+            VM_CASE(OPC_UPVALUEGET)
                 {
                     int upvidx;
                     NNObjFunction* closure;
-                    upvidx = nn_vmbits_readshort(state);
-                    closure = GCSingleton::get()->vmstate.currentframe->closure;
+                    upvidx = nn_vmbits_readshort();
+                    closure = vmgcs->m_vmstate.currentframe->closure;
                     if(upvidx < closure->upvalcount)
                     {
-                        nn_vmbits_stackpush(state, (NNValue)(closure->fnclosure.upvalues[upvidx]->location));
+                        vmgcs->stackPush((closure->fnclosure.upvalues[upvidx]->location));
                     }
                     else
                     {
-                        nn_vmbits_stackpush(state, (NNValue)closure->clsthisval);
+                        vmgcs->stackPush(closure->clsthisval);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_UPVALUESET)
+            VM_CASE(OPC_UPVALUESET)
                 {
                     int upvidx;
                     NNValue val;
-                    upvidx = nn_vmbits_readshort(state);
-                    val = nn_vmbits_stackpeek(state, 0);
-                    GCSingleton::get()->vmstate.currentframe->closure->fnclosure.upvalues[upvidx]->location = val;
+                    upvidx = nn_vmbits_readshort();
+                    val = nn_vm_stackpeek(0);
+                    vmgcs->m_vmstate.currentframe->closure->fnclosure.upvalues[upvidx]->location = val;
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CALLFUNCTION)
+            VM_CASE(OPC_CALLFUNCTION)
                 {
                     int argcount;
                     NNValue callee;
                     NNValue thisval;
                     thisval = nn_value_makenull();
-                    argcount = nn_vmbits_readbyte(state);
-                    callee = nn_vmbits_stackpeek(state, argcount);
-                    if(nn_value_isfuncclosure(callee))
+                    argcount = nn_vmbits_readbyte();
+                    callee = nn_vm_stackpeek(argcount);
+                    if(callee.isFuncclosure())
                     {
-                        thisval = (NNValue)(nn_value_asfunction(callee)->clsthisval);
+                        thisval = (nn_value_asfunction(callee)->clsthisval);
                     }
                     if(!nn_vm_callvalue(state, callee, thisval, argcount, false))
                     {
                         nn_vmmac_exitvm(state);
                     }
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CALLMETHOD)
+            VM_CASE(OPC_CALLMETHOD)
                 {
                     int argcount;
                     NNObjString* method;
-                    method = nn_vmbits_readstring(state);
-                    argcount = nn_vmbits_readbyte(state);
+                    method = nn_vmbits_readstring();
+                    argcount = nn_vmbits_readbyte();
                     if(!nn_vmutil_invokemethodnormal(state, method, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSGETTHIS)
+            VM_CASE(OPC_CLASSGETTHIS)
                 {
                     NNValue thisval;
-                    thisval = nn_vmbits_stackpeek(state, 3);
+                    thisval = nn_vm_stackpeek(3);
                     nn_iostream_printf(state->debugwriter, "CLASSGETTHIS: thisval=");
                     nn_iostream_printvalue(state->debugwriter, thisval, true, false);
                     nn_iostream_printf(state->debugwriter, "\n");
-                    nn_vmbits_stackpush(state, thisval);
+                    vmgcs->stackPush(thisval);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSINVOKETHIS)
+            VM_CASE(OPC_CLASSINVOKETHIS)
                 {
                     int argcount;
                     NNObjString* method;
-                    method = nn_vmbits_readstring(state);
-                    argcount = nn_vmbits_readbyte(state);
+                    method = nn_vmbits_readstring();
+                    argcount = nn_vmbits_readbyte();
                     if(!nn_vmutil_invokemethodself(state, method, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_MAKECLASS)
+            VM_CASE(OPC_MAKECLASS)
                 {
                     bool haveval;
                     NNValue pushme;
@@ -20879,23 +20856,23 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjClass* klass;
                     NNProperty* field;
                     haveval = false;
-                    name = nn_vmbits_readstring(state);
-                    field = GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.getfieldbyostr(name);
+                    name = nn_vmbits_readstring();
+                    field = vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.getfieldbyostr(name);
                     if(field != nullptr)
                     {
-                        if(nn_value_isclass((NNValue)field->value))
+                        if(field->value.isClass())
                         {
                             haveval = true;
-                            pushme = (NNValue)field->value;
+                            pushme = field->value;
                         }
                     }
-                    field = GCSingleton::get()->declaredglobals.getfieldbyostr(name);
+                    field = vmgcs->declaredglobals.getfieldbyostr(name);
                     if(field != nullptr)
                     {
-                        if(nn_value_isclass((NNValue)field->value))
+                        if(field->value.isClass())
                         {
                             haveval = true;
-                            pushme = (NNValue)field->value;
+                            pushme = field->value;
                         }
                     }
                     if(!haveval)
@@ -20903,52 +20880,52 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         klass = nn_object_makeclass(name, state->classprimobject);
                         pushme = nn_value_fromobject(klass);
                     }
-                    nn_vmbits_stackpush(state, pushme);
+                    vmgcs->stackPush(pushme);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_MAKEMETHOD)
+            VM_CASE(OPC_MAKEMETHOD)
                 {
                     NNObjString* name;
-                    name = nn_vmbits_readstring(state);
-                    nn_vmutil_definemethod(state, name);
+                    name = nn_vmbits_readstring();
+                    nn_vmutil_definemethod(name);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSPROPERTYDEFINE)
+            VM_CASE(OPC_CLASSPROPERTYDEFINE)
                 {
                     int isstatic;
                     NNObjString* name;
-                    name = nn_vmbits_readstring(state);
-                    isstatic = nn_vmbits_readbyte(state);
-                    nn_vmutil_defineproperty(state, name, isstatic == 1);
+                    name = nn_vmbits_readstring();
+                    isstatic = nn_vmbits_readbyte();
+                    nn_vmutil_defineproperty(name, isstatic == 1);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSINHERIT)
+            VM_CASE(OPC_CLASSINHERIT)
                 {
                     NNValue vclass;
                     NNValue vsuper;
                     NNObjClass* superclass;
                     NNObjClass* subclass;
-                    vsuper = nn_vmbits_stackpeek(state, 1);
-                    if(!nn_value_isclass(vsuper))
+                    vsuper = nn_vm_stackpeek(1);
+                    if(!vsuper.isClass())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "cannot inherit from non-class object");
                         VM_DISPATCH();
                     }
-                    vclass = nn_vmbits_stackpeek(state, 0);
+                    vclass = nn_vm_stackpeek(0);
                     superclass = nn_value_asclass(vsuper);
                     subclass = nn_value_asclass(vclass);
                     nn_class_inheritfrom(subclass, superclass);
                     /* pop the subclass */
-                    nn_vmbits_stackpop(state);
+                    vmgcs->stackPop();
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSGETSUPER)
+            VM_CASE(OPC_CLASSGETSUPER)
                 {
                     NNValue vclass;
                     NNObjClass* klass;
                     NNObjString* name;
-                    name = nn_vmbits_readstring(state);
-                    vclass = nn_vmbits_stackpeek(state, 0);
+                    name = nn_vmbits_readstring();
+                    vclass = nn_vm_stackpeek(0);
                     klass = nn_value_asclass(vclass);
                     if(!nn_vmutil_bindmethod(state, klass->superclass, name))
                     {
@@ -20956,67 +20933,67 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSINVOKESUPER)
+            VM_CASE(OPC_CLASSINVOKESUPER)
                 {
                     int argcount;
                     NNValue vclass;
                     NNObjClass* klass;
                     NNObjString* method;
-                    method = nn_vmbits_readstring(state);
-                    argcount = nn_vmbits_readbyte(state);
-                    vclass = nn_vmbits_stackpop(state);
+                    method = nn_vmbits_readstring();
+                    argcount = nn_vmbits_readbyte();
+                    vclass = vmgcs->stackPop();
                     klass = nn_value_asclass(vclass);
                     if(!nn_vmutil_invokemethodfromclass(state, klass, method, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_CLASSINVOKESUPERSELF)
+            VM_CASE(OPC_CLASSINVOKESUPERSELF)
                 {
                     int argcount;
                     NNValue vclass;
                     NNObjClass* klass;
-                    argcount = nn_vmbits_readbyte(state);
-                    vclass = nn_vmbits_stackpop(state);
+                    argcount = nn_vmbits_readbyte();
+                    vclass = vmgcs->stackPop();
                     klass = nn_value_asclass(vclass);
                     if(!nn_vmutil_invokemethodfromclass(state, klass, state->defaultstrings.nmconstructor, argcount))
                     {
                         nn_vmmac_exitvm(state);
                     }
-                    GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                    vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_MAKEARRAY)
+            VM_CASE(OPC_MAKEARRAY)
                 {
-                    if(!nn_vmdo_makearray(state))
+                    if(!nn_vmdo_makearray())
                     {
                         nn_vmmac_exitvm(state);
                     }
                 }
                 VM_DISPATCH();
 
-            VM_CASE(NEON_OP_MAKERANGE)
+            VM_CASE(OPC_MAKERANGE)
                 {
                     double lower;
                     double upper;
                     NNValue vupper;
                     NNValue vlower;
-                    vupper = nn_vmbits_stackpeek(state, 0);
-                    vlower = nn_vmbits_stackpeek(state, 1);
-                    if(!nn_value_isnumber(vupper) || !nn_value_isnumber(vlower))
+                    vupper = nn_vm_stackpeek(0);
+                    vlower = nn_vm_stackpeek(1);
+                    if(!vupper.isNumber() || !vlower.isNumber())
                     {
                         nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "invalid range boundaries");
                         VM_DISPATCH();
                     }
-                    lower = nn_value_asnumber(vlower);
-                    upper = nn_value_asnumber(vupper);
-                    nn_vmbits_stackpopn(state, 2);
-                    nn_vmbits_stackpush(state, nn_value_fromobject(nn_object_makerange(lower, upper)));
+                    lower = vlower.asNumber();
+                    upper = vupper.asNumber();
+                    vmgcs->stackPop(2);
+                    vmgcs->stackPush(nn_value_fromobject(nn_object_makerange(lower, upper)));
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_MAKEDICT)
+            VM_CASE(OPC_MAKEDICT)
                 {
                     if(!nn_vmdo_makedict(state))
                     {
@@ -21024,7 +21001,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_INDEXGETRANGED)
+            VM_CASE(OPC_INDEXGETRANGED)
                 {
                     if(!nn_vmdo_getrangedindex(state))
                     {
@@ -21032,7 +21009,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_INDEXGET)
+            VM_CASE(OPC_INDEXGET)
                 {
                     if(!nn_vmdo_indexget(state))
                     {
@@ -21040,7 +21017,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_INDEXSET)
+            VM_CASE(OPC_INDEXSET)
                 {
                     if(!nn_vmdo_indexset(state))
                     {
@@ -21048,14 +21025,14 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_IMPORTIMPORT)
+            VM_CASE(OPC_IMPORTIMPORT)
                 {
                     NNValue res;
                     NNValue vname;
                     NNObjString* name;
                     NNObjModule* mod;
-                    vname = nn_vmbits_stackpeek(state, 0);
-                    name = nn_value_asstring(vname);
+                    vname = nn_vm_stackpeek(0);
+                    name = vname.asString();
                     fprintf(stderr, "IMPORTIMPORT: name='%s'\n", nn_string_getdata(name));
                     mod = nn_import_loadmodulescript(state, state->topmodule, name);
                     fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", (void*)mod);
@@ -21067,27 +21044,27 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     {
                         res = nn_value_fromobject(mod);
                     }
-                    nn_vmbits_stackpush(state, res);
+                    vmgcs->stackPush(res);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_TYPEOF)
+            VM_CASE(OPC_TYPEOF)
                 {
                     NNValue res;
                     NNValue thing;
                     const char* result;
-                    thing = nn_vmbits_stackpop(state);
+                    thing = vmgcs->stackPop();
                     result = nn_value_typename(thing, false);
                     res = nn_value_fromobject(nn_string_copycstr(result));
-                    nn_vmbits_stackpush(state, res);
+                    vmgcs->stackPush(res);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_ASSERT)
+            VM_CASE(OPC_ASSERT)
                 {
                     NNValue message;
                     NNValue expression;
-                    message = nn_vmbits_stackpop(state);
-                    expression = nn_vmbits_stackpop(state);
-                    if(nn_value_isfalse(expression))
+                    message = vmgcs->stackPop();
+                    expression = vmgcs->stackPop();
+                    if(expression.isFalse())
                     {
                         if(!message.isNull())
                         {
@@ -21100,15 +21077,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_EXTHROW)
+            VM_CASE(OPC_EXTHROW)
                 {
                     bool isok;
                     NNValue peeked;
                     NNValue stacktrace;
                     NNObjInstance* instance;
-                    peeked = nn_vmbits_stackpeek(state, 0);
+                    peeked = nn_vm_stackpeek(0);
                     isok = (
-                        nn_value_isinstance(peeked) ||
+                        peeked.isInstance() ||
                         nn_util_isinstanceof(nn_value_asinstance(peeked)->klass, state->exceptions.stdexception)
                     );
                     if(!isok)
@@ -21121,12 +21098,12 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     nn_instance_defproperty(instance, nn_string_intern("stacktrace"), stacktrace);
                     if(nn_except_propagate(state))
                     {
-                        GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                        vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                         VM_DISPATCH();
                     }
                     nn_vmmac_exitvm(state);
                 }
-            VM_CASE(NEON_OP_EXTRY)
+            VM_CASE(OPC_EXTRY)
                 {
                     bool haveclass;
                     uint16_t addr;
@@ -21136,15 +21113,15 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                     NNObjClass* exclass;
                     haveclass = false;
                     exclass = nullptr;
-                    type = nn_vmbits_readstring(state);
-                    addr = nn_vmbits_readshort(state);
-                    finaddr = nn_vmbits_readshort(state);
+                    type = nn_vmbits_readstring();
+                    addr = nn_vmbits_readshort();
+                    finaddr = nn_vmbits_readshort();
                     if(addr != 0)
                     {
                         value = nn_value_makenull();
-                        if(!GCSingleton::get()->declaredglobals.get(nn_value_fromobject(type), &value))
+                        if(!vmgcs->declaredglobals.get(nn_value_fromobject(type), &value))
                         {
-                            if(nn_value_isclass(value))
+                            if(value.isClass())
                             {
                                 haveclass = true;
                                 exclass = nn_value_asclass(value);
@@ -21153,7 +21130,7 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                         if(!haveclass)
                         {
                             /*
-                            if(!GCSingleton::get()->vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.get(nn_value_fromobject(type), &value) || !nn_value_isclass(value))
+                            if(!vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.get(nn_value_fromobject(type), &value) || !value.isClass())
                             {
                                 nn_vmmac_tryraise(state, NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", nn_string_getdata(type));
                                 VM_DISPATCH();
@@ -21161,50 +21138,50 @@ NNStatus nn_vm_runvm(NNState* state, int exitframe, NNValue* rv)
                             */
                             exclass = state->exceptions.stdexception;
                         }
-                        nn_except_pushhandler(state, exclass, addr, finaddr);
+                        nn_except_pushhandler(exclass, addr, finaddr);
                     }
                     else
                     {
-                        nn_except_pushhandler(state, nullptr, addr, finaddr);
+                        nn_except_pushhandler(nullptr, addr, finaddr);
                     }
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_EXPOPTRY)
+            VM_CASE(OPC_EXPOPTRY)
                 {
-                    GCSingleton::get()->vmstate.currentframe->handlercount--;
+                    vmgcs->m_vmstate.currentframe->handlercount--;
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_EXPUBLISHTRY)
+            VM_CASE(OPC_EXPUBLISHTRY)
                 {
-                    GCSingleton::get()->vmstate.currentframe->handlercount--;
+                    vmgcs->m_vmstate.currentframe->handlercount--;
                     if(nn_except_propagate(state))
                     {
-                        GCSingleton::get()->vmstate.currentframe = &GCSingleton::get()->vmstate.framevalues[GCSingleton::get()->vmstate.framecount - 1];
+                        vmgcs->m_vmstate.currentframe = &vmgcs->m_vmstate.framevalues[vmgcs->m_vmstate.framecount - 1];
                         VM_DISPATCH();
                     }
                     nn_vmmac_exitvm(state);
                 }
                 VM_DISPATCH();
-            VM_CASE(NEON_OP_SWITCH)
+            VM_CASE(OPC_SWITCH)
                 {
                     NNValue expr;
                     NNValue value;
                     NNObjSwitch* sw;
-                    sw = nn_value_asswitch(nn_vmbits_readconst(state));
-                    expr = nn_vmbits_stackpeek(state, 0);
+                    sw = nn_value_asswitch(nn_vmbits_readconst());
+                    expr = nn_vm_stackpeek(0);
                     if(sw->table.get(expr, &value))
                     {
-                        GCSingleton::get()->vmstate.currentframe->inscode += (int)nn_value_asnumber(value);
+                        vmgcs->m_vmstate.currentframe->inscode += (int)value.asNumber();
                     }
                     else if(sw->defaultjump != -1)
                     {
-                        GCSingleton::get()->vmstate.currentframe->inscode += sw->defaultjump;
+                        vmgcs->m_vmstate.currentframe->inscode += sw->defaultjump;
                     }
                     else
                     {
-                        GCSingleton::get()->vmstate.currentframe->inscode += sw->exitjump;
+                        vmgcs->m_vmstate.currentframe->inscode += sw->exitjump;
                     }
-                    nn_vmbits_stackpop(state);
+                    vmgcs->stackPop();
                 }
                 VM_DISPATCH();
             #if 0
@@ -21228,15 +21205,15 @@ int nn_nestcall_prepare(NNValue callable, NNValue mthobj, NNValue* callarr, int 
     (void)maxcallarr;
     arity = 0;
     ofn = nn_value_asfunction(callable);
-    if(nn_value_isfuncclosure(callable))
+    if(callable.isFuncclosure())
     {
         arity = ofn->fnclosure.scriptfunc->fnscriptfunc.arity;
     }
-    else if(nn_value_isfuncscript(callable))
+    else if(callable.isFuncscript())
     {
         arity = ofn->fnscriptfunc.arity;
     }
-    else if(nn_value_isfuncnative(callable))
+    else if(callable.isFuncnative())
     {
         #if 0
             arity = ofn;
@@ -21265,14 +21242,14 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
     int64_t pidx;
     NNStatus status;
     NNValue rtv;
-    pidx = GCSingleton::get()->vmstate.stackidx;
+    pidx = GCSingleton::get()->m_vmstate.stackidx;
     /* set the closure before the args */
-    nn_vm_stackpush(state, callable);
+    GCSingleton::get()->stackPush(callable);
     if((argv != nullptr) && (argc > 0))
     {
         for(i = 0; i < argc; i++)
         {
-            nn_vm_stackpush(state, argv[i]);
+            GCSingleton::get()->stackPush(argv[i]);
         }
     }
     if(!nn_vm_callvaluewithobject(state, callable, thisval, argc, fromoper))
@@ -21281,23 +21258,23 @@ bool nn_nestcall_callfunction(NNState* state, NNValue callable, NNValue thisval,
         abort();
     }
     needvm = true;
-    if(nn_value_isfuncnative(callable))
+    if(callable.isFuncnative())
     {
         needvm = false;
     }
     if(needvm)
     {
-        status = nn_vm_runvm(state, GCSingleton::get()->vmstate.framecount - 1, nullptr);
+        status = nn_vm_runvm(state, GCSingleton::get()->m_vmstate.framecount - 1, nullptr);
         if(status != NEON_STATUS_OK)
         {
             fprintf(stderr, "nestcall: call to runvm failed\n");
             abort();
         }
     }
-    rtv = GCSingleton::get()->vmstate.stackvalues[GCSingleton::get()->vmstate.stackidx - 1];
+    rtv = GCSingleton::get()->m_vmstate.stackvalues[GCSingleton::get()->m_vmstate.stackidx - 1];
     *dest = rtv;
-    nn_vm_stackpopn(state, argc + 0);
-    GCSingleton::get()->vmstate.stackidx = pidx;
+    GCSingleton::get()->stackPop(argc + 0);
+    GCSingleton::get()->m_vmstate.stackidx = pidx;
     return true;
 }
 
@@ -21463,7 +21440,7 @@ static bool nn_cli_repl(linocontext_t* lictx, NNState* state)
             {
                 nn_iostream_printf(pr, "%s = ", varnamebuf);
                 nn_iostream_printvalue(pr, dest, true, true);
-                nn_state_defglobalvalue(state, varnamebuf, dest);
+                nn_state_defglobalvalue(varnamebuf, dest);
                 nn_iostream_printf(pr, "\n");
                 rescnt++;
             }
@@ -21482,11 +21459,11 @@ static bool nn_cli_runfile(NNState* state, const char* file)
     char* source;
     const char* oldfile;
     NNStatus result;
-    source = nn_util_filereadfile(state, file, &fsz, false, 0);
+    source = nn_util_filereadfile(file, &fsz, false, 0);
     if(source == nullptr)
     {
         oldfile = file;
-        source = nn_util_filereadfile(state, file, &fsz, false, 0);
+        source = nn_util_filereadfile(file, &fsz, false, 0);
         if(source == nullptr)
         {
             fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
@@ -21774,7 +21751,7 @@ int main(int argc, char* argv[], char** envp)
         }
         GCSingleton::get()->declaredglobals.set(nn_value_copystr("ARGV"), nn_value_fromobject(state->processinfo->cliargv));
     }
-    GCSingleton::get()->gcstate.nextgc = nextgcstart;
+    GCSingleton::get()->m_gcstate.nextgc = nextgcstart;
     nn_import_loadbuiltinmodules(state);
     if(source != nullptr)
     {
@@ -21782,7 +21759,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else if(nargc > 0)
     {
-        os = nn_value_asstring(state->processinfo->cliargv->varray.get(0));
+        os = state->processinfo->cliargv->varray.get(0).asString();
         filename = nn_string_getdata(os);
         ok = nn_cli_runfile(state, filename);
     }
