@@ -1,0 +1,422 @@
+8494  execve("/usr/bin/g++", ["g++", "-std=c++20", "-fmodules-ts", "foo.cpp"], 0x7ffd212e0088 /* 34 vars */) = 0
+8494  brk(NULL)                         = 0x16808000
+8494  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x79a274911000
+8494  access("/etc/ld.so.preload", R_OK) = -1 ENOENT (No such file or directory)
+8494  openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+8494  fstat(3, {st_mode=S_IFREG|0644, st_size=89467, ...}) = 0
+8494  mmap(NULL, 89467, PROT_READ, MAP_PRIVATE, 3, 0) = 0x79a2748fb000
+8494  close(3)                          = 0
+8494  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+8494  read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\220\243\2\0\0\0\0\0"..., 832) = 832
+8494  pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+8494  fstat(3, {st_mode=S_IFREG|0755, st_size=2125328, ...}) = 0
+8494  pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+8494  mmap(NULL, 2170256, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x79a274600000
+8494  mmap(0x79a274628000, 1605632, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = 0x79a274628000
+8494  mmap(0x79a2747b0000, 323584, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1b0000) = 0x79a2747b0000
+8494  mmap(0x79a2747ff000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1fe000) = 0x79a2747ff000
+8494  mmap(0x79a274805000, 52624, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x79a274805000
+8494  close(3)                          = 0
+8494  mmap(NULL, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x79a2748f8000
+8494  arch_prctl(ARCH_SET_FS, 0x79a2748f8740) = 0
+8494  set_tid_address(0x79a2748f8a10)   = 8494
+8494  set_robust_list(0x79a2748f8a20, 24) = 0
+8494  rseq(0x79a2748f9060, 0x20, 0, 0x53053053) = 0
+8494  mprotect(0x79a2747ff000, 16384, PROT_READ) = 0
+8494  mprotect(0x4f7000, 8192, PROT_READ) = 0
+8494  mprotect(0x79a274949000, 8192, PROT_READ) = 0
+8494  prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
+8494  munmap(0x79a2748fb000, 89467)     = 0
+8494  getrandom("\xa7\xf5\xef\xdc\x50\x3d\xe2\x5a", 8, GRND_NONBLOCK) = 8
+8494  brk(NULL)                         = 0x16808000
+8494  brk(0x16829000)                   = 0x16829000
+8494  brk(0x1684b000)                   = 0x1684b000
+8494  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8494  ioctl(0, TIOCGWINSZ, {ws_row=47, ws_col=185, ws_xpixel=0, ws_ypixel=0}) = 0
+8494  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8494  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8494  rt_sigaction(SIGINT, {sa_handler=SIG_IGN, sa_mask=[INT], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8494  rt_sigaction(SIGINT, {sa_handler=0x41822e, sa_mask=[INT], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_IGN, sa_mask=[INT], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, 8) = 0
+8494  rt_sigaction(SIGHUP, {sa_handler=SIG_IGN, sa_mask=[HUP], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8494  rt_sigaction(SIGHUP, {sa_handler=0x41822e, sa_mask=[HUP], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_IGN, sa_mask=[HUP], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, 8) = 0
+8494  rt_sigaction(SIGTERM, {sa_handler=SIG_IGN, sa_mask=[TERM], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8494  rt_sigaction(SIGTERM, {sa_handler=0x41822e, sa_mask=[TERM], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_IGN, sa_mask=[TERM], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, 8) = 0
+8494  rt_sigaction(SIGPIPE, {sa_handler=SIG_IGN, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8494  rt_sigaction(SIGPIPE, {sa_handler=0x41822e, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_IGN, sa_mask=[PIPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, 8) = 0
+8494  rt_sigaction(SIGCHLD, {sa_handler=SIG_DFL, sa_mask=[CHLD], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x79a274645330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8494  prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=8192*1024, rlim_max=RLIM64_INFINITY}) = 0
+8494  prlimit64(0, RLIMIT_STACK, {rlim_cur=65536*1024, rlim_max=RLIM64_INFINITY}, NULL) = 0
+8494  access("/home/john/.cargo/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/.local/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/go/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/linuxbrew/.linuxbrew/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/bin/g++", X_OK)      = 0
+8494  newfstatat(AT_FDCWD, "/usr/bin/g++", {st_mode=S_IFREG|0755, st_size=1027128, ...}, 0) = 0
+8494  readlink("/usr", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  readlink("/usr/bin", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  readlink("/usr/bin/g++", "g++-13", 1023) = 6
+8494  readlink("/usr/bin/g++-13", "x86_64-linux-gnu-g++-13", 1023) = 23
+8494  readlink("/usr/bin/x86_64-linux-gnu-g++-13", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  access("/home/john/.cargo/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/.local/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/john/go/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/home/linuxbrew/.linuxbrew/bin/g++", X_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/bin/g++", X_OK)      = 0
+8494  newfstatat(AT_FDCWD, "/usr/bin/g++", {st_mode=S_IFREG|0755, st_size=1027128, ...}, 0) = 0
+8494  readlink("/usr", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  readlink("/usr/bin", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  readlink("/usr/bin/g++", "g++-13", 1023) = 6
+8494  readlink("/usr/bin/g++-13", "x86_64-linux-gnu-g++-13", 1023) = 23
+8494  readlink("/usr/bin/x86_64-linux-gnu-g++-13", 0x7fff20f1e2c0, 1023) = -1 EINVAL (Invalid argument)
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/specs", R_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/x86_64-linux-gnu/13/specs", R_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/lib/specs", R_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/specs", R_OK) = -1 ENOENT (No such file or directory)
+8494  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8494  newfstatat(AT_FDCWD, "/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper", {st_mode=S_IFREG|0755, st_size=831800, ...}, 0) = 0
+8494  access("/usr/libexec/gcc/x86_64-linux-gnu/13/lto-wrapper", X_OK) = 0
+8494  access("/tmp", R_OK|W_OK|X_OK)    = 0
+8494  newfstatat(AT_FDCWD, "/tmp", {st_mode=S_IFDIR|S_ISVTX|0777, st_size=24576, ...}, 0) = 0
+8494  openat(AT_FDCWD, "/tmp/cc10EXv0.s", O_RDWR|O_CREAT|O_EXCL, 0600) = 3
+8494  close(3)                          = 0
+8494  newfstatat(AT_FDCWD, "/usr/libexec/gcc/x86_64-linux-gnu/13/cc1plus", {st_mode=S_IFREG|0755, st_size=32675168, ...}, 0) = 0
+8494  access("/usr/libexec/gcc/x86_64-linux-gnu/13/cc1plus", X_OK) = 0
+8494  pipe2([3, 4], O_CLOEXEC)          = 0
+8494  vfork( <unfinished ...>
+8495  close(3)                          = 0
+8495  execve("/usr/libexec/gcc/x86_64-linux-gnu/13/cc1plus", ["/usr/libexec/gcc/x86_64-linux-gn"..., "-quiet", "-imultiarch", "x86_64-linux-gnu", "-D_GNU_SOURCE", "foo.cpp", "-quiet", "-dumpdir", "a-", "-dumpbase", "foo.cpp", "-dumpbase-ext", ".cpp", "-mtune=generic", "-march=x86-64", "-std=c++20", "-fmodules-ts", "-fasynchronous-unwind-tables", "-fstack-protector-strong", "-Wformat", "-Wformat-security", "-fstack-clash-protection", "-fcf-protection", "-o", "/tmp/cc10EXv0.s"], 0x16833ac0 /* 39 vars */ <unfinished ...>
+8494  <... vfork resumed>)              = 8495
+8494  close(4 <unfinished ...>
+8495  <... execve resumed>)             = 0
+8494  <... close resumed>)              = 0
+8495  brk(NULL <unfinished ...>
+8494  read(3,  <unfinished ...>
+8495  <... brk resumed>)                = 0x22b83000
+8494  <... read resumed>"", 16)         = 0
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0 <unfinished ...>
+8494  close(3 <unfinished ...>
+8495  <... mmap resumed>)               = 0x70d49903b000
+8494  <... close resumed>)              = 0
+8495  access("/etc/ld.so.preload", R_OK <unfinished ...>
+8494  wait4(8495,  <unfinished ...>
+8495  <... access resumed>)             = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/etc/ld.so.cache", O_RDONLY|O_CLOEXEC) = 3
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=89467, ...}) = 0
+8495  mmap(NULL, 89467, PROT_READ, MAP_PRIVATE, 3, 0) = 0x70d499025000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libisl.so.23", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=1863352, ...}) = 0
+8495  mmap(NULL, 1865304, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498e5d000
+8495  mmap(0x70d498eab000, 1200128, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x4e000) = 0x70d498eab000
+8495  mmap(0x70d498fd0000, 335872, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x173000) = 0x70d498fd0000
+8495  mmap(0x70d499022000, 12288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1c4000) = 0x70d499022000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libmpc.so.3", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=134440, ...}) = 0
+8495  mmap(NULL, 136440, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498e3b000
+8495  mmap(0x70d498e40000, 98304, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x5000) = 0x70d498e40000
+8495  mmap(0x70d498e58000, 12288, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1d000) = 0x70d498e58000
+8495  mmap(0x70d498e5b000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1f000) = 0x70d498e5b000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libmpfr.so.6", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=760464, ...}) = 0
+8495  mmap(NULL, 758144, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498d81000
+8495  mmap(0x70d498d8d000, 581632, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xc000) = 0x70d498d8d000
+8495  mmap(0x70d498e1b000, 81920, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x9a000) = 0x70d498e1b000
+8495  mmap(0x70d498e2f000, 49152, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xae000) = 0x70d498e2f000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libgmp.so.10", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=534896, ...}) = 0
+8495  mmap(NULL, 537072, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498cfd000
+8495  mmap(0x70d498d07000, 405504, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xa000) = 0x70d498d07000
+8495  mmap(0x70d498d6a000, 86016, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x6d000) = 0x70d498d6a000
+8495  mmap(0x70d498d7f000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x81000) = 0x70d498d7f000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libz.so.1", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=113000, ...}) = 0
+8495  mmap(NULL, 110744, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498ce1000
+8495  mmap(0x70d498ce3000, 73728, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x2000) = 0x70d498ce3000
+8495  mmap(0x70d498cf5000, 24576, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x14000) = 0x70d498cf5000
+8495  mmap(0x70d498cfb000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1a000) = 0x70d498cfb000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libzstd.so.1", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\0\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=755864, ...}) = 0
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d498cdf000
+8495  mmap(NULL, 757816, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498c25000
+8495  mmap(0x70d498c29000, 684032, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x4000) = 0x70d498c29000
+8495  mmap(0x70d498cd0000, 53248, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xab000) = 0x70d498cd0000
+8495  mmap(0x70d498cdd000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xb7000) = 0x70d498cdd000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libc.so.6", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\220\243\2\0\0\0\0\0"..., 832) = 832
+8495  pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+8495  fstat(3, {st_mode=S_IFREG|0755, st_size=2125328, ...}) = 0
+8495  pread64(3, "\6\0\0\0\4\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0@\0\0\0\0\0\0\0"..., 784, 64) = 784
+8495  mmap(NULL, 2170256, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498a00000
+8495  mmap(0x70d498a28000, 1605632, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x28000) = 0x70d498a28000
+8495  mmap(0x70d498bb0000, 323584, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1b0000) = 0x70d498bb0000
+8495  mmap(0x70d498bff000, 24576, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x1fe000) = 0x70d498bff000
+8495  mmap(0x70d498c05000, 52624, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_ANONYMOUS, -1, 0) = 0x70d498c05000
+8495  close(3)                          = 0
+8495  openat(AT_FDCWD, "/lib/x86_64-linux-gnu/libm.so.6", O_RDONLY|O_CLOEXEC) = 3
+8495  read(3, "\177ELF\2\1\1\3\0\0\0\0\0\0\0\0\3\0>\0\1\0\0\0\0\0\0\0\0\0\0\0"..., 832) = 832
+8495  fstat(3, {st_mode=S_IFREG|0644, st_size=952616, ...}) = 0
+8495  mmap(NULL, 950296, PROT_READ, MAP_PRIVATE|MAP_DENYWRITE, 3, 0) = 0x70d498917000
+8495  mmap(0x70d498927000, 520192, PROT_READ|PROT_EXEC, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x10000) = 0x70d498927000
+8495  mmap(0x70d4989a6000, 360448, PROT_READ, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0x8f000) = 0x70d4989a6000
+8495  mmap(0x70d4989fe000, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_FIXED|MAP_DENYWRITE, 3, 0xe7000) = 0x70d4989fe000
+8495  close(3)                          = 0
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d498c23000
+8495  arch_prctl(ARCH_SET_FS, 0x70d498c24140) = 0
+8495  set_tid_address(0x70d498c24410)   = 8495
+8495  set_robust_list(0x70d498c24420, 24) = 0
+8495  rseq(0x70d498c24a60, 0x20, 0, 0x53053053) = 0
+8495  mprotect(0x70d498bff000, 16384, PROT_READ) = 0
+8495  mprotect(0x70d4989fe000, 4096, PROT_READ) = 0
+8495  mprotect(0x70d498cdd000, 4096, PROT_READ) = 0
+8495  mprotect(0x70d498cfb000, 4096, PROT_READ) = 0
+8495  mprotect(0x70d498d7f000, 4096, PROT_READ) = 0
+8495  mprotect(0x70d498e2f000, 8192, PROT_READ) = 0
+8495  mprotect(0x70d498e5b000, 4096, PROT_READ) = 0
+8495  mprotect(0x70d499022000, 4096, PROT_READ) = 0
+8495  mprotect(0x2319000, 8192, PROT_READ) = 0
+8495  mprotect(0x70d499073000, 8192, PROT_READ) = 0
+8495  prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=65536*1024, rlim_max=RLIM64_INFINITY}) = 0
+8495  munmap(0x70d499025000, 89467)     = 0
+8495  getrandom("\xa3\x41\x06\xe6\xea\x76\x95\x77", 8, GRND_NONBLOCK) = 8
+8495  brk(NULL)                         = 0x22b83000
+8495  brk(0x22ba4000)                   = 0x22ba4000
+8495  prlimit64(0, RLIMIT_STACK, NULL, {rlim_cur=65536*1024, rlim_max=RLIM64_INFINITY}) = 0
+8495  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8495  ioctl(0, TIOCGWINSZ, {ws_row=47, ws_col=185, ws_xpixel=0, ws_ypixel=0}) = 0
+8495  rt_sigaction(SIGSEGV, {sa_handler=0xd398eb, sa_mask=[SEGV], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x70d498a45330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8495  rt_sigaction(SIGILL, {sa_handler=0xd398eb, sa_mask=[ILL], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x70d498a45330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8495  rt_sigaction(SIGBUS, {sa_handler=0xd398eb, sa_mask=[BUS], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x70d498a45330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8495  rt_sigaction(SIGABRT, {sa_handler=0xd398eb, sa_mask=[ABRT], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x70d498a45330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8495  rt_sigaction(SIGFPE, {sa_handler=0xd398eb, sa_mask=[FPE], sa_flags=SA_RESTORER|SA_RESTART, sa_restorer=0x70d498a45330}, {sa_handler=SIG_DFL, sa_mask=[], sa_flags=0}, 8) = 0
+8495  mmap(NULL, 4096, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d49903a000
+8495  mmap(NULL, 135168, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d4988f6000
+8495  brk(0x22bc8000)                   = 0x22bc8000
+8495  mmap(NULL, 2097152, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d4986f6000
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d499038000
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d499036000
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d499034000
+8495  mmap(NULL, 16384, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d499030000
+8495  brk(0x22be9000)                   = 0x22be9000
+8495  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8495  ioctl(2, TCGETS, {c_iflag=BRKINT|IGNPAR|ICRNL|IXON|IMAXBEL, c_oflag=NL0|CR0|TAB0|BS0|VT0|FF0|OPOST|ONLCR, c_cflag=B38400|CS8|CREAD, c_lflag=ISIG|ICANON|ECHO|ECHOE|ECHOK|IEXTEN|ECHOCTL|ECHOKE, ...}) = 0
+8495  brk(0x22c17000)                   = 0x22c17000
+8495  sysinfo({uptime=73937, loads=[288, 160, 0], totalram=8329084928, freeram=7744733184, sharedram=3764224, bufferram=1314816, totalswap=2147483648, freeswap=2147483648, procs=194, totalhigh=0, freehigh=0, mem_unit=1}) = 0
+8495  prlimit64(0, RLIMIT_AS, NULL, {rlim_cur=RLIM64_INFINITY, rlim_max=RLIM64_INFINITY}) = 0
+8495  sysinfo({uptime=73937, loads=[288, 160, 0], totalram=8329084928, freeram=7744733184, sharedram=3764224, bufferram=1314816, totalswap=2147483648, freeswap=2147483648, procs=194, totalhigh=0, freehigh=0, mem_unit=1}) = 0
+8495  prlimit64(0, RLIMIT_AS, NULL, {rlim_cur=RLIM64_INFINITY, rlim_max=RLIM64_INFINITY}) = 0
+8495  prlimit64(0, RLIMIT_RSS, NULL, {rlim_cur=RLIM64_INFINITY, rlim_max=RLIM64_INFINITY}) = 0
+8495  sysinfo({uptime=73937, loads=[288, 160, 0], totalram=8329084928, freeram=7744733184, sharedram=3764224, bufferram=1314816, totalswap=2147483648, freeswap=2147483648, procs=194, totalhigh=0, freehigh=0, mem_unit=1}) = 0
+8495  prlimit64(0, RLIMIT_AS, NULL, {rlim_cur=RLIM64_INFINITY, rlim_max=RLIM64_INFINITY}) = 0
+8495  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  faccessat2(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/", F_OK, AT_EACCESS) = 0
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  faccessat2(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/", F_OK, AT_EACCESS) = 0
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  faccessat2(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/", F_OK, AT_EACCESS) = 0
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  faccessat2(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/", F_OK, AT_EACCESS) = 0
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13/backward", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local/include/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed", 0x7ffc6d0cdf90, 1023) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed", 0x7ffc6d0cdf90, 1023) = -1 ENOENT (No such file or directory)
+8495  access("/usr/lib/gcc/x86_64-linux-gnu/13/", X_OK) = 0
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  faccessat2(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/", F_OK, AT_EACCESS) = 0
+8495  readlink("/usr/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cdf90, 1023) = -1 EINVAL (Invalid argument)
+8495  newfstatat(AT_FDCWD, "/cloud/local/sharedcode/include", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/c++/13", {st_mode=S_IFDIR|0755, st_size=16384, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/c++/13", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/c++/13", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/include/c++/13/backward", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/include", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/local/include/x86_64-linux-gnu", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/local/include", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed/x86_64-linux-gnu", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/include-fixed", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/../../../../x86_64-linux-gnu/include", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/x86_64-linux-gnu", {st_mode=S_IFDIR|0755, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/usr/include", {st_mode=S_IFDIR|0755, st_size=20480, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, "/cloud/local/sharedcode/include", 0x7ffc6d0cf320, 0) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "foo.cpp.gch", 0x7ffc6d0cf380, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "foo.cpp", O_RDONLY|O_NOCTTY) = 3
+8495  fstat(3, {st_mode=S_IFREG|0777, st_size=345, ...}) = 0
+8495  read(3, "\n/////// A.cpp (primary module i"..., 345) = 345
+8495  close(3)                          = 0
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d49902e000
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d49902c000
+8495  mmap(NULL, 8192, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d49902a000
+8495  mmap(NULL, 16384, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d499026000
+8495  brk(0x22c38000)                   = 0x22c38000
+8495  mmap(NULL, 32768, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d498c1b000
+8495  prlimit64(0, RLIMIT_NOFILE, NULL, {rlim_cur=10*1024, rlim_max=1024*1024}) = 0
+8495  prlimit64(0, RLIMIT_NOFILE, {rlim_cur=32783, rlim_max=1000000}, NULL) = 0
+8495  readlink("/tmp", 0x7ffc6d0ce010, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/tmp/cc10EXv0.s", 0x7ffc6d0ce010, 1023) = -1 EINVAL (Invalid argument)
+8495  getcwd("/mnt/c/cloud/local/dev/langs/neon/lab", 1024) = 38
+8495  readlink("/mnt/c/cloud/local/dev/langs/neon/lab/foo.cpp", 0x7ffc6d0ce010, 1023) = -1 EINVAL (Invalid argument)
+8495  openat(AT_FDCWD, "/tmp/cc10EXv0.s", O_WRONLY|O_CREAT|O_TRUNC, 0666) = 3
+8495  fstat(3, {st_mode=S_IFREG|0600, st_size=0, ...}) = 0
+8495  newfstatat(AT_FDCWD, "/home/john/dev/langs/neon/lab", {st_mode=S_IFDIR|0777, st_size=4096, ...}, 0) = 0
+8495  newfstatat(AT_FDCWD, ".", {st_mode=S_IFDIR|0777, st_size=4096, ...}, 0) = 0
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/c++/13/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/include/c++/13/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++/13", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/c++/13/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/c++/13/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/c++/13/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13/backward", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13/backward/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/c++/13/backward/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/include/c++/13/backward/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/lib/gcc/x86_64-linux-gnu/13/include/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/include/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/lib/gcc/x86_64-linux-gnu/13/include/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/local/include/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/local/include/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/local/include/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/x86_64-linux-gnu/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 ENOENT (No such file or directory)
+8495  newfstatat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/include/x86_64-linux-gnu/stdc-predef.h", O_RDONLY|O_NOCTTY) = -1 ENOENT (No such file or directory)
+8495  readlink("/usr", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/stdc-predef.h", 0x7ffc6d0cde70, 1023) = -1 EINVAL (Invalid argument)
+8495  newfstatat(AT_FDCWD, "/usr/include/stdc-predef.h.gch", 0x7ffc6d0cf340, 0) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "/usr/include/stdc-predef.h", O_RDONLY|O_NOCTTY) = 4
+8495  fstat(4, {st_mode=S_IFREG|0644, st_size=2462, ...}) = 0
+8495  read(4, "/* Copyright (C) 1991-2024 Free "..., 2462) = 2462
+8495  close(4)                          = 0
+8495  mmap(NULL, 524288, PROT_READ|PROT_WRITE, MAP_PRIVATE|MAP_ANONYMOUS, -1, 0) = 0x70d498676000
+8495  readlink("/usr", 0x7ffc6d0cdc50, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include", 0x7ffc6d0cdc50, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++", 0x7ffc6d0cdc50, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13", 0x7ffc6d0cdc50, 1023) = -1 EINVAL (Invalid argument)
+8495  readlink("/usr/include/c++/13/iostream", 0x7ffc6d0cdc50, 1023) = -1 EINVAL (Invalid argument)
+8495  openat(AT_FDCWD, "/usr/include/c++/13/iostream", O_RDONLY|O_NOCTTY) = 4
+8495  fstat(4, {st_mode=S_IFREG|0644, st_size=3074, ...}) = 0
+8495  close(4)                          = 0
+8495  openat(AT_FDCWD, "gcm.cache/./usr/include/c++/13/iostream.gcm", O_RDONLY|O_CLOEXEC) = -1 ENOENT (No such file or directory)
+8495  openat(AT_FDCWD, "foo.cpp", O_RDONLY) = 4
+8495  fstat(4, {st_mode=S_IFREG|0777, st_size=345, ...}) = 0
+8495  read(4, "\n/////// A.cpp (primary module i"..., 4096) = 345
+8495  read(4, "", 4096)                 = 0
+8495  write(2, "In module imported at \33[01m\33[Kfo"..., 175) = 175
+8495  write(2, "\33[01m\33[K/usr/include/c++/13/iost"..., 151) = 151
+8495  write(2, "\33[01m\33[K/usr/include/c++/13/iost"..., 111) = 111
+8495  write(2, "\33[01m\33[K/usr/include/c++/13/iost"..., 119) = 119
+8495  close(4)                          = 0
+8495  write(2, "compilation terminated.\n", 24) = 24
+8495  write(3, "\t.file\t\"foo.cpp\"\n", 17) = 17
+8495  exit_group(1)                     = ?
+8495  +++ exited with 1 +++
+8494  <... wait4 resumed>[{WIFEXITED(s) && WEXITSTATUS(s) == 1}], 0, NULL) = 8495
+8494  --- SIGCHLD {si_signo=SIGCHLD, si_code=CLD_EXITED, si_pid=8495, si_uid=1000, si_status=1, si_utime=0, si_stime=1 /* 0.01 s */} ---
+8494  newfstatat(AT_FDCWD, "/tmp/cc10EXv0.s", {st_mode=S_IFREG|0600, st_size=17, ...}, 0) = 0
+8494  unlink("/tmp/cc10EXv0.s")         = 0
+8494  exit_group(1)                     = ?
+8494  +++ exited with 1 +++
