@@ -142,17 +142,10 @@ LICENSE
 #include <assert.h>
 
 #if !defined(NEON_INLINE)
-    #if defined(__STRICT_ANSI__)
-        #define NEON_INLINE
-        #define NEON_FORCEINLINE
-        #define inline
+    #if defined(__GNUC__) || defined(__TINYC__)
+        #define NEON_INLINE __attribute__((always_inline)) inline
     #else
         #define NEON_INLINE inline
-        #if defined(__GNUC__) || defined(__TINYC__)
-            #define NEON_FORCEINLINE __attribute__((always_inline)) inline
-        #else
-            #define NEON_FORCEINLINE inline
-        #endif
     #endif
 #endif
 
