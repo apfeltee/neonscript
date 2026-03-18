@@ -1,6 +1,7 @@
 
 #include <new>
 #include <type_traits>
+#include <functional>
 #include <assert.h>
 #include <stdarg.h>
 #include <stdbool.h>
@@ -24,14 +25,7 @@
     #define NEON_PLAT_ISLINUX
 #endif
 
-#include "mem.h"
-#include "mrx.h"
-#include "strbuf.h"
-#include "oslib.h"
-#include "optparse.h"
-#if !defined(NEON_PLAT_ISWINDOWS)
-    #include "lino.h"
-#endif
+#define NEON_CONF_REPLSUPPORT 1
 
 #if defined(NEON_PLAT_ISWINDOWS)
     #include <windows.h>
@@ -42,6 +36,17 @@
     #include <sys/time.h>
     #include <unistd.h>
 #endif
+
+
+#include "mem.h"
+#include "mrx.h"
+#include "strbuf.h"
+#include "oslib.h"
+#include "optparse.h"
+#if defined(NEON_CONF_REPLSUPPORT) && (NEON_CONF_REPLSUPPORT == 1)
+    #include "lino.h"
+#endif
+
 
 /* needed when compiling with wasi. must be defined *before* signal.h is included! */
 #if defined(__wasi__)
@@ -282,7 +287,6 @@ namespace neon
     class /**/ AstLexer;
     class /**/ FormatInfo;
     class /**/ utf8iterator_t;
-    class /**/ ConstClassMethodItem;
     class /**/ Module;
     class /**/ Upvalue;
     class /**/ Userdata;
@@ -358,7 +362,6 @@ namespace neon
 
 
 
-    void nn_state_installmethods(Class* klass, ConstClassMethodItem* listmethods);
     void nn_state_initbuiltinmethods();
     Value nn_except_getstacktrace();
     bool nn_except_propagate();
@@ -387,36 +390,10 @@ namespace neon
     int nn_dbg_printclosureinstr(IOStream* pr, const char* name, Blob* blob, int offset);
     int nn_dbg_printinstructionat(IOStream* pr, Blob* blob, int offset);
 
-    void nn_iostream_printvaltable(IOStream* pr, HashTable<Value, Value>* table, const char* name);
-    void nn_iostream_printfunction(IOStream* pr, Function* func);
-    void nn_iostream_printarray(IOStream* pr, Array* list);
-    void nn_iostream_printdict(IOStream* pr, Dict* dict);
-    void nn_iostream_printfile(IOStream* pr, File* file);
-    void nn_iostream_printinstance(IOStream* pr, Instance* instance, bool invmethod);
-    void nn_iostream_printtable(IOStream* pr, HashTable<Value, Value>* table);
-    void nn_iostream_printobjclass(IOStream* pr, Value value, bool fixstring, bool invmethod);
-    void nn_iostream_printobject(IOStream* pr, Value value, bool fixstring, bool invmethod);
-    void nn_iostream_printnumber(IOStream* pr, Value value);
-    void nn_iostream_printvalue(IOStream* pr, Value value, bool fixstring, bool invmethod);
-
 
     void nn_state_installobjectarray();
     /* libdict.c */
-    Dict* nn_object_makedict();
-    void nn_dict_destroy(Dict* dict);
-    bool nn_dict_setentry(Dict* dict, Value key, Value value);
-    void nn_dict_addentry(Dict* dict, Value key, Value value);
-    void nn_dict_addentrycstr(Dict* dict, const char* ckey, Value value);
-    Property* nn_dict_getentry(Dict* dict, Value key);
-    Dict* nn_dict_copy(Dict* dict);
     void nn_state_installobjectdict();
-    /* libfile.c */
-    File* nn_object_makefile(FILE* handle, bool isstd, const char* path, const char* mode);
-    void nn_file_destroy(File* file);
-    void nn_file_mark(File* file);
-    bool nn_file_read(File* file, size_t readhowmuch, IOResult* dest);
-    int nn_fileobject_close(File* file);
-    bool nn_fileobject_open(File* file);
     void nn_state_installobjectfile();
     /* libfunc.c */
     void nn_funcscript_destroy(Function* ofn);
@@ -614,13 +591,6 @@ namespace neon
 
     };
 
-    class ConstClassMethodItem
-    {
-        public:
-            const char* m_constclassmthname;
-            NativeFN fn;
-    };
-
     class utf8iterator_t
     {
         public:
@@ -691,7 +661,7 @@ namespace neon
 
         public:
             Type m_objtype;
-            bool mark;
+            bool m_objmark;
             /*
             // when an object is marked as stale, it means that the
             // GC will never collect this object. This can be useful
@@ -699,8 +669,13 @@ namespace neon
             // objects in their types/pointers. The GC cannot reach
             // them yet, so it's best for them to be kept stale.
             */
-            bool stale;
-            Object* next;
+            bool m_objstale;
+            Object* m_objnext;
+
+        public:
+            Object()
+            {
+            }
     };
 
     class Value
@@ -770,6 +745,8 @@ namespace neon
             }
 
         public:
+            Value() = default;
+
             NEON_INLINE Object::Type objType() const
             {
                 return asObject()->m_objtype;
@@ -942,235 +919,7 @@ namespace neon
             bool isFalse() const;
     };
 
-    template <typename StoredType>
-    class ValArray
-    {
-        public:
-            void deInit(bool actuallydelete)
-            {
-                nn_memory_free(this->listitems);
-                if(actuallydelete)
-                {
-                    nn_memory_free(this);
-                }
-            }
-
-            static NEON_INLINE uint64_t getNextCapacity(uint64_t capacity)
-            {
-                if(capacity < 4)
-                {
-                    return 4;
-                }
-                return nn_util_rndup2pow64(capacity + 1);
-            }
-
-            void initSelf()
-            {
-                size_t initialsize;
-                initialsize = 32;
-                listcount = 0;
-                listcapacity = 0;
-                listitems = nullptr;
-                listname = nullptr;
-                if(initialsize > 0)
-                {
-                    ensureCapacity(initialsize, StoredType{}, true);
-                }
-            }
-
-        public:
-            const char* listname = nullptr;
-            Value* listitems = nullptr;
-            size_t listcapacity = 0;
-            size_t listcount = 0;
-
-        public:
-            ValArray()
-            {
-            }
-
-            NEON_INLINE bool push(StoredType value)
-            {
-                size_t oldcap;
-                if(this->listcapacity < this->listcount + 1)
-                {
-                    oldcap = this->listcapacity;
-                    this->listcapacity = getNextCapacity(oldcap);
-                    if(this->listitems == nullptr)
-                    {
-                        this->listitems = (StoredType*)nn_memory_malloc(sizeof(StoredType) * this->listcapacity);
-                    }
-                    else
-                    {
-                        this->listitems = (StoredType*)nn_memory_realloc(this->listitems, sizeof(StoredType) * this->listcapacity);
-                    }
-                }
-                this->listitems[this->listcount] = value;
-                this->listcount++;
-                return true;
-            }
-
-            NEON_INLINE bool set(size_t idx, StoredType val)
-            {
-                size_t need;
-                need = idx + 8;
-                if(this->listcount == 0)
-                {
-                    return push(val);
-                }
-                if(((idx == 0) || (this->listcapacity == 0)) || (idx >= this->listcapacity))
-                {
-                    if(!ensureCapacity(need, StoredType{}, false))
-                    {
-                        return false;
-                    }
-                }
-                this->listitems[idx] = val;
-                if(idx > this->listcount)
-                {
-                    this->listcount = idx;
-                }
-                return true;
-            }
-
-            NEON_INLINE bool removeAtIntern(unsigned int ix)
-            {
-                size_t tomovebytes;
-                void* src;
-                void* dest;
-                if(ix == (this->listcount - 1))
-                {
-                    this->listcount--;
-                    return true;
-                }
-                tomovebytes = (this->listcount - 1 - ix) * sizeof(StoredType);
-                dest = this->listitems + (ix * sizeof(StoredType));
-                src = this->listitems + ((ix + 1) * sizeof(StoredType));
-                memmove(dest, src, tomovebytes);
-                this->listcount--;
-                return true;
-            }
-
-            NEON_INLINE bool removeAt(unsigned int ix)
-            {
-                if(ix >= this->listcount)
-                {
-                    return false;
-                }
-                if(ix == 0)
-                {
-                    this->listitems += sizeof(StoredType);
-                    this->listcapacity--;
-                    this->listcount--;
-                    return true;
-                }
-                return removeAtIntern(this, ix);
-            }
-
-            NEON_INLINE bool ensureCapacity(size_t needsize, StoredType fillval, bool first)
-            {
-                size_t i;
-                size_t ncap;
-                size_t oldcap;
-                (void)first;
-                if(this->listcapacity < needsize)
-                {
-                    oldcap = this->listcapacity;
-                    if(oldcap == 0)
-                    {
-                        ncap = needsize;
-                    }
-                    else
-                    {
-                        ncap = getNextCapacity(this->listcapacity + needsize);
-                    }
-                    this->listcapacity = ncap;
-                    if(this->listitems == nullptr)
-                    {
-                        this->listitems = (StoredType*)nn_memory_malloc(sizeof(StoredType) * ncap);
-                    }
-                    else
-                    {
-                        this->listitems = (StoredType*)nn_memory_realloc(this->listitems, sizeof(StoredType) * ncap);
-                    }
-                    if(this->listitems == nullptr)
-                    {
-                        return false;
-                    }
-                    for(i = oldcap; i < ncap; i++)
-                    {
-                        this->listitems[i] = fillval;
-                    }
-                }
-                return true;
-            }
-
-            NEON_INLINE void setEmpty()
-            {
-                if((this->listcapacity > 0) && (this->listitems != nullptr))
-                {
-                    memset(this->listitems, 0, sizeof(StoredType) * this->listcapacity);
-                }
-                this->listcount = 0;
-                this->listcapacity = 0;
-            }
-
-            NEON_INLINE void setCount(size_t cnt)
-            {
-                this->listcount = cnt;
-            }
-
-            NEON_INLINE void increaseBy(size_t cnt)
-            {
-                this->listcount += cnt;
-            }
-
-            NEON_INLINE void decreaseBy(size_t cnt)
-            {
-                this->listcount -= cnt;
-            }
-
-            NEON_INLINE size_t count() const
-            {
-                return this->listcount;
-            }
-
-            NEON_INLINE size_t capacity() const
-            {
-                return this->listcapacity;
-            }
-
-            NEON_INLINE StoredType* data() const
-            {
-                return (StoredType*)this->listitems;
-            }
-
-            NEON_INLINE StoredType get(size_t idx) const
-            {
-                return ((StoredType*)this->listitems)[idx];
-            }
-
-            NEON_INLINE StoredType* getp(size_t idx) const
-            {
-                return (StoredType*)&this->listitems[idx];
-            }
-
-            NEON_INLINE bool insert(StoredType val, size_t idx)
-            {
-                return set(idx, val);
-            }
-
-            NEON_INLINE bool pop(StoredType* dest)
-            {
-                if(this->listcount > 0)
-                {
-                    *dest = (StoredType)this->listitems[this->listcount - 1];
-                    this->listcount--;
-                    return true;
-                }
-                return false;
-            }
-    };
+    #include "list.h"
 
     class Property
     {
@@ -1274,7 +1023,7 @@ namespace neon
                 this->htentries = nullptr;
             }
 
-            void deinit()
+            void deInit()
             {
                 nn_memory_free(this->htentries);
             }
@@ -1724,8 +1473,6 @@ namespace neon
                 blob->count = 0;
                 blob->capacity = 0;
                 blob->instrucs = nullptr;
-                blob->constants.initSelf();
-                blob->argdefvals.initSelf();
             }
 
             static void destroy(Blob* blob)
@@ -1734,8 +1481,8 @@ namespace neon
                 {
                     nn_memory_free(blob->instrucs);
                 }
-                blob->constants.deInit(false);
-                blob->argdefvals.deInit(false);
+                blob->constants.deInit();
+                blob->argdefvals.deInit();
             }
 
 
@@ -1747,6 +1494,11 @@ namespace neon
             ValArray<Value> argdefvals;
 
         public:
+            Blob()
+            {
+                init(this);
+            }
+
             void push(Instruction ins)
             {
                 int oldcapacity;
@@ -1772,16 +1524,16 @@ namespace neon
         public:
             struct ExceptionInfo
             {
-                uint16_t address;
-                uint16_t finallyaddress;
+                uint16_t address = 0;
+                uint16_t finallyaddress = 0;
             };
 
         public:
-            int m_handlercount;
-            int gcprotcount;
-            int stackslotpos;
-            Instruction* inscode;
-            Function* closure;
+            int m_handlercount = 0;
+            int gcprotcount = 0;
+            int stackslotpos = 0;
+            Instruction* inscode = nullptr;
+            Function* closure = nullptr;
             /* TODO: should be dynamically allocated */
             ExceptionInfo handlers[NEON_CONFIG_MAXEXCEPTHANDLERS];
     };
@@ -1813,9 +1565,9 @@ namespace neon
                         m_htab.initTable();
                     }
 
-                    void deinit()
+                    void deInit()
                     {
-                        m_htab.deinit();
+                        m_htab.deInit();
                     }
 
                     void store(String* os)
@@ -2017,15 +1769,17 @@ namespace neon
                 return SharedState::m_myself;
             }
 
-            static Object* gcMakeObject(size_t size, Object::Type type, bool retain)
+            template<typename InputT>
+            static InputT* gcMakeObject(Object::Type type, bool retain)
             {
-                Object* object;
+                size_t size = sizeof(InputT);
                 auto gcs = SharedState::get();
-                object = (Object*)SharedState::gcAllocate(size, 1, retain);
+                auto temp = (InputT*)SharedState::gcAllocate(size, 1, retain);
+                auto object = new(temp) InputT();
                 object->m_objtype = type;
-                object->mark = !gcs->markvalue;
-                object->stale = false;
-                object->next = gcs->linkedobjects;
+                object->m_objmark = !gcs->markvalue;
+                object->m_objstale = false;
+                object->m_objnext = gcs->linkedobjects;
                 gcs->linkedobjects = object;
                 return object;
             }
@@ -2075,18 +1829,18 @@ namespace neon
                 object = gcs->linkedobjects;
                 while(object != nullptr)
                 {
-                    if(object->mark == gcs->markvalue)
+                    if(object->m_objmark == gcs->markvalue)
                     {
                         previous = object;
-                        object = object->next;
+                        object = object->m_objnext;
                     }
                     else
                     {
                         unreached = object;
-                        object = object->next;
+                        object = object->m_objnext;
                         if(previous != nullptr)
                         {
-                            previous->next = object;
+                            previous->m_objnext = object;
                         }
                         else
                         {
@@ -2105,7 +1859,7 @@ namespace neon
                 object = gcs->linkedobjects;
                 while(object != nullptr)
                 {
-                    next = object->next;
+                    next = object->m_objnext;
                     Object::destroyObject(object);
                     object = next;
                 }
@@ -2258,7 +2012,6 @@ namespace neon
                 oldsz = m_vmstate.framecapacity;
                 newsz = oldsz + needed;
                 allocsz = ((newsz + 1) * sizeof(CallFrame));
-        #if 1
                 oldbuf = m_vmstate.framevalues;
                 newbuf = (CallFrame*)nn_memory_realloc(oldbuf, allocsz);
                 if(newbuf == nullptr)
@@ -2266,7 +2019,6 @@ namespace neon
                     fprintf(stderr, "internal error: failed to resize framevalues!\n");
                     abort();
                 }
-        #endif
                 m_vmstate.framevalues = (CallFrame*)newbuf;
                 m_vmstate.framecapacity = newsz;
                 /*
@@ -2280,20 +2032,26 @@ namespace neon
                 return true;
             }
 
-            NEON_INLINE bool checkMaybeResize()
+            NEON_INLINE bool checkMaybeResizeStack()
             {
                 if((m_vmstate.stackidx + 1) >= m_vmstate.stackcapacity)
                 {
-                    if(!resizeStack(m_vmstate.stackidx + 1))
+                    if(!resizeStack(nn_util_rndup2pow64(m_vmstate.stackidx + 1)))
                     {
                         fprintf(stderr, "failed to resize stack due to overflow");
                         return false;
                     }
                     return true;
                 }
+                return false;
+            }
+
+            NEON_INLINE bool checkMaybeResizeFrames()
+            {
+                //fprintf(stderr, "checking if frames need resizing...\n");
                 if(m_vmstate.framecount >= m_vmstate.framecapacity)
                 {
-                    if(!resizeFrames(m_vmstate.framecapacity + 1))
+                    if(!resizeFrames(nn_util_rndup2pow64(m_vmstate.framecapacity + 1)))
                     {
                         fprintf(stderr, "failed to resize frames due to overflow");
                         return false;
@@ -2303,9 +2061,9 @@ namespace neon
                 return false;
             }
 
-            template <typename InputT> NEON_INLINE void stackPush(InputT value)
+            NEON_INLINE void stackPush(Value value)
             {
-                checkMaybeResize();
+                checkMaybeResizeStack();
                 m_vmstate.stackvalues[m_vmstate.stackidx] = value;
                 m_vmstate.stackidx++;
             }
@@ -2354,7 +2112,7 @@ namespace neon
             static String* makeFromStrbuf(NNStringBuffer buf, uint32_t hsv, size_t length)
             {
                 String* rs;
-                rs = (String*)SharedState::gcMakeObject(sizeof(String), Object::OTYP_STRING, false);
+                rs = SharedState::gcMakeObject<String>(Object::OTYP_STRING, false);
                 rs->m_sbuf = buf;
                 rs->m_hashvalue = hsv;
                 if(length > 0)
@@ -2367,7 +2125,6 @@ namespace neon
             static void destroy(String* str)
             {
                 nn_strbuf_destroyfromstack(&str->m_sbuf);
-                SharedState::gcRelease(str);
             }
 
             static String* intern(const char* strdata, int length)
@@ -2553,37 +2310,37 @@ namespace neon
             String* m_funcname;
             int upvalcount;
             Value clsthisval;
-            union
+            union FuncUnion
             {
-                struct
+                struct FNDataClosure
                 {
                     Function* scriptfunc;
                     Upvalue** m_upvalues;
                 } fnclosure;
-                struct
+                struct FNDataScriptFunc
                 {
                     int arity;
                     bool isvariadic;
-                    Blob blob;
+                    Blob* blob;
                     Module* module;
                 } fnscriptfunc;
-                struct
+                struct FNDataNativeFunc
                 {
                     NativeFN natfunc;
                     void* userptr;
                 } fnnativefunc;
-                struct
+                struct FNDataMethod
                 {
                     Value receiver;
                     Function* method;
                 } fnmethod;
-            };
+            } m_fnvals;
 
         public:
             static Function* makeFuncGeneric(String* name, Object::Type fntype, Value thisval)
             {
                 Function* ofn;
-                ofn = (Function*)SharedState::gcMakeObject(sizeof(Function), fntype, false);
+                ofn = SharedState::gcMakeObject<Function>(fntype, false);
                 ofn->clsthisval = thisval;
                 ofn->m_funcname = name;
                 return ofn;
@@ -2593,8 +2350,8 @@ namespace neon
             {
                 Function* ofn;
                 ofn = makeFuncGeneric(method->m_funcname, Object::OTYP_FUNCBOUND, Value::makeNull());
-                ofn->fnmethod.receiver = receiver;
-                ofn->fnmethod.method = method;
+                ofn->m_fnvals.fnmethod.receiver = receiver;
+                ofn->m_fnvals.fnmethod.method = method;
                 return ofn;
             }
 
@@ -2602,13 +2359,13 @@ namespace neon
             {
                 Function* ofn;
                 ofn = makeFuncGeneric(String::intern("<script>"), Object::OTYP_FUNCSCRIPT, Value::makeNull());
-                ofn->fnscriptfunc.arity = 0;
+                ofn->m_fnvals.fnscriptfunc.arity = 0;
                 ofn->upvalcount = 0;
-                ofn->fnscriptfunc.isvariadic = false;
+                ofn->m_fnvals.fnscriptfunc.isvariadic = false;
                 ofn->m_funcname = nullptr;
                 ofn->m_contexttype = (Function::ContextType)type;
-                ofn->fnscriptfunc.module = module;
-                Blob::init(&ofn->fnscriptfunc.blob);
+                ofn->m_fnvals.fnscriptfunc.module = module;
+                ofn->m_fnvals.fnscriptfunc.blob = Memory::make<Blob>();
                 return ofn;
             }
 
@@ -2616,9 +2373,9 @@ namespace neon
             {
                 Function* ofn;
                 ofn = makeFuncGeneric(String::copy(name), Object::OTYP_FUNCNATIVE, Value::makeNull());
-                ofn->fnnativefunc.natfunc = natfn;
+                ofn->m_fnvals.fnnativefunc.natfunc = natfn;
                 ofn->m_contexttype = Function::CTXTYPE_FUNCTION;
-                ofn->fnnativefunc.userptr = uptr;
+                ofn->m_fnvals.fnnativefunc.userptr = uptr;
                 return ofn;
             }
 
@@ -2637,11 +2394,13 @@ namespace neon
                     }
                 }
                 ofn = makeFuncGeneric(innerfn->m_funcname, Object::OTYP_FUNCCLOSURE, thisval);
-                ofn->fnclosure.scriptfunc = innerfn;
-                ofn->fnclosure.m_upvalues = upvals;
+                ofn->m_fnvals.fnclosure.scriptfunc = innerfn;
+                ofn->m_fnvals.fnclosure.m_upvalues = upvals;
                 ofn->upvalcount = innerfn->upvalcount;
                 return ofn;
             }
+
+            public:
 
     };
 
@@ -2651,7 +2410,7 @@ namespace neon
             static Module* make(const char* name, const char* file, bool imported, bool retain)
             {
                 Module* module;
-                module = (Module*)SharedState::gcMakeObject(sizeof(Module), Object::OTYP_MODULE, retain);
+                module = SharedState::gcMakeObject<Module>(Object::OTYP_MODULE, retain);
                 module->deftable.initTable();
                 module->m_modname = String::copy(name);
                 module->physicalpath = String::copy(file);
@@ -2677,7 +2436,7 @@ namespace neon
             static void destroy(Module* module)
             {
                 ModLoaderFN asfn;
-                module->deftable.deinit();
+                module->deftable.deInit();
                 /*
                 nn_memory_free(module->m_modname);
                 nn_memory_free(module->physicalpath);
@@ -2812,11 +2571,13 @@ namespace neon
                 field = gcs->m_openedmodules.getfieldbyostr(modulename);
                 if(field != nullptr)
                 {
+                    Blob::destroy(&blob);
                     return field->value.asModule();
                 }
                 physpath = resolvePath(modulename->data(), intomodule->physicalpath->data(), nullptr, false);
                 if(physpath == nullptr)
                 {
+                    Blob::destroy(&blob);
                     nn_except_throwclass(gcs->m_exceptions.importerror, "module not found: '%s'", modulename->data());
                     return nullptr;
                 }
@@ -2825,9 +2586,9 @@ namespace neon
                 if(source == nullptr)
                 {
                     nn_except_throwclass(gcs->m_exceptions.importerror, "could not read import file %s", physpath);
+                    Blob::destroy(&blob);
                     return nullptr;
                 }
-                Blob::init(&blob);
                 module = Module::make(modulename->data(), physpath, true, true);
                 nn_memory_free(physpath);
                 function = nn_astutil_compilesource(module, source, &blob, true, false);
@@ -2876,6 +2637,14 @@ namespace neon
     class Class : public Object
     {
         public:
+            class ConstItem
+            {
+                public:
+                    const char* m_constclassmthname;
+                    NativeFN fn;
+            };
+
+        public:
             /*
              * the constructor, if any. defaults to <empty>, and if not <empty>, expects to be
              * some callable value.
@@ -2912,7 +2681,7 @@ namespace neon
             static Class* make(String* name, Class* parent)
             {
                 Class* klass;
-                klass = (Class*)SharedState::gcMakeObject(sizeof(Class), Object::OTYP_CLASS, false);
+                klass = SharedState::gcMakeObject<Class>(Object::OTYP_CLASS, false);
                 klass->m_classname = name;
                 klass->m_instproperties.initTable();
                 klass->m_staticproperties.initTable();
@@ -2926,10 +2695,10 @@ namespace neon
 
             static void destroy(Class* klass)
             {
-                klass->m_instmethods.deinit();
-                klass->m_staticmethods.deinit();
-                klass->m_instproperties.deinit();
-                klass->m_staticproperties.deinit();
+                klass->m_instmethods.deInit();
+                klass->m_staticmethods.deInit();
+                klass->m_instproperties.deInit();
+                klass->m_staticproperties.deInit();
                 /*
                 // We are not freeing the initializer because it's a closure and will still be freed accordingly later.
                 */
@@ -3088,18 +2857,32 @@ namespace neon
                 return field;
             }
 
-
+            void installMethods(ConstItem* listmethods)
+            {
+                int i;
+                const char* rawname;
+                NativeFN rawfn;
+                String* osname;
+                for(i = 0; listmethods[i].m_constclassmthname != nullptr; i++)
+                {
+                    rawname = listmethods[i].m_constclassmthname;
+                    rawfn = listmethods[i].fn;
+                    osname = String::intern(rawname);
+                    defNativeMethod(osname, rawfn);
+                }
+            }
     };
 
     class Instance : public Object
     {
         public:
-            static Instance* makeInstanceOfSize(Class* klass, size_t sz)
+            template<typename InputT>
+            static Instance* makeInstanceOfSize(Class* klass)
             {
                 Instance* oinst;
                 Instance* instance;
                 oinst = nullptr;
-                instance = (Instance*)SharedState::gcMakeObject(sz, Object::OTYP_INSTANCE, false);
+                instance = (Instance*)SharedState::gcMakeObject<InputT>(Object::OTYP_INSTANCE, false);
                 instance->m_instactive = true;
                 instance->m_instanceclass = klass;
                 instance->m_instancesuperinstance = nullptr;
@@ -3118,7 +2901,7 @@ namespace neon
 
             static Instance* make(Class* klass)
             {
-                return makeInstanceOfSize(klass, sizeof(Instance));
+                return makeInstanceOfSize<Instance>(klass);
             }
 
             static void mark(Instance* instance)
@@ -3140,7 +2923,7 @@ namespace neon
                     {
                     }
                 }
-                instance->m_instanceprops.deinit();
+                instance->m_instanceprops.deInit();
                 instance->m_instactive = false;
                 SharedState::gcRelease(instance);
             }
@@ -3213,8 +2996,7 @@ namespace neon
             {
                 size_t i;
                 Array* list;
-                list = (Array*)SharedState::gcMakeObject(sizeof(Array), Object::OTYP_ARRAY, false);
-                list->m_objvarray.initSelf();
+                list = SharedState::gcMakeObject<Array>(Object::OTYP_ARRAY, false);
                 if(cnt > 0)
                 {
                     for(i = 0; i < cnt; i++)
@@ -3246,8 +3028,14 @@ namespace neon
 
             NEON_INLINE Value* data() const
             {
-                return (Value*)m_objvarray.listitems;
+                return (Value*)m_objvarray.data();
             }
+
+            NEON_INLINE bool pop(Value* dest)
+            {
+                return m_objvarray.pop(dest);
+            }
+
 
             NEON_INLINE bool set(size_t idx, Value val)
             {
@@ -3312,10 +3100,107 @@ namespace neon
         public:
             ValArray<Value> htnames;
             HashTable<Value, Value> htab;
+
+        public:
+            static Dict* make()
+            {
+                Dict* dict;
+                dict = SharedState::gcMakeObject<Dict>(Object::OTYP_DICT, false);
+                dict->htab.initTable();
+                return dict;
+            }
+
+            static void destroy(Dict* dict)
+            {
+                dict->htnames.deInit();
+                dict->htab.deInit();
+            }
+
+            bool set(Value key, Value value)
+            {
+                Value tempvalue;
+                if(!this->htab.get(key, &tempvalue))
+                {
+                    /* add key if it doesn't exist. */
+                    this->htnames.push(key);
+                }
+                return this->htab.set(key, value);
+            }
+
+            void add(Value key, Value value)
+            {
+                this->set(key, value);
+            }
+
+            void addCstr(const char* ckey, Value value)
+            {
+                String* os;
+                os = String::copy(ckey);
+                this->add(Value::fromObject(os), value);
+            }
+
+            Property* get(Value key)
+            {
+                return this->htab.getfield(key);
+            }
+
+            Dict* copy()
+            {
+                size_t i;
+                size_t dsz;
+                Value key;
+                Property* field;
+                Dict* ndict;
+                ndict = Dict::make();
+                /*
+                // @TODO: Figure out how to handle dictionary values correctly
+                // remember that copying keys is redundant and unnecessary
+                */
+                dsz = this->htnames.count();
+                for(i = 0; i < dsz; i++)
+                {
+                    key = this->htnames.get(i);
+                    field = this->htab.getfield(this->htnames.get(i));
+                    ndict->htnames.push(key);
+                    ndict->htab.setwithtype(key, field->value, field->m_fieldtype, key.isString());
+                }
+                return ndict;
+            }
     };
 
     class File : public Object
     {
+        public:
+            static File* make(FILE* handle, bool isstd, const char* path, const char* mode)
+            {
+                File* file;
+                file = SharedState::gcMakeObject<File>(Object::OTYP_FILE, false);
+                file->isopen = false;
+                file->mode = String::copy(mode);
+                file->path = String::copy(path);
+                file->isstd = isstd;
+                file->handle = handle;
+                file->istty = false;
+                file->number = -1;
+                if(file->handle != nullptr)
+                {
+                    file->isopen = true;
+                }
+                return file;
+            }
+
+            static void destroy(File* file)
+            {
+                file->closeFile();
+                SharedState::gcRelease(file);
+            }
+
+            static void mark(File* file)
+            {
+                Object::markObject((Object*)file->mode);
+                Object::markObject((Object*)file->path);
+            }
+
         public:
             bool isopen;
             bool isstd;
@@ -3324,6 +3209,126 @@ namespace neon
             FILE* handle;
             String* mode;
             String* path;
+
+        public:
+            bool readData(size_t readhowmuch, IOResult* dest)
+            {
+                size_t filesizereal;
+                struct stat stats;
+                filesizereal = -1;
+                dest->success = false;
+                dest->length = 0;
+                dest->data = nullptr;
+                if(!this->isstd)
+                {
+                    if(!nn_util_fsfileexists(this->path->data()))
+                    {
+                        return false;
+                    }
+                    /* file is in write only mode */
+                    /*
+                    else if(strstr(this->mode->data(), "w") != nullptr && strstr(this->mode->data(), "+") == nullptr)
+                    {
+                        NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
+                    }
+                    */
+                    if(!this->isopen)
+                    {
+                        /* open the file if it isn't open */
+                        this->openWithoutParams();
+                    }
+                    else if(this->handle == nullptr)
+                    {
+                        return false;
+                    }
+                    if(osfn_lstat(this->path->data(), &stats) == 0)
+                    {
+                        filesizereal = (size_t)stats.st_size;
+                    }
+                    else
+                    {
+                        /* fallback */
+                        fseek(this->handle, 0L, SEEK_END);
+                        filesizereal = ftell(this->handle);
+                        rewind(this->handle);
+                    }
+                    if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
+                    {
+                        readhowmuch = filesizereal;
+                    }
+                }
+                else
+                {
+                    /*
+                    // for non-file objects such as stdin
+                    // minimum read bytes should be 1
+                    */
+                    if(readhowmuch == (size_t)-1)
+                    {
+                        readhowmuch = 1;
+                    }
+                }
+                /* +1 for terminator '\0' */
+                dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
+                if(dest->data == nullptr && readhowmuch != 0)
+                {
+                    return false;
+                }
+                dest->length = fread(dest->data, sizeof(char), readhowmuch, this->handle);
+                if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
+                {
+                    return false;
+                }
+                /* we made use of +1 so we can terminate the string. */
+                if(dest->data != nullptr)
+                {
+                    dest->data[dest->length] = '\0';
+                }
+                return true;
+            }
+
+            int closeFile()
+            {
+                int result;
+                if(this->handle != nullptr && !this->isstd)
+                {
+                    fflush(this->handle);
+                    result = fclose(this->handle);
+                    this->handle = nullptr;
+                    this->isopen = false;
+                    this->number = -1;
+                    this->istty = false;
+                    return result;
+                }
+                return -1;
+            }
+
+            bool openWithoutParams()
+            {
+                if(this->handle != nullptr)
+                {
+                    return true;
+                }
+                if(this->handle == nullptr && !this->isstd)
+                {
+                    this->handle = fopen(this->path->data(), this->mode->data());
+                    if(this->handle != nullptr)
+                    {
+                        this->isopen = true;
+                        this->number = fileno(this->handle);
+                        this->istty = osfn_isatty(this->number);
+                        return true;
+                    }
+                    else
+                    {
+                        this->number = -1;
+                        this->istty = false;
+                    }
+                    return false;
+                }
+                return false;
+            }
+
     };
 
     class Switch : public Object
@@ -3633,6 +3638,429 @@ namespace neon
             }
     };
 
+    class ValPrinter
+    {
+        public:
+            ValPrinter(IOStream* pr) = delete;
+
+            static void printValue(IOStream* pr, Value value, bool fixstring, bool invmethod)
+            {
+                if(value.isNull())
+                {
+                    pr->writeString("null");
+                }
+                else if(value.isBool())
+                {
+                    pr->writeString(value.asBool() ? "true" : "false");
+                }
+                else if(value.isNumber())
+                {
+                    printNumber(pr, value);
+                }
+                else
+                {
+                    printObject(pr, value, fixstring, invmethod);
+                }
+            }
+
+            static void printObject(IOStream* pr, Value value, bool fixstring, bool invmethod)
+            {
+                Object* obj;
+                obj = value.asObject();
+                switch(obj->m_objtype)
+                {
+                    case Object::OTYP_SWITCH:
+                        {
+                            pr->writeString("<switch>");
+                        }
+                        break;
+                    case Object::OTYP_USERDATA:
+                        {
+                            pr->format("<userdata %s>", value.asUserdata()->m_udname);
+                        }
+                        break;
+                    case Object::OTYP_RANGE:
+                        {
+                            Range* range;
+                            range = value.asRange();
+                            pr->format("<range %d .. %d>", range->lower, range->upper);
+                        }
+                        break;
+                    case Object::OTYP_FILE:
+                        {
+                            printFile(pr, value.asFile());
+                        }
+                        break;
+                    case Object::OTYP_DICT:
+                        {
+                            printDict(pr, value.asDict());
+                        }
+                        break;
+                    case Object::OTYP_ARRAY:
+                        {
+                            printArray(pr, value.asArray());
+                        }
+                        break;
+                    case Object::OTYP_FUNCBOUND:
+                        {
+                            Function* bn;
+                            bn = value.asFunction();
+                            printFunction(pr, bn->m_fnvals.fnmethod.method->m_fnvals.fnclosure.scriptfunc);
+                        }
+                        break;
+                    case Object::OTYP_MODULE:
+                        {
+                            Module* mod;
+                            mod = value.asModule();
+                            pr->format("<module '%s' at '%s'>", mod->m_modname->data(), mod->physicalpath->data());
+                        }
+                        break;
+                    case Object::OTYP_CLASS:
+                        {
+                            printClass(pr, value, fixstring, invmethod);
+                        }
+                        break;
+                    case Object::OTYP_FUNCCLOSURE:
+                        {
+                            Function* cls;
+                            cls = value.asFunction();
+                            printFunction(pr, cls->m_fnvals.fnclosure.scriptfunc);
+                        }
+                        break;
+                    case Object::OTYP_FUNCSCRIPT:
+                        {
+                            Function* fn;
+                            fn = value.asFunction();
+                            printFunction(pr, fn);
+                        }
+                        break;
+                    case Object::OTYP_INSTANCE:
+                        {
+                            /* @TODO: support the toString() override */
+                            Instance* instance;
+                            instance = value.asInstance();
+                            printInstance(pr, instance, invmethod);
+                        }
+                        break;
+                    case Object::OTYP_FUNCNATIVE:
+                        {
+                            Function* native;
+                            native = value.asFunction();
+                            pr->format("<function %s(native) at %p>", native->m_funcname->data(), (void*)native);
+                        }
+                        break;
+                    case Object::OTYP_UPVALUE:
+                        {
+                            pr->format("<upvalue>");
+                        }
+                        break;
+                    case Object::OTYP_STRING:
+                        {
+                            String* string;
+                            string = value.asString();
+                            if(fixstring)
+                            {
+                                pr->writeQuotedString(string->data(), string->length(), true);
+                            }
+                            else
+                            {
+                                pr->writeString(string->data(), string->length());
+                            }
+                        }
+                        break;
+                }
+            }
+
+            static void printNumber(IOStream* pr, Value value)
+            {
+                double dn;
+                dn = value.asNumber();
+                pr->format("%.16g", dn);
+            }
+
+            static void printFunction(IOStream* pr, Function* func)
+            {
+                if(func->m_funcname == nullptr)
+                {
+                    pr->format("<script at %p>", (void*)func);
+                }
+                else
+                {
+                    if(func->m_fnvals.fnscriptfunc.isvariadic)
+                    {
+                        pr->format("<function %s(%d...) at %p>", func->m_funcname->data(), func->m_fnvals.fnscriptfunc.arity, (void*)func);
+                    }
+                    else
+                    {
+                        pr->format("<function %s(%d) at %p>", func->m_funcname->data(), func->m_fnvals.fnscriptfunc.arity, (void*)func);
+                    }
+                }
+            }
+
+            static void printArray(IOStream* pr, Array* list)
+            {
+                size_t i;
+                size_t vsz;
+                bool isrecur;
+                Value val;
+                Array* subarr;
+                vsz = list->count();
+                pr->format("[");
+                for(i = 0; i < vsz; i++)
+                {
+                    isrecur = false;
+                    val = list->get(i);
+                    if(val.isArray())
+                    {
+                        subarr = val.asArray();
+                        if(subarr == list)
+                        {
+                            isrecur = true;
+                        }
+                    }
+                    if(isrecur)
+                    {
+                        pr->format("<recursion>");
+                    }
+                    else
+                    {
+                        printValue(pr, val, true, true);
+                    }
+                    if(i != vsz - 1)
+                    {
+                        pr->format(",");
+                    }
+                    if(pr->shortenvalues && (i >= pr->maxvallength))
+                    {
+                        pr->format(" [%zd items]", vsz);
+                        break;
+                    }
+                }
+                pr->format("]");
+            }
+
+            static void printDict(IOStream* pr, Dict* dict)
+            {
+                size_t i;
+                size_t dsz;
+                bool keyisrecur;
+                bool valisrecur;
+                Value val;
+                Dict* subdict;
+                dsz = dict->htnames.count();
+                pr->format("{");
+                for(i = 0; i < dsz; i++)
+                {
+                    valisrecur = false;
+                    keyisrecur = false;
+                    val = dict->htnames.get(i);
+                    if(val.isDict())
+                    {
+                        subdict = val.asDict();
+                        if(subdict == dict)
+                        {
+                            valisrecur = true;
+                        }
+                    }
+                    if(valisrecur)
+                    {
+                        pr->format("<recursion>");
+                    }
+                    else
+                    {
+                        printValue(pr, val, true, true);
+                    }
+                    pr->format(": ");
+                    auto field = dict->htab.getfield(dict->htnames.get(i));
+                    if(field != nullptr)
+                    {
+                        if(field->value.isDict())
+                        {
+                            subdict = field->value.asDict();
+                            if(subdict == dict)
+                            {
+                                keyisrecur = true;
+                            }
+                        }
+                        if(keyisrecur)
+                        {
+                            pr->format("<recursion>");
+                        }
+                        else
+                        {
+                            printValue(pr, field->value, true, true);
+                        }
+                    }
+                    if(i != dsz - 1)
+                    {
+                        pr->format(", ");
+                    }
+                    if(pr->shortenvalues && (pr->maxvallength >= i))
+                    {
+                        pr->format(" [%zd items]", dsz);
+                        break;
+                    }
+                }
+                pr->format("}");
+            }
+
+            static void printFile(IOStream* pr, File* file)
+            {
+                pr->format("<file at %s in mode %s>", file->path->data(), file->mode->data());
+            }
+
+            static void printInstance(IOStream* pr, Instance* instance, bool invmethod)
+            {
+                (void)invmethod;
+            #if 0
+                /*
+                int arity;
+                IOStream subw;
+                Value resv;
+                Value thisval;
+                Property* field;
+                String* os;
+                Array* args;
+                auto gcs = SharedState::get();
+                if(invmethod)
+                {
+                    field = instance->m_instanceclass->m_instmethods.getfieldbycstr("toString");
+                    if(field != nullptr)
+                    {
+                        args = Array::make();
+                        thisval = Value::fromObject(instance);
+                        arity = nn_nestcall_prepare(field->value, thisval, nullptr, 0);
+                        fprintf(stderr, "arity = %d\n", arity);
+                        gcs->stackPop();
+                        gcs->stackPush(thisval);
+                        if(nn_nestcall_callfunction(field->value, thisval, nullptr, 0, &resv, false))
+                        {
+                            IOStream::makeStackString(&subw);
+                            printValue(pr, &subw, resv, false, false);
+                            os = subw.takeString();
+                            pr->writeString(os->data(), os->length());
+                            #if 0
+                                gcs->stackPop();
+                            #endif
+                            return;
+                        }
+                    }
+                }
+                */
+            #endif
+                pr->format("<instance of %s at %p>", instance->m_instanceclass->m_classname->data(), (void*)instance);
+            }
+
+
+            static void printValTable(IOStream* pr, HashTable<Value, Value>* table, const char* name)
+            {
+                size_t i;
+                size_t hcap;
+                hcap = table->capacity();
+                pr->format("<HashTable of %s : {\n", name);
+                for(i = 0; i < hcap; i++)
+                {
+                    auto entry = table->entryatindex(i);
+                    if(!entry->key.isNull())
+                    {
+                        printValue(pr, entry->key, true, true);
+                        pr->format(": ");
+                        printValue(pr, entry->value.value, true, true);
+                        if(i != (hcap - 1))
+                        {
+                            pr->format(",\n");
+                        }
+                    }
+                }
+                pr->format("}>\n");
+            }
+
+            static void printTable(IOStream* pr, HashTable<Value, Value>* table)
+            {
+                size_t i;
+                size_t hcap;
+                hcap = table->capacity();
+                pr->format("{");
+                for(i = 0; i < (size_t)hcap; i++)
+                {
+                    auto entry = table->entryatindex(i);
+                    if(entry->key.isNull())
+                    {
+                        continue;
+                    }
+                    printValue(pr, entry->key, true, false);
+                    pr->format(":");
+                    printValue(pr, entry->value.value, true, false);
+                    auto nextentry = table->entryatindex(i + 1);
+                    if((nextentry != nullptr) && !nextentry->key.isNull())
+                    {
+                        if((i + 1) < (size_t)hcap)
+                        {
+                            pr->format(",");
+                        }
+                    }
+                }
+                pr->format("}");
+            }
+
+            static void printClass(IOStream* pr, Value value, bool fixstring, bool invmethod)
+            {
+                bool oldexp;
+                Class* klass;
+                (void)fixstring;
+                (void)invmethod;
+                klass = value.asClass();
+                if(pr->jsonmode)
+                {
+                    pr->format("{");
+                    {
+                        {
+                            pr->format("name: ");
+                            ValPrinter::printValue(pr, Value::fromObject(klass->m_classname), true, false);
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("superclass: ");
+                            oldexp = pr->jsonmode;
+                            pr->jsonmode = false;
+                            printValue(pr, Value::fromObject(klass->m_superclass), true, false);
+                            pr->jsonmode = oldexp;
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("constructor: ");
+                            printValue(pr, klass->m_constructor, true, false);
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("instanceproperties:");
+                            printTable(pr, &klass->m_instproperties);
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("staticproperties:");
+                            printTable(pr, &klass->m_staticproperties);
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("instancemethods:");
+                            printTable(pr, &klass->m_instmethods);
+                            pr->format(",");
+                        }
+                        {
+                            pr->format("staticmethods:");
+                            printTable(pr, &klass->m_staticmethods);
+                        }
+                    }
+                    pr->format("}");
+                }
+                else
+                {
+                    pr->format("<class %s at %p>", klass->m_classname->data(), (void*)klass);
+                }
+            }
+    };
+
     class FormatInfo
     {
         public:
@@ -3697,7 +4125,7 @@ namespace neon
                                 case 'q':
                                 case 'p':
                                 {
-                                    nn_iostream_printvalue(m_writer, cval, true, true);
+                                    ValPrinter::printValue(m_writer, cval, true, true);
                                 }
                                 break;
                                 case 'c':
@@ -3712,7 +4140,7 @@ namespace neon
                                 case 'i':
                                 case 'g':
                                 {
-                                    nn_iostream_printvalue(m_writer, cval, false, true);
+                                    ValPrinter::printValue(m_writer, cval, false, true);
                                 }
                                 break;
                                 default:
@@ -3731,8 +4159,6 @@ namespace neon
                 return ok;
             }
     };
-
-
 
     class AstToken
     {
@@ -3841,6 +4267,7 @@ namespace neon
                 T_UNDEFINED,
                 T_TOKCOUNT
             };
+
         public:
             bool isglobal;
             Type m_toktype;
@@ -4252,11 +4679,6 @@ namespace neon
                     /* regular comment body */
                     advance();
                 }
-            #if defined(NEON_PLAT_ISWINDOWS)
-                #if 0
-                        advance();
-                #endif
-            #endif
                 return createtoken(AstToken::T_UNDEFINED);
             }
 
@@ -5065,10 +5487,10 @@ namespace neon
                         do
                         {
                             m_sharedprs->ignorewhitespace();
-                            m_sharedprs->m_currentfunccompiler->m_targetfunc->fnscriptfunc.arity++;
+                            m_sharedprs->m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.arity++;
                             if(m_sharedprs->match(AstToken::T_TRIPLEDOT))
                             {
-                                m_sharedprs->m_currentfunccompiler->m_targetfunc->fnscriptfunc.isvariadic = true;
+                                m_sharedprs->m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.isvariadic = true;
                                 m_sharedprs->consume(AstToken::T_IDENTNORMAL, "expected identifier after '...'");
                                 vargname = m_sharedprs->m_prevtoken;
                                 m_sharedprs->addlocal(vargname);
@@ -5266,7 +5688,7 @@ namespace neon
             static bool astruleanonclass(AstParser* prs, bool canassign)
             {
                 (void)canassign;
-                prs->parseclassdeclaration(false);
+                prs->parseclassdecl(false);
                 return true;
             }
 
@@ -5955,7 +6377,7 @@ namespace neon
                     dorule(AstToken::T_KWEMPTY, astruleliteral, nullptr, Rule::PREC_NONE);
                     dorule(AstToken::T_UNDEFINED, nullptr, nullptr, Rule::PREC_NONE);
                     default:
-                        fprintf(stderr, "missing rule?\n");
+                        fprintf(stderr, "missing rule for %s?\n", AstLexer::tokTypeToString(type));
                         break;
                 }
                 return nullptr;
@@ -5966,7 +6388,7 @@ namespace neon
 
             Blob* currentblob()
             {
-                return &m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob;
+                return m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob;
             }
 
             bool raiseerroratv(AstToken* t, const char* message, va_list args)
@@ -6137,7 +6559,7 @@ namespace neon
                 ignorewhitespace();
                 if(match(AstToken::T_KWCLASS))
                 {
-                    parseclassdeclaration(true);
+                    parseclassdecl(true);
                 }
                 else if(match(AstToken::T_KWFUNCTION))
                 {
@@ -6765,18 +7187,18 @@ namespace neon
                 // find all Instruction::OPC_BREAK_PL placeholder and replace with the appropriate jump...
                 */
                 i = m_innermostloopstart;
-                while(i < m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob.count)
+                while(i < m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->count)
                 {
-                    if(m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob.instrucs[i].code == Instruction::OPC_BREAK_PL)
+                    if(m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs[i].code == Instruction::OPC_BREAK_PL)
                     {
-                        m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob.instrucs[i].code = Instruction::OPC_JUMPNOW;
+                        m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs[i].code = Instruction::OPC_JUMPNOW;
                         patchjump(i + 1);
                         i += 3;
                     }
                     else
                     {
-                        bcode = m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob.instrucs;
-                        cvals = (Value*)m_currentfunccompiler->m_targetfunc->fnscriptfunc.blob.constants.listitems;
+                        bcode = m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs;
+                        cvals = (Value*)m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->constants.data();
                         i += 1 + getcodeargscount(bcode, cvals, i);
                     }
                 }
@@ -7443,7 +7865,7 @@ namespace neon
                 m_infunction = false;
             }
 
-            void parsemethod(AstToken classname, AstToken methodname, bool havenametoken, bool isstatic)
+            void parseclassmethod(AstToken classname, AstToken methodname, bool havenametoken, bool isstatic)
             {
                 size_t sn;
                 int constant;
@@ -7481,8 +7903,7 @@ namespace neon
                 emitbyteandshort(Instruction::OPC_MAKEMETHOD, constant);
             }
 
-
-            bool parsefield(AstToken* nametokendest, bool* havenamedest, bool isstatic)
+            bool parseclassfield(AstToken* nametokendest, bool* havenamedest, bool isstatic)
             {
                 int fieldconstant;
                 AstToken fieldname;
@@ -7516,7 +7937,7 @@ namespace neon
                 definevariable(global);
             }
 
-            void parseclassdeclaration(bool named)
+            void parseclassdecl(bool named)
             {
                 bool isstatic;
                 bool havenametoken;
@@ -7599,9 +8020,9 @@ namespace neon
                          * but not incorrect either. maybe warn that this syntax is deprecated?
                          */
                     }
-                    if(!parsefield(&nametoken, &havenametoken, isstatic))
+                    if(!parseclassfield(&nametoken, &havenametoken, isstatic))
                     {
-                        parsemethod(classname, nametoken, havenametoken, isstatic);
+                        parseclassmethod(classname, nametoken, havenametoken, isstatic);
                     }
                     ignorewhitespace();
                 }
@@ -7680,9 +8101,9 @@ namespace neon
                     }
                     else
                     {
-            #if 0
+                        #if 0
                         if(!m_keeplastvalue)
-            #endif
+                        #endif
                         {
                             emitinstruc(Instruction::OPC_POPONE);
                         }
@@ -7715,7 +8136,6 @@ namespace neon
              *    i = i + 1
              * }
              */
-
             void parseforstmt()
             {
                 int exitjump;
@@ -8446,7 +8866,7 @@ namespace neon
     };
 
 
-    class UClassComplex
+    class UClassComplex: public Object
     {
         public:
             Instance selfinstance;
@@ -8489,9 +8909,9 @@ namespace neon
     {
         size_t i;
         NN_NULLPTRCHECK_RETURN(list);
-        for(i = 0; i < list->listcount; i++)
+        for(i = 0; i < list->count(); i++)
         {
-            nn_gcmem_markvalue(list->listitems[i]);
+            nn_gcmem_markvalue(list->get(i));
         }
     }
 
@@ -8543,16 +8963,16 @@ namespace neon
             return;
         }
         auto gcs = SharedState::get();
-        if(object->mark == gcs->markvalue)
+        if(object->m_objmark == gcs->markvalue)
         {
             return;
         }
     #if defined(DEBUG_GC) && DEBUG_GC
         gcs->m_debugwriter->format("GC: marking object at <%p> ", (void*)object);
-        nn_iostream_printvalue(gcs->m_debugwriter, Value::fromObject(object), false);
+        ValPrinter::printValue(gcs->m_debugwriter, Value::fromObject(object), false);
         gcs->m_debugwriter->format("\n");
     #endif
-        object->mark = gcs->markvalue;
+        object->m_objmark = gcs->markvalue;
         if(gcs->m_gcstate.graycapacity < gcs->m_gcstate.graycount + 1)
         {
             gcs->m_gcstate.graycapacity = NEON_MEMORY_GROWCAPACITY(gcs->m_gcstate.graycapacity);
@@ -8572,7 +8992,7 @@ namespace neon
     #if defined(DEBUG_GC) && DEBUG_GC
         auto gcs = SharedState::get();
         gcs->m_debugwriter->format("GC: blacken object at <%p> ", (void*)object);
-        nn_iostream_printvalue(gcs->m_debugwriter, Value::fromObject(object), false);
+        ValPrinter::printValue(gcs->m_debugwriter, Value::fromObject(object), false);
         gcs->m_debugwriter->format("\n");
     #endif
         switch(object->m_objtype)
@@ -8595,7 +9015,7 @@ namespace neon
             {
                 File* file;
                 file = (File*)object;
-                nn_file_mark(file);
+                File::mark(file);
             }
             break;
             case Object::OTYP_DICT:
@@ -8616,8 +9036,8 @@ namespace neon
             {
                 Function* bound;
                 bound = (Function*)object;
-                nn_gcmem_markvalue(bound->fnmethod.receiver);
-                Object::markObject((Object*)bound->fnmethod.method);
+                nn_gcmem_markvalue(bound->m_fnvals.fnmethod.receiver);
+                Object::markObject((Object*)bound->m_fnvals.fnmethod.method);
             }
             break;
             case Object::OTYP_CLASS:
@@ -8641,10 +9061,10 @@ namespace neon
                 int i;
                 Function* closure;
                 closure = (Function*)object;
-                Object::markObject((Object*)closure->fnclosure.scriptfunc);
+                Object::markObject((Object*)closure->m_fnvals.fnclosure.scriptfunc);
                 for(i = 0; i < closure->upvalcount; i++)
                 {
-                    Object::markObject((Object*)closure->fnclosure.m_upvalues[i]);
+                    Object::markObject((Object*)closure->m_fnvals.fnclosure.m_upvalues[i]);
                 }
             }
             break;
@@ -8653,8 +9073,8 @@ namespace neon
                 Function* function;
                 function = (Function*)object;
                 Object::markObject((Object*)function->m_funcname);
-                Object::markObject((Object*)function->fnscriptfunc.module);
-                Value::markValArray(&function->fnscriptfunc.blob.constants);
+                Object::markObject((Object*)function->m_fnvals.fnscriptfunc.module);
+                Value::markValArray(&function->m_fnvals.fnscriptfunc.blob->constants);
             }
             break;
             case Object::OTYP_INSTANCE:
@@ -8680,7 +9100,7 @@ namespace neon
 
     void Object::destroyObject(Object* object)
     {
-        if(object->stale)
+        if(object->m_objstale)
         {
             return;
         }
@@ -8698,14 +9118,14 @@ namespace neon
             {
                 File* file;
                 file = (File*)object;
-                nn_file_destroy(file);
+                File::destroy(file);
             }
             break;
             case Object::OTYP_DICT:
             {
                 Dict* dict;
                 dict = (Dict*)object;
-                nn_dict_destroy(dict);
+                Dict::destroy(dict);
                 SharedState::gcRelease(dict);
             }
             break;
@@ -8713,7 +9133,7 @@ namespace neon
             {
                 Array* list;
                 list = (Array*)object;
-                list->m_objvarray.deInit(false);
+                list->m_objvarray.deInit();
                 SharedState::gcRelease(list);
             }
             break;
@@ -8738,7 +9158,7 @@ namespace neon
             {
                 Function* closure;
                 closure = (Function*)object;
-                nn_gcmem_freearray(sizeof(Upvalue*), closure->fnclosure.m_upvalues, closure->upvalcount);
+                nn_gcmem_freearray(sizeof(Upvalue*), closure->m_fnvals.fnclosure.m_upvalues, closure->upvalcount);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
@@ -8784,13 +9204,14 @@ namespace neon
                 String* string;
                 string = (String*)object;
                 String::destroy(string);
+                SharedState::gcRelease(string);
             }
             break;
             case Object::OTYP_SWITCH:
             {
                 Switch* sw;
                 sw = (Switch*)object;
-                sw->table.deinit();
+                sw->table.deInit();
                 SharedState::gcRelease(sw);
             }
             break;
@@ -8899,7 +9320,7 @@ namespace neon
         auto gcs = SharedState::get();
         pr = gcs->m_stderrprinter;
         pr->format("VMDEBUG: val=<<<");
-        nn_iostream_printvalue(pr, val, true, false);
+        ValPrinter::printValue(pr, val, true, false);
         pr->format(">>> ");
         pr->format(fmt, args...);
         pr->format("\n");
@@ -8946,12 +9367,12 @@ namespace neon
         fflush(stdout);
         auto gcs = SharedState::get();
         frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount - 1];
-        function = frame->closure->fnclosure.scriptfunc;
-        instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-        line = function->fnscriptfunc.blob.instrucs[instruction].fromsourceline;
+        function = frame->closure->m_fnvals.fnclosure.scriptfunc;
+        instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
+        line = function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline;
         fprintf(stderr, "RuntimeError: ");
         tmpfprintf(stderr, format, args...);
-        fprintf(stderr, " -> %s:%d ", function->fnscriptfunc.module->physicalpath->data(), line);
+        fprintf(stderr, " -> %s:%d ", function->m_fnvals.fnscriptfunc.module->physicalpath->data(), line);
         fputs("\n", stderr);
         if(gcs->m_vmstate.framecount > 1)
         {
@@ -8959,10 +9380,10 @@ namespace neon
             for(i = gcs->m_vmstate.framecount - 1; i >= 0; i--)
             {
                 frame = &gcs->m_vmstate.framevalues[i];
-                function = frame->closure->fnclosure.scriptfunc;
+                function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-                fprintf(stderr, "    %s:%d -> ", function->fnscriptfunc.module->physicalpath->data(), function->fnscriptfunc.blob.instrucs[instruction].fromsourceline);
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
+                fprintf(stderr, "    %s:%d -> ", function->m_fnvals.fnscriptfunc.module->physicalpath->data(), function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline);
                 if(function->m_funcname == nullptr)
                 {
                     fprintf(stderr, "<script>");
@@ -9889,8 +10310,8 @@ namespace neon
                 fn = (Function*)object;
                 tmpptr = (uint32_t)(uintptr_t)fn;
     #if 1
-                tmpa = nn_util_hashdouble(fn->fnscriptfunc.arity);
-                tmpb = nn_util_hashdouble(fn->fnscriptfunc.blob.count);
+                tmpa = nn_util_hashdouble(fn->m_fnvals.fnscriptfunc.arity);
+                tmpb = nn_util_hashdouble(fn->m_fnvals.fnscriptfunc.blob->count);
                 tmpres = tmpa ^ tmpb;
                 tmpres = tmpres ^ tmpptr;
     #else
@@ -9939,7 +10360,7 @@ namespace neon
         for(i = 0; i < table->htcapacity; i++)
         {
             auto entry = &table->htentries[i];
-            if(entry->key.isObject() && entry->key.asObject()->mark != gcs->markvalue)
+            if(entry->key.isObject() && entry->key.asObject()->m_objmark != gcs->markvalue)
             {
                 table->remove(entry->key);
             }
@@ -9987,425 +10408,6 @@ namespace neon
         return dn;
     }
 
-
-
-
-    void nn_iostream_printvaltable(IOStream* pr, HashTable<Value, Value>* table, const char* name)
-    {
-        size_t i;
-        size_t hcap;
-        hcap = table->capacity();
-        pr->format("<HashTable of %s : {\n", name);
-        for(i = 0; i < hcap; i++)
-        {
-            auto entry = table->entryatindex(i);
-            if(!entry->key.isNull())
-            {
-                nn_iostream_printvalue(pr, entry->key, true, true);
-                pr->format(": ");
-                nn_iostream_printvalue(pr, entry->value.value, true, true);
-                if(i != (hcap - 1))
-                {
-                    pr->format(",\n");
-                }
-            }
-        }
-        pr->format("}>\n");
-    }
-
-    void nn_iostream_printfunction(IOStream* pr, Function* func)
-    {
-        if(func->m_funcname == nullptr)
-        {
-            pr->format("<script at %p>", (void*)func);
-        }
-        else
-        {
-            if(func->fnscriptfunc.isvariadic)
-            {
-                pr->format("<function %s(%d...) at %p>", func->m_funcname->data(), func->fnscriptfunc.arity, (void*)func);
-            }
-            else
-            {
-                pr->format("<function %s(%d) at %p>", func->m_funcname->data(), func->fnscriptfunc.arity, (void*)func);
-            }
-        }
-    }
-
-    void nn_iostream_printarray(IOStream* pr, Array* list)
-    {
-        size_t i;
-        size_t vsz;
-        bool isrecur;
-        Value val;
-        Array* subarr;
-        vsz = list->count();
-        pr->format("[");
-        for(i = 0; i < vsz; i++)
-        {
-            isrecur = false;
-            val = list->get(i);
-            if(val.isArray())
-            {
-                subarr = val.asArray();
-                if(subarr == list)
-                {
-                    isrecur = true;
-                }
-            }
-            if(isrecur)
-            {
-                pr->format("<recursion>");
-            }
-            else
-            {
-                nn_iostream_printvalue(pr, val, true, true);
-            }
-            if(i != vsz - 1)
-            {
-                pr->format(",");
-            }
-            if(pr->shortenvalues && (i >= pr->maxvallength))
-            {
-                pr->format(" [%zd items]", vsz);
-                break;
-            }
-        }
-        pr->format("]");
-    }
-
-    void nn_iostream_printdict(IOStream* pr, Dict* dict)
-    {
-        size_t i;
-        size_t dsz;
-        bool keyisrecur;
-        bool valisrecur;
-        Value val;
-        Dict* subdict;
-        dsz = dict->htnames.count();
-        pr->format("{");
-        for(i = 0; i < dsz; i++)
-        {
-            valisrecur = false;
-            keyisrecur = false;
-            val = dict->htnames.get(i);
-            if(val.isDict())
-            {
-                subdict = val.asDict();
-                if(subdict == dict)
-                {
-                    valisrecur = true;
-                }
-            }
-            if(valisrecur)
-            {
-                pr->format("<recursion>");
-            }
-            else
-            {
-                nn_iostream_printvalue(pr, val, true, true);
-            }
-            pr->format(": ");
-            auto field = dict->htab.getfield(dict->htnames.get(i));
-            if(field != nullptr)
-            {
-                if(field->value.isDict())
-                {
-                    subdict = field->value.asDict();
-                    if(subdict == dict)
-                    {
-                        keyisrecur = true;
-                    }
-                }
-                if(keyisrecur)
-                {
-                    pr->format("<recursion>");
-                }
-                else
-                {
-                    nn_iostream_printvalue(pr, field->value, true, true);
-                }
-            }
-            if(i != dsz - 1)
-            {
-                pr->format(", ");
-            }
-            if(pr->shortenvalues && (pr->maxvallength >= i))
-            {
-                pr->format(" [%zd items]", dsz);
-                break;
-            }
-        }
-        pr->format("}");
-    }
-
-    void nn_iostream_printfile(IOStream* pr, File* file)
-    {
-        pr->format("<file at %s in mode %s>", file->path->data(), file->mode->data());
-    }
-
-    void nn_iostream_printinstance(IOStream* pr, Instance* instance, bool invmethod)
-    {
-        (void)invmethod;
-    #if 0
-        /*
-        int arity;
-        IOStream subw;
-        Value resv;
-        Value thisval;
-        Property* field;
-        String* os;
-        Array* args;
-        auto gcs = SharedState::get();
-        if(invmethod)
-        {
-            field = instance->m_instanceclass->m_instmethods.getfieldbycstr("toString");
-            if(field != nullptr)
-            {
-                args = Array::make();
-                thisval = Value::fromObject(instance);
-                arity = nn_nestcall_prepare(field->value, thisval, nullptr, 0);
-                fprintf(stderr, "arity = %d\n", arity);
-                gcs->stackPop();
-                gcs->stackPush(thisval);
-                if(nn_nestcall_callfunction(field->value, thisval, nullptr, 0, &resv, false))
-                {
-                    IOStream::makeStackString(&subw);
-                    nn_iostream_printvalue(&subw, resv, false, false);
-                    os = subw.takeString();
-                    pr->writeString(os->data(), os->length());
-                    #if 0
-                        gcs->stackPop();
-                    #endif
-                    return;
-                }
-            }
-        }
-        */
-    #endif
-        pr->format("<instance of %s at %p>", instance->m_instanceclass->m_classname->data(), (void*)instance);
-    }
-
-    void nn_iostream_printtable(IOStream* pr, HashTable<Value, Value>* table)
-    {
-        size_t i;
-        size_t hcap;
-        hcap = table->capacity();
-        pr->format("{");
-        for(i = 0; i < (size_t)hcap; i++)
-        {
-            auto entry = table->entryatindex(i);
-            if(entry->key.isNull())
-            {
-                continue;
-            }
-            nn_iostream_printvalue(pr, entry->key, true, false);
-            pr->format(":");
-            nn_iostream_printvalue(pr, entry->value.value, true, false);
-            auto nextentry = table->entryatindex(i + 1);
-            if((nextentry != nullptr) && !nextentry->key.isNull())
-            {
-                if((i + 1) < (size_t)hcap)
-                {
-                    pr->format(",");
-                }
-            }
-        }
-        pr->format("}");
-    }
-
-    void nn_iostream_printobjclass(IOStream* pr, Value value, bool fixstring, bool invmethod)
-    {
-        bool oldexp;
-        Class* klass;
-        (void)fixstring;
-        (void)invmethod;
-        klass = value.asClass();
-        if(pr->jsonmode)
-        {
-            pr->format("{");
-            {
-                {
-                    pr->format("name: ");
-                    nn_iostream_printvalue(pr, Value::fromObject(klass->m_classname), true, false);
-                    pr->format(",");
-                }
-                {
-                    pr->format("superclass: ");
-                    oldexp = pr->jsonmode;
-                    pr->jsonmode = false;
-                    nn_iostream_printvalue(pr, Value::fromObject(klass->m_superclass), true, false);
-                    pr->jsonmode = oldexp;
-                    pr->format(",");
-                }
-                {
-                    pr->format("constructor: ");
-                    nn_iostream_printvalue(pr, klass->m_constructor, true, false);
-                    pr->format(",");
-                }
-                {
-                    pr->format("instanceproperties:");
-                    nn_iostream_printtable(pr, &klass->m_instproperties);
-                    pr->format(",");
-                }
-                {
-                    pr->format("staticproperties:");
-                    nn_iostream_printtable(pr, &klass->m_staticproperties);
-                    pr->format(",");
-                }
-                {
-                    pr->format("instancemethods:");
-                    nn_iostream_printtable(pr, &klass->m_instmethods);
-                    pr->format(",");
-                }
-                {
-                    pr->format("staticmethods:");
-                    nn_iostream_printtable(pr, &klass->m_staticmethods);
-                }
-            }
-            pr->format("}");
-        }
-        else
-        {
-            pr->format("<class %s at %p>", klass->m_classname->data(), (void*)klass);
-        }
-    }
-
-    void nn_iostream_printobject(IOStream* pr, Value value, bool fixstring, bool invmethod)
-    {
-        Object* obj;
-        obj = value.asObject();
-        switch(obj->m_objtype)
-        {
-            case Object::OTYP_SWITCH:
-            {
-                pr->writeString("<switch>");
-            }
-            break;
-            case Object::OTYP_USERDATA:
-            {
-                pr->format("<userdata %s>", value.asUserdata()->m_udname);
-            }
-            break;
-            case Object::OTYP_RANGE:
-            {
-                Range* range;
-                range = value.asRange();
-                pr->format("<range %d .. %d>", range->lower, range->upper);
-            }
-            break;
-            case Object::OTYP_FILE:
-            {
-                nn_iostream_printfile(pr, value.asFile());
-            }
-            break;
-            case Object::OTYP_DICT:
-            {
-                nn_iostream_printdict(pr, value.asDict());
-            }
-            break;
-            case Object::OTYP_ARRAY:
-            {
-                nn_iostream_printarray(pr, value.asArray());
-            }
-            break;
-            case Object::OTYP_FUNCBOUND:
-            {
-                Function* bn;
-                bn = value.asFunction();
-                nn_iostream_printfunction(pr, bn->fnmethod.method->fnclosure.scriptfunc);
-            }
-            break;
-            case Object::OTYP_MODULE:
-            {
-                Module* mod;
-                mod = value.asModule();
-                pr->format("<module '%s' at '%s'>", mod->m_modname->data(), mod->physicalpath->data());
-            }
-            break;
-            case Object::OTYP_CLASS:
-            {
-                nn_iostream_printobjclass(pr, value, fixstring, invmethod);
-            }
-            break;
-            case Object::OTYP_FUNCCLOSURE:
-            {
-                Function* cls;
-                cls = value.asFunction();
-                nn_iostream_printfunction(pr, cls->fnclosure.scriptfunc);
-            }
-            break;
-            case Object::OTYP_FUNCSCRIPT:
-            {
-                Function* fn;
-                fn = value.asFunction();
-                nn_iostream_printfunction(pr, fn);
-            }
-            break;
-            case Object::OTYP_INSTANCE:
-            {
-                /* @TODO: support the toString() override */
-                Instance* instance;
-                instance = value.asInstance();
-                nn_iostream_printinstance(pr, instance, invmethod);
-            }
-            break;
-            case Object::OTYP_FUNCNATIVE:
-            {
-                Function* native;
-                native = value.asFunction();
-                pr->format("<function %s(native) at %p>", native->m_funcname->data(), (void*)native);
-            }
-            break;
-            case Object::OTYP_UPVALUE:
-            {
-                pr->format("<upvalue>");
-            }
-            break;
-            case Object::OTYP_STRING:
-            {
-                String* string;
-                string = value.asString();
-                if(fixstring)
-                {
-                    pr->writeQuotedString(string->data(), string->length(), true);
-                }
-                else
-                {
-                    pr->writeString(string->data(), string->length());
-                }
-            }
-            break;
-        }
-    }
-
-    void nn_iostream_printnumber(IOStream* pr, Value value)
-    {
-        double dn;
-        dn = value.asNumber();
-        pr->format("%.16g", dn);
-    }
-
-    void nn_iostream_printvalue(IOStream* pr, Value value, bool fixstring, bool invmethod)
-    {
-        if(value.isNull())
-        {
-            pr->writeString("null");
-        }
-        else if(value.isBool())
-        {
-            pr->writeString(value.asBool() ? "true" : "false");
-        }
-        else if(value.isNumber())
-        {
-            nn_iostream_printnumber(pr, value);
-        }
-        else
-        {
-            nn_iostream_printobject(pr, value, fixstring, invmethod);
-        }
-    }
-
     void nn_dbg_disasmblob(IOStream* pr, Blob* blob, const char* name)
     {
         int offset;
@@ -10435,7 +10437,7 @@ namespace neon
         constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
         nn_dbg_printinstrname(pr, name);
         pr->format("%8d ", constant);
-        nn_iostream_printvalue(pr, blob->constants.get(constant), true, false);
+        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
         pr->format("\n");
         return offset + 3;
     }
@@ -10447,7 +10449,7 @@ namespace neon
         constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
         nn_dbg_printinstrname(pr, name);
         pr->format("%8d ", constant);
-        nn_iostream_printvalue(pr, blob->constants.get(constant), true, false);
+        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
         proptn = "";
         if(blob->instrucs[offset + 3].code == 1)
         {
@@ -10511,7 +10513,7 @@ namespace neon
         argcount = blob->instrucs[offset + 3].code;
         nn_dbg_printinstrname(pr, name);
         pr->format("(%d args) %8d ", argcount, constant);
-        nn_iostream_printvalue(pr, blob->constants.get(constant), true, false);
+        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
         pr->format("\n");
         return offset + 4;
     }
@@ -10686,7 +10688,7 @@ namespace neon
         constant = blob->instrucs[offset++].code << 8;
         constant |= blob->instrucs[offset++].code;
         pr->format("%-16s %8d ", name, constant);
-        nn_iostream_printvalue(pr, blob->constants.get(constant), true, false);
+        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
         pr->format("\n");
         function = blob->constants.get(constant).asFunction();
         for(j = 0; j < function->upvalcount; j++)
@@ -10895,7 +10897,7 @@ namespace neon
         IOStream pr;
         String* s;
         IOStream::makeStackString(&pr);
-        nn_iostream_printvalue(&pr, value, false, true);
+        ValPrinter::printValue(&pr, value, false, true);
         s = pr.takeString();
         return s;
     }
@@ -11051,7 +11053,7 @@ namespace neon
             if(fielda != nullptr)
             {
                 /* then look up that key in dictb ... */
-                fieldb = nn_dict_getentry(dictb, keya);
+                fieldb = dictb->get(keya);
                 if((fielda != nullptr) && (fieldb != nullptr))
                 {
                     /* if it exists, compare their values */
@@ -11205,7 +11207,7 @@ namespace neon
             }
             else if(a.isFuncscript() && b.isFuncscript())
             {
-                if(a.asFunction()->fnscriptfunc.arity >= b.asFunction()->fnscriptfunc.arity)
+                if(a.asFunction()->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnscriptfunc.arity)
                 {
                     return a;
                 }
@@ -11213,7 +11215,7 @@ namespace neon
             }
             else if(a.isFuncclosure() && b.isFuncclosure())
             {
-                if(a.asFunction()->fnclosure.scriptfunc->fnscriptfunc.arity >= b.asFunction()->fnclosure.scriptfunc->fnscriptfunc.arity)
+                if(a.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity)
                 {
                     return a;
                 }
@@ -11337,7 +11339,7 @@ namespace neon
                 {
                     Dict* dict;
                     dict = value.asDict();
-                    return Value::fromObject(nn_dict_copy(dict));
+                    return Value::fromObject(dict->copy());
                 }
                 break;
                 default:
@@ -11351,7 +11353,7 @@ namespace neon
     Upvalue* nn_object_makeupvalue(Value* slot, int stackpos)
     {
         Upvalue* upvalue;
-        upvalue = (Upvalue*)SharedState::gcMakeObject(sizeof(Upvalue), Object::OTYP_UPVALUE, false);
+        upvalue = SharedState::gcMakeObject<Upvalue>(Object::OTYP_UPVALUE, false);
         upvalue->closed = Value::makeNull();
         upvalue->location = *slot;
         upvalue->next = nullptr;
@@ -11362,7 +11364,7 @@ namespace neon
     Userdata* nn_object_makeuserdata(void* pointer, const char* name)
     {
         Userdata* ptr;
-        ptr = (Userdata*)SharedState::gcMakeObject(sizeof(Userdata), Object::OTYP_USERDATA, false);
+        ptr = SharedState::gcMakeObject<Userdata>(Object::OTYP_USERDATA, false);
         ptr->pointer = pointer;
         ptr->m_udname = nn_util_strdup(name);
         ptr->ondestroyfn = nullptr;
@@ -11374,7 +11376,7 @@ namespace neon
     Switch* nn_object_makeswitch()
     {
         Switch* sw;
-        sw = (Switch*)SharedState::gcMakeObject(sizeof(Switch), Object::OTYP_SWITCH, false);
+        sw = SharedState::gcMakeObject<Switch>(Object::OTYP_SWITCH, false);
         sw->table.initTable();
         sw->defaultjump = -1;
         sw->exitjump = -1;
@@ -11384,7 +11386,7 @@ namespace neon
     Range* nn_object_makerange(int lower, int upper)
     {
         Range* range;
-        range = (Range*)SharedState::gcMakeObject(sizeof(Range), Object::OTYP_RANGE, false);
+        range = SharedState::gcMakeObject<Range>(Object::OTYP_RANGE, false);
         range->lower = lower;
         range->upper = upper;
         if(upper > lower)
@@ -11417,21 +11419,6 @@ namespace neon
         {
         }
         return Value::makeBool(false);
-    }
-
-    void nn_state_installmethods(Class* klass, ConstClassMethodItem* listmethods)
-    {
-        int i;
-        const char* rawname;
-        NativeFN rawfn;
-        String* osname;
-        for(i = 0; listmethods[i].m_constclassmthname != nullptr; i++)
-        {
-            rawname = listmethods[i].m_constclassmthname;
-            rawfn = listmethods[i].fn;
-            osname = String::intern(rawname);
-            klass->defNativeMethod(osname, rawfn);
-        }
     }
 
     void nn_state_initbuiltinmethods()
@@ -11486,14 +11473,14 @@ namespace neon
             {
                 IOStream::makeStackString(&pr);
                 frame = &gcs->m_vmstate.framevalues[i];
-                function = frame->closure->fnclosure.scriptfunc;
+                function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->fnscriptfunc.blob.instrucs - 1;
-                line = function->fnscriptfunc.blob.instrucs[instruction].fromsourceline;
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
+                line = function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline;
                 physfile = "(unknown)";
-                if(function->fnscriptfunc.module->physicalpath != nullptr)
+                if(function->m_fnvals.fnscriptfunc.module->physicalpath != nullptr)
                 {
-                    physfile = function->fnscriptfunc.module->physicalpath->data();
+                    physfile = function->m_fnvals.fnscriptfunc.module->physicalpath->data();
                 }
                 fnname = "<script>";
                 if(function->m_funcname != nullptr)
@@ -11549,17 +11536,17 @@ namespace neon
             for(i = gcs->m_vmstate.currentframe->m_handlercount; i > 0; i--)
             {
                 handler = &gcs->m_vmstate.currentframe->handlers[i - 1];
-                function = gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc;
+                function = gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc;
                 if(handler->address != 0 /*&& nn_util_isinstanceof(exception->m_instanceclass, handler->handlerklass)*/)
                 {
-                    gcs->m_vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->address];
+                    gcs->m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->instrucs[handler->address];
                     return true;
                 }
                 else if(handler->finallyaddress != 0)
                 {
                     /* continue propagating once the 'finally' block completes */
                     gcs->stackPush(Value::makeBool(true));
-                    gcs->m_vmstate.currentframe->inscode = &function->fnscriptfunc.blob.instrucs[handler->finallyaddress];
+                    gcs->m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->instrucs[handler->finallyaddress];
                     return true;
                 }
             }
@@ -11620,7 +11607,7 @@ namespace neon
                     stackitm = oa->get(i);
                     gcs->m_debugwriter->format("%s", colyellow);
                     gcs->m_debugwriter->format("  ");
-                    nn_iostream_printvalue(gcs->m_debugwriter, stackitm, false, true);
+                    ValPrinter::printValue(gcs->m_debugwriter, stackitm, false, true);
                     gcs->m_debugwriter->format("%s\n", colreset);
                     if(i == 0)
                     {
@@ -11681,44 +11668,44 @@ namespace neon
         gcs->stackPop();
         gcs->stackPush(Value::fromObject(klass));
         function = Function::makeFuncScript(module, Function::CTXTYPE_METHOD);
-        function->fnscriptfunc.arity = 1;
-        function->fnscriptfunc.isvariadic = false;
+        function->m_fnvals.fnscriptfunc.arity = 1;
+        function->m_fnvals.fnscriptfunc.isvariadic = false;
         gcs->stackPush(Value::fromObject(function));
         {
             /* g_loc 0 */
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, (0 >> 8) & 0xff, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, 0 & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, (0 >> 8) & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, 0 & 0xff, 0));
         }
         {
             /* g_loc 1 */
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, (1 >> 8) & 0xff, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, 1 & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, (1 >> 8) & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, 1 & 0xff, 0));
         }
         {
-            messageconst = function->fnscriptfunc.blob.addConstant(Value::fromObject(String::intern("message")));
+            messageconst = function->m_fnvals.fnscriptfunc.blob->addConstant(Value::fromObject(String::intern("message")));
             /* s_prop 0 */
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_PROPERTYSET, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, (messageconst >> 8) & 0xff, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(false, messageconst & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_PROPERTYSET, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, (messageconst >> 8) & 0xff, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, messageconst & 0xff, 0));
         }
         {
             /* pop */
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_POPONE, 0));
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_POPONE, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_POPONE, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_POPONE, 0));
         }
         {
             /* g_loc 0 */
             /*
-            //  function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
-            //  function->fnscriptfunc.blob.push(Instruction::make(false, (0 >> 8) & 0xff, 0));
-            //  function->fnscriptfunc.blob.push(Instruction::make(false, 0 & 0xff, 0));
+            //  function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_LOCALGET, 0));
+            //  function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, (0 >> 8) & 0xff, 0));
+            //  function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(false, 0 & 0xff, 0));
             */
         }
         {
             /* ret */
-            function->fnscriptfunc.blob.push(Instruction::make(true, Instruction::OPC_RETURN, 0));
+            function->m_fnvals.fnscriptfunc.blob->push(Instruction::make(true, Instruction::OPC_RETURN, 0));
         }
         closure = Function::makeFuncClosure(function, Value::makeNull());
         gcs->stackPop();
@@ -11887,7 +11874,7 @@ namespace neon
         IOStream::makeStackString(&pr);
         for(i = 0; i < count; i++)
         {
-            nn_iostream_printvalue(&pr, list[i], false, true);
+            ValPrinter::printValue(&pr, list[i], false, true);
             if((havejoinee && (joinee != nullptr)) && ((i + 1) < count))
             {
                 pr.writeString(joinee->data(), joinee->length());
@@ -11922,7 +11909,7 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "clear", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
-        scfn.thisval.asArray()->m_objvarray.deInit(false);
+        scfn.thisval.asArray()->m_objvarray.deInit();
         return Value::makeNull();
     }
 
@@ -12000,6 +11987,8 @@ namespace neon
 
     static Value nn_objfnarray_insert(const FuncContext& scfn)
     {
+        //! FIXME
+        /*
         int index;
         Array* list;
         ArgCheck check;
@@ -12009,6 +11998,7 @@ namespace neon
         list = scfn.thisval.asArray();
         index = (int)scfn.argv[1].asNumber();
         list->m_objvarray.insert(scfn.argv[0], index);
+        */
         return Value::makeNull();
     }
 
@@ -12020,10 +12010,8 @@ namespace neon
         nn_argcheck_init(&check, "pop", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         list = scfn.thisval.asArray();
-        if(list->count() > 0)
+        if(list->pop(&value))
         {
-            value = list->get(list->count() - 1);
-            list->m_objvarray.decreaseBy(1);
             return value;
         }
         return Value::makeNull();
@@ -12031,6 +12019,8 @@ namespace neon
 
     static Value nn_objfnarray_shift(const FuncContext& scfn)
     {
+        ///FIXME
+        /*
         size_t i;
         size_t j;
         size_t count;
@@ -12061,7 +12051,7 @@ namespace neon
                 {
                     list->set(j, list->get(j + 1));
                 }
-                list->m_objvarray.decreaseBy(1);
+                list->m_objvarray.pop(nullptr);
             }
             if(count == 1)
             {
@@ -12072,6 +12062,7 @@ namespace neon
                 return Value::fromObject(newlist);
             }
         }
+        */
         return Value::makeNull();
     }
 
@@ -12096,7 +12087,7 @@ namespace neon
         {
             list->set(i, list->get(i + 1));
         }
-        list->m_objvarray.decreaseBy(1);
+        list->m_objvarray.pop(nullptr);
         return value;
     }
 
@@ -12124,7 +12115,7 @@ namespace neon
             {
                 list->set(i, list->get(i + 1));
             }
-            list->m_objvarray.decreaseBy(1);
+            list->m_objvarray.pop(nullptr);
         }
         return Value::makeNull();
     }
@@ -12190,6 +12181,8 @@ namespace neon
 
     static Value nn_objfnarray_delete(const FuncContext& scfn)
     {
+        //! FIXME
+        /*
         size_t i;
         size_t idxupper;
         size_t idxlower;
@@ -12218,8 +12211,10 @@ namespace neon
         {
             list->set(idxlower + i, list->get(i + idxupper + 1));
         }
-        list->m_objvarray.decreaseBy(idxupper - idxlower + 1);
+        list->m_objvarray.m_listcount -= (idxupper - idxlower + 1);
         return Value::makeNumber((double)idxupper - (double)idxlower + 1);
+        */
+        return Value::makeNull();
     }
 
     static Value nn_objfnarray_first(const FuncContext& scfn)
@@ -12436,11 +12431,11 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "toDict", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
-        dict = (Dict*)nn_gcmem_protect((Object*)nn_object_makedict());
+        dict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
         list = scfn.thisval.asArray();
         for(i = 0; i < list->count(); i++)
         {
-            nn_dict_setentry(dict, Value::makeNumber(i), list->get(i));
+            dict->set(Value::makeNumber(i), list->get(i));
         }
         return Value::fromObject(dict);
     }
@@ -12805,81 +12800,17 @@ namespace neon
 
     void nn_state_installobjectarray()
     {
-        static ConstClassMethodItem arraymethods[] = { { "size", nn_objfnarray_length }, { "join", nn_objfnarray_join },       { "append", nn_objfnarray_append }, { "push", nn_objfnarray_append }, { "clear", nn_objfnarray_clear },     { "clone", nn_objfnarray_clone },   { "count", nn_objfnarray_count }, { "extend", nn_objfnarray_extend },   { "indexOf", nn_objfnarray_indexof }, { "insert", nn_objfnarray_insert }, { "pop", nn_objfnarray_pop }, { "shift", nn_objfnarray_shift },   { "removeAt", nn_objfnarray_removeat }, { "remove", nn_objfnarray_remove }, { "reverse", nn_objfnarray_reverse }, { "sort", nn_objfnarray_sort },   { "contains", nn_objfnarray_contains }, { "delete", nn_objfnarray_delete }, { "first", nn_objfnarray_first },
+        static Class::ConstItem arraymethods[] = { { "size", nn_objfnarray_length }, { "join", nn_objfnarray_join },       { "append", nn_objfnarray_append }, { "push", nn_objfnarray_append }, { "clear", nn_objfnarray_clear },     { "clone", nn_objfnarray_clone },   { "count", nn_objfnarray_count }, { "extend", nn_objfnarray_extend },   { "indexOf", nn_objfnarray_indexof }, { "insert", nn_objfnarray_insert }, { "pop", nn_objfnarray_pop }, { "shift", nn_objfnarray_shift },   { "removeAt", nn_objfnarray_removeat }, { "remove", nn_objfnarray_remove }, { "reverse", nn_objfnarray_reverse }, { "sort", nn_objfnarray_sort },   { "contains", nn_objfnarray_contains }, { "delete", nn_objfnarray_delete }, { "first", nn_objfnarray_first },
                                                          { "last", nn_objfnarray_last },   { "isEmpty", nn_objfnarray_isempty }, { "take", nn_objfnarray_take },     { "get", nn_objfnarray_get },     { "compact", nn_objfnarray_compact }, { "unique", nn_objfnarray_unique }, { "zip", nn_objfnarray_zip },     { "zipFrom", nn_objfnarray_zipfrom }, { "toDict", nn_objfnarray_todict },   { "each", nn_objfnarray_each },     { "map", nn_objfnarray_map }, { "filter", nn_objfnarray_filter }, { "some", nn_objfnarray_some },         { "every", nn_objfnarray_every },   { "reduce", nn_objfnarray_reduce },   { "slice", nn_objfnarray_slice }, { "@iter", nn_objfnarray_iter },        { "@itern", nn_objfnarray_itern },  { nullptr, nullptr } };
         auto gcs = SharedState::get();
         gcs->m_classprimarray->defNativeConstructor(nn_objfnarray_constructor);
         gcs->m_classprimarray->defCallableField(String::intern("length"), nn_objfnarray_length);
-        nn_state_installmethods(gcs->m_classprimarray, arraymethods);
+        gcs->m_classprimarray->installMethods(arraymethods);
     }
 
 
 
-    Dict* nn_object_makedict()
-    {
-        Dict* dict;
-        dict = (Dict*)SharedState::gcMakeObject(sizeof(Dict), Object::OTYP_DICT, false);
-        dict->htnames.initSelf();
-        dict->htab.initTable();
-        return dict;
-    }
 
-    void nn_dict_destroy(Dict* dict)
-    {
-        dict->htnames.deInit(false);
-        dict->htab.deinit();
-    }
-
-    bool nn_dict_setentry(Dict* dict, Value key, Value value)
-    {
-        Value tempvalue;
-        if(!dict->htab.get(key, &tempvalue))
-        {
-            /* add key if it doesn't exist. */
-            dict->htnames.push(key);
-        }
-        return dict->htab.set(key, value);
-    }
-
-    void nn_dict_addentry(Dict* dict, Value key, Value value)
-    {
-        nn_dict_setentry(dict, key, value);
-    }
-
-    void nn_dict_addentrycstr(Dict* dict, const char* ckey, Value value)
-    {
-        String* os;
-        os = String::copy(ckey);
-        nn_dict_addentry(dict, Value::fromObject(os), value);
-    }
-
-    Property* nn_dict_getentry(Dict* dict, Value key)
-    {
-        return dict->htab.getfield(key);
-    }
-
-    Dict* nn_dict_copy(Dict* dict)
-    {
-        size_t i;
-        size_t dsz;
-        Value key;
-        Property* field;
-        Dict* ndict;
-        ndict = nn_object_makedict();
-        /*
-        // @TODO: Figure out how to handle dictionary values correctly
-        // remember that copying keys is redundant and unnecessary
-        */
-        dsz = dict->htnames.count();
-        for(i = 0; i < dsz; i++)
-        {
-            key = dict->htnames.get(i);
-            field = dict->htab.getfield(dict->htnames.get(i));
-            ndict->htnames.push(key);
-            ndict->htab.setwithtype(key, field->value, field->m_fieldtype, key.isString());
-        }
-        return ndict;
-    }
 
     static Value nn_objfndict_length(const FuncContext& scfn)
     {
@@ -12901,7 +12832,7 @@ namespace neon
         {
             NEON_RETURNERROR(scfn, "duplicate key %s at add()", nn_value_tostring(scfn.argv[0])->data());
         }
-        nn_dict_addentry(dict, scfn.argv[0], scfn.argv[1]);
+        dict->add(scfn.argv[0], scfn.argv[1]);
         return Value::makeNull();
     }
 
@@ -12915,11 +12846,11 @@ namespace neon
         dict = scfn.thisval.asDict();
         if(!dict->htab.get(scfn.argv[0], &value))
         {
-            nn_dict_addentry(dict, scfn.argv[0], scfn.argv[1]);
+            dict->add(scfn.argv[0], scfn.argv[1]);
         }
         else
         {
-            nn_dict_setentry(dict, scfn.argv[0], scfn.argv[1]);
+            dict->set(scfn.argv[0], scfn.argv[1]);
         }
         return Value::makeNull();
     }
@@ -12931,8 +12862,8 @@ namespace neon
         nn_argcheck_init(&check, "clear", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        dict->htnames.deInit(false);
-        dict->htab.deinit();
+        dict->htnames.deInit();
+        dict->htab.deInit();
         return Value::makeNull();
     }
 
@@ -12946,7 +12877,7 @@ namespace neon
         nn_argcheck_init(&check, "clone", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        newdict = (Dict*)nn_gcmem_protect((Object*)nn_object_makedict());
+        newdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
         if(!dict->htab.copyTo(&newdict->htab, true))
         {
             nn_except_throwclass(gcs->m_exceptions.argumenterror, "failed to copy table");
@@ -12969,14 +12900,14 @@ namespace neon
         nn_argcheck_init(&check, "compact", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        newdict = (Dict*)nn_gcmem_protect((Object*)nn_object_makedict());
+        newdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
         tmpvalue = Value::makeNull();
         for(i = 0; i < dict->htnames.count(); i++)
         {
             dict->htab.get(dict->htnames.get(i), &tmpvalue);
             if(!nn_value_compare(tmpvalue, Value::makeNull()))
             {
-                nn_dict_addentry(newdict, dict->htnames.get(i), tmpvalue);
+                newdict->add(dict->htnames.get(i), tmpvalue);
             }
         }
         return Value::fromObject(newdict);
@@ -13024,7 +12955,7 @@ namespace neon
         nn_argcheck_init(&check, "get", scfn);
         NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
         dict = scfn.thisval.asDict();
-        field = nn_dict_getentry(dict, scfn.argv[0]);
+        field = dict->get(scfn.argv[0]);
         if(field == nullptr)
         {
             if(scfn.argc == 1)
@@ -13069,7 +13000,7 @@ namespace neon
         list = (Array*)nn_gcmem_protect((Object*)Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
         {
-            field = nn_dict_getentry(dict, dict->htnames.get(i));
+            field = dict->get(dict->htnames.get(i));
             list->push(field->value);
         }
         return Value::fromObject(list);
@@ -13101,7 +13032,7 @@ namespace neon
             {
                 dict->htnames.set(i, dict->htnames.get(i + 1));
             }
-            dict->htnames.decreaseBy(1);
+            dict->htnames.pop(nullptr);
             return value;
         }
         return Value::makeNull();
@@ -13253,7 +13184,7 @@ namespace neon
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = nn_nestcall_prepare(callable, scfn.thisval, nestargs, 2);
-        resultdict = (Dict*)nn_gcmem_protect((Object*)nn_object_makedict());
+        resultdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
         value = Value::makeNull();
         for(i = 0; i < dict->htnames.count(); i++)
         {
@@ -13272,7 +13203,7 @@ namespace neon
             nn_nestcall_callfunction(callable, scfn.thisval, nestargs, passi, &result, false);
             if(!result.isFalse())
             {
-                nn_dict_addentry(resultdict, dict->htnames.get(i), value);
+                resultdict->add(dict->htnames.get(i), value);
             }
         }
         /* pop the call list */
@@ -13429,7 +13360,7 @@ namespace neon
 
     void nn_state_installobjectdict()
     {
-        static ConstClassMethodItem dictmethods[] = {
+        static Class::ConstItem dictmethods[] = {
             { "keys", nn_objfndict_keys }, { "size", nn_objfndict_length }, { "add", nn_objfndict_add }, { "set", nn_objfndict_set }, { "clear", nn_objfndict_clear }, { "clone", nn_objfndict_clone }, { "compact", nn_objfndict_compact }, { "contains", nn_objfndict_contains }, { "extend", nn_objfndict_extend }, { "get", nn_objfndict_get }, { "values", nn_objfndict_values }, { "remove", nn_objfndict_remove }, { "isEmpty", nn_objfndict_isempty }, { "findKey", nn_objfndict_findkey }, { "toList", nn_objfndict_tolist }, { "each", nn_objfndict_each }, { "filter", nn_objfndict_filter }, { "some", nn_objfndict_some }, { "every", nn_objfndict_every }, { "reduce", nn_objfndict_reduce }, { "@iter", nn_objfndict_iter }, { "@itern", nn_objfndict_itern }, { nullptr, nullptr },
         };
         auto gcs = SharedState::get();
@@ -13437,173 +13368,9 @@ namespace neon
         gcs->m_classprimdict->defNativeConstructor(nn_objfndict_constructor);
         gcs->m_classprimdict->defStaticNativeMethod(String::copy("keys"), nn_objfndict_keys);
     #endif
-        nn_state_installmethods(gcs->m_classprimdict, dictmethods);
+        gcs->m_classprimdict->installMethods(dictmethods);
     }
 
-    #
-    File* nn_object_makefile(FILE* handle, bool isstd, const char* path, const char* mode)
-    {
-        File* file;
-        file = (File*)SharedState::gcMakeObject(sizeof(File), Object::OTYP_FILE, false);
-        file->isopen = false;
-        file->mode = String::copy(mode);
-        file->path = String::copy(path);
-        file->isstd = isstd;
-        file->handle = handle;
-        file->istty = false;
-        file->number = -1;
-        if(file->handle != nullptr)
-        {
-            file->isopen = true;
-        }
-        return file;
-    }
-
-    void nn_file_destroy(File* file)
-    {
-        nn_fileobject_close(file);
-        SharedState::gcRelease(file);
-    }
-
-    void nn_file_mark(File* file)
-    {
-        Object::markObject((Object*)file->mode);
-        Object::markObject((Object*)file->path);
-    }
-
-    bool nn_file_read(File* file, size_t readhowmuch, IOResult* dest)
-    {
-        size_t filesizereal;
-        struct stat stats;
-        filesizereal = -1;
-        dest->success = false;
-        dest->length = 0;
-        dest->data = nullptr;
-        if(!file->isstd)
-        {
-            if(!nn_util_fsfileexists(file->path->data()))
-            {
-                return false;
-            }
-            /* file is in write only mode */
-            /*
-            else if(strstr(file->mode->data(), "w") != nullptr && strstr(file->mode->data(), "+") == nullptr)
-            {
-                FILE_ERROR(scfn, Unsupported, "cannot read file in write mode");
-            }
-            */
-            if(!file->isopen)
-            {
-                /* open the file if it isn't open */
-                nn_fileobject_open(file);
-            }
-            else if(file->handle == nullptr)
-            {
-                return false;
-            }
-            if(osfn_lstat(file->path->data(), &stats) == 0)
-            {
-                filesizereal = (size_t)stats.st_size;
-            }
-            else
-            {
-                /* fallback */
-                fseek(file->handle, 0L, SEEK_END);
-                filesizereal = ftell(file->handle);
-                rewind(file->handle);
-            }
-            if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
-            {
-                readhowmuch = filesizereal;
-            }
-        }
-        else
-        {
-            /*
-            // for non-file objects such as stdin
-            // minimum read bytes should be 1
-            */
-            if(readhowmuch == (size_t)-1)
-            {
-                readhowmuch = 1;
-            }
-        }
-        /* +1 for terminator '\0' */
-        dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
-        if(dest->data == nullptr && readhowmuch != 0)
-        {
-            return false;
-        }
-        dest->length = fread(dest->data, sizeof(char), readhowmuch, file->handle);
-        if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
-        {
-            return false;
-        }
-        /* we made use of +1 so we can terminate the string. */
-        if(dest->data != nullptr)
-        {
-            dest->data[dest->length] = '\0';
-        }
-        return true;
-    }
-
-    #define FILE_ERROR(scfn, type, message) NEON_RETURNERROR(scfn, #type " -> %s", message, file->path->data());
-
-    #define RETURN_STATUS(scfn, status)              \
-        if((status) == 0)                      \
-        {                                      \
-            return Value::makeBool(true);    \
-        }                                      \
-        else                                   \
-        {                                      \
-            FILE_ERROR(scfn, File, strerror(errno)); \
-        }
-
-    #define DENY_STD(scfn)  \
-        if(file->isstd) \
-            NEON_RETURNERROR(scfn, "method not supported for std files");
-
-    int nn_fileobject_close(File* file)
-    {
-        int result;
-        if(file->handle != nullptr && !file->isstd)
-        {
-            fflush(file->handle);
-            result = fclose(file->handle);
-            file->handle = nullptr;
-            file->isopen = false;
-            file->number = -1;
-            file->istty = false;
-            return result;
-        }
-        return -1;
-    }
-
-    bool nn_fileobject_open(File* file)
-    {
-        if(file->handle != nullptr)
-        {
-            return true;
-        }
-        if(file->handle == nullptr && !file->isstd)
-        {
-            file->handle = fopen(file->path->data(), file->mode->data());
-            if(file->handle != nullptr)
-            {
-                file->isopen = true;
-                file->number = fileno(file->handle);
-                file->istty = osfn_isatty(file->number);
-                return true;
-            }
-            else
-            {
-                file->number = -1;
-                file->istty = false;
-            }
-            return false;
-        }
-        return false;
-    }
 
     static Value nn_objfnfile_constructor(const FuncContext& scfn)
     {
@@ -13629,8 +13396,8 @@ namespace neon
             mode = scfn.argv[1].asString()->data();
         }
         path = opath->data();
-        file = (File*)nn_gcmem_protect((Object*)nn_object_makefile(nullptr, false, path, mode));
-        nn_fileobject_open(file);
+        file = (File*)nn_gcmem_protect((Object*)File::make(nullptr, false, path, mode));
+        file->openWithoutParams();
         return Value::fromObject(file);
     }
 
@@ -13735,7 +13502,7 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "close", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
-        nn_fileobject_close(scfn.thisval.asFile());
+        scfn.thisval.asFile()->closeFile();
         return Value::makeNull();
     }
 
@@ -13744,7 +13511,7 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "open", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
-        nn_fileobject_open(scfn.thisval.asFile());
+        scfn.thisval.asFile()->openWithoutParams();
         return Value::makeNull();
     }
 
@@ -13777,9 +13544,11 @@ namespace neon
             readhowmuch = (size_t)scfn.argv[0].asNumber();
         }
         file = scfn.thisval.asFile();
-        if(!nn_file_read(file, readhowmuch, &res))
+        //#define FILE_ERROR_(scfn, type, message) NEON_RETURNERROR(scfn, #type " -> %s", message, file->path->data());
+
+        if(!file->readData(readhowmuch, &res))
         {
-            FILE_ERROR(scfn, NotFound, strerror(errno));
+            NEON_RETURNERROR(scfn, "NotFound -> %s" , strerror(errno));
         }
         return Value::fromObject(String::take(res.data, res.length));
     }
@@ -13844,19 +13613,19 @@ namespace neon
         {
             if(!nn_util_fsfileexists(file->path->data()))
             {
-                FILE_ERROR(scfn, NotFound, "no such file or directory");
+                NEON_RETURNERROR(scfn, "NotFound -> %s" , "no such file or directory");
             }
             else if(strstr(file->mode->data(), "w") != nullptr && strstr(file->mode->data(), "+") == nullptr)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot read file in write mode");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
             }
             if(!file->isopen)
             {
-                FILE_ERROR(scfn, Read, "file not open");
+                NEON_RETURNERROR(scfn, "Read -> %s" , "file not open");
             }
             else if(file->handle == nullptr)
             {
-                FILE_ERROR(scfn, Read, "could not read file");
+                NEON_RETURNERROR(scfn, "Read -> %s" , "could not read file");
             }
             if(length == -1)
             {
@@ -13871,7 +13640,7 @@ namespace neon
         {
             if(fileno(stdout) == file->number || fileno(stderr) == file->number)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot read from output file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read from output file");
             }
             /*
             // for non-file objects such as stdin
@@ -13885,12 +13654,12 @@ namespace neon
         buffer = (char*)nn_memory_malloc(sizeof(char) * (length + 1));
         if(buffer == nullptr && length != 0)
         {
-            FILE_ERROR(scfn, Buffer, "not enough memory to read file");
+            NEON_RETURNERROR(scfn, "Buffer -> %s" , "not enough memory to read file");
         }
         bytesread = fread(buffer, sizeof(char), length, file->handle);
         if(bytesread == 0 && length != 0)
         {
-            FILE_ERROR(scfn, Read, "could not read file contents");
+            NEON_RETURNERROR(scfn, "Read -> %s" , "could not read file contents");
         }
         if(buffer != nullptr)
         {
@@ -13918,26 +13687,26 @@ namespace neon
         {
             if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write into non-writable file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
             else if(length == 0)
             {
-                FILE_ERROR(scfn, Write, "cannot write empty buffer to file");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "cannot write empty buffer to file");
             }
             else if(file->handle == nullptr || !file->isopen)
             {
-                nn_fileobject_open(file);
+                file->openWithoutParams();
             }
             else if(file->handle == nullptr)
             {
-                FILE_ERROR(scfn, Write, "could not write to file");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
             if(fileno(stdin) == file->number)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write to input file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
         }
         count = fwrite(data, sizeof(unsigned char), length, file->handle);
@@ -13967,22 +13736,22 @@ namespace neon
         {
             if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write into non-writable file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
             else if(!file->isopen)
             {
-                FILE_ERROR(scfn, Write, "file not open");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "file not open");
             }
             else if(file->handle == nullptr)
             {
-                FILE_ERROR(scfn, Write, "could not write to file");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
             if(fileno(stdin) == file->number)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write to input file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
         }
         rc = 0;
@@ -14015,22 +13784,22 @@ namespace neon
         {
             if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write into non-writable file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
             else if(!file->isopen)
             {
-                FILE_ERROR(scfn, Write, "file not open");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "file not open");
             }
             else if(file->handle == nullptr)
             {
-                FILE_ERROR(scfn, Write, "could not write to file");
+                NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
             if(fileno(stdin) == file->number)
             {
-                FILE_ERROR(scfn, Unsupported, "cannot write to input file");
+                NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
         }
         rc = 0;
@@ -14089,7 +13858,7 @@ namespace neon
         file = scfn.thisval.asFile();
         if(!file->isopen)
         {
-            FILE_ERROR(scfn, Unsupported, "I/O operation on closed file");
+            NEON_RETURNERROR(scfn, "Unsupported -> %s" , "I/O operation on closed file");
         }
     #if defined(NEON_PLAT_ISLINUX)
         if(fileno(stdin) == file->number)
@@ -14115,7 +13884,10 @@ namespace neon
         nn_argcheck_init(&check, "path", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         file = scfn.thisval.asFile();
-        DENY_STD(scfn);
+        if(file->isstd)
+        {
+            NEON_RETURNERROR(scfn, "method not supported for std files");
+        }
         return Value::fromObject(file->path);
     }
 
@@ -14160,10 +13932,17 @@ namespace neon
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isnumber);
         NEON_ARGS_CHECKTYPE(&check, 1, nn_value_isnumber);
         file = scfn.thisval.asFile();
-        DENY_STD(scfn);
+        if(file->isstd)
+        {
+            NEON_RETURNERROR(scfn, "method not supported for std files");
+        }
         position = (long)scfn.argv[0].asNumber();
         seektype = scfn.argv[1].asNumber();
-        RETURN_STATUS(scfn, fseek(file->handle, position, seektype));
+        if(fseek(file->handle, position, seektype) == 0)
+        {
+            return Value::makeBool(true);
+        }
+        NEON_RETURNERROR(scfn, "File -> %s" , strerror(errno));
     }
 
     static Value nn_objfnfile_tell(const FuncContext& scfn)
@@ -14173,19 +13952,20 @@ namespace neon
         nn_argcheck_init(&check, "tell", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         file = scfn.thisval.asFile();
-        DENY_STD(scfn);
+        if(file->isstd)
+        {
+            NEON_RETURNERROR(scfn, "method not supported for std files");
+        }
         return Value::makeNumber(ftell(file->handle));
     }
 
-    #undef FILE_ERROR
-    #undef RETURN_STATUS
-    #undef DENY_STD
+
 
     Value nn_modfn_os_stat(const FuncContext& scfn);
 
     void nn_state_installobjectfile()
     {
-        static ConstClassMethodItem filemethods[] = {
+        static Class::ConstItem filemethods[] = {
             { "close", nn_objfnfile_close }, { "open", nn_objfnfile_open }, { "read", nn_objfnfile_readmethod }, { "get", nn_objfnfile_get }, { "gets", nn_objfnfile_gets }, { "write", nn_objfnfile_write }, { "puts", nn_objfnfile_puts }, { "putc", nn_objfnfile_putc }, { "printf", nn_objfnfile_printf }, { "number", nn_objfnfile_number }, { "isTTY", nn_objfnfile_istty }, { "isOpen", nn_objfnfile_isopen }, { "isClosed", nn_objfnfile_isclosed }, { "flush", nn_objfnfile_flush }, { "path", nn_objfnfile_path }, { "seek", nn_objfnfile_seek }, { "tell", nn_objfnfile_tell }, { "mode", nn_objfnfile_mode }, { "name", nn_objfnfile_name }, { "readLine", nn_objfnfile_readline }, { nullptr, nullptr },
         };
         auto gcs = SharedState::get();
@@ -14197,12 +13977,13 @@ namespace neon
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("isFile"), nn_objfnfile_isfile);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("isDirectory"), nn_objfnfile_isdirectory);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("stat"), nn_modfn_os_stat);
-        nn_state_installmethods(gcs->m_classprimfile, filemethods);
+        gcs->m_classprimfile->installMethods(filemethods);
     }
 
     void nn_funcscript_destroy(Function* ofn)
     {
-        Blob::destroy(&ofn->fnscriptfunc.blob);
+        Blob::destroy(ofn->m_fnvals.fnscriptfunc.blob);
+        nn_memory_free(ofn->m_fnvals.fnscriptfunc.blob);
     }
 
 
@@ -14235,7 +14016,6 @@ namespace neon
         int i;
         static const char* defaultsearchpaths[] = { "mods", "mods/@/index" NEON_CONFIG_FILEEXT, ".", nullptr };
         auto gcs = SharedState::get();
-        gcs->m_importpath.initSelf();
         Module::addSearchPathObj(gcs->m_processinfo->cliexedirectory);
         for(i = 0; defaultsearchpaths[i] != nullptr; i++)
         {
@@ -14470,7 +14250,7 @@ namespace neon
 
     void nn_state_installobjectnumber()
     {
-        static ConstClassMethodItem numbermethods[] = {
+        static Class::ConstItem numbermethods[] = {
             { "toHexString", nn_objfnnumber_tohexstring },
             { "toOctString", nn_objfnnumber_tooctstring },
             { "toBinString", nn_objfnnumber_tobinstring },
@@ -14478,7 +14258,7 @@ namespace neon
         };
         auto gcs = SharedState::get();
         gcs->m_classprimnumber->defNativeConstructor(nn_objfnnumber_constructor);
-        nn_state_installmethods(gcs->m_classprimnumber, numbermethods);
+        gcs->m_classprimnumber->installMethods(numbermethods);
     }
 
     void nn_state_installmodmath()
@@ -14502,7 +14282,7 @@ namespace neon
         String* os;
         v = scfn.thisval;
         IOStream::makeStackString(&pr);
-        nn_iostream_printvalue(&pr, v, true, false);
+        ValPrinter::printValue(&pr, v, true, false);
         os = pr.takeString();
         IOStream::destroy(&pr);
         return Value::fromObject(os);
@@ -14515,7 +14295,7 @@ namespace neon
         String* os;
         v = scfn.thisval;
         IOStream::makeStackString(&pr);
-        nn_iostream_printvalue(&pr, v, false, true);
+        ValPrinter::printValue(&pr, v, false, true);
         os = pr.takeString();
         IOStream::destroy(&pr);
         return Value::fromObject(os);
@@ -14678,14 +14458,14 @@ namespace neon
 
     void nn_state_installobjectobject()
     {
-        static ConstClassMethodItem objectmethods[] = {
+        static Class::ConstItem objectmethods[] = {
             { "dump", nn_objfnobject_dumpself }, { "isa", nn_objfnobject_isa }, { "toString", nn_objfnobject_tostring }, { "isArray", nn_objfnobject_isarray }, { "isString", nn_objfnobject_isstring }, { "isCallable", nn_objfnobject_iscallable }, { "isBool", nn_objfnobject_isbool }, { "isNumber", nn_objfnobject_isnumber }, { "isInt", nn_objfnobject_isint }, { "isDict", nn_objfnobject_isdict }, { "isObject", nn_objfnobject_isobject }, { "isFunction", nn_objfnobject_isfunction }, { "isIterable", nn_objfnobject_isiterable }, { "isClass", nn_objfnobject_isclass }, { "isFile", nn_objfnobject_isfile }, { "isInstance", nn_objfnobject_isinstance }, { nullptr, nullptr },
         };
         auto gcs = SharedState::get();
         // gcs->m_classprimobject->defCallableField(String::intern("class"), nn_objfnobject_getselfclass);
         gcs->m_classprimobject->defStaticNativeMethod(String::intern("typename"), nn_objfnobject_typename);
         gcs->m_classprimobject->defStaticCallableField(String::intern("prototype"), nn_objfnobject_getselfinstance);
-        nn_state_installmethods(gcs->m_classprimobject, objectmethods);
+        gcs->m_classprimobject->installMethods(objectmethods);
         {
             gcs->m_classprimclass->defStaticCallableField(String::intern("name"), nn_objfnclass_getselfname);
         }
@@ -14875,12 +14655,12 @@ namespace neon
 
     void nn_state_installobjectrange()
     {
-        static ConstClassMethodItem rangemethods[] = {
+        static Class::ConstItem rangemethods[] = {
             { "lower", nn_objfnrange_lower }, { "upper", nn_objfnrange_upper }, { "range", nn_objfnrange_range }, { "expand", nn_objfnrange_expand }, { "toArray", nn_objfnrange_expand }, { "@iter", nn_objfnrange_iter }, { "@itern", nn_objfnrange_itern }, { nullptr, nullptr },
         };
         auto gcs = SharedState::get();
         gcs->m_classprimrange->defNativeConstructor(nn_objfnrange_constructor);
-        nn_state_installmethods(gcs->m_classprimrange, rangemethods);
+        gcs->m_classprimrange->installMethods(rangemethods);
     }
 
     static Value nn_objfnstring_utf8numbytes(const FuncContext& scfn)
@@ -15548,10 +15328,10 @@ namespace neon
         int16_t restokens;
         int64_t capstarts[matchMaxCaptures + 1];
         int64_t caplengths[matchMaxCaptures + 1];
-        RegexToken tokens[matchMaxTokens + 1];
+        RegexContext::Token tokens[matchMaxTokens + 1];
         RegexContext pctx;
         auto gcs = SharedState::get();
-        memset(tokens, 0, (matchMaxTokens + 1) * sizeof(RegexToken));
+        memset(tokens, 0, (matchMaxTokens + 1) * sizeof(RegexContext::Token));
         memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
         memset(capstarts, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
         const char* strstart;
@@ -15560,15 +15340,15 @@ namespace neon
         Dict* dm;
         restokens = matchMaxTokens;
         actualmaxcaptures = 0;
-        mrx_context_initstack(&pctx, tokens, restokens);
+        RegexContext::initStack(&pctx, tokens, restokens);
         if(capture)
         {
             actualmaxcaptures = matchMaxCaptures;
         }
-        prc = mrx_regex_parse(&pctx, pattern->data(), 0);
+        prc = pctx.parse(pattern->data(), 0);
         if(prc == 0)
         {
-            cpres = mrx_regex_match(&pctx, string->data(), 0, actualmaxcaptures, capstarts, caplengths);
+            cpres = pctx.match(string->data(), 0, actualmaxcaptures, capstarts, caplengths);
             if(cpres > 0)
             {
                 if(capture)
@@ -15582,10 +15362,10 @@ namespace neon
                         {
                             strstart = &string->data()[mtstart];
                             rstr = String::copy(strstart, mtlength);
-                            dm = nn_object_makedict();
-                            nn_dict_addentrycstr(dm, "string", Value::fromObject(rstr));
-                            nn_dict_addentrycstr(dm, "start", Value::makeNumber(mtstart));
-                            nn_dict_addentrycstr(dm, "length", Value::makeNumber(mtlength));
+                            dm = Dict::make();
+                            dm->addCstr("string", Value::fromObject(rstr));
+                            dm->addCstr("start", Value::makeNumber(mtstart));
+                            dm->addCstr("length", Value::makeNumber(mtlength));
                             oa->push(Value::fromObject(dm));
                         }
                     }
@@ -15601,7 +15381,7 @@ namespace neon
         {
             nn_except_throwclass(gcs->m_exceptions.regexerror, pctx.errorbuf);
         }
-        mrx_context_destroy(&pctx);
+        RegexContext::destroy(&pctx);
         if(capture)
         {
             return Value::makeNull();
@@ -16050,7 +15830,7 @@ namespace neon
 
     void nn_state_installobjectstring()
     {
-        static ConstClassMethodItem stringmethods[] = {
+        static Class::ConstItem stringmethods[] = {
             { "@iter", nn_objfnstring_iter },
             { "@itern", nn_objfnstring_itern },
             { "size", nn_objfnstring_length },
@@ -16101,7 +15881,7 @@ namespace neon
         gcs->m_classprimstring->defStaticNativeMethod(String::intern("utf8Encode"), nn_objfnstring_utf8encode);
         gcs->m_classprimstring->defStaticNativeMethod(String::intern("utf8NumBytes"), nn_objfnstring_utf8numbytes);
         gcs->m_classprimstring->defCallableField(String::intern("length"), nn_objfnstring_length);
-        nn_state_installmethods(gcs->m_classprimstring, stringmethods);
+        gcs->m_classprimstring->installMethods(stringmethods);
     }
 
     static Value nn_modfn_astscan_scan(const FuncContext& scfn)
@@ -16126,12 +15906,12 @@ namespace neon
         arr = Array::make();
         while(!scn->isatend())
         {
-            itm = nn_object_makedict();
+            itm = Dict::make();
             token = scn->scantoken();
-            nn_dict_addentrycstr(itm, "line", Value::makeNumber(token.m_line));
+            itm->addCstr("line", Value::makeNumber(token.m_line));
             cstr = AstLexer::tokTypeToString(token.m_toktype);
-            nn_dict_addentrycstr(itm, "type", Value::fromObject(String::copy(cstr + kTokPrefixLength)));
-            nn_dict_addentrycstr(itm, "source", Value::fromObject(String::copy(token.m_start, token.length)));
+            itm->addCstr("type", Value::fromObject(String::copy(cstr + kTokPrefixLength)));
+            itm->addCstr("source", Value::fromObject(String::copy(token.m_start, token.length)));
             arr->push(Value::fromObject(itm));
         }
         AstLexer::destroy(scn);
@@ -16163,7 +15943,7 @@ namespace neon
     static Value nn_pcomplex_makeinstance(Class* klass, double re, double im)
     {
         UClassComplex* inst;
-        inst = (UClassComplex*)Instance::makeInstanceOfSize(klass, sizeof(UClassComplex));
+        inst = (UClassComplex*)Instance::makeInstanceOfSize<UClassComplex>(klass);
         inst->re = re;
         inst->im = im;
         return Value::fromObject((Instance*)inst);
@@ -16497,7 +16277,7 @@ namespace neon
         auto gcs = SharedState::get();
         for(i = 0; i < scfn.argc; i++)
         {
-            nn_iostream_printvalue(gcs->m_stdoutprinter, scfn.argv[i], false, true);
+            ValPrinter::printValue(gcs->m_stdoutprinter, scfn.argv[i], false, true);
         }
         return Value::makeNull();
     }
@@ -16525,7 +16305,7 @@ namespace neon
         v = scfn.argv[0];
         IOStream::makeStackString(&pr);
         pr.jsonmode = true;
-        nn_iostream_printvalue(&pr, v, true, false);
+        ValPrinter::printValue(&pr, v, true, false);
         os = pr.takeString();
         IOStream::destroy(&pr);
         return Value::fromObject(os);
@@ -16833,7 +16613,7 @@ namespace neon
             }                                                       \
             else                                                    \
             {                                                       \
-                nn_dict_addentrycstr(md, name, value);              \
+                md->addCstr(name, value);              \
             }                                                       \
         }
 
@@ -16868,7 +16648,7 @@ namespace neon
         md = nullptr;
         if(!havekey)
         {
-            md = nn_object_makedict();
+            md = Dict::make();
         }
         putorgetkey(md, "path", Value::fromObject(path));
         putorgetkey(md, "mode", Value::makeNumber(nfs.mode));
@@ -16967,11 +16747,11 @@ namespace neon
         const char* name;
         (void)needed;
         name = "unknown";
-        if(closure->fnclosure.scriptfunc != nullptr)
+        if(closure->m_fnvals.fnclosure.scriptfunc != nullptr)
         {
-            if(closure->fnclosure.scriptfunc->m_funcname != nullptr)
+            if(closure->m_fnvals.fnclosure.scriptfunc->m_funcname != nullptr)
             {
-                data = closure->fnclosure.scriptfunc->m_funcname->data();
+                data = closure->m_fnvals.fnclosure.scriptfunc->m_funcname->data();
                 if(data != nullptr)
                 {
                     name = data;
@@ -16999,14 +16779,14 @@ namespace neon
         NEON_APIDEBUG("thisval.m_valtype=%s, argcount=%d", nn_value_typename(thisval, true), argcount);
         auto gcs = SharedState::get();
         /* fill empty parameters if not variadic */
-        for(; !closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && (argcount < size_t(closure->fnclosure.scriptfunc->fnscriptfunc.arity)); argcount++)
+        for(; !closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.isvariadic && (argcount < size_t(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity)); argcount++)
         {
             gcs->stackPush(Value::makeNull());
         }
         /* handle variadic arguments... */
-        if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic && (argcount >= size_t(closure->fnclosure.scriptfunc->fnscriptfunc.arity) - 1))
+        if(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.isvariadic && (argcount >= size_t(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity) - 1))
         {
-            startva = argcount - closure->fnclosure.scriptfunc->fnscriptfunc.arity;
+            startva = argcount - closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity;
             argslist = Array::make();
             gcs->stackPush(Value::fromObject(argslist));
             for(i = startva; i >= 0; i--)
@@ -17018,42 +16798,33 @@ namespace neon
             gcs->stackPop(startva + 2);
             gcs->stackPush(Value::fromObject(argslist));
         }
-        if(argcount != size_t(closure->fnclosure.scriptfunc->fnscriptfunc.arity))
+        if(argcount != size_t(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity))
         {
             gcs->stackPop(argcount);
-            if(closure->fnclosure.scriptfunc->fnscriptfunc.isvariadic)
+            if(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.isvariadic)
             {
-                return nn_except_throw("function '%s' expected at least %d arguments but got %d", closure->m_funcname->data(), closure->fnclosure.scriptfunc->fnscriptfunc.arity - 1, argcount);
+                return nn_except_throw("function '%s' expected at least %d arguments but got %d", closure->m_funcname->data(), closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity - 1, argcount);
             }
             else
             {
-                return nn_except_throw("function '%s' expected %d arguments but got %d", closure->m_funcname->data(), closure->fnclosure.scriptfunc->fnscriptfunc.arity, argcount);
+                return nn_except_throw("function '%s' expected %d arguments but got %d", closure->m_funcname->data(), closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity, argcount);
             }
         }
-        if(gcs->checkMaybeResize())
+        if(gcs->checkMaybeResizeFrames() /*|| gcs->checkMaybeResizeStack()*/)
         {
-    #if 0
+            #if 0
                 gcs->stackPop(argcount);
-    #endif
+            #endif
         }
         if(fromoperator)
         {
-    #if 0
-                gcs->stackPop();
-                gcs->stackPush(thisval);
-    #else
             int64_t spos;
             spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
-        #if 0
-                    gcs->m_vmstate.stackvalues[spos] = closure->clsthisval;
-        #else
             gcs->m_vmstate.stackvalues[spos] = thisval;
-        #endif
-    #endif
         }
         frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount++];
         frame->closure = closure;
-        frame->inscode = closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs;
+        frame->inscode = closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->instrucs;
         frame->stackslotpos = gcs->m_vmstate.stackidx + (-argcount - 1);
         return true;
     }
@@ -17067,7 +16838,7 @@ namespace neon
         auto gcs = SharedState::get();
         spos = gcs->m_vmstate.stackidx + (-argcount);
         vargs = &gcs->m_vmstate.stackvalues[spos];
-        r = native->fnnativefunc.natfunc(FuncContext{thisval, vargs, argcount});
+        r = native->m_fnvals.fnnativefunc.natfunc(FuncContext{thisval, vargs, argcount});
         {
             gcs->m_vmstate.stackvalues[spos - 1] = r;
             gcs->m_vmstate.stackidx -= argcount;
@@ -17108,7 +16879,7 @@ namespace neon
                     bound = ofn;
                     spos = (gcs->m_vmstate.stackidx + (-argcount - 1));
                     gcs->m_vmstate.stackvalues[spos] = thisval;
-                    return nn_vm_callclosure(bound->fnmethod.method, thisval, argcount, fromoper);
+                    return nn_vm_callclosure(bound->m_fnvals.fnmethod.method, thisval, argcount, fromoper);
                 }
                 break;
                 case Object::OTYP_CLASS:
@@ -17165,7 +16936,7 @@ namespace neon
                 {
                     Function* bound;
                     bound = ofn;
-                    actualthisval = bound->fnmethod.receiver;
+                    actualthisval = bound->m_fnvals.fnmethod.receiver;
                     if(!thisval.isNull())
                     {
                         actualthisval = thisval;
@@ -17208,7 +16979,7 @@ namespace neon
             case Object::OTYP_FUNCNATIVE:
                 return ofn->m_contexttype;
             case Object::OTYP_FUNCCLOSURE:
-                return ofn->fnclosure.scriptfunc->m_contexttype;
+                return ofn->m_fnvals.fnclosure.scriptfunc->m_contexttype;
             default:
                 break;
         }
@@ -17321,7 +17092,7 @@ namespace neon
         uint16_t idx;
         idx = nn_vmbits_readshort();
         auto gcs = SharedState::get();
-        return gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.constants.get(idx);
+        return gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->constants.get(idx);
     }
 
     NEON_INLINE String* nn_vmbits_readstring()
@@ -17883,7 +17654,7 @@ namespace neon
         Property* field;
         auto gcs = SharedState::get();
         vindex = nn_vm_stackpeek(0);
-        field = nn_dict_getentry(dict, vindex);
+        field = dict->get(vindex);
         if(field != nullptr)
         {
             if(!willassign)
@@ -18169,7 +17940,7 @@ namespace neon
     NEON_INLINE bool nn_vmutil_dosetindexdict(Dict* dict, Value index, Value value)
     {
         auto gcs = SharedState::get();
-        nn_dict_setentry(dict, index, value);
+        dict->set(index, value);
         /* pop the value, index and dict out */
         gcs->stackPop(3);
         /*
@@ -18213,45 +17984,6 @@ namespace neon
         ocnt = list->count();
         rawpos = index.asNumber();
         position = rawpos;
-        if(rawpos < 0)
-        {
-            rawpos = list->count() + rawpos;
-        }
-        if(position < ocap && position > -(ocap))
-        {
-            list->set(position, value);
-            if(position >= ocnt)
-            {
-                list->m_objvarray.increaseBy(1);
-            }
-        }
-        else
-        {
-            if(position < 0)
-            {
-                fprintf(stderr, "inverting negative position %d\n", position);
-                position = (~position) + 1;
-            }
-            tmp = 0;
-            vasz = list->count();
-            if((position > vasz) || ((position == 0) && (vasz == 0)))
-            {
-                if(position == 0)
-                {
-                    list->push(Value::makeNull());
-                }
-                else
-                {
-                    tmp = position + 1;
-                    while(tmp > vasz)
-                    {
-                        list->push(Value::makeNull());
-                        tmp--;
-                    }
-                }
-            }
-            fprintf(stderr, "setting value at position %ld (array count: %ld)\n", (long)position, (long)list->count());
-        }
         list->set(position, value);
         /* pop the value, index and list out */
         gcs->stackPop(3);
@@ -18388,8 +18120,8 @@ namespace neon
         vright = nn_vm_stackpeek(0);
         vleft = nn_vm_stackpeek(1);
         IOStream::makeStackString(&pr);
-        nn_iostream_printvalue(&pr, vleft, false, true);
-        nn_iostream_printvalue(&pr, vright, false, true);
+        ValPrinter::printValue(&pr, vleft, false, true);
+        ValPrinter::printValue(&pr, vright, false, true);
         result = pr.takeString();
         IOStream::destroy(&pr);
         gcs->stackPop(2);
@@ -18595,7 +18327,7 @@ namespace neon
                 {
                     return field;
                 }
-                nn_except_throw("unknown key or class Dict property '%s'", name->data());
+                nn_except_throw("unknown key or class 'Dict' property '%s'", name->data());
                 return nullptr;
             }
             break;
@@ -18782,7 +18514,7 @@ namespace neon
         else if(vtarget.isDict())
         {
             dict = vtarget.asDict();
-            nn_dict_setentry(dict, Value::fromObject(name), vpeek);
+            dict->set(Value::fromObject(name), vpeek);
             value = gcs->stackPop();
             /* removing the dictionary object */
             gcs->stackPop();
@@ -19074,7 +18806,7 @@ namespace neon
         name = nn_vmbits_readstring();
         val = nn_vm_stackpeek(0);
         auto gcs = SharedState::get();
-        auto tab = &gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
+        auto tab = &gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable;
         tab->set(Value::fromObject(name), val);
         gcs->stackPop();
     #if (defined(DEBUG_TABLE) && DEBUG_TABLE) || 0
@@ -19089,7 +18821,7 @@ namespace neon
         Property* field;
         name = nn_vmbits_readstring();
         auto gcs = SharedState::get();
-        auto tab = &gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable;
+        auto tab = &gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable;
         field = tab->getfieldbyostr(name);
         if(field == nullptr)
         {
@@ -19110,7 +18842,7 @@ namespace neon
         Module* module;
         name = nn_vmbits_readstring();
         auto gcs = SharedState::get();
-        module = gcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module;
+        module = gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module;
         auto table = &module->deftable;
         if(table->set(Value::fromObject(name), nn_vm_stackpeek(0)))
         {
@@ -19180,9 +18912,9 @@ namespace neon
             {
                 IOStream* pr = gcs->m_stderrprinter;
                 pr->format("funcargoptional: slot=%d putpos=%zd cval=<", slot, putpos);
-                nn_iostream_printvalue(pr, cval, true, false);
+                ValPrinter::printValue(pr, cval, true, false);
                 pr->format(">, peeked=<");
-                nn_iostream_printvalue(pr, peeked, true, false);
+                ValPrinter::printValue(pr, peeked, true, false);
                 pr->format(">\n");
             }
         #endif
@@ -19256,11 +18988,11 @@ namespace neon
             {
                 ssp = gcs->m_vmstate.currentframe->stackslotpos;
                 upvals = &gcs->m_vmstate.stackvalues[ssp + upvidx];
-                closure->fnclosure.m_upvalues[i] = nn_vmutil_upvaluescapture(upvals, upvidx);
+                closure->m_fnvals.fnclosure.m_upvalues[i] = nn_vmutil_upvaluescapture(upvals, upvidx);
             }
             else
             {
-                closure->fnclosure.m_upvalues[i] = gcs->m_vmstate.currentframe->closure->fnclosure.m_upvalues[upvidx];
+                closure->m_fnvals.fnclosure.m_upvalues[i] = gcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.m_upvalues[upvidx];
             }
         }
         return true;
@@ -19294,7 +19026,7 @@ namespace neon
         /* 1 for key, 1 for value */
         realcount = nn_vmbits_readshort();
         count = realcount * 2;
-        dict = nn_object_makedict();
+        dict = Dict::make();
         auto gcs = SharedState::get();
         gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count - 1)] = Value::fromObject(dict);
         for(i = 0; i < count; i += 2)
@@ -19306,7 +19038,7 @@ namespace neon
                 return false;
             }
             value = gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx + (-count + i + 1)];
-            nn_dict_setentry(dict, name, value);
+            dict->set(name, value);
         }
         gcs->stackPop(count);
         return true;
@@ -19474,8 +19206,8 @@ namespace neon
             }
             if(nn_util_unlikely(vmgcs->m_conf.shoulddumpstack))
             {
-                ofs = (int)(vmgcs->m_vmstate.currentframe->inscode - vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob.instrucs);
-                nn_dbg_printinstructionat(vmgcs->m_debugwriter, &vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.blob, ofs);
+                ofs = (int)(vmgcs->m_vmstate.currentframe->inscode - vmgcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->instrucs);
+                nn_dbg_printinstructionat(vmgcs->m_debugwriter, vmgcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
                 fprintf(stderr, "stack (before)=[\n");
                 iterpos = 0;
                 dbgslot = vmgcs->m_vmstate.stackvalues;
@@ -19485,7 +19217,7 @@ namespace neon
                     iterpos++;
                     fprintf(stderr, "  [%s%d%s] ", nn_util_color(NEON_COLOR_YELLOW), printpos, nn_util_color(NEON_COLOR_RESET));
                     vmgcs->m_debugwriter->format("%s", nn_util_color(NEON_COLOR_YELLOW));
-                    nn_iostream_printvalue(vmgcs->m_debugwriter, *dbgslot, true, false);
+                    ValPrinter::printValue(vmgcs->m_debugwriter, *dbgslot, true, false);
                     vmgcs->m_debugwriter->format("%s", nn_util_color(NEON_COLOR_RESET));
                     fprintf(stderr, "\n");
                     dbgslot++;
@@ -19770,7 +19502,7 @@ namespace neon
                 {
                     Value val;
                     val = nn_vm_stackpeek(0);
-                    nn_iostream_printvalue(vmgcs->m_stdoutprinter, val, vmgcs->m_isrepl, true);
+                    ValPrinter::printValue(vmgcs->m_stdoutprinter, val, vmgcs->m_isrepl, true);
                     if(!val.isNull())
                     {
                         vmgcs->m_stdoutprinter->writeString("\n");
@@ -19954,7 +19686,7 @@ namespace neon
                     closure = vmgcs->m_vmstate.currentframe->closure;
                     if(upvidx < closure->upvalcount)
                     {
-                        vmgcs->stackPush((closure->fnclosure.m_upvalues[upvidx]->location));
+                        vmgcs->stackPush((closure->m_fnvals.fnclosure.m_upvalues[upvidx]->location));
                     }
                     else
                     {
@@ -19968,7 +19700,7 @@ namespace neon
                     Value val;
                     upvidx = nn_vmbits_readshort();
                     val = nn_vm_stackpeek(0);
-                    vmgcs->m_vmstate.currentframe->closure->fnclosure.m_upvalues[upvidx]->location = val;
+                    vmgcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.m_upvalues[upvidx]->location = val;
                 }
                 VM_DISPATCH();
                 VM_CASE(OPC_CALLFUNCTION)
@@ -20008,7 +19740,7 @@ namespace neon
                     Value thisval;
                     thisval = nn_vm_stackpeek(3);
                     vmgcs->m_debugwriter->format("CLASSGETTHIS: thisval=");
-                    nn_iostream_printvalue(vmgcs->m_debugwriter, thisval, true, false);
+                    ValPrinter::printValue(vmgcs->m_debugwriter, thisval, true, false);
                     vmgcs->m_debugwriter->format("\n");
                     vmgcs->stackPush(thisval);
                 }
@@ -20035,7 +19767,7 @@ namespace neon
                     Property* field;
                     haveval = false;
                     name = nn_vmbits_readstring();
-                    field = vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.getfieldbyostr(name);
+                    field = vmgcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable.getfieldbyostr(name);
                     if(field != nullptr)
                     {
                         if(field->value.isClass())
@@ -20305,7 +20037,7 @@ namespace neon
                         if(!haveclass)
                         {
                             /*
-                            if(!vmgcs->m_vmstate.currentframe->closure->fnclosure.scriptfunc->fnscriptfunc.module->deftable.get(Value::fromObject(type), &value) || !value.isClass())
+                            if(!vmgcs->m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable.get(Value::fromObject(type), &value) || !value.isClass())
                             {
                                 nn_vmmac_tryraise(NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->data());
                                 VM_DISPATCH();
@@ -20381,11 +20113,11 @@ namespace neon
         ofn = callable.asFunction();
         if(callable.isFuncclosure())
         {
-            arity = ofn->fnclosure.scriptfunc->fnscriptfunc.arity;
+            arity = ofn->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity;
         }
         else if(callable.isFuncscript())
         {
-            arity = ofn->fnscriptfunc.arity;
+            arity = ofn->m_fnvals.fnscriptfunc.arity;
         }
         else if(callable.isFuncnative())
         {
@@ -20479,15 +20211,15 @@ namespace neon
         }
         {
             {
-                gcs->m_processinfo->filestdout = nn_object_makefile(stdout, true, "<stdout>", "wb");
+                gcs->m_processinfo->filestdout = File::make(stdout, true, "<stdout>", "wb");
                 nn_state_defglobalvalue("STDOUT", Value::fromObject(gcs->m_processinfo->filestdout));
             }
             {
-                gcs->m_processinfo->filestderr = nn_object_makefile(stderr, true, "<stderr>", "wb");
+                gcs->m_processinfo->filestderr = File::make(stderr, true, "<stderr>", "wb");
                 nn_state_defglobalvalue("STDERR", Value::fromObject(gcs->m_processinfo->filestderr));
             }
             {
-                gcs->m_processinfo->filestdin = nn_object_makefile(stdin, true, "<stdin>", "rb");
+                gcs->m_processinfo->filestdin = File::make(stdin, true, "<stdin>", "rb");
                 nn_state_defglobalvalue("STDIN", Value::fromObject(gcs->m_processinfo->filestdin));
             }
         }
@@ -20602,7 +20334,7 @@ namespace neon
          * declare environment variables dictionary
          */
         {
-            gcs->m_envdict = nn_object_makedict();
+            gcs->m_envdict = Dict::make();
         }
         /*
          * declare default exception types
@@ -20646,16 +20378,16 @@ namespace neon
     {
         auto gcs = SharedState::get();
         destrdebug("destroying m_importpath...");
-        gcs->m_importpath.deInit(false);
+        gcs->m_importpath.deInit();
         destrdebug("destroying linked objects...");
         SharedState::gcLinkedObjectsDestroy();
         /* since object in module can exist in m_declaredglobals, it must come before */
         destrdebug("destroying module table...");
-        gcs->m_openedmodules.deinit();
+        gcs->m_openedmodules.deInit();
         destrdebug("destroying globals table...");
-        gcs->m_declaredglobals.deinit();
+        gcs->m_declaredglobals.deInit();
         destrdebug("destroying strings table...");
-        gcs->m_allocatedstrings.deinit();
+        gcs->m_allocatedstrings.deInit();
         destrdebug("destroying m_stdoutprinter...");
         IOStream::destroy(gcs->m_stdoutprinter);
         destrdebug("destroying m_stderrprinter...");
@@ -20680,7 +20412,6 @@ namespace neon
         Function* closure;
         (void)toplevel;
         auto gcs = SharedState::get();
-        Blob::init(&blob);
         function = nn_astutil_compilesource(module, source, &blob, false, fromeval);
         if(function == nullptr)
         {
@@ -20759,7 +20490,7 @@ namespace neon
 #define OPTTOSTRIFY_(thing) #thing
 #define OPTTOSTRIFY(thing) OPTTOSTRIFY_(thing)
 
-#if !defined(NEON_PLAT_ISWINDOWS)
+#if defined(NEON_CONF_REPLSUPPORT) && (NEON_CONF_REPLSUPPORT == 1)
 static char* nn_cli_getinput(linocontext_t* lictx, const char* prompt)
 {
     return lino_context_readline(lictx, prompt);
@@ -20918,7 +20649,7 @@ static bool nn_cli_repl(linocontext_t* lictx)
             if(!dest.isNull())
             {
                 pr->format("%s = ", varnamebuf);
-                nn_iostream_printvalue(pr, dest, true, true);
+                neon::ValPrinter::printValue(pr, dest, true, true);
                 nn_state_defglobalvalue(varnamebuf, dest);
                 pr->format("\n");
                 rescnt++;
@@ -21034,7 +20765,7 @@ static void nn_cli_parseenv(char** envp)
             valbuf = &raw[pos + 1];
             auto oskey = neon::String::copy(keybuf);
             auto osval = neon::String::copy(valbuf);
-            nn_dict_setentry(gcs->m_envdict, neon::Value::fromObject(oskey), neon::Value::fromObject(osval));
+            gcs->m_envdict->set(neon::Value::fromObject(oskey), neon::Value::fromObject(osval));
         }
     }
 }
@@ -21125,21 +20856,23 @@ int main(int argc, char* argv[], char** envp)
     const char* filename;
     char* nargv[128];
     optcontext_t options;
-    #if !defined(NEON_PLAT_ISWINDOWS)
+    #if defined(NEON_CONF_REPLSUPPORT) && (NEON_CONF_REPLSUPPORT == 1)
     linocontext_t lictx;
     #endif
-    static optlongflags_t longopts[] = { { "help", 'h', OPTPARSE_NONE, "this help" },
-                                         { "strict", 's', OPTPARSE_NONE, "enable strict mode, such as requiring explicit var declarations" },
-                                         { "warn", 'w', OPTPARSE_NONE, "enable warnings" },
-                                         { "debug", 'd', OPTPARSE_NONE, "enable debugging: print instructions and stack values during execution" },
-                                         { "exitaftercompile", 'x', OPTPARSE_NONE, "when using '-d', quit after printing compiled function(s)" },
-                                         { "eval", 'e', OPTPARSE_REQUIRED, "evaluate a single line of code" },
-                                         { "quit", 'q', OPTPARSE_NONE, "initiate, then immediately destroy the interpreter state" },
-                                         { "types", 't', OPTPARSE_NONE, "print sizeof() of types" },
-                                         { "apidebug", 'a', OPTPARSE_NONE, "print calls to API (very verbose, very slow)" },
-                                         { "gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC (default is " OPTTOSTRIFY(NEON_CONFIG_DEFAULTGCSTART) ")" },
-                                         { 0, 0, (optargtype_t)0, nullptr } };
-    #if !defined(NEON_PLAT_ISWINDOWS)
+    static optlongflags_t longopts[] = {
+        { "help", 'h', OPTPARSE_NONE, "this help" },
+        { "strict", 's', OPTPARSE_NONE, "enable strict mode, such as requiring explicit var declarations" },
+        { "warn", 'w', OPTPARSE_NONE, "enable warnings" },
+        { "debug", 'd', OPTPARSE_NONE, "enable debugging: print instructions and stack values during execution" },
+        { "exitaftercompile", 'x', OPTPARSE_NONE, "when using '-d', quit after printing compiled function(s)" },
+        { "eval", 'e', OPTPARSE_REQUIRED, "evaluate a single line of code" },
+        { "quit", 'q', OPTPARSE_NONE, "initiate, then immediately destroy the interpreter state" },
+        { "types", 't', OPTPARSE_NONE, "print sizeof() of types" },
+        { "apidebug", 'a', OPTPARSE_NONE, "print calls to API (very verbose, very slow)" },
+        { "gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC (default is " OPTTOSTRIFY(NEON_CONFIG_DEFAULTGCSTART) ")" },
+        { 0, 0, (optargtype_t)0, nullptr }
+    };
+    #if defined(NEON_CONF_REPLSUPPORT) && (NEON_CONF_REPLSUPPORT == 1)
     lino_context_init(&lictx);
     #endif
 #if defined(NEON_PLAT_ISWINDOWS) || defined(_MSC_VER)
@@ -21244,7 +20977,7 @@ int main(int argc, char* argv[], char** envp)
     }
     else
     {
-        #if !defined(NEON_PLAT_ISWINDOWS)
+        #if defined(NEON_CONF_REPLSUPPORT) && (NEON_CONF_REPLSUPPORT == 1)
             ok = nn_cli_repl(&lictx);
         #else
             ok = false;

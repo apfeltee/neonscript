@@ -4,7 +4,7 @@ const os = import "os";
 
 function scan(dir)
 {
-    os.readdir(dir, function(item)
+    os.readdir(dir, def(item)
     {
         if((item == ".") || (item == ".."))
         {
@@ -17,12 +17,12 @@ function scan(dir)
             var isdir = File.isDirectory(fp);
             if(isdir)
             {
-                println(fp);
+                //println(fp);
                 scan(fp);
             }
             else
             {
-                println(fp);
+                //println(fp);
             }
         }
     })

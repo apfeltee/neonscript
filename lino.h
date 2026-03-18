@@ -227,24 +227,9 @@ struct linocontext_t
 static linocontext_t* g_linoconst_gcontext = NULL;
 static const char* g_linoconst_unsupportedterminals[] = { "dumb", "cons25", "emacs", NULL };
 
-/* Debugging macro. */
-#if 0
-FILE *lndebug_fp = NULL;
-    #define lndebug(...)                                                                                                                                    \
-        do                                                                                                                                                  \
-        {                                                                                                                                                   \
-            if(lndebug_fp == NULL)                                                                                                                          \
-            {                                                                                                                                               \
-                lndebug_fp = fopen("/tmp/lndebug.txt", "a");                                                                                                \
-                fprintf(lndebug_fp, "[%d %d %d] p: %d, rows: %d, rpos: %d, max: %d, oldmax: %d\n", (int)edst->currentedlinelen, (int)edst->currentcursorpos, (int)edst->prevrefreshcursorpos, plen, rows, \
-                        rpos, (int)edst->maxrowsused, oldrows);                                                                                                   \
-            }                                                                                                                                               \
-            fprintf(lndebug_fp, ", " __VA_ARGS__);                                                                                                          \
-            fflush(lndebug_fp);                                                                                                                             \
-        } while(0)
-#else
-    #define lndebug(fmt, ...)
-#endif
+/* Debugging macro. was too verbose, needs to implemented again */
+#define lndebug(fmt, ...)
+
 
 
 /* ========================== Encoding functions ============================= */

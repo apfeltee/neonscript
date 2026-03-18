@@ -1,0 +1,22 @@
+with pool:
+
+==33743==
+==33743== HEAP SUMMARY:
+==33743==     in use at exit: 0 bytes in 0 blocks
+==33743==   total heap usage: 1,483 allocs, 1,483 frees, 48,581,412 bytes allocated
+==33743==
+==33743== All heap blocks were freed -- no leaks are possible
+==33743==
+==33743== For lists of detected and suppressed errors, rerun with: -s
+==33743== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+
+without:
+==33758== HEAP SUMMARY:
+==33758==     in use at exit: 0 bytes in 0 blocks
+==33758==   total heap usage: 54,267 allocs, 54,267 frees, 53,682,349 bytes allocated
+==33758==
+==33758== All heap blocks were freed -- no leaks are possible
+==33758==
+==33758== Use --track-origins=yes to see where uninitialised values come from
+==33758== For lists of detected and suppressed errors, rerun with: -s
+==33758== ERROR SUMMARY: 1297 errors from 3 contexts (suppressed: 0 from 0)
