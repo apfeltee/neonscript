@@ -3,7 +3,7 @@
 #include <iostream>
 
 template<typename Typ>
-void foo()
+void foo(Type)
 {
 
 }

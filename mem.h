@@ -1,4 +1,6 @@
 
+#pragma once
+
 #include "allocator.h"
 
 /*
@@ -141,4 +143,42 @@ static inline void nn_memory_free(void* ptr)
         free(ptr);
     #endif
 }
+
+    template <typename ClassT>
+    concept MemoryClassHasDestroyFunc = requires(ClassT* ptr)
+    {
+        { ClassT::destroy(ptr) };
+    };
+
+    class Memory
+    {
+        public:
+            template<typename ClassT, typename... ArgsT>
+            static inline ClassT* make(ArgsT&&... args)
+            {
+                ClassT* tmp;
+                ClassT* ret;
+                tmp = (ClassT*)nn_memory_malloc(sizeof(ClassT));
+                ret = new(tmp) ClassT(args...);
+                return ret;
+            }
+
+            template<typename ClassT, typename... ArgsT>
+            static inline void destroy(ClassT* cls, ArgsT&&... args)
+            {
+                if constexpr (MemoryClassHasDestroyFunc<ClassT>)
+                {
+                    //std::cerr << "Memory::destroy: using destroy" << std::endl;
+                    ClassT::destroy(cls, args...);
+                }
+                else
+                {
+                    //std::cerr << "Memory::destroy: using free()" << std::endl;
+                    nn_memory_free(cls);
+                }
+            }
+    };
+
+
+
 
