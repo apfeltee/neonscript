@@ -20,7 +20,7 @@ class ValArray
         static void destroy(ValArray* list, OnDestroyFN dfn)
         {
             if(list != nullptr)
-            {    
+            {
                 if(dfn != nullptr)
                 {
                     destroyAndClear(list, dfn);
@@ -42,6 +42,28 @@ class ValArray
                 }
             }
             list->clear();
+        }
+        static size_t nextCapacity(size_t oldcap)
+        {
+            if((oldcap) < 8)
+            {
+                return 8;
+            }
+            #if 1
+                return (oldcap * 2);
+            #else
+                return (((oldcap * 3) / 2) + 1);
+            #endif
+        }
+
+        static NEON_INLINE void initItems(StoredTyp* inbuf, size_t begin, size_t end)
+        {
+            size_t i;
+            for(i=begin; i<end; i++)
+            {
+                auto tmp = new(&inbuf[i]) StoredTyp();
+                inbuf[i] = *tmp;
+            }
         }
 
     private:
@@ -68,42 +90,38 @@ class ValArray
             return true;
         }
 
-        size_t nextCapacity(size_t oldcap)
+        NEON_INLINE void ensureCapacityActual(size_t needsize)
         {
-            if((oldcap) < 8)
-            {
-                return 8;
-            }
-            #if 1
-                return (oldcap * 2);
-            #else
-                return (((oldcap * 3) / 2) + 1);
-            #endif
-        }
-
-        NEON_INLINE void ensureCapacity(size_t needsize, const StoredTyp& fillval, bool first)
-        {
-            size_t i;
             size_t ncap;
             size_t oldcap;
-            (void)first;
             if(m_listcapacity < needsize)
             {
                 oldcap = m_listcapacity;
-                ncap = nextCapacity(m_listcapacity + needsize);
+                ncap = nextCapacity(oldcap + needsize);
                 m_listcapacity = ncap;
                 if(m_listitems == nullptr)
                 {
                     m_listitems = (StoredTyp*)nn_memory_malloc(sizeof(StoredTyp) * ncap);
+                    initItems(m_listitems, 0, ncap);
                 }
                 else
                 {
                     m_listitems = (StoredTyp*)nn_memory_realloc(m_listitems, sizeof(StoredTyp) * ncap);
+                    initItems(m_listitems, m_listcount, ncap);
                 }
-                for(i = oldcap; i < ncap; i++)
-                {
-                    m_listitems[i] = fillval;
-                }
+
+            }
+        }
+
+        NEON_INLINE void ensureCapacity(size_t need)
+        {
+            if constexpr(std::is_pointer<StoredTyp>::value)
+            {
+                ensureCapacityActual(need);
+            }
+            else
+            {
+                ensureCapacityActual(need);
             }
         }
 
@@ -119,26 +137,7 @@ class ValArray
             m_listitems = nullptr;
             if(initialsize > 0)
             {
-                if constexpr(std::is_pointer<StoredTyp>::value)
-                {
-                    ensureCapacity(initialsize, nullptr, true);
-                }
-                else
-                {
-                    ensureCapacity(initialsize, {}, true);                    
-                }
-            }
-        }
-
-        template<typename InputT>
-        NEON_INLINE ValArray(size_t initialsize, const InputT& value)
-        {
-            m_listcount = 0;
-            m_listcapacity = 0;
-            m_listitems = nullptr;
-            if(initialsize > 0)
-            {
-                ensureCapacity(initialsize, value, true);
+                ensureCapacity(initialsize);
             }
         }
 
@@ -147,22 +146,9 @@ class ValArray
             //deInit();
         }
 
-
-        template<typename InputT>
-        void reserve(size_t sz, const InputT& value)
+        void reserve(size_t sz)
         {
-            ensureCapacity(sz, value, true);
-        }
-
-        StoredTyp* getOrphanedData()
-        {
-            size_t i;
-            auto rtdata = (StoredTyp*)nn_memory_malloc(count() * sizeof(StoredTyp));
-            for(i=0; i<count(); i++)
-            {
-                rtdata[i] = get(i);
-            }
-            return rtdata;
+            ensureCapacityActual(sz);
         }
 
         NEON_INLINE void deInit(OnDestroyFN dfn)
@@ -185,21 +171,6 @@ class ValArray
             //m_listitems = nullptr;
             m_listcount = 0;
             m_listcapacity = 0;
-        }
-
-        bool shrinkToFit()
-        {
-            void* ndata;
-            m_listcapacity = m_listcount;
-            if(m_listitems == nullptr)
-            {}
-            ndata = nn_memory_realloc(m_listitems, m_listcount * sizeof(StoredTyp));
-            if(ndata == NULL)
-            {
-                return false;
-            }
-            m_listitems = (StoredTyp*)ndata;
-            return true;
         }
 
         NEON_INLINE void clear()
@@ -360,14 +331,7 @@ class ValArray
             need = idx + 1;
             if(((idx == 0) || (m_listcapacity == 0)) || (idx >= m_listcapacity))
             {
-                if constexpr(std::is_pointer<StoredTyp>::value)
-                {
-                    ensureCapacity(need, nullptr, false);
-                }
-                else
-                {
-                    ensureCapacity(need, {}, false);
-                }
+                ensureCapacity(need);
             }
             if(idx > m_listcount)
             {
@@ -379,19 +343,13 @@ class ValArray
 
         NEON_INLINE bool push(const StoredTyp& value)
         {
+            size_t need;
             size_t oldcap;
             if(m_listcapacity < m_listcount + 1)
             {
                 oldcap = m_listcapacity;
-                m_listcapacity =  nextCapacity(oldcap);
-                if(m_listitems == nullptr)
-                {
-                    m_listitems = (StoredTyp*)nn_memory_malloc(sizeof(StoredTyp) * m_listcapacity);
-                }
-                else
-                {
-                    m_listitems = (StoredTyp*)nn_memory_realloc(m_listitems, sizeof(StoredTyp) * m_listcapacity);
-                }
+                need =  nextCapacity(oldcap);
+                ensureCapacity(need);
             }
             m_listitems[m_listcount] = value;
             m_listcount++;

@@ -168,11 +168,11 @@ namespace neon
     #endif
     /*
     // NOTE:
-    // 1. Any call to nn_gcmem_protect() within a function/block must be accompanied by
+    // 1. Any call to SharedState::gcProtect() within a function/block must be accompanied by
     // at least one call to SharedState::clearGCProtect() before exiting the function/block
     // otherwise, expected unexpected behavior
     // 2. The call to SharedState::clearGCProtect() will be automatic for native functions.
-    // 3. $thisval must be retrieved before any call to nn_gcmem_protect in a
+    // 3. $thisval must be retrieved before any call to SharedState::gcProtect in a
     // native function.
     */
 
@@ -396,13 +396,10 @@ namespace neon
     void nn_state_installobjectdict();
     void nn_state_installobjectfile();
     /* libfunc.c */
-    void nn_funcscript_destroy(Function* ofn);
     /* libmodule.c */
     void loadBuiltinMethods();
 
     void nn_state_setupmodulepaths();
-    bool nn_import_loadnativemodule(ModInitFN init_fn, char* importname, const char* source, void* dlw);
-    void nn_import_addnativemodule(Module* module, const char* as);
     void nn_import_closemodule(void* hnd);
     /* libnumber.c */
     void nn_state_installobjectnumber();
@@ -416,10 +413,6 @@ namespace neon
 
     double nn_string_tabhashvaluecombine(const char* data, size_t len, uint32_t hsv);
     void nn_state_installobjectstring();
-
-    Object* nn_gcmem_protect(Object* object);
-
-    void nn_gcmem_markvalue(Value value);
 
     /* modast.c */
     DefExport* nn_natmodule_load_astscan();
@@ -464,10 +457,6 @@ namespace neon
     void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index);
     uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index);
     double nn_util_mtrand(double lowerlimit, double upperlimit);
-    char* nn_util_filereadhandle(FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize);
-    char* nn_util_filereadfile(const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize);
-    char* nn_util_filegetshandle(char* s, int size, FILE* f, size_t* lendest);
-    int nn_util_filegetlinehandle(char** lineptr, size_t* destlen, FILE* hnd);
     char* nn_util_strtoupper(char* str, size_t length);
     char* nn_util_strtolower(char* str, size_t length);
     String* nn_util_numbertobinstring(long n);
@@ -476,9 +465,7 @@ namespace neon
     uint32_t nn_object_hashobject(Object* object);
     uint32_t nn_value_hashvalue(Value value);
     /* value.c */
-    Value nn_value_copystrlen(const char* str, size_t len);
-    Value nn_value_copystr(const char* str);
-    String* nn_value_tostring(Value value);
+
     const char* nn_value_objecttypename(Object* object, bool detailed);
     const char* nn_value_typename(Value value, bool detailed);
     bool nn_value_compobjarray(Object* oa, Object* ob);
@@ -491,7 +478,7 @@ namespace neon
     void nn_value_sortvalues(Value* values, int count);
     Value nn_value_copyvalue(Value value);
     /* vm.c */
-    void nn_vm_initvmstate();
+
     void nn_state_resetvmstate();
     bool nn_vm_callclosure(Function* closure, Value thisval, size_t argcount, bool fromoperator);
     bool nn_vm_callvaluewithobject(Value callable, Value thisval, size_t argcount, bool fromoper);
@@ -508,6 +495,10 @@ namespace neon
 
     template<typename... ArgsT>
     bool throwScriptException(Class* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args);
+
+
+
+
 
     /* topproto */
 
@@ -588,7 +579,8 @@ namespace neon
             static uint32_t wrapStrGetHash(String* os);
             static const char* wrapStrGetData(String* os);
             static size_t wrapStrGetLength(String* os);
-
+            static String* wrapMakeFromStrBuf(NNStringBuffer buf, uint32_t hsv, size_t length);
+            static String* wrapStringCopy(const char* data, size_t len);
     };
 
     class utf8iterator_t
@@ -623,6 +615,298 @@ namespace neon
             char* data;
             size_t length;
     };
+
+    class IOStream
+    {
+        public:
+            enum Mode
+            {
+                PRMODE_UNDEFINED,
+                PRMODE_STRING,
+                PRMODE_FILE
+            };
+
+        public:
+            static bool makeStackIO(IOStream* pr, FILE* fh, bool shouldclose)
+            {
+                initStreamVars(pr, PRMODE_FILE);
+                pr->fromstack = true;
+                pr->handle = fh;
+                pr->shouldclose = shouldclose;
+                return true;
+            }
+
+            static bool makeStackString(IOStream* pr)
+            {
+                initStreamVars(pr, PRMODE_STRING);
+                pr->fromstack = true;
+                pr->wrmode = PRMODE_STRING;
+                nn_strbuf_makebasicemptystack(&pr->strbuf, nullptr, 0);
+                return true;
+            }
+
+            static IOStream* makeUndefStream(Mode mode)
+            {
+                IOStream* pr;
+                pr = Memory::make<IOStream>();
+                if(!pr)
+                {
+                    fprintf(stderr, "cannot allocate IOStream\n");
+                    return nullptr;
+                }
+                initStreamVars(pr, mode);
+                return pr;
+            }
+
+            static IOStream* makeIO(FILE* fh, bool shouldclose)
+            {
+                IOStream* pr;
+                pr = makeUndefStream(PRMODE_FILE);
+                pr->handle = fh;
+                pr->shouldclose = shouldclose;
+                return pr;
+            }
+
+            static void destroy(IOStream* pr)
+            {
+                if(pr == nullptr)
+                {
+                    return;
+                }
+                if(pr->wrmode == PRMODE_UNDEFINED)
+                {
+                    return;
+                }
+                /*fprintf(stderr, "IOStream::destroy: pr->wrmode=%d\n", pr->wrmode);*/
+                if(pr->wrmode == PRMODE_STRING)
+                {
+                    if(!pr->stringtaken)
+                    {
+                        nn_strbuf_destroyfromstack(&pr->strbuf);
+                    }
+                }
+                else if(pr->wrmode == PRMODE_FILE)
+                {
+                    if(pr->shouldclose)
+                    {
+            #if 0
+                        fclose(pr->handle);
+            #endif
+                    }
+                }
+                if(!pr->fromstack)
+                {
+                    nn_memory_free(pr);
+                    pr = nullptr;
+                }
+            }
+
+            static void initStreamVars(IOStream* pr, Mode mode)
+            {
+                pr->fromstack = false;
+                pr->wrmode = PRMODE_UNDEFINED;
+                pr->shouldclose = false;
+                pr->shouldflush = false;
+                pr->stringtaken = false;
+                pr->shortenvalues = false;
+                pr->jsonmode = false;
+                pr->maxvallength = 15;
+                pr->handle = nullptr;
+                pr->wrmode = mode;
+            }
+
+        public:
+            /* if file: should be closed when writer is destroyed? */
+            uint8_t shouldclose;
+            /* if file: should write operations be flushed via fflush()? */
+            uint8_t shouldflush;
+            /* if string: true if $strbuf was taken via nn_iostream_take */
+            uint8_t stringtaken;
+            /* was this writer instance created on stack? */
+            uint8_t fromstack;
+            uint8_t shortenvalues;
+            uint8_t jsonmode;
+            size_t maxvallength;
+            /* the mode that determines what writer actually does */
+            Mode wrmode;
+            NNStringBuffer strbuf;
+            FILE* handle;
+
+        public:
+
+            String* takeString()
+            {
+                size_t xlen;
+                String* os;
+                xlen = nn_strbuf_length(&this->strbuf);
+                os = Wrappers::wrapMakeFromStrBuf(this->strbuf, nn_util_hashstring(nn_strbuf_data(&this->strbuf), xlen), xlen);
+                this->stringtaken = true;
+                return os;
+            }
+
+            String* copyString()
+            {
+                String* os;
+                os = Wrappers::wrapStringCopy(nn_strbuf_data(&this->strbuf), nn_strbuf_length(&this->strbuf));
+                return os;
+            }
+
+            void flush()
+            {
+                // if(this->shouldflush)
+                {
+                    fflush(this->handle);
+                }
+            }
+
+            bool writeString(const char* estr, size_t elen)
+            {
+                // fprintf(stderr, "writestringl: (%d) <<<%.*s>>>\n", elen, elen, estr);
+                size_t chlen;
+                chlen = sizeof(char);
+                if(elen > 0)
+                {
+                    if(this->wrmode == PRMODE_FILE)
+                    {
+                        fwrite(estr, chlen, elen, this->handle);
+                        flush();
+                    }
+                    else if(this->wrmode == PRMODE_STRING)
+                    {
+                        nn_strbuf_appendstrn(&this->strbuf, estr, elen);
+                    }
+                    else
+                    {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            bool writeString(const char* estr)
+            {
+                return writeString(estr, strlen(estr));
+            }
+
+            bool writeChar(int b)
+            {
+                char ch;
+                if(this->wrmode == PRMODE_STRING)
+                {
+                    ch = b;
+                    writeString(&ch, 1);
+                }
+                else if(this->wrmode == PRMODE_FILE)
+                {
+                    fputc(b, this->handle);
+                    flush();
+                }
+                return true;
+            }
+
+            bool writeEscapedChar(int ch)
+            {
+                switch(ch)
+                {
+                    case '\'':
+                    {
+                        writeString("\\\'");
+                    }
+                    break;
+                    case '\"':
+                    {
+                        writeString("\\\"");
+                    }
+                    break;
+                    case '\\':
+                    {
+                        writeString("\\\\");
+                    }
+                    break;
+                    case '\b':
+                    {
+                        writeString("\\b");
+                    }
+                    break;
+                    case '\f':
+                    {
+                        writeString("\\f");
+                    }
+                    break;
+                    case '\n':
+                    {
+                        writeString("\\n");
+                    }
+                    break;
+                    case '\r':
+                    {
+                        writeString("\\r");
+                    }
+                    break;
+                    case '\t':
+                    {
+                        writeString("\\t");
+                    }
+                    break;
+                    case 0:
+                    {
+                        writeString("\\0");
+                    }
+                    break;
+                    default:
+                    {
+                        format("\\x%02x", (unsigned char)ch);
+                    }
+                    break;
+                }
+                return true;
+            }
+
+            bool writeQuotedString(const char* str, size_t len, bool withquot)
+            {
+                int bch;
+                size_t i;
+                bch = 0;
+                if(withquot)
+                {
+                    writeChar('"');
+                }
+                for(i = 0; i < len; i++)
+                {
+                    bch = str[i];
+                    if((bch < 32) || (bch > 127) || (bch == '\"') || (bch == '\\'))
+                    {
+                        writeEscapedChar(bch);
+                    }
+                    else
+                    {
+                        writeChar(bch);
+                    }
+                }
+                if(withquot)
+                {
+                    writeChar('"');
+                }
+                return true;
+            }
+
+            template<typename... ArgsT>
+            bool format(const char* fmt, ArgsT&&... args)
+            {
+                constexpr static auto tmpfprintf = fprintf;
+                if(this->wrmode == PRMODE_STRING)
+                {
+                    nn_strbuf_appendformat(&this->strbuf, fmt, args...);
+                }
+                else if(this->wrmode == PRMODE_FILE)
+                {
+                    tmpfprintf(this->handle, fmt, args...);
+                    flush();
+                }
+                return true;
+            }
+    };
+
 
     class Object
     {    
@@ -703,6 +987,8 @@ namespace neon
             } m_valunion;
 
         public:
+            static String* toString(Value value);
+
             static NEON_INLINE Value makeTypedValue(Type type)
             {
                 Value v;
@@ -917,6 +1203,14 @@ namespace neon
             }
 
             bool isFalse() const;
+    };
+
+    class FuncContext
+    {
+        public:
+            Value thisval;
+            Value* argv;
+            size_t argc;
     };
 
     #include "list.h"
@@ -1769,6 +2063,18 @@ namespace neon
                 return SharedState::m_myself;
             }
 
+            template<typename... ArgsT>
+            static void raiseWarning(const char* fmt, ArgsT&&... args)
+            {
+                auto gcs = SharedState::get();
+                if(gcs->m_conf.enablewarnings)
+                {
+                    fprintf(stderr, "WARNING: ");
+                    fprintf(stderr, fmt, args...);
+                    fprintf(stderr, "\n");
+                }
+            }
+
             template<typename InputT>
             static InputT* gcMakeObject(Object::Type type, bool retain)
             {
@@ -1803,6 +2109,29 @@ namespace neon
                     abort();
                 }
                 return result;
+            }
+
+            template<typename InputT>
+            static InputT* gcProtect(InputT* object)
+            {
+                size_t frpos;
+                auto gcs = SharedState::get();
+                gcs->stackPush(Value::fromObject(object));
+                frpos = 0;
+                if(gcs->m_vmstate.framecount > 0)
+                {
+                    frpos = gcs->m_vmstate.framecount - 1;
+                }
+                gcs->m_vmstate.framevalues[frpos].gcprotcount++;
+                return object;
+            }
+
+            static void markValue(Value value)
+            {
+                if(value.isObject())
+                {
+                    Object::markObject(value.asObject());
+                }
             }
 
             static void gcMarkRoots();
@@ -1988,6 +2317,7 @@ namespace neon
                     fprintf(stderr, "internal error: failed to resize stackvalues!\n");
                     abort();
                 }
+                ValArray<Value>::initItems(newbuf, oldsz, newsz);
                 m_vmstate.stackvalues = (Value*)newbuf;
                 m_vmstate.stackcapacity = newsz;
                 return true;
@@ -2019,6 +2349,7 @@ namespace neon
                     fprintf(stderr, "internal error: failed to resize framevalues!\n");
                     abort();
                 }
+                ValArray<CallFrame>::initItems(newbuf, oldsz, newsz);
                 m_vmstate.framevalues = (CallFrame*)newbuf;
                 m_vmstate.framecapacity = newsz;
                 /*
@@ -2031,6 +2362,8 @@ namespace neon
                 m_vmstate.currentframe->closure = oldclosure;
                 return true;
             }
+
+
 
             NEON_INLINE bool checkMaybeResizeStack()
             {
@@ -2059,6 +2392,47 @@ namespace neon
                     return true;
                 }
                 return false;
+            }
+
+            /* initial amount of frames (will grow dynamically if needed) */
+            #define NEON_CONFIG_INITFRAMECOUNT (16)
+
+            /* initial amount of stack values (will grow dynamically if needed) */
+            #define NEON_CONFIG_INITSTACKCOUNT (4 * 1)
+
+
+            static void initVMState()
+            {
+                size_t finalsz;
+                Value* newbufvals;
+                CallFrame* newbufframes;
+                auto gcs = SharedState::get();
+                gcs->linkedobjects = nullptr;
+                gcs->m_vmstate.currentframe = nullptr;
+                {
+                    gcs->m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
+                    finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(Value);
+                    newbufvals = (Value*)nn_memory_malloc(finalsz);
+                    if(newbufvals == nullptr)
+                    {
+                        fprintf(stderr, "error: failed to allocate stackvalues!\n");
+                        abort();
+                    }
+                    ValArray<Value>::initItems(newbufvals, 0, NEON_CONFIG_INITSTACKCOUNT);
+                    gcs->m_vmstate.stackvalues = newbufvals;
+                }
+                {
+                    gcs->m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
+                    finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(CallFrame);
+                    newbufframes = (CallFrame*)nn_memory_malloc(finalsz);
+                    if(newbufframes == nullptr)
+                    {
+                        fprintf(stderr, "error: failed to allocate framevalues!\n");
+                        abort();
+                    }
+                    ValArray<CallFrame>::initItems(newbufframes, 0, NEON_CONFIG_INITFRAMECOUNT);
+                    gcs->m_vmstate.framevalues = newbufframes;
+                }
             }
 
             NEON_INLINE void stackPush(Value value)
@@ -2400,234 +2774,72 @@ namespace neon
                 return ofn;
             }
 
-            public:
+            static void destroy(Function* ofn)
+            {
+                Blob::destroy(ofn->m_fnvals.fnscriptfunc.blob);
+                nn_memory_free(ofn->m_fnvals.fnscriptfunc.blob);
+            }
+
+        public:
 
     };
 
-    class Module : public Object
+    class DefExport
     {
         public:
-            static Module* make(const char* name, const char* file, bool imported, bool retain)
+            struct Function
             {
-                Module* module;
-                module = SharedState::gcMakeObject<Module>(Object::OTYP_MODULE, retain);
-                module->deftable.initTable();
-                module->m_modname = String::copy(name);
-                module->physicalpath = String::copy(file);
-                module->fnunloaderptr = nullptr;
-                module->fnpreloaderptr = nullptr;
-                module->handle = nullptr;
-                module->imported = imported;
-                return module;
-            }
+                const char* m_deffuncname;
+                bool isstatic;
+                NativeFN function;
+            };
 
-            static bool addSearchPathObj(String* os)
+            struct Field
             {
-                auto gcs = SharedState::get();
-                gcs->m_importpath.push(Value::fromObject(os));
-                return true;
-            }
+                const char* m_deffieldname;
+                bool isstatic;
+                NativeFN fieldvalfn;
+            };
 
-            static bool addSearchPath(const char* path)
+            struct Class
             {
-                return addSearchPathObj(String::copy(path));
-            }
-
-            static void destroy(Module* module)
-            {
-                ModLoaderFN asfn;
-                module->deftable.deInit();
-                /*
-                nn_memory_free(module->m_modname);
-                nn_memory_free(module->physicalpath);
-                */
-                if(module->fnunloaderptr != nullptr && module->imported)
-                {
-                    asfn = *(ModLoaderFN*)module->fnunloaderptr;
-                    asfn();
-                }
-                if(module->handle != nullptr)
-                {
-                    nn_import_closemodule(module->handle);
-                }
-            }
-
-            static char* resolvePath(const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
-            {
-                size_t i;
-                size_t mlen;
-                size_t splen;
-                char* path1;
-                char* path2;
-                char* retme;
-                const char* cstrpath;
-                struct stat stroot;
-                struct stat stmod;
-                String* pitem;
-                NNStringBuffer* pathbuf;
-                (void)rootfile;
-                (void)isrelative;
-                (void)stroot;
-                (void)stmod;
-                auto gcs = SharedState::get();
-                mlen = strlen(modulename);
-                splen = gcs->m_importpath.count();
-                pathbuf = nn_strbuf_makebasicempty(nullptr, 0);
-                for(i = 0; i < splen; i++)
-                {
-                    pitem = gcs->m_importpath.get(i).asString();
-                    nn_strbuf_reset(pathbuf);
-                    nn_strbuf_appendstrn(pathbuf, pitem->data(), pitem->length());
-                    if(nn_strbuf_containschar(pathbuf, '@'))
-                    {
-                        nn_strbuf_charreplace(pathbuf, '@', modulename, mlen);
-                    }
-                    else
-                    {
-                        nn_strbuf_appendstr(pathbuf, "/");
-                        nn_strbuf_appendstr(pathbuf, modulename);
-                        nn_strbuf_appendstr(pathbuf, NEON_CONFIG_FILEEXT);
-                    }
-                    cstrpath = nn_strbuf_data(pathbuf);
-                    fprintf(stderr, "import: trying '%s' ... ", cstrpath);
-                    if(nn_util_fsfileexists(cstrpath))
-                    {
-                        fprintf(stderr, "found!\n");
-            /* stop a core library from importing itself */
-            #if 1
-                        if(stat(currentfile, &stroot) == -1)
-                        {
-                            fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
-                            return nullptr;
-                        }
-                        if(stat(cstrpath, &stmod) == -1)
-                        {
-                            fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
-                            return nullptr;
-                        }
-                        if(stroot.st_ino == stmod.st_ino)
-                        {
-                            fprintf(stderr, "resolvepath: refusing to import itself\n");
-                            return nullptr;
-                        }
-            #endif
-            #if 1
-                        path1 = osfn_realpath(cstrpath, nullptr);
-                        path2 = osfn_realpath(currentfile, nullptr);
-            #else
-                        path1 = strdup(cstrpath);
-                        path2 = strdup(currentfile);
-            #endif
-                        if(path1 != nullptr && path2 != nullptr)
-                        {
-                            if(memcmp(path1, path2, (int)strlen(path2)) == 0)
-                            {
-                                nn_memory_free(path1);
-                                nn_memory_free(path2);
-                                path1 = nullptr;
-                                path2 = nullptr;
-                                fprintf(stderr, "resolvepath: refusing to import itself\n");
-                                return nullptr;
-                            }
-                            if(path2 != nullptr)
-                            {
-                                nn_memory_free(path2);
-                            }
-                            nn_strbuf_destroy(pathbuf);
-                            pathbuf = nullptr;
-                            retme = nn_util_strdup(path1);
-                            if(path1 != nullptr)
-                            {
-                                nn_memory_free(path1);
-                            }
-                            return retme;
-                        }
-                    }
-                    else
-                    {
-                        fprintf(stderr, "does not exist\n");
-                    }
-                }
-                nn_strbuf_destroy(pathbuf);
-                return nullptr;
-            }
-
-            static Module* loadScriptModule(Module* intomodule, String* modulename)
-            {
-                size_t fsz;
-                char* source;
-                char* physpath;
-                Blob blob;
-                Value retv;
-                Value callable;
-                Property* field;
-                String* os;
-                Module* module;
-                Function* closure;
-                Function* function;
-                (void)os;
-                (void)intomodule;
-                auto gcs = SharedState::get();
-                field = gcs->m_openedmodules.getfieldbyostr(modulename);
-                if(field != nullptr)
-                {
-                    Blob::destroy(&blob);
-                    return field->value.asModule();
-                }
-                physpath = resolvePath(modulename->data(), intomodule->physicalpath->data(), nullptr, false);
-                if(physpath == nullptr)
-                {
-                    Blob::destroy(&blob);
-                    nn_except_throwclass(gcs->m_exceptions.importerror, "module not found: '%s'", modulename->data());
-                    return nullptr;
-                }
-                fprintf(stderr, "loading module from '%s'\n", physpath);
-                source = nn_util_filereadfile(physpath, &fsz, false, 0);
-                if(source == nullptr)
-                {
-                    nn_except_throwclass(gcs->m_exceptions.importerror, "could not read import file %s", physpath);
-                    Blob::destroy(&blob);
-                    return nullptr;
-                }
-                module = Module::make(modulename->data(), physpath, true, true);
-                nn_memory_free(physpath);
-                function = nn_astutil_compilesource(module, source, &blob, true, false);
-                nn_memory_free(source);
-                closure = Function::makeFuncClosure(function, Value::makeNull());
-                callable = Value::fromObject(closure);
-                nn_nestcall_prepare(callable, Value::makeNull(), nullptr, 0);
-                if(!nn_nestcall_callfunction(callable, Value::makeNull(), nullptr, 0, &retv, false))
-                {
-                    Blob::destroy(&blob);
-                    nn_except_throwclass(gcs->m_exceptions.importerror, "failed to call compiled import closure");
-                    return nullptr;
-                }
-                Blob::destroy(&blob);
-                return module;
-            }
+                const char* m_defclassname;
+                Field* defpubfields;
+                Function* defpubfunctions;
+            };
 
         public:
-            /* was this module imported? */
-            bool imported;
-            /* named exports */
-            HashTable<Value, Value> deftable;
-            /* the name of this module */
-            String* m_modname;
-            /* physsical location of this module, or nullptr if some other non-physical location */
-            String* physicalpath;
-            /* callback to call BEFORE this module is loaded */
-            void* fnpreloaderptr;
-            /* callbac to call AFTER this module is unloaded */
-            void* fnunloaderptr;
-            /* pointer that is based to preloader/unloader */
-            void* handle;
+            /*
+             * the name of this module.
+             * note: if the name must be preserved, copy it; it is only a pointer to a
+             * string that gets freed past loading.
+             */
+            const char* m_defmodname;
 
-        public:
-            void setInternFileField()
-            {
-                return;
-                this->deftable.set(Value::fromObject(String::intern("__file__")), Value::fromObject(String::copyObject(this->physicalpath)));
-            }
+            /* exported fields, if any. */
+            Field* definedfields;
+
+            /* regular functions, if any. */
+            Function* definedfunctions;
+
+            /* exported classes, if any.
+             * i.e.:
+             * {"Stuff",
+             *   (Field[]){
+             *       {"enabled", true},
+             *       ...
+             *   },
+             *   (Function[]){
+             *       {"isStuff", myclass_fn_isstuff},
+             *       ...
+             * }})*/
+            Class* definedclasses;
+
+            /* function that is called directly upon loading the module. can be nullptr. */
+            ModLoaderFN fnpreloaderfunc;
+
+            /* function that is called before unloading the module. can be nullptr. */
+            ModLoaderFN fnunloaderfunc;
     };
 
 
@@ -2699,10 +2911,6 @@ namespace neon
                 klass->m_staticmethods.deInit();
                 klass->m_instproperties.deInit();
                 klass->m_staticproperties.deInit();
-                /*
-                // We are not freeing the initializer because it's a closure and will still be freed accordingly later.
-                */
-                memset(klass, 0, sizeof(Class));
                 SharedState::gcRelease(klass);
             }
 
@@ -2908,7 +3116,7 @@ namespace neon
             {
                 if(instance->m_instactive == false)
                 {
-                    // nn_state_warn("trying to mark inactive instance <%p>!", instance);
+                    // raiseWarning("trying to mark inactive instance <%p>!", instance);
                     return;
                 }
                 nn_valtable_mark(&instance->m_instanceprops);
@@ -2985,6 +3193,684 @@ namespace neon
                 return this->getMethod(os);
             }
     };
+
+    class File : public Object
+    {
+        public:
+            static char* readFromHandle(FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
+            {
+                long rawtold;
+                /*
+                 * the value returned by ftell() may not necessarily be the same as
+                 * the amount that can be read.
+                 * since we only ever read a maximum of $toldlen, there will
+                 * be no memory trashing.
+                 */
+                size_t toldlen;
+                size_t actuallen;
+                char* buf;
+                if(fseek(hnd, 0, SEEK_END) == -1)
+                {
+                    return nullptr;
+                }
+                if((rawtold = ftell(hnd)) == -1)
+                {
+                    return nullptr;
+                }
+                toldlen = rawtold;
+                if(fseek(hnd, 0, SEEK_SET) == -1)
+                {
+                    return nullptr;
+                }
+                if(havemaxsz)
+                {
+                    if(toldlen > maxsize)
+                    {
+                        toldlen = maxsize;
+                    }
+                }
+                buf = (char*)nn_memory_malloc(sizeof(char) * (toldlen + 1));
+                memset(buf, 0, toldlen + 1);
+                if(buf != nullptr)
+                {
+                    actuallen = fread(buf, sizeof(char), toldlen, hnd);
+                    /*
+                    // optionally, read remainder:
+                    size_t tmplen;
+                    if(actuallen < toldlen)
+                    {
+                        tmplen = actuallen;
+                        actuallen += fread(buf+tmplen, sizeof(char), actuallen-toldlen, hnd);
+                        ...
+                    }
+                    // unlikely to be necessary, so not implemented.
+                    */
+                    if(dlen != nullptr)
+                    {
+                        *dlen = actuallen;
+                    }
+                    return buf;
+                }
+                return nullptr;
+            }
+
+            static char* readFile(const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
+            {
+                char* b;
+                FILE* fh;
+                fh = fopen(filename, "rb");
+                if(fh == nullptr)
+                {
+                    return nullptr;
+                }
+            #if defined(NEON_PLAT_ISWINDOWS)
+                _setmode(fileno(fh), _O_BINARY);
+            #endif
+                b = readFromHandle(fh, dlen, havemaxsz, maxsize);
+                fclose(fh);
+                return b;
+            }
+
+            static char* fileHandleGets(char* s, int size, FILE* f, size_t* lendest)
+            {
+                int c;
+                char* p;
+                p = s;
+                (*lendest) = 0;
+                if(size > 0)
+                {
+                    while(--size > 0)
+                    {
+                        if((c = getc(f)) == -1)
+                        {
+                            if(ferror(f) == EINTR)
+                            {
+                                continue;
+                            }
+                            break;
+                        }
+                        *p++ = c & 0xff;
+                        (*lendest) += 1;
+                        if(c == '\n')
+                        {
+                            break;
+                        }
+                    }
+                    *p = '\0';
+                }
+                if(p > s)
+                {
+                    return s;
+                }
+                return nullptr;
+            }
+
+            static int readLineFromHandle(char** lineptr, size_t* destlen, FILE* hnd)
+            {
+                enum
+                {
+                    kInitialStrBufSize = 256
+                };
+                static char stackbuf[kInitialStrBufSize];
+                char* heapbuf;
+                size_t getlen;
+                unsigned int linelen;
+                getlen = 0;
+                if(lineptr == nullptr || destlen == nullptr)
+                {
+                    errno = EINVAL;
+                    return -1;
+                }
+                if(ferror(hnd))
+                {
+                    return -1;
+                }
+                if(feof(hnd))
+                {
+                    return -1;
+                }
+                fileHandleGets(stackbuf, kInitialStrBufSize, hnd, &getlen);
+                heapbuf = strchr(stackbuf, '\n');
+                if(heapbuf)
+                {
+                    *heapbuf = '\0';
+                }
+                linelen = getlen;
+                if((linelen + 1) < kInitialStrBufSize)
+                {
+                    heapbuf = (char*)nn_memory_realloc(*lineptr, kInitialStrBufSize);
+                    if(heapbuf == nullptr)
+                    {
+                        return -1;
+                    }
+                    *lineptr = heapbuf;
+                    *destlen = kInitialStrBufSize;
+                }
+                strcpy(*lineptr, stackbuf);
+                *destlen = linelen;
+                return linelen;
+            }
+
+        public:
+            static File* make(FILE* handle, bool isstd, const char* path, const char* mode)
+            {
+                File* file;
+                file = SharedState::gcMakeObject<File>(Object::OTYP_FILE, false);
+                file->isopen = false;
+                file->mode = String::copy(mode);
+                file->path = String::copy(path);
+                file->isstd = isstd;
+                file->handle = handle;
+                file->istty = false;
+                file->number = -1;
+                if(file->handle != nullptr)
+                {
+                    file->isopen = true;
+                }
+                return file;
+            }
+
+            static void destroy(File* file)
+            {
+                file->closeFile();
+                SharedState::gcRelease(file);
+            }
+
+            static void mark(File* file)
+            {
+                Object::markObject((Object*)file->mode);
+                Object::markObject((Object*)file->path);
+            }
+
+        public:
+            bool isopen;
+            bool isstd;
+            bool istty;
+            int number;
+            FILE* handle;
+            String* mode;
+            String* path;
+
+        public:
+            bool readData(size_t readhowmuch, IOResult* dest)
+            {
+                size_t filesizereal;
+                struct stat stats;
+                filesizereal = -1;
+                dest->success = false;
+                dest->length = 0;
+                dest->data = nullptr;
+                if(!this->isstd)
+                {
+                    if(!nn_util_fsfileexists(this->path->data()))
+                    {
+                        return false;
+                    }
+                    /* file is in write only mode */
+                    /*
+                    else if(strstr(this->mode->data(), "w") != nullptr && strstr(this->mode->data(), "+") == nullptr)
+                    {
+                        NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
+                    }
+                    */
+                    if(!this->isopen)
+                    {
+                        /* open the file if it isn't open */
+                        this->openWithoutParams();
+                    }
+                    else if(this->handle == nullptr)
+                    {
+                        return false;
+                    }
+                    if(osfn_lstat(this->path->data(), &stats) == 0)
+                    {
+                        filesizereal = (size_t)stats.st_size;
+                    }
+                    else
+                    {
+                        /* fallback */
+                        fseek(this->handle, 0L, SEEK_END);
+                        filesizereal = ftell(this->handle);
+                        rewind(this->handle);
+                    }
+                    if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
+                    {
+                        readhowmuch = filesizereal;
+                    }
+                }
+                else
+                {
+                    /*
+                    // for non-file objects such as stdin
+                    // minimum read bytes should be 1
+                    */
+                    if(readhowmuch == (size_t)-1)
+                    {
+                        readhowmuch = 1;
+                    }
+                }
+                /* +1 for terminator '\0' */
+                dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
+                if(dest->data == nullptr && readhowmuch != 0)
+                {
+                    return false;
+                }
+                dest->length = fread(dest->data, sizeof(char), readhowmuch, this->handle);
+                if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
+                {
+                    return false;
+                }
+                /* we made use of +1 so we can terminate the string. */
+                if(dest->data != nullptr)
+                {
+                    dest->data[dest->length] = '\0';
+                }
+                return true;
+            }
+
+            int closeFile()
+            {
+                int result;
+                if(this->handle != nullptr && !this->isstd)
+                {
+                    fflush(this->handle);
+                    result = fclose(this->handle);
+                    this->handle = nullptr;
+                    this->isopen = false;
+                    this->number = -1;
+                    this->istty = false;
+                    return result;
+                }
+                return -1;
+            }
+
+            bool openWithoutParams()
+            {
+                if(this->handle != nullptr)
+                {
+                    return true;
+                }
+                if(this->handle == nullptr && !this->isstd)
+                {
+                    this->handle = fopen(this->path->data(), this->mode->data());
+                    if(this->handle != nullptr)
+                    {
+                        this->isopen = true;
+                        this->number = fileno(this->handle);
+                        this->istty = osfn_isatty(this->number);
+                        return true;
+                    }
+                    else
+                    {
+                        this->number = -1;
+                        this->istty = false;
+                    }
+                    return false;
+                }
+                return false;
+            }
+
+    };
+
+    class Module : public Object
+    {
+        public:
+            static Module* make(const char* name, const char* file, bool imported, bool retain)
+            {
+                Module* module;
+                module = SharedState::gcMakeObject<Module>(Object::OTYP_MODULE, retain);
+                module->deftable.initTable();
+                module->m_modname = String::copy(name);
+                module->physicalpath = String::copy(file);
+                module->fnunloaderptr = nullptr;
+                module->fnpreloaderptr = nullptr;
+                module->handle = nullptr;
+                module->imported = imported;
+                return module;
+            }
+
+            static bool addSearchPathObj(String* os)
+            {
+                auto gcs = SharedState::get();
+                gcs->m_importpath.push(Value::fromObject(os));
+                return true;
+            }
+
+            static bool addSearchPath(const char* path)
+            {
+                return addSearchPathObj(String::copy(path));
+            }
+
+            static void destroy(Module* module)
+            {
+                ModLoaderFN asfn;
+                module->deftable.deInit();
+                /*
+                nn_memory_free(module->m_modname);
+                nn_memory_free(module->physicalpath);
+                */
+                if(module->fnunloaderptr != nullptr && module->imported)
+                {
+                    asfn = *(ModLoaderFN*)module->fnunloaderptr;
+                    asfn();
+                }
+                if(module->handle != nullptr)
+                {
+                    nn_import_closemodule(module->handle);
+                }
+            }
+
+            static char* resolvePath(const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+            {
+                size_t i;
+                size_t mlen;
+                size_t splen;
+                char* path1;
+                char* path2;
+                char* retme;
+                const char* cstrpath;
+                struct stat stroot;
+                struct stat stmod;
+                String* pitem;
+                NNStringBuffer* pathbuf;
+                (void)rootfile;
+                (void)isrelative;
+                (void)stroot;
+                (void)stmod;
+                auto gcs = SharedState::get();
+                mlen = strlen(modulename);
+                splen = gcs->m_importpath.count();
+                pathbuf = nn_strbuf_makebasicempty(nullptr, 0);
+                for(i = 0; i < splen; i++)
+                {
+                    pitem = gcs->m_importpath.get(i).asString();
+                    nn_strbuf_reset(pathbuf);
+                    nn_strbuf_appendstrn(pathbuf, pitem->data(), pitem->length());
+                    if(nn_strbuf_containschar(pathbuf, '@'))
+                    {
+                        nn_strbuf_charreplace(pathbuf, '@', modulename, mlen);
+                    }
+                    else
+                    {
+                        nn_strbuf_appendstr(pathbuf, "/");
+                        nn_strbuf_appendstr(pathbuf, modulename);
+                        nn_strbuf_appendstr(pathbuf, NEON_CONFIG_FILEEXT);
+                    }
+                    cstrpath = nn_strbuf_data(pathbuf);
+                    fprintf(stderr, "import: trying '%s' ... ", cstrpath);
+                    if(nn_util_fsfileexists(cstrpath))
+                    {
+                        fprintf(stderr, "found!\n");
+            /* stop a core library from importing itself */
+            #if 1
+                        if(stat(currentfile, &stroot) == -1)
+                        {
+                            fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
+                            return nullptr;
+                        }
+                        if(stat(cstrpath, &stmod) == -1)
+                        {
+                            fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
+                            return nullptr;
+                        }
+                        if(stroot.st_ino == stmod.st_ino)
+                        {
+                            fprintf(stderr, "resolvepath: refusing to import itself\n");
+                            return nullptr;
+                        }
+            #endif
+            #if 1
+                        path1 = osfn_realpath(cstrpath, nullptr);
+                        path2 = osfn_realpath(currentfile, nullptr);
+            #else
+                        path1 = strdup(cstrpath);
+                        path2 = strdup(currentfile);
+            #endif
+                        if(path1 != nullptr && path2 != nullptr)
+                        {
+                            if(memcmp(path1, path2, (int)strlen(path2)) == 0)
+                            {
+                                nn_memory_free(path1);
+                                nn_memory_free(path2);
+                                path1 = nullptr;
+                                path2 = nullptr;
+                                fprintf(stderr, "resolvepath: refusing to import itself\n");
+                                return nullptr;
+                            }
+                            if(path2 != nullptr)
+                            {
+                                nn_memory_free(path2);
+                            }
+                            nn_strbuf_destroy(pathbuf);
+                            pathbuf = nullptr;
+                            retme = nn_util_strdup(path1);
+                            if(path1 != nullptr)
+                            {
+                                nn_memory_free(path1);
+                            }
+                            return retme;
+                        }
+                    }
+                    else
+                    {
+                        fprintf(stderr, "does not exist\n");
+                    }
+                }
+                nn_strbuf_destroy(pathbuf);
+                return nullptr;
+            }
+
+            static Module* loadScriptModule(Module* intomodule, String* modulename)
+            {
+                size_t fsz;
+                char* source;
+                char* physpath;
+                Blob blob;
+                Value retv;
+                Value callable;
+                Property* field;
+                String* os;
+                Module* module;
+                Function* closure;
+                Function* function;
+                (void)os;
+                (void)intomodule;
+                auto gcs = SharedState::get();
+                field = gcs->m_openedmodules.getfieldbyostr(modulename);
+                if(field != nullptr)
+                {
+                    Blob::destroy(&blob);
+                    return field->value.asModule();
+                }
+                physpath = resolvePath(modulename->data(), intomodule->physicalpath->data(), nullptr, false);
+                if(physpath == nullptr)
+                {
+                    Blob::destroy(&blob);
+                    nn_except_throwclass(gcs->m_exceptions.importerror, "module not found: '%s'", modulename->data());
+                    return nullptr;
+                }
+                fprintf(stderr, "loading module from '%s'\n", physpath);
+                source = neon::File::readFile(physpath, &fsz, false, 0);
+                if(source == nullptr)
+                {
+                    nn_except_throwclass(gcs->m_exceptions.importerror, "could not read import file %s", physpath);
+                    Blob::destroy(&blob);
+                    return nullptr;
+                }
+                module = Module::make(modulename->data(), physpath, true, true);
+                nn_memory_free(physpath);
+                function = nn_astutil_compilesource(module, source, &blob, true, false);
+                nn_memory_free(source);
+                closure = Function::makeFuncClosure(function, Value::makeNull());
+                callable = Value::fromObject(closure);
+                nn_nestcall_prepare(callable, Value::makeNull(), nullptr, 0);
+                if(!nn_nestcall_callfunction(callable, Value::makeNull(), nullptr, 0, &retv, false))
+                {
+                    Blob::destroy(&blob);
+                    nn_except_throwclass(gcs->m_exceptions.importerror, "failed to call compiled import closure");
+                    return nullptr;
+                }
+                Blob::destroy(&blob);
+                return module;
+            }
+
+            static void addNativeModule(Module* module, const char* as)
+            {
+                Value name;
+                auto gcs = SharedState::get();
+                if(as != nullptr)
+                {
+                    module->m_modname = String::copy(as);
+                }
+                name = Value::fromObject(String::copyObject(module->m_modname));
+                gcs->stackPush(name);
+                gcs->stackPush(Value::fromObject(module));
+                gcs->m_openedmodules.set(name, Value::fromObject(module));
+                gcs->stackPop(2);
+            }
+
+
+            static bool loadBuiltinModule(ModInitFN init_fn, char* importname, const char* source, void* dlw)
+            {
+                size_t j;
+                size_t k;
+                size_t slen;
+                Value v;
+                Value fieldname;
+                Value funcname;
+                Value funcrealvalue;
+                DefExport::Function func;
+                DefExport::Field field;
+                DefExport* defmod;
+                Module* targetmod;
+                DefExport::Class klassreg;
+                String* classname;
+                Function* native;
+                Class* klass;
+                auto gcs = SharedState::get();
+                defmod = init_fn();
+                if(defmod != nullptr)
+                {
+                    targetmod = SharedState::gcProtect(Module::make((char*)defmod->m_defmodname, source, false, true));
+                    targetmod->fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
+                    targetmod->fnunloaderptr = (void*)defmod->fnunloaderfunc;
+                    if(defmod->definedfields != nullptr)
+                    {
+                        for(j = 0; defmod->definedfields[j].m_deffieldname != nullptr; j++)
+                        {
+                            field = defmod->definedfields[j];
+                            fieldname = Value::fromObject(SharedState::gcProtect(String::copy(field.m_deffieldname)));
+                            v = field.fieldvalfn(FuncContext{Value::makeNull(), nullptr, 0});
+                            gcs->stackPush(v);
+                            targetmod->deftable.set(fieldname, v);
+                            gcs->stackPop();
+                        }
+                    }
+                    if(defmod->definedfunctions != nullptr)
+                    {
+                        for(j = 0; defmod->definedfunctions[j].m_deffuncname != nullptr; j++)
+                        {
+                            func = defmod->definedfunctions[j];
+                            funcname = Value::fromObject(SharedState::gcProtect(String::copy(func.m_deffuncname)));
+                            funcrealvalue = Value::fromObject(SharedState::gcProtect(Function::makeFuncNative(func.function, func.m_deffuncname, nullptr)));
+                            gcs->stackPush(funcrealvalue);
+                            targetmod->deftable.set(funcname, funcrealvalue);
+                            gcs->stackPop();
+                        }
+                    }
+                    if(defmod->definedclasses != nullptr)
+                    {
+                        for(j = 0; ((defmod->definedclasses[j].m_defclassname != nullptr) && (defmod->definedclasses[j].defpubfunctions != nullptr)); j++)
+                        {
+                            klassreg = defmod->definedclasses[j];
+                            classname = (String*)SharedState::gcProtect(String::copy(klassreg.m_defclassname));
+                            klass = (Class*)SharedState::gcProtect(Class::make(classname, gcs->m_classprimobject));
+                            if(klassreg.defpubfunctions != nullptr)
+                            {
+                                for(k = 0; klassreg.defpubfunctions[k].m_deffuncname != nullptr; k++)
+                                {
+                                    func = klassreg.defpubfunctions[k];
+                                    slen = strlen(func.m_deffuncname);
+                                    funcname = Value::fromObject(SharedState::gcProtect(String::copy(func.m_deffuncname)));
+                                    native = SharedState::gcProtect(Function::makeFuncNative(func.function, func.m_deffuncname, nullptr));
+                                    if(func.isstatic)
+                                    {
+                                        native->m_contexttype = Function::CTXTYPE_STATIC;
+                                    }
+                                    else if(slen > 0 && func.m_deffuncname[0] == '_')
+                                    {
+                                        native->m_contexttype = Function::CTXTYPE_PRIVATE;
+                                    }
+                                    if(strncmp(func.m_deffuncname, "constructor", slen) == 0)
+                                    {
+                                        klass->m_constructor = Value::fromObject(native);
+                                    }
+                                    else
+                                    {
+                                        klass->m_instmethods.set(funcname, Value::fromObject(native));
+                                    }
+                                }
+                            }
+                            if(klassreg.defpubfields != nullptr)
+                            {
+                                k = 0;
+                                while(true)
+                                {
+                                    if(klassreg.defpubfields[k].m_deffieldname == nullptr)
+                                    {
+                                        break;
+                                    }
+                                    field = klassreg.defpubfields[k];
+                                    if(field.m_deffieldname != nullptr)
+                                    {
+                                        klass->defCallableField(String::copy(field.m_deffieldname), field.fieldvalfn);
+                                    }
+                                    k++;
+                                }
+                            }
+                            targetmod->deftable.set(Value::fromObject(classname), Value::fromObject(klass));
+                        }
+                    }
+                    if(dlw != nullptr)
+                    {
+                        targetmod->handle = dlw;
+                    }
+                    Module::addNativeModule(targetmod, targetmod->m_modname->data());
+                    SharedState::clearGCProtect();
+                    return true;
+                }
+                else
+                {
+                    SharedState::raiseWarning("Error loading module: %s\n", importname);
+                }
+                return false;
+            }
+
+
+        public:
+            /* was this module imported? */
+            bool imported;
+            /* named exports */
+            HashTable<Value, Value> deftable;
+            /* the name of this module */
+            String* m_modname;
+            /* physsical location of this module, or nullptr if some other non-physical location */
+            String* physicalpath;
+            /* callback to call BEFORE this module is loaded */
+            void* fnpreloaderptr;
+            /* callbac to call AFTER this module is unloaded */
+            void* fnunloaderptr;
+            /* pointer that is based to preloader/unloader */
+            void* handle;
+
+        public:
+            void setInternFileField()
+            {
+                return;
+                this->deftable.set(Value::fromObject(String::intern("__file__")), Value::fromObject(String::copyObject(this->physicalpath)));
+            }
+    };
+
 
     class Array : public Object
     {
@@ -3168,168 +4054,6 @@ namespace neon
             }
     };
 
-    class File : public Object
-    {
-        public:
-            static File* make(FILE* handle, bool isstd, const char* path, const char* mode)
-            {
-                File* file;
-                file = SharedState::gcMakeObject<File>(Object::OTYP_FILE, false);
-                file->isopen = false;
-                file->mode = String::copy(mode);
-                file->path = String::copy(path);
-                file->isstd = isstd;
-                file->handle = handle;
-                file->istty = false;
-                file->number = -1;
-                if(file->handle != nullptr)
-                {
-                    file->isopen = true;
-                }
-                return file;
-            }
-
-            static void destroy(File* file)
-            {
-                file->closeFile();
-                SharedState::gcRelease(file);
-            }
-
-            static void mark(File* file)
-            {
-                Object::markObject((Object*)file->mode);
-                Object::markObject((Object*)file->path);
-            }
-
-        public:
-            bool isopen;
-            bool isstd;
-            bool istty;
-            int number;
-            FILE* handle;
-            String* mode;
-            String* path;
-
-        public:
-            bool readData(size_t readhowmuch, IOResult* dest)
-            {
-                size_t filesizereal;
-                struct stat stats;
-                filesizereal = -1;
-                dest->success = false;
-                dest->length = 0;
-                dest->data = nullptr;
-                if(!this->isstd)
-                {
-                    if(!nn_util_fsfileexists(this->path->data()))
-                    {
-                        return false;
-                    }
-                    /* file is in write only mode */
-                    /*
-                    else if(strstr(this->mode->data(), "w") != nullptr && strstr(this->mode->data(), "+") == nullptr)
-                    {
-                        NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
-                    }
-                    */
-                    if(!this->isopen)
-                    {
-                        /* open the file if it isn't open */
-                        this->openWithoutParams();
-                    }
-                    else if(this->handle == nullptr)
-                    {
-                        return false;
-                    }
-                    if(osfn_lstat(this->path->data(), &stats) == 0)
-                    {
-                        filesizereal = (size_t)stats.st_size;
-                    }
-                    else
-                    {
-                        /* fallback */
-                        fseek(this->handle, 0L, SEEK_END);
-                        filesizereal = ftell(this->handle);
-                        rewind(this->handle);
-                    }
-                    if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
-                    {
-                        readhowmuch = filesizereal;
-                    }
-                }
-                else
-                {
-                    /*
-                    // for non-file objects such as stdin
-                    // minimum read bytes should be 1
-                    */
-                    if(readhowmuch == (size_t)-1)
-                    {
-                        readhowmuch = 1;
-                    }
-                }
-                /* +1 for terminator '\0' */
-                dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
-                if(dest->data == nullptr && readhowmuch != 0)
-                {
-                    return false;
-                }
-                dest->length = fread(dest->data, sizeof(char), readhowmuch, this->handle);
-                if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
-                {
-                    return false;
-                }
-                /* we made use of +1 so we can terminate the string. */
-                if(dest->data != nullptr)
-                {
-                    dest->data[dest->length] = '\0';
-                }
-                return true;
-            }
-
-            int closeFile()
-            {
-                int result;
-                if(this->handle != nullptr && !this->isstd)
-                {
-                    fflush(this->handle);
-                    result = fclose(this->handle);
-                    this->handle = nullptr;
-                    this->isopen = false;
-                    this->number = -1;
-                    this->istty = false;
-                    return result;
-                }
-                return -1;
-            }
-
-            bool openWithoutParams()
-            {
-                if(this->handle != nullptr)
-                {
-                    return true;
-                }
-                if(this->handle == nullptr && !this->isstd)
-                {
-                    this->handle = fopen(this->path->data(), this->mode->data());
-                    if(this->handle != nullptr)
-                    {
-                        this->isopen = true;
-                        this->number = fileno(this->handle);
-                        this->istty = osfn_isatty(this->number);
-                        return true;
-                    }
-                    else
-                    {
-                        this->number = -1;
-                        this->istty = false;
-                    }
-                    return false;
-                }
-                return false;
-            }
-
-    };
 
     class Switch : public Object
     {
@@ -3345,297 +4069,6 @@ namespace neon
             void* pointer;
             char* m_udname;
             PtrFreeFN ondestroyfn;
-    };
-
-    class IOStream
-    {
-        public:
-            enum Mode
-            {
-                PRMODE_UNDEFINED,
-                PRMODE_STRING,
-                PRMODE_FILE
-            };
-
-        public:
-            static bool makeStackIO(IOStream* pr, FILE* fh, bool shouldclose)
-            {
-                initStreamVars(pr, PRMODE_FILE);
-                pr->fromstack = true;
-                pr->handle = fh;
-                pr->shouldclose = shouldclose;
-                return true;
-            }
-
-            static bool makeStackString(IOStream* pr)
-            {
-                initStreamVars(pr, PRMODE_STRING);
-                pr->fromstack = true;
-                pr->wrmode = PRMODE_STRING;
-                nn_strbuf_makebasicemptystack(&pr->strbuf, nullptr, 0);
-                return true;
-            }
-
-            static IOStream* makeUndefStream(Mode mode)
-            {
-                IOStream* pr;
-                pr = Memory::make<IOStream>();
-                if(!pr)
-                {
-                    fprintf(stderr, "cannot allocate IOStream\n");
-                    return nullptr;
-                }
-                initStreamVars(pr, mode);
-                return pr;
-            }
-
-            static IOStream* makeIO(FILE* fh, bool shouldclose)
-            {
-                IOStream* pr;
-                pr = makeUndefStream(PRMODE_FILE);
-                pr->handle = fh;
-                pr->shouldclose = shouldclose;
-                return pr;
-            }
-
-            static void destroy(IOStream* pr)
-            {
-                if(pr == nullptr)
-                {
-                    return;
-                }
-                if(pr->wrmode == PRMODE_UNDEFINED)
-                {
-                    return;
-                }
-                /*fprintf(stderr, "IOStream::destroy: pr->wrmode=%d\n", pr->wrmode);*/
-                if(pr->wrmode == PRMODE_STRING)
-                {
-                    if(!pr->stringtaken)
-                    {
-                        nn_strbuf_destroyfromstack(&pr->strbuf);
-                    }
-                }
-                else if(pr->wrmode == PRMODE_FILE)
-                {
-                    if(pr->shouldclose)
-                    {
-            #if 0
-                        fclose(pr->handle);
-            #endif
-                    }
-                }
-                if(!pr->fromstack)
-                {
-                    nn_memory_free(pr);
-                    pr = nullptr;
-                }
-            }
-
-            static void initStreamVars(IOStream* pr, Mode mode)
-            {
-                pr->fromstack = false;
-                pr->wrmode = PRMODE_UNDEFINED;
-                pr->shouldclose = false;
-                pr->shouldflush = false;
-                pr->stringtaken = false;
-                pr->shortenvalues = false;
-                pr->jsonmode = false;
-                pr->maxvallength = 15;
-                pr->handle = nullptr;
-                pr->wrmode = mode;
-            }
-
-        public:
-            /* if file: should be closed when writer is destroyed? */
-            uint8_t shouldclose;
-            /* if file: should write operations be flushed via fflush()? */
-            uint8_t shouldflush;
-            /* if string: true if $strbuf was taken via nn_iostream_take */
-            uint8_t stringtaken;
-            /* was this writer instance created on stack? */
-            uint8_t fromstack;
-            uint8_t shortenvalues;
-            uint8_t jsonmode;
-            size_t maxvallength;
-            /* the mode that determines what writer actually does */
-            Mode wrmode;
-            NNStringBuffer strbuf;
-            FILE* handle;
-
-        public:
-
-            String* takeString()
-            {
-                size_t xlen;
-                String* os;
-                xlen = nn_strbuf_length(&this->strbuf);
-                os = String::makeFromStrbuf(this->strbuf, nn_util_hashstring(nn_strbuf_data(&this->strbuf), xlen), xlen);
-                this->stringtaken = true;
-                return os;
-            }
-
-            String* copyString()
-            {
-                String* os;
-                os = String::copy(nn_strbuf_data(&this->strbuf), nn_strbuf_length(&this->strbuf));
-                return os;
-            }
-
-            void flush()
-            {
-                // if(this->shouldflush)
-                {
-                    fflush(this->handle);
-                }
-            }
-
-            bool writeString(const char* estr, size_t elen)
-            {
-                // fprintf(stderr, "writestringl: (%d) <<<%.*s>>>\n", elen, elen, estr);
-                size_t chlen;
-                chlen = sizeof(char);
-                if(elen > 0)
-                {
-                    if(this->wrmode == PRMODE_FILE)
-                    {
-                        fwrite(estr, chlen, elen, this->handle);
-                        flush();
-                    }
-                    else if(this->wrmode == PRMODE_STRING)
-                    {
-                        nn_strbuf_appendstrn(&this->strbuf, estr, elen);
-                    }
-                    else
-                    {
-                        return false;
-                    }
-                }
-                return true;
-            }
-
-            bool writeString(const char* estr)
-            {
-                return writeString(estr, strlen(estr));
-            }
-
-            bool writeChar(int b)
-            {
-                char ch;
-                if(this->wrmode == PRMODE_STRING)
-                {
-                    ch = b;
-                    writeString(&ch, 1);
-                }
-                else if(this->wrmode == PRMODE_FILE)
-                {
-                    fputc(b, this->handle);
-                    flush();
-                }
-                return true;
-            }
-
-            bool writeEscapedChar(int ch)
-            {
-                switch(ch)
-                {
-                    case '\'':
-                    {
-                        writeString("\\\'");
-                    }
-                    break;
-                    case '\"':
-                    {
-                        writeString("\\\"");
-                    }
-                    break;
-                    case '\\':
-                    {
-                        writeString("\\\\");
-                    }
-                    break;
-                    case '\b':
-                    {
-                        writeString("\\b");
-                    }
-                    break;
-                    case '\f':
-                    {
-                        writeString("\\f");
-                    }
-                    break;
-                    case '\n':
-                    {
-                        writeString("\\n");
-                    }
-                    break;
-                    case '\r':
-                    {
-                        writeString("\\r");
-                    }
-                    break;
-                    case '\t':
-                    {
-                        writeString("\\t");
-                    }
-                    break;
-                    case 0:
-                    {
-                        writeString("\\0");
-                    }
-                    break;
-                    default:
-                    {
-                        format("\\x%02x", (unsigned char)ch);
-                    }
-                    break;
-                }
-                return true;
-            }
-
-            bool writeQuotedString(const char* str, size_t len, bool withquot)
-            {
-                int bch;
-                size_t i;
-                bch = 0;
-                if(withquot)
-                {
-                    writeChar('"');
-                }
-                for(i = 0; i < len; i++)
-                {
-                    bch = str[i];
-                    if((bch < 32) || (bch > 127) || (bch == '\"') || (bch == '\\'))
-                    {
-                        writeEscapedChar(bch);
-                    }
-                    else
-                    {
-                        writeChar(bch);
-                    }
-                }
-                if(withquot)
-                {
-                    writeChar('"');
-                }
-                return true;
-            }
-
-            template<typename... ArgsT>
-            bool format(const char* fmt, ArgsT&&... args)
-            {
-                constexpr static auto tmpfprintf = fprintf;
-                if(this->wrmode == PRMODE_STRING)
-                {
-                    nn_strbuf_appendformat(&this->strbuf, fmt, args...);
-                }
-                else if(this->wrmode == PRMODE_FILE)
-                {
-                    tmpfprintf(this->handle, fmt, args...);
-                    flush();
-                }
-                return true;
-            }
     };
 
     class ValPrinter
@@ -8790,72 +9223,7 @@ namespace neon
 
     };
 
-    class DefExport
-    {
-        public:
-            struct Function
-            {
-                const char* m_deffuncname;
-                bool isstatic;
-                NativeFN function;
-            };
 
-            struct Field
-            {
-                const char* m_deffieldname;
-                bool isstatic;
-                NativeFN fieldvalfn;
-            };
-
-            struct Class
-            {
-                const char* m_defclassname;
-                Field* defpubfields;
-                Function* defpubfunctions;
-            };
-
-        public:
-            /*
-             * the name of this module.
-             * note: if the name must be preserved, copy it; it is only a pointer to a
-             * string that gets freed past loading.
-             */
-            const char* m_defmodname;
-
-            /* exported fields, if any. */
-            Field* definedfields;
-
-            /* regular functions, if any. */
-            Function* definedfunctions;
-
-            /* exported classes, if any.
-             * i.e.:
-             * {"Stuff",
-             *   (Field[]){
-             *       {"enabled", true},
-             *       ...
-             *   },
-             *   (Function[]){
-             *       {"isStuff", myclass_fn_isstuff},
-             *       ...
-             * }})*/
-            Class* definedclasses;
-
-            /* function that is called directly upon loading the module. can be nullptr. */
-            ModLoaderFN fnpreloaderfunc;
-
-            /* function that is called before unloading the module. can be nullptr. */
-            ModLoaderFN fnunloaderfunc;
-    };
-
-
-    class FuncContext
-    {
-        public:
-            Value thisval;
-            Value* argv;
-            size_t argc;
-    };
 
 
     class ArgCheck
@@ -8898,6 +9266,25 @@ namespace neon
         return os->length();
     }
 
+    String* Wrappers::wrapMakeFromStrBuf(NNStringBuffer buf, uint32_t hsv, size_t length)
+    {
+        return String::makeFromStrbuf(buf, hsv, length);
+    }
+
+    String* wrapStringCopy(const char* data, size_t len)
+    {
+        return String::copy(data, len);
+    }
+
+    String* Value::toString(Value value)
+    {
+        IOStream pr;
+        String* s;
+        IOStream::makeStackString(&pr);
+        ValPrinter::printValue(&pr, value, false, true);
+        s = pr.takeString();
+        return s;
+    }
 
     void Value::markDict(Dict* dict)
     {
@@ -8911,7 +9298,7 @@ namespace neon
         NN_NULLPTRCHECK_RETURN(list);
         for(i = 0; i < list->count(); i++)
         {
-            nn_gcmem_markvalue(list->get(i));
+            SharedState::markValue(list->get(i));
         }
     }
 
@@ -9036,7 +9423,7 @@ namespace neon
             {
                 Function* bound;
                 bound = (Function*)object;
-                nn_gcmem_markvalue(bound->m_fnvals.fnmethod.receiver);
+                SharedState::markValue(bound->m_fnvals.fnmethod.receiver);
                 Object::markObject((Object*)bound->m_fnvals.fnmethod.method);
             }
             break;
@@ -9048,8 +9435,8 @@ namespace neon
                 nn_valtable_mark(&klass->m_instmethods);
                 nn_valtable_mark(&klass->m_staticmethods);
                 nn_valtable_mark(&klass->m_staticproperties);
-                nn_gcmem_markvalue(klass->m_constructor);
-                nn_gcmem_markvalue(klass->m_destructor);
+                SharedState::markValue(klass->m_constructor);
+                SharedState::markValue(klass->m_destructor);
                 if(klass->m_superclass != nullptr)
                 {
                     Object::markObject((Object*)klass->m_superclass);
@@ -9087,7 +9474,7 @@ namespace neon
             case Object::OTYP_UPVALUE:
             {
                 auto upv = (Upvalue*)object;
-                nn_gcmem_markvalue(upv->closed);
+                SharedState::markValue(upv->closed);
             }
             break;
             case Object::OTYP_RANGE:
@@ -9170,7 +9557,7 @@ namespace neon
             {
                 Function* function;
                 function = (Function*)object;
-                nn_funcscript_destroy(function);
+                Function::destroy(function);
                 SharedState::gcRelease(function);
             }
             break;
@@ -9242,7 +9629,7 @@ namespace neon
         auto gcs = SharedState::get();
         for(slot = gcs->m_vmstate.stackvalues; slot < &gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx]; slot++)
         {
-            nn_gcmem_markvalue(*slot);
+            SharedState::markValue(*slot);
         }
         for(i = 0; i < (int)gcs->m_vmstate.framecount; i++)
         {
@@ -9460,28 +9847,6 @@ namespace neon
 
 
 
-    Object* nn_gcmem_protect(Object* object)
-    {
-        size_t frpos;
-        auto gcs = SharedState::get();
-        gcs->stackPush(Value::fromObject(object));
-        frpos = 0;
-        if(gcs->m_vmstate.framecount > 0)
-        {
-            frpos = gcs->m_vmstate.framecount - 1;
-        }
-        gcs->m_vmstate.framevalues[frpos].gcprotcount++;
-        return object;
-    }
-
-
-    void nn_gcmem_markvalue(Value value)
-    {
-        if(value.isObject())
-        {
-            Object::markObject(value.asObject());
-        }
-    }
 
 
 
@@ -10023,159 +10388,6 @@ namespace neon
         return randnum;
     }
 
-    char* nn_util_filereadhandle(FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
-    {
-        long rawtold;
-        /*
-         * the value returned by ftell() may not necessarily be the same as
-         * the amount that can be read.
-         * since we only ever read a maximum of $toldlen, there will
-         * be no memory trashing.
-         */
-        size_t toldlen;
-        size_t actuallen;
-        char* buf;
-        if(fseek(hnd, 0, SEEK_END) == -1)
-        {
-            return nullptr;
-        }
-        if((rawtold = ftell(hnd)) == -1)
-        {
-            return nullptr;
-        }
-        toldlen = rawtold;
-        if(fseek(hnd, 0, SEEK_SET) == -1)
-        {
-            return nullptr;
-        }
-        if(havemaxsz)
-        {
-            if(toldlen > maxsize)
-            {
-                toldlen = maxsize;
-            }
-        }
-        buf = (char*)nn_memory_malloc(sizeof(char) * (toldlen + 1));
-        memset(buf, 0, toldlen + 1);
-        if(buf != nullptr)
-        {
-            actuallen = fread(buf, sizeof(char), toldlen, hnd);
-            /*
-            // optionally, read remainder:
-            size_t tmplen;
-            if(actuallen < toldlen)
-            {
-                tmplen = actuallen;
-                actuallen += fread(buf+tmplen, sizeof(char), actuallen-toldlen, hnd);
-                ...
-            }
-            // unlikely to be necessary, so not implemented.
-            */
-            if(dlen != nullptr)
-            {
-                *dlen = actuallen;
-            }
-            return buf;
-        }
-        return nullptr;
-    }
-
-    char* nn_util_filereadfile(const char* filename, size_t* dlen, bool havemaxsz, size_t maxsize)
-    {
-        char* b;
-        FILE* fh;
-        fh = fopen(filename, "rb");
-        if(fh == nullptr)
-        {
-            return nullptr;
-        }
-    #if defined(NEON_PLAT_ISWINDOWS)
-        _setmode(fileno(fh), _O_BINARY);
-    #endif
-        b = nn_util_filereadhandle(fh, dlen, havemaxsz, maxsize);
-        fclose(fh);
-        return b;
-    }
-
-    char* nn_util_filegetshandle(char* s, int size, FILE* f, size_t* lendest)
-    {
-        int c;
-        char* p;
-        p = s;
-        (*lendest) = 0;
-        if(size > 0)
-        {
-            while(--size > 0)
-            {
-                if((c = getc(f)) == -1)
-                {
-                    if(ferror(f) == EINTR)
-                    {
-                        continue;
-                    }
-                    break;
-                }
-                *p++ = c & 0xff;
-                (*lendest) += 1;
-                if(c == '\n')
-                {
-                    break;
-                }
-            }
-            *p = '\0';
-        }
-        if(p > s)
-        {
-            return s;
-        }
-        return nullptr;
-    }
-
-    int nn_util_filegetlinehandle(char** lineptr, size_t* destlen, FILE* hnd)
-    {
-        enum
-        {
-            kInitialStrBufSize = 256
-        };
-        static char stackbuf[kInitialStrBufSize];
-        char* heapbuf;
-        size_t getlen;
-        unsigned int linelen;
-        getlen = 0;
-        if(lineptr == nullptr || destlen == nullptr)
-        {
-            errno = EINVAL;
-            return -1;
-        }
-        if(ferror(hnd))
-        {
-            return -1;
-        }
-        if(feof(hnd))
-        {
-            return -1;
-        }
-        nn_util_filegetshandle(stackbuf, kInitialStrBufSize, hnd, &getlen);
-        heapbuf = strchr(stackbuf, '\n');
-        if(heapbuf)
-        {
-            *heapbuf = '\0';
-        }
-        linelen = getlen;
-        if((linelen + 1) < kInitialStrBufSize)
-        {
-            heapbuf = (char*)nn_memory_realloc(*lineptr, kInitialStrBufSize);
-            if(heapbuf == nullptr)
-            {
-                return -1;
-            }
-            *lineptr = heapbuf;
-            *destlen = kInitialStrBufSize;
-        }
-        strcpy(*lineptr, stackbuf);
-        *destlen = linelen;
-        return linelen;
-    }
 
     char* nn_util_strtoupper(char* str, size_t length)
     {
@@ -10377,7 +10589,7 @@ namespace neon
         }
         if(!table->htactive)
         {
-            // nn_state_warn("trying to mark inactive hashtable <%p>!", table);
+            // SharedState::raiseWarning("trying to mark inactive hashtable <%p>!", table);
             return;
         }
         for(i = 0; i < table->htcapacity; i++)
@@ -10387,8 +10599,8 @@ namespace neon
             {
                 if(!entry->key.isNull())
                 {
-                    nn_gcmem_markvalue(entry->key);
-                    nn_gcmem_markvalue(entry->value.value);
+                    SharedState::markValue(entry->key);
+                    SharedState::markValue(entry->value.value);
                 }
             }
         }
@@ -10882,25 +11094,6 @@ namespace neon
         return offset + 1;
     }
 
-    Value nn_value_copystrlen(const char* str, size_t len)
-    {
-        return Value::fromObject(String::copy(str, len));
-    }
-
-    Value nn_value_copystr(const char* str)
-    {
-        return nn_value_copystrlen(str, strlen(str));
-    }
-
-    String* nn_value_tostring(Value value)
-    {
-        IOStream pr;
-        String* s;
-        IOStream::makeStackString(&pr);
-        ValPrinter::printValue(&pr, value, false, true);
-        s = pr.takeString();
-        return s;
-    }
 
     const char* nn_value_objecttypename(Object* object, bool detailed)
     {
@@ -11435,22 +11628,6 @@ namespace neon
     }
 
     /**
-     * see @nn_state_warn
-     */
-    template<typename... ArgsT>
-    void nn_state_warn(const char* fmt, ArgsT&&... args)
-    {
-        auto gcs = SharedState::get();
-        if(gcs->m_conf.enablewarnings)
-        {
-            fprintf(stderr, "WARNING: ");
-            fprintf(stderr, fmt, args...);
-            fprintf(stderr, "\n");
-        }
-    }
-
-
-    /**
      * procuce a stacktrace array; it is an object array, because it used both internally and in scripts.
      * cannot take any shortcuts here.
      */
@@ -11582,7 +11759,7 @@ namespace neon
         field = exception->m_instanceprops.getfieldbycstr("message");
         if(field != nullptr)
         {
-            emsg = nn_value_tostring(field->value);
+            emsg = Value::toString(field->value);
             if(emsg->length() > 0)
             {
                 gcs->m_debugwriter->format( ": %s", emsg->data());
@@ -11861,7 +12038,7 @@ namespace neon
             }
             else
             {
-                joinee = nn_value_tostring(vjoinee);
+                joinee = Value::toString(vjoinee);
                 havejoinee = true;
             }
         }
@@ -11987,6 +12164,7 @@ namespace neon
 
     static Value nn_objfnarray_insert(const FuncContext& scfn)
     {
+        (void)scfn;
         //! FIXME
         /*
         int index;
@@ -12019,6 +12197,7 @@ namespace neon
 
     static Value nn_objfnarray_shift(const FuncContext& scfn)
     {
+        (void)scfn;
         ///FIXME
         /*
         size_t i;
@@ -12129,7 +12308,7 @@ namespace neon
         nn_argcheck_init(&check, "reverse", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         list = scfn.thisval.asArray();
-        nlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        nlist = SharedState::gcProtect(Array::make());
         /* in-place reversal:*/
         /*
         int start = 0;
@@ -12181,6 +12360,7 @@ namespace neon
 
     static Value nn_objfnarray_delete(const FuncContext& scfn)
     {
+        (void)scfn;
         //! FIXME
         /*
         size_t i;
@@ -12300,7 +12480,7 @@ namespace neon
         nn_argcheck_init(&check, "compact", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         list = scfn.thisval.asArray();
-        newlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        newlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
         {
             if(!nn_value_compare(list->get(i), Value::makeNull()))
@@ -12322,7 +12502,7 @@ namespace neon
         nn_argcheck_init(&check, "unique", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         list = scfn.thisval.asArray();
-        newlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        newlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
         {
             found = false;
@@ -12353,7 +12533,7 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "zip", scfn);
         list = scfn.thisval.asArray();
-        newlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        newlist = SharedState::gcProtect(Array::make());
         arglist = (Array**)SharedState::gcAllocate(sizeof(Array*), scfn.argc, false);
         for(i = 0; i < scfn.argc; i++)
         {
@@ -12362,7 +12542,7 @@ namespace neon
         }
         for(i = 0; i < list->count(); i++)
         {
-            alist = (Array*)nn_gcmem_protect((Object*)Array::make());
+            alist = SharedState::gcProtect(Array::make());
             /* item of main list*/
             alist->push(list->get(i));
             for(j = 0; j < scfn.argc; j++)
@@ -12394,7 +12574,7 @@ namespace neon
         NEON_ARGS_CHECKCOUNT(&check, 1);
         NEON_ARGS_CHECKTYPE(&check, 0, nn_value_isarray);
         list = scfn.thisval.asArray();
-        newlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        newlist = SharedState::gcProtect(Array::make());
         arglist = scfn.argv[0].asArray();
         for(i = 0; i < arglist->count(); i++)
         {
@@ -12405,7 +12585,7 @@ namespace neon
         }
         for(i = 0; i < list->count(); i++)
         {
-            alist = (Array*)nn_gcmem_protect((Object*)Array::make());
+            alist = SharedState::gcProtect(Array::make());
             alist->push(list->get(i));
             for(j = 0; j < arglist->count(); j++)
             {
@@ -12431,7 +12611,7 @@ namespace neon
         ArgCheck check;
         nn_argcheck_init(&check, "toDict", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
-        dict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
+        dict = SharedState::gcProtect(Dict::make());
         list = scfn.thisval.asArray();
         for(i = 0; i < list->count(); i++)
         {
@@ -12536,7 +12716,7 @@ namespace neon
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = nn_nestcall_prepare(callable, scfn.thisval, nestargs, 2);
-        resultlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        resultlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
         {
             passi = 0;
@@ -12580,7 +12760,7 @@ namespace neon
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = nn_nestcall_prepare(callable, scfn.thisval, nestargs, 2);
-        resultlist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        resultlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
         {
             passi = 0;
@@ -12830,7 +13010,7 @@ namespace neon
         dict = scfn.thisval.asDict();
         if(dict->htab.get(scfn.argv[0], &tempvalue))
         {
-            NEON_RETURNERROR(scfn, "duplicate key %s at add()", nn_value_tostring(scfn.argv[0])->data());
+            NEON_RETURNERROR(scfn, "duplicate key %s at add()", Value::toString(scfn.argv[0])->data());
         }
         dict->add(scfn.argv[0], scfn.argv[1]);
         return Value::makeNull();
@@ -12877,7 +13057,7 @@ namespace neon
         nn_argcheck_init(&check, "clone", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        newdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
+        newdict = SharedState::gcProtect(Dict::make());
         if(!dict->htab.copyTo(&newdict->htab, true))
         {
             nn_except_throwclass(gcs->m_exceptions.argumenterror, "failed to copy table");
@@ -12900,7 +13080,7 @@ namespace neon
         nn_argcheck_init(&check, "compact", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        newdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
+        newdict = (Dict*)SharedState::gcProtect(Dict::make());
         tmpvalue = Value::makeNull();
         for(i = 0; i < dict->htnames.count(); i++)
         {
@@ -12979,7 +13159,7 @@ namespace neon
         nn_argcheck_init(&check, "keys", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list = SharedState::gcProtect(Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
         {
             list->push(dict->htnames.get(i));
@@ -12997,7 +13177,7 @@ namespace neon
         nn_argcheck_init(&check, "values", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list =SharedState::gcProtect(Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
         {
             field = dict->get(dict->htnames.get(i));
@@ -13066,8 +13246,8 @@ namespace neon
         nn_argcheck_init(&check, "tolist", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         dict = scfn.thisval.asDict();
-        namelist = (Array*)nn_gcmem_protect((Object*)Array::make());
-        valuelist = (Array*)nn_gcmem_protect((Object*)Array::make());
+        namelist = SharedState::gcProtect(Array::make());
+        valuelist = SharedState::gcProtect(Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
         {
             namelist->push(dict->htnames.get(i));
@@ -13082,7 +13262,7 @@ namespace neon
                 valuelist->push(Value::makeNull());
             }
         }
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list = SharedState::gcProtect(Array::make());
         list->push(Value::fromObject(namelist));
         list->push(Value::fromObject(valuelist));
         return Value::fromObject(list);
@@ -13184,7 +13364,7 @@ namespace neon
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = nn_nestcall_prepare(callable, scfn.thisval, nestargs, 2);
-        resultdict = (Dict*)nn_gcmem_protect((Object*)Dict::make());
+        resultdict = SharedState::gcProtect(Dict::make());
         value = Value::makeNull();
         for(i = 0; i < dict->htnames.count(); i++)
         {
@@ -13396,7 +13576,7 @@ namespace neon
             mode = scfn.argv[1].asString()->data();
         }
         path = opath->data();
-        file = (File*)nn_gcmem_protect((Object*)File::make(nullptr, false, path, mode));
+        file = SharedState::gcProtect(File::make(nullptr, false, path, mode));
         file->openWithoutParams();
         return Value::fromObject(file);
     }
@@ -13451,7 +13631,7 @@ namespace neon
             thismuch = (size_t)scfn.argv[1].asNumber();
         }
         filepath = scfn.argv[0].asString();
-        buf = nn_util_filereadfile(filepath->data(), &actualsz, true, thismuch);
+        buf = File::readFile(filepath->data(), &actualsz, true, thismuch);
         if(buf == nullptr)
         {
             nn_except_throwclass(gcs->m_exceptions.ioerror, "%s: %s", filepath->data(), strerror(errno));
@@ -13566,7 +13746,7 @@ namespace neon
         file = scfn.thisval.asFile();
         linelen = 0;
         strline = nullptr;
-        rdline = nn_util_filegetlinehandle(&strline, &linelen, file->handle);
+        rdline = File::readLineFromHandle(&strline, &linelen, file->handle);
         if(rdline == -1)
         {
             return Value::makeNull();
@@ -13980,12 +14160,6 @@ namespace neon
         gcs->m_classprimfile->installMethods(filemethods);
     }
 
-    void nn_funcscript_destroy(Function* ofn)
-    {
-        Blob::destroy(ofn->m_fnvals.fnscriptfunc.blob);
-        nn_memory_free(ofn->m_fnvals.fnscriptfunc.blob);
-    }
-
 
     /*
      * TODO: when executable is run outside of current dev environment, it should correctly
@@ -14006,7 +14180,7 @@ namespace neon
         };
         for(i = 0; g_builtinmodules[i] != nullptr; i++)
         {
-            nn_import_loadnativemodule(g_builtinmodules[i], nullptr, "<__native__>", nullptr);
+            Module::loadBuiltinModule(g_builtinmodules[i], nullptr, "<__native__>", nullptr);
         }
     }
 
@@ -14025,136 +14199,6 @@ namespace neon
 
 
 
-    bool nn_import_loadnativemodule(ModInitFN init_fn, char* importname, const char* source, void* dlw)
-    {
-        size_t j;
-        size_t k;
-        size_t slen;
-        Value v;
-        Value fieldname;
-        Value funcname;
-        Value funcrealvalue;
-        DefExport::Function func;
-        DefExport::Field field;
-        DefExport* defmod;
-        Module* targetmod;
-        DefExport::Class klassreg;
-        String* classname;
-        Function* native;
-        Class* klass;
-        auto gcs = SharedState::get();
-        defmod = init_fn();
-        if(defmod != nullptr)
-        {
-            targetmod = (Module*)nn_gcmem_protect((Object*)Module::make((char*)defmod->m_defmodname, source, false, true));
-            targetmod->fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
-            targetmod->fnunloaderptr = (void*)defmod->fnunloaderfunc;
-            if(defmod->definedfields != nullptr)
-            {
-                for(j = 0; defmod->definedfields[j].m_deffieldname != nullptr; j++)
-                {
-                    field = defmod->definedfields[j];
-                    fieldname = Value::fromObject(nn_gcmem_protect((Object*)String::copy(field.m_deffieldname)));
-                    v = field.fieldvalfn(FuncContext{Value::makeNull(), nullptr, 0});
-                    gcs->stackPush(v);
-                    targetmod->deftable.set(fieldname, v);
-                    gcs->stackPop();
-                }
-            }
-            if(defmod->definedfunctions != nullptr)
-            {
-                for(j = 0; defmod->definedfunctions[j].m_deffuncname != nullptr; j++)
-                {
-                    func = defmod->definedfunctions[j];
-                    funcname = Value::fromObject(nn_gcmem_protect((Object*)String::copy(func.m_deffuncname)));
-                    funcrealvalue = Value::fromObject(nn_gcmem_protect((Object*)Function::makeFuncNative(func.function, func.m_deffuncname, nullptr)));
-                    gcs->stackPush(funcrealvalue);
-                    targetmod->deftable.set(funcname, funcrealvalue);
-                    gcs->stackPop();
-                }
-            }
-            if(defmod->definedclasses != nullptr)
-            {
-                for(j = 0; ((defmod->definedclasses[j].m_defclassname != nullptr) && (defmod->definedclasses[j].defpubfunctions != nullptr)); j++)
-                {
-                    klassreg = defmod->definedclasses[j];
-                    classname = (String*)nn_gcmem_protect((Object*)String::copy(klassreg.m_defclassname));
-                    klass = (Class*)nn_gcmem_protect((Object*)Class::make(classname, gcs->m_classprimobject));
-                    if(klassreg.defpubfunctions != nullptr)
-                    {
-                        for(k = 0; klassreg.defpubfunctions[k].m_deffuncname != nullptr; k++)
-                        {
-                            func = klassreg.defpubfunctions[k];
-                            slen = strlen(func.m_deffuncname);
-                            funcname = Value::fromObject(nn_gcmem_protect((Object*)String::copy(func.m_deffuncname)));
-                            native = (Function*)nn_gcmem_protect((Object*)Function::makeFuncNative(func.function, func.m_deffuncname, nullptr));
-                            if(func.isstatic)
-                            {
-                                native->m_contexttype = Function::CTXTYPE_STATIC;
-                            }
-                            else if(slen > 0 && func.m_deffuncname[0] == '_')
-                            {
-                                native->m_contexttype = Function::CTXTYPE_PRIVATE;
-                            }
-                            if(strncmp(func.m_deffuncname, "constructor", slen) == 0)
-                            {
-                                klass->m_constructor = Value::fromObject(native);
-                            }
-                            else
-                            {
-                                klass->m_instmethods.set(funcname, Value::fromObject(native));
-                            }
-                        }
-                    }
-                    if(klassreg.defpubfields != nullptr)
-                    {
-                        k = 0;
-                        while(true)
-                        {
-                            if(klassreg.defpubfields[k].m_deffieldname == nullptr)
-                            {
-                                break;
-                            }
-                            field = klassreg.defpubfields[k];
-                            if(field.m_deffieldname != nullptr)
-                            {
-                                klass->defCallableField(String::copy(field.m_deffieldname), field.fieldvalfn);
-                            }
-                            k++;
-                        }
-                    }
-                    targetmod->deftable.set(Value::fromObject(classname), Value::fromObject(klass));
-                }
-            }
-            if(dlw != nullptr)
-            {
-                targetmod->handle = dlw;
-            }
-            nn_import_addnativemodule(targetmod, targetmod->m_modname->data());
-            SharedState::clearGCProtect();
-            return true;
-        }
-        else
-        {
-            nn_state_warn("Error loading module: %s\n", importname);
-        }
-        return false;
-    }
-
-    void nn_import_addnativemodule(Module* module, const char* as)
-    {
-        Value name;
-        auto gcs = SharedState::get();
-        if(as != nullptr)
-        {
-            module->m_modname = String::copy(as);
-        }
-        name = Value::fromObject(String::copyObject(module->m_modname));
-        gcs->stackPush(name);
-        gcs->stackPush(Value::fromObject(module));
-        gcs->m_openedmodules.set(name, Value::fromObject(module));
-        gcs->stackPop(2);
-    }
 
     void nn_import_closemodule(void* hnd)
     {
@@ -15477,7 +15521,7 @@ namespace neon
         nn_argcheck_init(&check, "toList", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         string = scfn.thisval.asString();
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list = SharedState::gcProtect(Array::make());
         length = string->length();
         if(length > 0)
         {
@@ -15501,7 +15545,7 @@ namespace neon
         nn_argcheck_init(&check, "toBytes", scfn);
         NEON_ARGS_CHECKCOUNT(&check, 0);
         string = scfn.thisval.asString();
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list = SharedState::gcProtect(Array::make());
         length = string->length();
         if(length > 0)
         {
@@ -15623,7 +15667,7 @@ namespace neon
         {
             return Value::fromObject(Array::make());
         }
-        list = (Array*)nn_gcmem_protect((Object*)Array::make());
+        list = SharedState::gcProtect(Array::make());
         if(delimeter->length() > 0)
         {
             start = 0;
@@ -15798,7 +15842,7 @@ namespace neon
             }
             else
             {
-                oss = nn_value_tostring(arg);
+                oss = Value::toString(arg);
                 selfstring->appendObject(oss);
             }
         }
@@ -16705,41 +16749,6 @@ namespace neon
         return &module;
     }
 
-    /* initial amount of frames (will grow dynamically if needed) */
-    #define NEON_CONFIG_INITFRAMECOUNT (16)
-
-    /* initial amount of stack values (will grow dynamically if needed) */
-    #define NEON_CONFIG_INITSTACKCOUNT (4 * 1)
-
-    void nn_vm_initvmstate()
-    {
-        size_t finalsz;
-        auto gcs = SharedState::get();
-        gcs->linkedobjects = nullptr;
-        gcs->m_vmstate.currentframe = nullptr;
-        {
-            gcs->m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
-            finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(Value);
-            gcs->m_vmstate.stackvalues = (Value*)nn_memory_malloc(finalsz);
-            if(gcs->m_vmstate.stackvalues == nullptr)
-            {
-                fprintf(stderr, "error: failed to allocate stackvalues!\n");
-                abort();
-            }
-            memset(gcs->m_vmstate.stackvalues, 0, finalsz);
-        }
-        {
-            gcs->m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
-            finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(CallFrame);
-            gcs->m_vmstate.framevalues = (CallFrame*)nn_memory_malloc(finalsz);
-            if(gcs->m_vmstate.framevalues == nullptr)
-            {
-                fprintf(stderr, "error: failed to allocate framevalues!\n");
-                abort();
-            }
-            memset(gcs->m_vmstate.framevalues, 0, finalsz);
-        }
-    }
 
     NEON_INLINE void nn_vm_resizeinfo(const char* context, Function* closure, size_t needed)
     {
@@ -17687,7 +17696,7 @@ namespace neon
             return true;
         }
         gcs->stackPop();
-        return nn_except_throw("%s is undefined in module %s", nn_value_tostring(vindex)->data(), module->m_modname);
+        return nn_except_throw("%s is undefined in module %s", Value::toString(vindex)->data(), module->m_modname);
     }
 
     NEON_INLINE bool nn_vmutil_doindexgetstring(String* string, bool willassign)
@@ -17967,12 +17976,8 @@ namespace neon
 
     NEON_INLINE bool nn_vmutil_doindexsetarray(Array* list, Value index, Value value)
     {
-        int tmp;
         int rawpos;
         int position;
-        int ocnt;
-        int ocap;
-        int vasz;
         auto gcs = SharedState::get();
         if(nn_util_unlikely(!index.isNumber()))
         {
@@ -17980,8 +17985,6 @@ namespace neon
             /* pop the value, index and list out */
             return nn_except_throw("list are numerically indexed");
         }
-        ocap = list->m_objvarray.capacity();
-        ocnt = list->count();
         rawpos = index.asNumber();
         position = rawpos;
         list->set(position, value);
@@ -18409,7 +18412,7 @@ namespace neon
         }
         else
         {
-            nn_except_throw("'%s' of type %s does not have properties", nn_value_tostring(peeked)->data(), nn_value_typename(peeked, false));
+            nn_except_throw("'%s' of type %s does not have properties", Value::toString(peeked)->data(), nn_value_typename(peeked, false));
         }
         return false;
     }
@@ -18485,7 +18488,7 @@ namespace neon
             nn_vmmac_tryraise(false, "module '%s' does not have a field named '%s'", module->m_modname->data(), name->data());
             return false;
         }
-        nn_vmmac_tryraise(false, "'%s' of type %s does not have properties", nn_value_tostring(peeked)->data(), nn_value_typename(peeked, false));
+        nn_vmmac_tryraise(false, "'%s' of type %s does not have properties", Value::toString(peeked)->data(), nn_value_typename(peeked, false));
         return false;
     }
 
@@ -19519,7 +19522,7 @@ namespace neon
                     if(!peeked.isString() && !peeked.isNull())
                     {
                         popped = vmgcs->stackPop();
-                        os = nn_value_tostring(popped);
+                        os = Value::toString(popped);
                         if(os->length() != 0)
                         {
                             vmgcs->stackPush(Value::fromObject(os));
@@ -19978,7 +19981,7 @@ namespace neon
                     {
                         if(!message.isNull())
                         {
-                            nn_except_throwclass(vmgcs->m_exceptions.asserterror, nn_value_tostring(message)->data());
+                            nn_except_throwclass(vmgcs->m_exceptions.asserterror, Value::toString(message)->data());
                         }
                         else
                         {
@@ -20258,7 +20261,7 @@ namespace neon
         gcs->m_rootphysfile = nullptr;
         gcs->m_processinfo = nullptr;
         gcs->m_isrepl = false;
-        nn_vm_initvmstate();
+        SharedState::initVMState();
         nn_state_resetvmstate();
         /*
          * setup default config
@@ -20670,11 +20673,11 @@ static bool nn_cli_runfile(const char* file)
     const char* oldfile;
     neon::Status result;
     auto gcs = neon::SharedState::get();
-    source = neon::nn_util_filereadfile(file, &fsz, false, 0);
+    source = neon::File::readFile(file, &fsz, false, 0);
     if(source == nullptr)
     {
         oldfile = file;
-        source = neon::nn_util_filereadfile(file, &fsz, false, 0);
+        source = neon::File::readFile(file, &fsz, false, 0);
         if(source == nullptr)
         {
             fprintf(stderr, "failed to read from '%s': %s\n", oldfile, strerror(errno));
@@ -20961,7 +20964,7 @@ int main(int argc, char* argv[], char** envp)
             auto os = neon::String::copy(nargv[i]);
             gcs->m_processinfo->cliargv->push(neon::Value::fromObject(os));
         }
-        gcs->m_declaredglobals.set(neon::nn_value_copystr("ARGV"), neon::Value::fromObject(gcs->m_processinfo->cliargv));
+        gcs->m_declaredglobals.set(neon::Value::fromObject(neon::String::copy("ARGV")), neon::Value::fromObject(gcs->m_processinfo->cliargv));
     }
     gcs->m_gcstate.nextgc = nextgcstart;
     neon::loadBuiltinMethods();
