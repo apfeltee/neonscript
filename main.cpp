@@ -19,12 +19,8 @@
 #if defined(_WIN32) || defined(_WIN64) || defined(_MSC_VER)
     #define NEON_PLAT_ISWINDOWS
 #else
-    #if defined(__wasi__)
-        #define NEON_PLAT_ISWASM
-    #endif
     #define NEON_PLAT_ISLINUX
 #endif
-
 
 #if defined(NEON_PLAT_ISWINDOWS)
     #include <windows.h>
@@ -38,9 +34,41 @@
     #include <libgen.h>
 #endif
 
+#if 1
+    #if defined(__GNUC__) || defined(__TINYC__)
+        #define NEON_INLINE __attribute__((always_inline)) inline
+    #else
+        #define NEON_INLINE inline
+    #endif
+#endif
+
+#if defined(__GNUC__) || defined(__clang__)
+    #define NEON_LIKELY(x) (__builtin_expect(!!(x), 1))
+    #define NEON_UNLIKELY(x) (__builtin_expect(!!(x), 0))
+#else
+    #define NEON_LIKELY(x) (x)
+    #define NEON_UNLIKELY(x) (x)
+#endif
 
 #include "optparse.h"
 #include "lino.h"
+
+/*
+* set to 1 to use allocator (default).
+* stable, performs well, etc.
+* might not be portable beyond linux/windows, and a couple unix derivatives.
+* strives to use the least amount of memory (and does so very successfully).
+*/
+#define NEON_CONF_MEMUSEALLOCATOR 0
+
+#define NEON_CONF_OSPATHSIZE 1024
+
+#define NEON_CONFIG_FILEEXT ".nn"
+
+/* global debug mode flag */
+#define NEON_CONFIG_DEBUGGC 0
+
+#define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
 
 #if !defined(S_IFLNK)
     #define S_IFLNK 0120000
@@ -63,20 +91,10 @@
     #define S_ISLNK(m) (((m) & S_IFMT) == S_IFLNK)
 #endif
 
-#define NEON_CONF_OSPATHSIZE 1024
-
 extern "C"
 {
     extern int kill(int, int);
 }
-
-/* needed when compiling with wasi. must be defined *before* signal.h is included! */
-#if defined(__wasi__)
-    #define _WASI_EMULATED_SIGNAL
-#endif
-
-/**
- */
 
 /**
  * if enabled, most API calls will check for null pointers, and either
@@ -85,14 +103,6 @@ extern "C"
  * **BUT** the added branching will likely reduce performance.
  */
 #define NEON_CONFIG_USENULLPTRCHECKS 0
-
-#if 1
-    #if defined(__GNUC__) || defined(__TINYC__)
-        #define NEON_INLINE __attribute__((always_inline)) inline
-    #else
-        #define NEON_INLINE inline
-    #endif
-#endif
 
 #if defined(NEON_CONFIG_USENULLPTRCHECKS) && (NEON_CONFIG_USENULLPTRCHECKS == 1)
     #define NN_NULLPTRCHECK_RETURNVALUE(var, defval) \
@@ -114,120 +124,60 @@ extern "C"
     #define NN_NULLPTRCHECK_RETURN(var)
 #endif
 
-#if defined(__GNUC__) || defined(__clang__)
-    #define NEON_LIKELY(x) (__builtin_expect(!!(x), 1))
-    #define NEON_UNLIKELY(x) (__builtin_expect(!!(x), 0))
-#else
-    #define NEON_LIKELY(x) (x)
-    #define NEON_UNLIKELY(x) (x)
-#endif
+#define NEON_THROWCLASSWITHSOURCEINFO(exklass, ...) throwScriptException(exklass, __FILE__, __LINE__, __VA_ARGS__)
 
-/*
- * needed because clang + wasi (wasi headers, specifically) don't seem to define these.
- * note: keep these below stdlib.h, so as to check whether __BEGIN_DECLS is defined.
- */
-#if defined(__wasi__) && !defined(__BEGIN_DECLS)
-    #define __BEGIN_DECLS
-    #define __END_DECLS
-    #define __THROWNL
-    #define __THROW
-    #define __nonnull(...)
+#define NEON_THROWEXCEPTION(...) NEON_THROWCLASSWITHSOURCEINFO(SharedState::get()->m_exceptions.stdexception, __VA_ARGS__)
+
+#define NEON_RETURNERROR(scfn, ...)               \
+    {                                       \
+        SharedState::get()->vmStackPop(scfn.argc); \
+        NEON_THROWEXCEPTION(__VA_ARGS__);       \
+    }                                       \
+    return Value::makeBool(false);
+
+#define NEON_ARGS_FAIL(chp, ...) chp.thenFail(__FILE__, __LINE__, __VA_ARGS__)
+
+/* check for exact number of arguments $d */
+#define NEON_ARGS_CHECKCOUNT(chp, d)                                                                    \
+    if(NEON_UNLIKELY(chp.m_scriptfnctx.argc != (d)))                                                            \
+    {                                                                                                   \
+        return NEON_ARGS_FAIL(chp, "%s() expects %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
+    }
+
+/* check for miminum args $d ($d ... n) */
+#define NEON_ARGS_CHECKMINARG(chp, d)                                                                              \
+    if(NEON_UNLIKELY(chp.m_scriptfnctx.argc < (d)))                                                                        \
+    {                                                                                                              \
+        return NEON_ARGS_FAIL(chp, "%s() expects minimum of %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
+    }
+
+/* check for range of args ($low .. $up) */
+#define NEON_ARGS_CHECKCOUNTRANGE(chp, low, up)                                                                              \
+    if((int(NEON_UNLIKELY(chp.m_scriptfnctx.argc) < int(low)) || (int(chp.m_scriptfnctx.argc) > int(up))))                                                          \
+    {                                                                                                                        \
+        return NEON_ARGS_FAIL(chp, "%s() expects between %d and %d arguments, %d given", chp.m_argcheckfuncname, low, up, chp.m_scriptfnctx.argc); \
+    }
+
+/* check for argument at index $i for $type, where $type is a Value::is*() function */
+#define NEON_ARGS_CHECKTYPE(chp, i, typefunc) \
+    if(NEON_UNLIKELY(!((chp.m_scriptfnctx.argv[i].*typefunc)()))) \
+    { \
+        return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", chp.m_argcheckfuncname, (i) + 1, Value::typeFromFunction(typefunc), Value::typeName(chp.m_scriptfnctx.argv[i], false), false); \
+    }
+
+#if 0
+    #define NEON_APIDEBUG(...) \
+        if((NEON_UNLIKELY((<fixme>)->m_conf.enableapidebug))) \
+        { \
+            apiDebug(__FUNCTION__, __VA_ARGS__); \
+        }
+#else
+    #define NEON_APIDEBUG(...)
 #endif
 
 namespace neon
 {
 
-    #define NEON_CONFIG_FILEEXT ".nn"
-
-    /* global debug mode flag */
-    #define NEON_CONFIG_BUILDDEBUGMODE 0
-    #define NEON_CONFIG_MAXSYNTAXERRORS 10
-
-    #if NEON_CONFIG_BUILDDEBUGMODE == 1
-        #define DEBUG_PRINT_CODE 1
-        #define DEBUG_TABLE 0
-        #define DEBUG_GC 1
-        #define DEBUG_STACK 0
-    #endif
-
-    /* topmacros */
-
-    #define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
-
-    #if 0
-        #if defined(__GNUC__)
-            #define NEON_ATTR_PRINTFLIKE(fmtarg, firstvararg) __attribute__((__format__(__printf__, fmtarg, firstvararg)))
-        #else
-            #define NEON_ATTR_PRINTFLIKE(a, b)
-        #endif
-    #endif
-    /*
-    // NOTE:
-    // 1. Any call to SharedState::gcProtect() within a function/block must be accompanied by
-    // at least one call to SharedState::clearGCProtect() before exiting the function/block
-    // otherwise, expected unexpected behavior
-    // 2. The call to SharedState::clearGCProtect() will be automatic for native functions.
-    // 3. $thisval must be retrieved before any call to SharedState::gcProtect in a
-    // native function.
-    */
-
-
-    #define NEON_THROWCLASSWITHSOURCEINFO(exklass, ...) throwScriptException(exklass, __FILE__, __LINE__, __VA_ARGS__)
-
-    #define NEON_THROWEXCEPTION(...) NEON_THROWCLASSWITHSOURCEINFO(SharedState::get()->m_exceptions.stdexception, __VA_ARGS__)
-
-    #define NEON_RETURNERROR(scfn, ...)               \
-        {                                       \
-            SharedState::get()->vmStackPop(scfn.argc); \
-            NEON_THROWEXCEPTION(__VA_ARGS__);       \
-        }                                       \
-        return Value::makeBool(false);
-
-    #define NEON_ARGS_FAIL(chp, ...) chp.thenFail(__FILE__, __LINE__, __VA_ARGS__)
-
-    /* check for exact number of arguments $d */
-    #define NEON_ARGS_CHECKCOUNT(chp, d)                                                                    \
-        if(NEON_UNLIKELY(chp.m_scriptfnctx.argc != (d)))                                                            \
-        {                                                                                                   \
-            return NEON_ARGS_FAIL(chp, "%s() expects %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
-        }
-
-    /* check for miminum args $d ($d ... n) */
-    #define NEON_ARGS_CHECKMINARG(chp, d)                                                                              \
-        if(NEON_UNLIKELY(chp.m_scriptfnctx.argc < (d)))                                                                        \
-        {                                                                                                              \
-            return NEON_ARGS_FAIL(chp, "%s() expects minimum of %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
-        }
-
-    /* check for range of args ($low .. $up) */
-    #define NEON_ARGS_CHECKCOUNTRANGE(chp, low, up)                                                                              \
-        if((int(NEON_UNLIKELY(chp.m_scriptfnctx.argc) < int(low)) || (int(chp.m_scriptfnctx.argc) > int(up))))                                                          \
-        {                                                                                                                        \
-            return NEON_ARGS_FAIL(chp, "%s() expects between %d and %d arguments, %d given", chp.m_argcheckfuncname, low, up, chp.m_scriptfnctx.argc); \
-        }
-
-    /* check for argument at index $i for $type, where $type is a Value::is*() function */
-    #if 0
-        #define NEON_ARGS_CHECKTYPE(chp, i, typefunc)
-    #else
-        #define NEON_ARGS_CHECKTYPE(chp, i, typefunc) \
-            if(NEON_UNLIKELY(!((chp.m_scriptfnctx.argv[i].*typefunc)()))) \
-            { \
-                return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", chp.m_argcheckfuncname, (i) + 1, Value::typeFromFunction(typefunc), Value::typeName(chp.m_scriptfnctx.argv[i], false), false); \
-            }
-
-    #endif
-
-
-    #if 0
-        #define NEON_APIDEBUG(...) \
-            if((NEON_UNLIKELY((<fixme>)->m_conf.enableapidebug))) \
-            { \
-                apiDebug(__FUNCTION__, __VA_ARGS__); \
-            }
-    #else
-        #define NEON_APIDEBUG(...)
-    #endif
 
     enum Status
     {
@@ -353,13 +303,6 @@ namespace neon
     template<typename... ArgsT>
     bool throwScriptException(Class* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args);
 
-    /*
-    * set to 1 to use allocator (default).
-    * stable, performs well, etc.
-    * might not be portable beyond linux/windows, and a couple unix derivatives.
-    * strives to use the least amount of memory (and does so very successfully).
-    */
-    #define NEON_CONF_MEMUSEALLOCATOR 0
 
     template <typename ClassT>
     concept MemoryClassHasDestroyFunc = requires(ClassT* ptr)
@@ -5785,6 +5728,9 @@ namespace neon
             /* growth factor for GC heap objects */
             static constexpr auto CONF_GCHEAPGROWTHFACTOR = 1.25;
 
+            static constexpr auto CONF_MAXSYNTAXERRORS = 10;
+
+
             class InternedStringTab
             {
                 public:
@@ -6048,6 +5994,15 @@ namespace neon
                 return result;
             }
 
+            /*
+            // NOTE:
+            // 1. Any call to SharedState::gcProtect() within a function/block must be accompanied by
+            // at least one call to SharedState::clearGCProtect() before exiting the function/block
+            // otherwise, expect unexpected behavior
+            // 2. The call to SharedState::clearGCProtect() will be automatic for native functions.
+            // 3. $thisval must be retrieved before any call to SharedState::gcProtect in a
+            // native function.
+            */
             template<typename InputT>
             static InputT* gcProtect(InputT* object)
             {
@@ -14374,7 +14329,7 @@ namespace neon
         {
             return;
         }
-    #if defined(DEBUG_GC) && DEBUG_GC
+    #if defined(NEON_CONFIG_DEBUGGC) && NEON_CONFIG_DEBUGGC
         gcs->m_debugwriter->format("GC: marking object at <%p> ", (void*)object);
         ValPrinter::printValue(gcs->m_debugwriter, Value::fromObject(object), false);
         gcs->m_debugwriter->format("\n");
@@ -14396,7 +14351,7 @@ namespace neon
 
     void Object::blackenObject(Object* object)
     {
-    #if defined(DEBUG_GC) && DEBUG_GC
+    #if defined(NEON_CONFIG_DEBUGGC) && NEON_CONFIG_DEBUGGC
         auto gcs = SharedState::get();
         gcs->m_debugwriter->format("GC: blacken object at <%p> ", (void*)object);
         ValPrinter::printValue(gcs->m_debugwriter, Value::fromObject(object), false);
@@ -23285,7 +23240,7 @@ namespace neon
             gcs->m_conf.exitafterbytecode = false;
             gcs->m_conf.showfullstack = false;
             gcs->m_conf.enableapidebug = false;
-            gcs->m_conf.maxsyntaxerrors = NEON_CONFIG_MAXSYNTAXERRORS;
+            gcs->m_conf.maxsyntaxerrors = SharedState::CONF_MAXSYNTAXERRORS;
         }
         /*
          * initialize GC state
@@ -23501,12 +23456,6 @@ namespace neon
 }
 // endnamespace
 
-#if defined(NEON_PLAT_ISWASM)
-int __multi3(int a, int b)
-{
-    return a * b;
-}
-#endif
 
 struct ConsoleProg
 {
