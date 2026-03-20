@@ -17,12 +17,12 @@ function scan(dir)
             var isdir = File.isDirectory(fp);
             if(isdir)
             {
-                //println(fp);
+                println(fp);
                 scan(fp);
             }
             else
             {
-                //println(fp);
+                println(fp);
             }
         }
     })

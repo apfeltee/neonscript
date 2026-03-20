@@ -34,15 +34,41 @@
 #else
     #include <sys/time.h>
     #include <unistd.h>
+    #include <dirent.h>
+    #include <libgen.h>
 #endif
 
 
-#include "mem.h"
-#include "mrx.h"
-#include "oslib.h"
 #include "optparse.h"
 #include "lino.h"
 
+#if !defined(S_IFLNK)
+    #define S_IFLNK 0120000
+#endif
+#if !defined(S_IFREG)
+    #define S_IFREG  0100000
+#endif
+#if !defined(S_IFDIR)
+    #define S_IFDIR  0040000
+#endif
+#if !defined(S_ISDIR)
+    #define	S_ISDIR(m) (((m)&S_IFMT) == S_IFDIR)	/* directory */
+#endif
+
+#if !defined(S_ISREG)
+    #define	S_ISREG(m) (((m)&S_IFMT) == S_IFREG)	/* file */
+#endif
+
+#if !defined(S_ISLNK)
+    #define S_ISLNK(m) (((m) & S_IFMT) == S_IFLNK)
+#endif
+
+#define NEON_CONF_OSPATHSIZE 1024
+
+extern "C"
+{
+    extern int kill(int, int);
+}
 
 /* needed when compiling with wasi. must be defined *before* signal.h is included! */
 #if defined(__wasi__)
@@ -51,7 +77,6 @@
 
 /**
  */
-#define NEON_CONFIG_DEBUGMEMORY 0
 
 /**
  * if enabled, most API calls will check for null pointers, and either
@@ -111,7 +136,6 @@
 
 namespace neon
 {
-    #define NEON_CONFIG_MTSTATESIZE 624
 
     #define NEON_CONFIG_FILEEXT ".nn"
 
@@ -126,32 +150,7 @@ namespace neon
         #define DEBUG_STACK 0
     #endif
 
-    /* how many locals per function can be compiled */
-    #define NEON_CONFIG_ASTMAXLOCALS (64 * 2)
-
-    /* how many upvalues per function can be compiled */
-    #define NEON_CONFIG_ASTMAXUPVALS (64 * 2)
-
-    /* how many switch cases per switch statement */
-    #define NEON_CONFIG_ASTMAXSWITCHCASES (32)
-
-    /* max number of function parameters */
-    #define NEON_CONFIG_ASTMAXFUNCPARAMS (32)
-
-    /* how many catch() clauses per try statement */
-    #define NEON_CONFIG_MAXEXCEPTHANDLERS (2)
-
-    /*
-    // Maximum load factor of 12/14
-    // see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
-    */
-    #define NEON_CONFIG_MAXTABLELOAD (0.85714286)
-
-    /* how much memory can be allocated before the garbage collector kicks in */
-    #define NEON_CONFIG_DEFAULTGCSTART (1024 * 1024)
-
-    /* growth factor for GC heap objects */
-    #define NEON_CONFIG_GCHEAPGROWTHFACTOR (1.25)
+    /* topmacros */
 
     #define NEON_INFO_COPYRIGHT "based on the Blade Language, Copyright (c) 2021 - 2023 Ore Richard Muyiwa"
 
@@ -184,54 +183,51 @@ namespace neon
         }                                       \
         return Value::makeBool(false);
 
-    #define NEON_ARGS_FAIL(chp, ...) (chp)->thenFail(__FILE__, __LINE__, __VA_ARGS__)
+    #define NEON_ARGS_FAIL(chp, ...) chp.thenFail(__FILE__, __LINE__, __VA_ARGS__)
 
     /* check for exact number of arguments $d */
     #define NEON_ARGS_CHECKCOUNT(chp, d)                                                                    \
-        if(NEON_UNLIKELY((chp)->m_scriptfnctx.argc != (d)))                                                            \
+        if(NEON_UNLIKELY(chp.m_scriptfnctx.argc != (d)))                                                            \
         {                                                                                                   \
-            return NEON_ARGS_FAIL(chp, "%s() expects %d arguments, %d given", (chp)->m_argcheckfuncname, d, (chp)->m_scriptfnctx.argc); \
+            return NEON_ARGS_FAIL(chp, "%s() expects %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
         }
 
     /* check for miminum args $d ($d ... n) */
     #define NEON_ARGS_CHECKMINARG(chp, d)                                                                              \
-        if(NEON_UNLIKELY((chp)->m_scriptfnctx.argc < (d)))                                                                        \
+        if(NEON_UNLIKELY(chp.m_scriptfnctx.argc < (d)))                                                                        \
         {                                                                                                              \
-            return NEON_ARGS_FAIL(chp, "%s() expects minimum of %d arguments, %d given", (chp)->m_argcheckfuncname, d, (chp)->m_scriptfnctx.argc); \
+            return NEON_ARGS_FAIL(chp, "%s() expects minimum of %d arguments, %d given", chp.m_argcheckfuncname, d, chp.m_scriptfnctx.argc); \
         }
 
     /* check for range of args ($low .. $up) */
     #define NEON_ARGS_CHECKCOUNTRANGE(chp, low, up)                                                                              \
-        if((int(NEON_UNLIKELY((chp)->m_scriptfnctx.argc) < int(low)) || (int((chp)->m_scriptfnctx.argc) > int(up))))                                                          \
+        if((int(NEON_UNLIKELY(chp.m_scriptfnctx.argc) < int(low)) || (int(chp.m_scriptfnctx.argc) > int(up))))                                                          \
         {                                                                                                                        \
-            return NEON_ARGS_FAIL(chp, "%s() expects between %d and %d arguments, %d given", (chp)->m_argcheckfuncname, low, up, (chp)->m_scriptfnctx.argc); \
+            return NEON_ARGS_FAIL(chp, "%s() expects between %d and %d arguments, %d given", chp.m_argcheckfuncname, low, up, chp.m_scriptfnctx.argc); \
         }
 
-    /* check for argument at index $i for $type, where $type is a nn_value_is*() function */
-    #if 1
+    /* check for argument at index $i for $type, where $type is a Value::is*() function */
+    #if 0
         #define NEON_ARGS_CHECKTYPE(chp, i, typefunc)
     #else
-        #define NEON_ARGS_CHECKTYPE(chp, i, typefunc)                                                                                                                                               \
-            if(NEON_UNLIKELY(!typefunc((chp)->m_scriptfnctx.argv[i])))                                                                                                                                         \
-            {                                                                                                                                                                                       \
-                return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", (chp)->m_argcheckfuncname, (i) + 1, Value::typeFroFunction(typefunc), Value::typeName((chp)->m_scriptfnctx.argv[i], false), false); \
+        #define NEON_ARGS_CHECKTYPE(chp, i, typefunc) \
+            if(NEON_UNLIKELY(!((chp.m_scriptfnctx.argv[i].*typefunc)()))) \
+            { \
+                return NEON_ARGS_FAIL(chp, "%s() expects argument %d as %s, %s given", chp.m_argcheckfuncname, (i) + 1, Value::typeFromFunction(typefunc), Value::typeName(chp.m_scriptfnctx.argv[i], false), false); \
             }
+
     #endif
 
+
     #if 0
-        #define NEON_APIDEBUG(...)                                 \
+        #define NEON_APIDEBUG(...) \
             if((NEON_UNLIKELY((<fixme>)->m_conf.enableapidebug))) \
-            {                                                      \
-                nn_state_apidebug(__FUNCTION__, __VA_ARGS__);      \
+            { \
+                apiDebug(__FUNCTION__, __VA_ARGS__); \
             }
     #else
         #define NEON_APIDEBUG(...)
     #endif
-
-    #define NN_ASTPARSER_GROWCAPACITY(capacity) ((capacity) < 4 ? 4 : (capacity) * 2)
-
-
-
 
     enum Status
     {
@@ -239,8 +235,6 @@ namespace neon
         NEON_STATUS_FAILCOMPILE,
         NEON_STATUS_FAILRUNTIME
     };
-
-
 
     enum Color
     {
@@ -289,7 +283,7 @@ namespace neon
     class /**/ Dict;
     class /**/ Range;
     class /**/ FuncContext;
-    class /**/ StringBuffer;
+    class /**/ StrBuffer;
 
     class ArgCheck;
     template <typename StoredType> class ValArray;
@@ -313,21 +307,6 @@ namespace neon
 
     Status execSource(Module* module, const char* source, const char* filename, Value* dest);
     Value evalSource(const char* source);
-    /* dbg.c */
-    void nn_dbg_disasmblob(IOStream* pr, Blob* blob, const char* name);
-    void nn_dbg_printinstrname(IOStream* pr, const char* name);
-    int nn_dbg_printsimpleinstr(IOStream* pr, const char* name, int offset);
-    int nn_dbg_printconstinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printpropertyinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printshortinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printbyteinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printjumpinstr(IOStream* pr, const char* name, int sign, Blob* blob, int offset);
-    int nn_dbg_printtryinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printinvokeinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    const char* nn_dbg_op2str(uint16_t instruc);
-    int nn_dbg_printclosureinstr(IOStream* pr, const char* name, Blob* blob, int offset);
-    int nn_dbg_printinstructionat(IOStream* pr, Blob* blob, int offset);
-
 
     void installObjArray();
     /* libdict.c */
@@ -338,7 +317,6 @@ namespace neon
     void loadBuiltinMethods();
 
     void setupModulePaths();
-    void nn_import_closemodule(void* hnd);
     /* libnumber.c */
     void installObjNumber();
     void installModMath();
@@ -349,69 +327,25 @@ namespace neon
     /* librange.c */
     void installObjRange();
 
-    double nn_string_tabhashvaluecombine(const char* data, size_t len, uint32_t hsv);
     void installObjString();
 
     /* modast.c */
-    DefExport* nn_natmodule_load_astscan();
+    DefExport* natmodule_load_astscan();
     /* modcplx.c */
-    DefExport* nn_natmodule_load_complex();
+    DefExport* natmodule_load_complex();
     /* modglobal.c */
     void initBuiltinFunctions();
     /* modnull.c */
-    DefExport* nn_natmodule_load_null();
+    DefExport* natmodule_load_null();
     /* modos.c */
     void modfn_os_preloader();
-    DefExport* nn_natmodule_load_os();
+    DefExport* natmodule_load_os();
     /* object.c */
-    Upvalue* nn_object_makeupvalue(Value* slot, int stackpos);
-    Userdata* nn_object_makeuserdata(void* pointer, const char* name);
-    Switch* nn_object_makeswitch();
-    Range* nn_object_makerange(int lower, int upper);
 
-
-
-    /* utf.c */
-    void nn_utf8iter_init(utf8iterator_t* iter, const char* ptr, uint32_t length);
-    uint16_t nn_utf8iter_charsize(const char* character);
-    uint32_t nn_utf8iter_converter(const char* character, uint16_t size);
-    uint16_t nn_utf8iter_next(utf8iterator_t* iter);
-    const char* nn_utf8iter_getchar(utf8iterator_t* iter);
-    int nn_util_utf8numbytes(int value);
-    char* nn_util_utf8encode(unsigned int code, size_t* dlen);
-    int nn_util_utf8decode(const uint16_t* bytes, uint32_t length);
-    char* nn_util_utf8codepoint(const char* str, char* outcodepoint);
-    char* nn_util_utf8strstr(const char* haystack, const char* needle);
-    char* nn_util_utf8index(char* s, int pos);
-    void nn_util_utf8slice(char* s, int* start, int* end);
     /* utilhmap.c */
-    void nn_valtable_removewhites(HashTable<Value, Value>* table);
     /* utilstd.c */
-    size_t nn_util_rndup2pow64(uint64_t x);
-    const char* nn_util_color(Color tc);
-    char* nn_util_strndup(const char* src, size_t len);
-    char* nn_util_strdup(const char* src);
-    void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index);
-    uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index);
-    double nn_util_mtrand(double lowerlimit, double upperlimit);
-    char* nn_util_strtoupper(char* str, size_t length);
-    char* nn_util_strtolower(char* str, size_t length);
-    String* nn_util_numbertobinstring(long n);
-    String* nn_util_numbertooctstring(int64_t n, bool numeric);
-    String* nn_util_numbertohexstring(int64_t n, bool numeric);
-    uint32_t nn_object_hashobject(Object* object);
-    uint32_t nn_value_hashvalue(Value value);
     /* value.c */
-
-    bool nn_value_compobjarray(Object* oa, Object* ob);
-    bool nn_value_compobjstring(Object* oa, Object* ob);
-    bool nn_value_compobjdict(Object* oa, Object* ob);
-    bool nn_value_compobject(Value a, Value b);
-    bool nn_value_compare_actual(Value a, Value b);
-    bool nn_value_compare(Value a, Value b);
-    Value nn_value_findgreater(Value a, Value b);
-    void nn_value_sortvalues(Value* values, int count);
-    Value nn_value_copyvalue(Value value);
+    
     /* vm.c */
 
     Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast);
@@ -419,94 +353,1205 @@ namespace neon
     template<typename... ArgsT>
     bool throwScriptException(Class* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args);
 
+    /*
+    * set to 1 to use allocator (default).
+    * stable, performs well, etc.
+    * might not be portable beyond linux/windows, and a couple unix derivatives.
+    * strives to use the least amount of memory (and does so very successfully).
+    */
+    #define NEON_CONF_MEMUSEALLOCATOR 0
+
+    template <typename ClassT>
+    concept MemoryClassHasDestroyFunc = requires(ClassT* ptr)
+    {
+        { ClassT::destroy(ptr) };
+    };
+
+    class Memory
+    {
+        public:
+            
+            static size_t getNextCapacity(size_t capacity)
+            {
+                if(capacity < 4)
+                {
+                    return 4;
+                }
+                return (capacity * 2);
+            }
+
+            #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                /* if any global variables need to be declared, declare them here. */
+                static void* g_mspcontext;
+            #endif
+
+            static inline void mempoolInit()
+            {
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    g_mspcontext = nn_allocator_create();
+                #endif
+            }
+
+            static inline void mempoolDestroy()
+            {
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    nn_allocator_destroy(g_mspcontext);
+                #endif
+            }
+
+            static inline void* sysMalloc(size_t sz)
+            {
+                void* p;
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    p = (void*)nn_allocuser_malloc(g_mspcontext, sz);
+                #else
+                    p = (void*)malloc(sz);
+                #endif
+                return p;
+            }
+
+            static inline void* sysRealloc(void* p, size_t nsz)
+            {
+                void* retp;
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    if(p == NULL)
+                    {
+                        return sysMalloc(nsz);
+                    }
+                    retp = (void*)nn_allocuser_realloc(g_mspcontext, p, nsz);
+                #else
+                    retp = (void*)realloc(p, nsz);
+                #endif
+                return retp;
+            }
+
+            static inline void* sysCalloc(size_t count, size_t typsize)
+            {
+                void* p;
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    p = (void*)nn_allocuser_malloc(g_mspcontext, (count * typsize));
+                    memset(p, 0, (count * typsize));
+                #else
+                    p = (void*)calloc(count, typsize);
+                #endif
+                return p;
+            }
+
+            static inline void sysFree(void* ptr)
+            {
+                #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+                    nn_allocuser_free(g_mspcontext, ptr);
+                #else
+                    free(ptr);
+                #endif
+            }
 
 
+            template<typename ClassT, typename... ArgsT>
+            static inline ClassT* make(ArgsT&&... args)
+            {
+                ClassT* tmp;
+                ClassT* ret;
+                tmp = (ClassT*)sysMalloc(sizeof(ClassT));
+                ret = new(tmp) ClassT(args...);
+                return ret;
+            }
+
+            template<typename ClassT, typename... ArgsT>
+            static inline void destroy(ClassT* cls, ArgsT&&... args)
+            {
+                if constexpr (MemoryClassHasDestroyFunc<ClassT>)
+                {
+                    //std::cerr << "Memory::destroy: using destroy" << std::endl;
+                    ClassT::destroy(cls, args...);
+                }
+                else
+                {
+                    //std::cerr << "Memory::destroy: using free()" << std::endl;
+                    sysFree(cls);
+                }
+            }
+    };
+    #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
+        /* if any global variables need to be declared, declare them here. */
+        void* Memory::g_mspcontext = nullptr;
+    #endif
+
+
+    namespace Util
+    {
+        enum
+        {
+            CONF_MERSENNESTATESIZE = 624,
+        };
+        struct NNFSStat
+        {
+            struct stat rawstbuf;
+            int mode;
+            int inode;
+            int numlinks;
+            int owneruid;
+            int ownergid;
+            const char* modename;
+            bool isfile;
+            size_t blocksize;
+            size_t blockcount;
+            size_t filesize;
+            const time_t* tmlastchanged;
+            const time_t* tmlastaccessed;
+            const time_t* tmlastmodified;
+        };
+
+
+        class FSDirReader
+        {
+            public:
+                struct Item
+                {
+                    char name[NEON_CONF_OSPATHSIZE + 1];
+                    bool isdir;
+                    bool isfile;
+                };
+
+            public:
+                #if defined(NEON_PLAT_ISLINUX)
+                    DIR* m_handle;
+                #else
+                    WIN32_FIND_DATA m_finddata;
+                    HANDLE m_findhnd;
+                #endif
+
+            public:
+                bool openDir(const char* path)
+                {
+                    #if defined(NEON_PLAT_ISLINUX)
+                        if((this->m_handle = opendir(path)) == NULL)
+                        {
+                            return false;
+                        }
+                        return true;
+                    #else
+                        size_t msz;
+                        size_t plen;
+                        char* itempattern;
+                        /*
+                        * dumb-as-shit windows has AI, but retarded API:
+                        * unlike dirent.h, the method for reading items in a directory
+                        * requires '<path>' + "/" "*"', that is; one must add a glob character.
+                        * no idea if this interferes with dot files.
+                        */
+                        plen = strlen(path);
+                        msz = (sizeof(char) * (plen + 5));
+                        itempattern = (char*)mc_memory_malloc(msz);
+                        memset(itempattern, 0, msz);
+                        strncat(itempattern, path, plen);
+                        {
+                            strncat(itempattern, "/*", 2);
+                        }
+                        this->m_findhnd = FindFirstFile(itempattern, &this->m_finddata);
+                        mc_memory_free(itempattern);
+                        if(INVALID_HANDLE_VALUE == this->m_findhnd)
+                        {
+                           return false;
+                        }
+                        return true;
+                    #endif
+                    return false;
+                }
+
+                bool readItem(Item* itm)
+                {
+                    #if defined(NEON_PLAT_ISLINUX)
+                        struct dirent* ent;
+                    #else
+                        int ok;
+                    #endif
+                    itm->isdir = false;
+                    itm->isfile = false;
+                    memset(itm->name, 0, NEON_CONF_OSPATHSIZE);
+                    #if defined(NEON_PLAT_ISLINUX)
+                        if((ent = readdir((DIR*)(this->m_handle))) == NULL)
+                        {
+                            return false;
+                        }
+                        if(ent->d_type == DT_DIR)
+                        {
+                            itm->isdir = true;
+                        }
+                        if(ent->d_type == DT_REG)
+                        {
+                            itm->isfile = true;
+                        }
+                        strcpy(itm->name, ent->d_name);
+                        return true;
+                    #else
+                        ok = FindNextFile(this->m_findhnd, &this->m_finddata);
+                        if(ok != 0)
+                        {
+                            if(INVALID_HANDLE_VALUE == this->m_findhnd)
+                            {
+                                return false;
+                            }
+                            if(this->m_finddata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                            {
+                                itm->isfile = false;
+                                itm->isdir = true;
+                            }
+                            else
+                            {
+                                itm->isfile = true;
+                                itm->isdir = false;
+                            }
+                            strcpy(itm->name, this->m_finddata.cFileName);
+                            return true;
+                        }
+                    #endif
+                    return false;
+                }
+
+                bool closeDir()
+                {
+                    #if defined(NEON_PLAT_ISLINUX)
+                        closedir((DIR*)(this->m_handle));
+                    #else
+                        FindClose(this->m_findhnd);
+                    #endif
+                    return false;
+                }
+
+        };
+
+
+
+        union DblUnion
+        {
+            uint64_t bits;
+            double num;
+        };
+
+        static int osfn_gettimeofday(struct timeval* tp, void* tzp);
+
+
+        size_t roundUpToPowe64(uint64_t x)
+        {
+            /* long long >=64 bits guaranteed in C99 */
+            --x;
+            x |= x >> 1;
+            x |= x >> 2;
+            x |= x >> 4;
+            x |= x >> 8;
+            x |= x >> 16;
+            x |= x >> 32;
+            ++x;
+            return x;
+        }
+
+        NEON_INLINE uint32_t hashBits(uint64_t hs)
+        {
+            /*
+            // From v8's ComputeLongHash() which in turn cites:
+            // Thomas Wang, Integer Hash Functions.
+            // http://www.concentric.net/~Ttwang/tech/inthash.htm
+            // hs = (hs << 18) - hs - 1;
+            */
+            hs = ~hs + (hs << 18);
+            hs = hs ^ (hs >> 31);
+            /* hs = (hs + (hs << 2)) + (hs << 4); */
+            hs = hs * 21;
+            hs = hs ^ (hs >> 11);
+            hs = hs + (hs << 6);
+            hs = hs ^ (hs >> 22);
+            return (uint32_t)(hs & 0x3fffffff);
+        }
+
+        NEON_INLINE uint32_t hashDouble(double value)
+        {
+            DblUnion bits;
+            bits.num = value;
+            return hashBits(bits.bits);
+        }
+
+        NEON_INLINE uint32_t hashString(const char* str, size_t length)
+        {
+            /* Source: https://stackoverflow.com/a/21001712 */
+            size_t ci;
+            unsigned int byte;
+            unsigned int crc;
+            unsigned int mask;
+            int i = 0;
+            int j;
+            crc = 0xFFFFFFFF;
+            ci = 0;
+            while(ci < length)
+            {
+                byte = str[i];
+                crc = crc ^ byte;
+                for(j = 7; j >= 0; j--)
+                {
+                    mask = -(crc & 1);
+                    crc = (crc >> 1) ^ (0xEDB88320 & mask);
+                }
+                i = i + 1;
+                ci++;
+            }
+            return ~crc;
+        }
+
+        /* returns the number of bytes contained in a unicode character */
+        int utf8NumBytes(int value)
+        {
+            if(value < 0)
+            {
+                return -1;
+            }
+            if(value <= 0x7f)
+            {
+                return 1;
+            }
+            if(value <= 0x7ff)
+            {
+                return 2;
+            }
+            if(value <= 0xffff)
+            {
+                return 3;
+            }
+            if(value <= 0x10ffff)
+            {
+                return 4;
+            }
+            return 0;
+        }
+
+        char* utf8Encode(unsigned int code, size_t* dlen)
+        {
+            int count;
+            char* chars;
+            *dlen = 0;
+            count = utf8NumBytes((int)code);
+            if(NEON_LIKELY(count > 0))
+            {
+                *dlen = count;
+                chars = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)count + 1));
+                if(chars != nullptr)
+                {
+                    if(code <= 0x7F)
+                    {
+                        chars[0] = (char)(code & 0x7F);
+                        chars[1] = '\0';
+                    }
+                    else if(code <= 0x7FF)
+                    {
+                        /* one continuation byte */
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xC0 | (code & 0x1F));
+                    }
+                    else if(code <= 0xFFFF)
+                    {
+                        /* two continuation bytes */
+                        chars[2] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xE0 | (code & 0xF));
+                    }
+                    else if(code <= 0x10FFFF)
+                    {
+                        /* three continuation bytes */
+                        chars[3] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[2] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[1] = (char)(0x80 | (code & 0x3F));
+                        code = (code >> 6);
+                        chars[0] = (char)(0xF0 | (code & 0x7));
+                    }
+                    else
+                    {
+                        /* unicode replacement character */
+                        chars[2] = (char)0xEF;
+                        chars[1] = (char)0xBF;
+                        chars[0] = (char)0xBD;
+                    }
+                    return chars;
+                }
+            }
+            return nullptr;
+        }
+
+        int utf8Decode(const uint8_t* bytes, uint32_t length)
+        {
+            int value;
+            uint32_t remainingbytes;
+            /* Single byte (i.e. fits in ASCII). */
+            if(*bytes <= 0x7f)
+            {
+                return *bytes;
+            }
+            if((*bytes & 0xe0) == 0xc0)
+            {
+                /* Two byte sequence: 110xxxxx 10xxxxxx. */
+                value = *bytes & 0x1f;
+                remainingbytes = 1;
+            }
+            else if((*bytes & 0xf0) == 0xe0)
+            {
+                /* Three byte sequence: 1110xxxx	 10xxxxxx 10xxxxxx. */
+                value = *bytes & 0x0f;
+                remainingbytes = 2;
+            }
+            else if((*bytes & 0xf8) == 0xf0)
+            {
+                /* Four byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx. */
+                value = *bytes & 0x07;
+                remainingbytes = 3;
+            }
+            else
+            {
+                /* Invalid UTF-8 sequence. */
+                return -1;
+            }
+            /* Don't read past the end of the buffer on truncated UTF-8. */
+            if(remainingbytes > length - 1)
+            {
+                return -1;
+            }
+            while(remainingbytes > 0)
+            {
+                bytes++;
+                remainingbytes--;
+                /* Remaining bytes must be of form 10xxxxxx. */
+                if((*bytes & 0xc0) != 0x80)
+                {
+                    return -1;
+                }
+                value = value << 6 | (*bytes & 0x3f);
+            }
+            return value;
+        }
+
+        char* utf8Codepoint(const char* str, char* outcodepoint)
+        {
+            if(0xf0 == (0xf8 & str[0]))
+            {
+                /* 4 byte utf8 codepoint */
+                *outcodepoint = (((0x07 & str[0]) << 18) | ((0x3f & str[1]) << 12) | ((0x3f & str[2]) << 6) | (0x3f & str[3]));
+                str += 4;
+            }
+            else if(0xe0 == (0xf0 & str[0]))
+            {
+                /* 3 byte utf8 codepoint */
+                *outcodepoint = (((0x0f & str[0]) << 12) | ((0x3f & str[1]) << 6) | (0x3f & str[2]));
+                str += 3;
+            }
+            else if(0xc0 == (0xe0 & str[0]))
+            {
+                /* 2 byte utf8 codepoint */
+                *outcodepoint = (((0x1f & str[0]) << 6) | (0x3f & str[1]));
+                str += 2;
+            }
+            else
+            {
+                /* 1 byte utf8 codepoint otherwise */
+                *outcodepoint = str[0];
+                str += 1;
+            }
+            return (char*)str;
+        }
+
+        char* utf8Strstr(const char* haystack, const char* needle)
+        {
+            char throwawaycodepoint;
+            const char* n;
+            const char* maybematch;
+            throwawaycodepoint = 0;
+            /* if needle has no utf8 codepoints before the null terminating
+             * byte then return haystack */
+            if('\0' == *needle)
+            {
+                return (char*)haystack;
+            }
+            while('\0' != *haystack)
+            {
+                maybematch = haystack;
+                n = needle;
+                while(*haystack == *n && (*haystack != '\0' && *n != '\0'))
+                {
+                    n++;
+                    haystack++;
+                }
+                if('\0' == *n)
+                {
+                    /* we found the whole utf8 string for needle in haystack at
+                     * maybematch, so return it */
+                    return (char*)maybematch;
+                }
+                else
+                {
+                    /* h could be in the middle of an unmatching utf8 codepoint,
+                     * so we need to march it on to the next character beginning
+                     * starting from the current character */
+                    haystack = utf8Codepoint(maybematch, &throwawaycodepoint);
+                }
+            }
+            /* no match */
+            return nullptr;
+        }
+
+        /*
+        // returns a pointer to the beginning of the pos'th utf8 codepoint
+        // in the buffer at s
+        */
+        char* utf8Index(char* s, int pos)
+        {
+            ++pos;
+            for(; *s; ++s)
+            {
+                if((*s & 0xC0) != 0x80)
+                {
+                    --pos;
+                }
+                if(pos == 0)
+                {
+                    return s;
+                }
+            }
+            return nullptr;
+        }
+
+        /*
+        // converts codepoint indexes start and end to byte offsets in the buffer at s
+        */
+        void utf8Slice(char* s, int* start, int* end)
+        {
+            char* p;
+            p = utf8Index(s, *start);
+            if(p != nullptr)
+            {
+                *start = (int)(p - s);
+            }
+            else
+            {
+                *start = -1;
+            }
+            p = utf8Index(s, *end);
+            if(p != nullptr)
+            {
+                *end = (int)(p - s);
+            }
+            else
+            {
+                *end = (int)strlen(s);
+            }
+        }
+
+        char* stringDup(const char* src, size_t len)
+        {
+            char* buf;
+            buf = (char*)Memory::sysMalloc(sizeof(char) * (len + 1));
+            if(buf == nullptr)
+            {
+                return nullptr;
+            }
+            memset(buf, 0, len + 1);
+            memcpy(buf, src, len);
+            return buf;
+        }
+
+        char* stringDup(const char* src)
+        {
+            return stringDup(src, strlen(src));
+        }
+
+        void mtrandSeed(uint32_t seed, uint32_t* binst, uint32_t* index)
+        {
+            uint32_t i;
+            binst[0] = seed;
+            for(i = 1; i < CONF_MERSENNESTATESIZE; i++)
+            {
+                binst[i] = (uint32_t)(1812433253UL * (binst[i - 1] ^ (binst[i - 1] >> 30)) + i);
+            }
+            *index = CONF_MERSENNESTATESIZE;
+        }
+
+        uint32_t mtrandGenerate(uint32_t* binst, uint32_t* index)
+        {
+            uint32_t i;
+            uint32_t y;
+            if(*index >= CONF_MERSENNESTATESIZE)
+            {
+                for(i = 0; i < CONF_MERSENNESTATESIZE - 397; i++)
+                {
+                    y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
+                    binst[i] = binst[i + 397] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
+                }
+                for(; i < CONF_MERSENNESTATESIZE - 1; i++)
+                {
+                    y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
+                    binst[i] = binst[i + (397 - CONF_MERSENNESTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
+                }
+                y = (binst[CONF_MERSENNESTATESIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
+                binst[CONF_MERSENNESTATESIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
+                *index = 0;
+            }
+            y = binst[*index];
+            *index = *index + 1;
+            y = y ^ (y >> 11);
+            y = y ^ ((y << 7) & 0x9d2c5680);
+            y = y ^ ((y << 15) & 0xefc60000);
+            y = y ^ (y >> 18);
+            return y;
+        }
+
+        double mtrandRandom(double lowerlimit, double upperlimit)
+        {
+            double randnum;
+            uint32_t randval;
+            struct timeval tv;
+            static uint32_t mtstate[CONF_MERSENNESTATESIZE];
+            static uint32_t mtindex = CONF_MERSENNESTATESIZE + 1;
+            if(mtindex >= CONF_MERSENNESTATESIZE)
+            {
+                osfn_gettimeofday(&tv, nullptr);
+                mtrandSeed((uint32_t)(1000000 * tv.tv_sec + tv.tv_usec), mtstate, &mtindex);
+            }
+            randval = mtrandGenerate(mtstate, &mtindex);
+            randnum = lowerlimit + ((double)randval / UINT32_MAX) * (upperlimit - lowerlimit);
+            return randnum;
+        }
+
+        char* stringToUpper(char* str, size_t length)
+        {
+            int c;
+            size_t i;
+            for(i = 0; i < length; i++)
+            {
+                c = str[i];
+                str[i] = toupper(c);
+            }
+            return str;
+        }
+
+        char* stringToLower(char* str, size_t length)
+        {
+            int c;
+            size_t i;
+            for(i = 0; i < length; i++)
+            {
+                c = str[i];
+                str[i] = toupper(c);
+            }
+            return str;
+        }
+
+        static FILE* osfn_popen(const char* cmd, const char* type)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return popen(cmd, type);
+            #endif
+            return NULL;
+        }
+
+        static void osfn_pclose(FILE* fh)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                pclose(fh);
+            #endif
+        }
+
+        static int osfn_chmod(const char* path, int mode)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return chmod(path, mode);
+            #else
+                return -1;
+            #endif
+        }
+
+        static char* osfn_realpath(const char* path, char* respath)
+        {
+            char* copy;
+            #if defined(NEON_PLAT_ISLINUX)
+                char* rt;
+                rt = realpath(path, respath);
+                if(rt != NULL)
+                {
+                    copy = Util::stringDup(rt);
+                    free(rt);
+                    return copy;
+                }
+            #else
+            #endif
+            copy = Util::stringDup(path);
+            respath = copy;
+            return copy;
+
+        }
+
+        static char* osfn_dirname(const char *fname)
+        {
+            size_t dirlen;
+            char * dirpart;
+            const char *p;
+            const char *slash;
+            p = fname;
+            slash = NULL;
+            if(fname)
+            {
+                if(*fname && fname[1] == ':')
+                {
+                    slash = fname + 1;
+                    p += 2;
+                }
+                /* Find the rightmost slash.  */
+                while (*p)
+                {
+                    if (*p == '/' || *p == '\\')
+                    {
+                        slash = p;
+                    }
+                    p++;
+                }
+                if(slash == NULL)
+                {
+                    fname = ".";
+                    dirlen = 1;
+                }
+                else
+                {
+                    /* Remove any trailing slashes.  */
+                    while(slash > fname && (slash[-1] == '/' || slash[-1] == '\\'))
+                    {
+                        slash--;
+                    }
+                    /* How long is the directory we will return?  */
+                    dirlen = slash - fname + (slash == fname || slash[-1] == ':');
+                    if (*slash == ':' && dirlen == 1)
+                    {
+                        dirlen += 2;
+                    }
+                }
+                dirpart = (char *)Memory::sysMalloc(dirlen + 1);
+                if(dirpart != NULL)
+                {
+                    strncpy(dirpart, fname, dirlen);
+                    if (slash && *slash == ':' && dirlen == 3)
+                    {
+                        dirpart[2] = '.';	/* for "x:foo" return "x:." */
+                    }
+                    dirpart[dirlen] = '\0';
+                }
+                return dirpart;
+            }
+            return NULL;
+        }
+
+        static char* osfn_fallbackbasename(const char* opath)
+        {
+            char* strbeg;
+            char* strend;
+            char* cpath;
+            strend = cpath = (char*)opath;
+            while(*strend)
+            {
+                strend++;
+            }
+            while(strend > cpath && strend[-1] == '/')
+            {
+                strend--;
+            }
+            strbeg = strend;
+            while(strbeg > cpath && strbeg[-1] != '/')
+            {
+                strbeg--;
+            }
+            /* len = (strend - strbeg) */
+            cpath = strbeg;
+            cpath[(strend - strbeg)] = 0;
+            return strbeg;
+        }
+
+        static char* osfn_basename(const char* path)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                char* rt;
+                rt = basename((char*)path);
+                if(rt != NULL)
+                {
+                    return rt;
+                }
+            #else
+            #endif
+            return osfn_fallbackbasename(path);
+        }
+
+        static int osfn_isatty(int fd)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return isatty(fd);
+            #else
+                return 0;
+            #endif
+        }
+
+        static int osfn_symlink(const char* path1, const char* path2)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return symlink(path1, path2);
+            #else
+                return -1;
+            #endif
+        }
+
+        static int osfn_symlinkat(const char* path1, int fd, const char* path2)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return symlinkat(path1, fd, path2);
+            #else
+                return -1;
+            #endif
+        }
+
+        static char* osfn_getcwd(char* buf, size_t size)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return getcwd(buf, size);
+            #else
+                #if defined(NEON_PLAT_ISWINDOWS)
+                    GetCurrentDirectory(size, buf);
+                    return buf;
+                #endif
+            #endif
+            return NULL;
+
+        }
+
+        static int osfn_lstat(const char* path, struct stat* buf)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return lstat(path, buf);
+            #else
+                return stat(path, buf);
+            #endif
+        }
+
+
+        static int osfn_truncate(const char* path, size_t length)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return truncate(path, length);
+            #else
+                return -1;
+            #endif
+        }
+
+        static unsigned int osfn_sleep(unsigned int seconds)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return sleep(seconds);
+            #else
+                return 0;
+            #endif
+        }
+
+        static int osfn_gettimeofday(struct timeval* tp, void* tzp)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return gettimeofday(tp, tzp);
+            #else
+                return 0;
+            #endif
+        }
+
+        static int osfn_mkdir(const char* path, size_t mode)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return mkdir(path, mode);
+            #else
+                return -1;
+            #endif
+        }
+
+        static int osfn_rmdir(const char* path)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return rmdir(path);
+            #else
+                return -1;
+            #endif
+        }
+
+        static int osfn_unlink(const char* path)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return unlink(path);
+            #else
+                return -1;
+            #endif
+        }
+
+
+        static const char* osfn_getenv(const char* key)
+        {
+            return getenv(key);
+        }
+
+        static bool osfn_setenv(const char* key, const char* value, bool replace)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return (setenv(key, value, replace) == 0);
+            #else
+                int errcode;
+                size_t envsize;
+                errcode = 0;
+                if(!replace)
+                {
+                    envsize = 0;
+                    errcode = getenv_s(&envsize, NULL, 0, key);
+                    if(errcode || envsize) return errcode;
+                }
+                if(_putenv_s(key, value) == -1)
+                {
+                    return false;
+                }
+                return true;
+            #endif
+        }
+
+        static int osfn_chdir(const char* path)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return chdir(path);
+            #else
+                return -1;
+            #endif
+        }
+
+        static int osfn_getpid()
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return getpid();
+            #endif
+            return -1;
+        }
+
+        static int osfn_kill(int pid, int code)
+        {
+            #if defined(NEON_PLAT_ISLINUX)
+                return kill(pid, code);
+            #else
+                return -1;
+            #endif
+        }
+
+        static bool nn_util_fsfileexists(const char* filepath)
+        {
+            #if !defined(NEON_PLAT_ISWINDOWS)
+                return access(filepath, F_OK) == 0;
+            #else
+                struct stat st;
+                if(stat(filepath, &st) == -1)
+                {
+                    return false;
+                }
+                return true;
+            #endif
+        }
+
+        static bool nn_util_fsfileistype(const char* filepath, int typ)
+        {
+            struct stat st;
+            (void)filepath;
+            if(stat(filepath, &st) == -1)
+            {
+                return false;
+            }
+            if(typ == 'f')
+            {
+                return S_ISREG(st.st_mode);
+            }
+            else if(typ == 'd')
+            {
+                return S_ISDIR(st.st_mode);
+            }
+            return false;
+        }
+
+        static bool nn_util_fsfileisfile(const char* filepath)
+        {
+            return nn_util_fsfileistype(filepath, 'f');
+        }
+
+        static bool nn_util_fsfileisdirectory(const char* filepath)
+        {
+            return nn_util_fsfileistype(filepath, 'd');
+        }
+
+        static char* nn_util_fsgetbasename(const char* path)
+        {
+            return osfn_basename(path);
+        }
+
+        static const char* filestat_internmodetoname(int t)
+        {
+            switch(t)
+            {
+                #if defined(S_IFBLK)
+                    case S_IFBLK:
+                        return "blockdevice";
+                        break;
+                #endif
+                #if defined(S_IFCHR)
+                    case S_IFCHR:
+                        return "characterdevice";
+                        break;
+                #endif
+                #if defined(S_IFDIR)
+                    case S_IFDIR:
+                        return "directory";
+                        break;
+                #endif
+                #if defined(S_IFIFO)
+                    case S_IFIFO:
+                        return "pipe";
+                        break;
+                #endif
+                #if defined(S_IFLNK)
+                    case S_IFLNK:
+                        return "symlink";
+                        break;
+                #endif
+                #if defined(S_IFREG)
+                    case S_IFREG:
+                        return "file";
+                        break;
+                #endif
+                #if defined(S_IFSOCK)
+                    case S_IFSOCK:
+                        return "socket";
+                        break;
+                #endif
+                    default:
+                        break;
+            }
+            return "unknown";
+        }
+
+        static const char* filestat_ctimetostring(const time_t *timep)
+        {
+            size_t len;
+            char* r;
+            r = ctime(timep);
+            len = strlen(r);
+            if(r[len - 1] == '\n')
+            {
+                r[len - 1] = 0;
+            }
+            return r;
+        }
+
+
+        static bool filestat_initempty(NNFSStat* nfs)
+        {
+            memset(nfs, 0, sizeof(NNFSStat));
+            return true;
+        }
+
+        static bool filestat_setup(NNFSStat* nfs)
+        {
+            nfs->inode = nfs->rawstbuf.st_ino;
+            nfs->mode = (nfs->rawstbuf.st_mode & S_IFMT);
+            nfs->numlinks = nfs->rawstbuf.st_nlink;
+            nfs->owneruid = nfs->rawstbuf.st_uid;
+            nfs->ownergid = nfs->rawstbuf.st_gid;
+            #if !defined(_WIN32) && !defined(_WIN64)
+                nfs->blocksize = nfs->rawstbuf.st_blksize;
+                nfs->blockcount = nfs->rawstbuf.st_blocks;
+            #else
+                nfs->blocksize = 8;
+                nfs->blockcount = (1024 * 4);
+            #endif
+            nfs->filesize = nfs->rawstbuf.st_size;
+            nfs->modename = filestat_internmodetoname(nfs->mode);
+            nfs->tmlastchanged = (&nfs->rawstbuf.st_ctime);
+            nfs->tmlastaccessed = (&nfs->rawstbuf.st_atime);
+            nfs->tmlastmodified = (&nfs->rawstbuf.st_mtime);
+            return true;
+        }
+
+
+        static bool filestat_initfrompath(NNFSStat* nfs, const char* path)
+        {
+            if(!filestat_initempty(nfs))
+            {
+                return false;
+            }
+            if(stat(path, &nfs->rawstbuf) == -1)
+            {
+                return false;
+            }
+            return filestat_setup(nfs);
+        }
+
+        static int g_neon_ttycheck = -1;
+
+        const char* termColor(Color tc)
+        {
+        #if !defined(NEON_CONFIG_FORCEDISABLECOLOR)
+            int fdstdout;
+            int fdstderr;
+            if(g_neon_ttycheck == -1)
+            {
+                fdstdout = fileno(stdout);
+                fdstderr = fileno(stderr);
+                g_neon_ttycheck = (osfn_isatty(fdstderr) && osfn_isatty(fdstdout));
+            }
+            if(g_neon_ttycheck)
+            {
+                switch(tc)
+                {
+                    case NEON_COLOR_RESET:
+                        return "\x1B[0m";
+                    case NEON_COLOR_RED:
+                        return "\x1B[31m";
+                    case NEON_COLOR_GREEN:
+                        return "\x1B[32m";
+                    case NEON_COLOR_YELLOW:
+                        return "\x1B[33m";
+                    case NEON_COLOR_BLUE:
+                        return "\x1B[34m";
+                    case NEON_COLOR_MAGENTA:
+                        return "\x1B[35m";
+                    case NEON_COLOR_CYAN:
+                        return "\x1B[36m";
+                }
+            }
+        #else
+            (void)tc;
+        #endif
+            return "";
+        }
 
 
     /* topproto */
-
-    union UtilDblUnion
-    {
-        uint64_t bits;
-        double num;
-    };
-
-    size_t nn_util_rndup2pow64(uint64_t x)
-    {
-        /* long long >=64 bits guaranteed in C99 */
-        --x;
-        x |= x >> 1;
-        x |= x >> 2;
-        x |= x >> 4;
-        x |= x >> 8;
-        x |= x >> 16;
-        x |= x >> 32;
-        ++x;
-        return x;
     }
 
-    NEON_INLINE uint32_t nn_util_hashbits(uint64_t hs)
-    {
-        /*
-        // From v8's ComputeLongHash() which in turn cites:
-        // Thomas Wang, Integer Hash Functions.
-        // http://www.concentric.net/~Ttwang/tech/inthash.htm
-        // hs = (hs << 18) - hs - 1;
-        */
-        hs = ~hs + (hs << 18);
-        hs = hs ^ (hs >> 31);
-        /* hs = (hs + (hs << 2)) + (hs << 4); */
-        hs = hs * 21;
-        hs = hs ^ (hs >> 11);
-        hs = hs + (hs << 6);
-        hs = hs ^ (hs >> 22);
-        return (uint32_t)(hs & 0x3fffffff);
-    }
-
-    NEON_INLINE uint32_t nn_util_hashdouble(double value)
-    {
-        UtilDblUnion bits;
-        bits.num = value;
-        return nn_util_hashbits(bits.bits);
-    }
-
-    NEON_INLINE uint32_t nn_util_hashstring(const char* str, size_t length)
-    {
-        /* Source: https://stackoverflow.com/a/21001712 */
-        size_t ci;
-        unsigned int byte;
-        unsigned int crc;
-        unsigned int mask;
-        int i = 0;
-        int j;
-        crc = 0xFFFFFFFF;
-        ci = 0;
-        while(ci < length)
-        {
-            byte = str[i];
-            crc = crc ^ byte;
-            for(j = 7; j >= 0; j--)
-            {
-                mask = -(crc & 1);
-                crc = (crc >> 1) ^ (0xEDB88320 & mask);
-            }
-            i = i + 1;
-            ci++;
-        }
-        return ~crc;
-    }
 
     class Wrappers
     {
         public:
+            static String* wrapClassGetName(Class* cl);
             static uint32_t wrapStrGetHash(String* os);
             static const char* wrapStrGetData(String* os);
             static size_t wrapStrGetLength(String* os);
-            static String* wrapMakeFromStrBuf(const StringBuffer& buf, uint32_t hsv, size_t length);
+            static String* wrapMakeFromStrBuf(const StrBuffer& buf, uint32_t hsv, size_t length);
             static String* wrapStringCopy(const char* data, size_t len);
+            static String* wrapStringCopy(const char* str);
             static Blob* wrapGetBlobOfClosure(Function* fn);
             static size_t wrapGetArityOfClosure(Function* ofn);
             static size_t wrapGetArityOfFuncScript(Function* ofn);
+            static size_t wrapGetBlobcountOfFuncScript(Function* ofn);
             static const char* wrapGetInstanceName(Instance* inst);
     };
 
@@ -533,12 +1578,154 @@ namespace neon
 
             /* number of counter characters currently */
             uint32_t currcount;
+
+        public:
+            /* allows you to set a custom length. */
+            utf8iterator_t(const char* ptr, uint32_t length)
+            {
+                this->plainstr = ptr;
+                this->plainlen = length;
+                this->codepoint = 0;
+                this->currpos = 0;
+                this->nextpos = 0;
+                this->currcount = 0;
+            }
+
+            /* calculate the number of bytes a UTF8 character occupies in a string. */
+            uint16_t charSize(const char* character)
+            {
+                if(character == nullptr)
+                {
+                    return 0;
+                }
+                if(character[0] == 0)
+                {
+                    return 0;
+                }
+                if((character[0] & 0x80) == 0)
+                {
+                    return 1;
+                }
+                else if((character[0] & 0xE0) == 0xC0)
+                {
+                    return 2;
+                }
+                else if((character[0] & 0xF0) == 0xE0)
+                {
+                    return 3;
+                }
+                else if((character[0] & 0xF8) == 0xF0)
+                {
+                    return 4;
+                }
+                else if((character[0] & 0xFC) == 0xF8)
+                {
+                    return 5;
+                }
+                else if((character[0] & 0xFE) == 0xFC)
+                {
+                    return 6;
+                }
+                return 0;
+            }
+
+            uint32_t converter(const char* character, uint16_t size)
+            {
+                uint16_t i;
+                static uint32_t currcodepoint = 0;
+                static const uint16_t g_utf8iter_table_unicode[] = { 0, 0, 0x1F, 0xF, 0x7, 0x3, 0x1 };
+                if(size == 0)
+                {
+                    return 0;
+                }
+                if(character == nullptr)
+                {
+                    return 0;
+                }
+                if(character[0] == 0)
+                {
+                    return 0;
+                }
+                if(size == 1)
+                {
+                    return character[0];
+                }
+                currcodepoint = g_utf8iter_table_unicode[size] & character[0];
+                for(i = 1; i < size; i++)
+                {
+                    currcodepoint = currcodepoint << 6;
+                    currcodepoint = currcodepoint | (character[i] & 0x3F);
+                }
+                return currcodepoint;
+            }
+
+            /* returns 1 if there is a character in the next position. If there is not, return 0. */
+            uint16_t next()
+            {
+                const char* pointer;
+                if(this->plainstr == nullptr)
+                {
+                    return 0;
+                }
+                if(this->nextpos < this->plainlen)
+                {
+                    this->currpos = this->nextpos;
+                    /* Set Current Pointer */
+                    pointer = this->plainstr + this->nextpos;
+                    this->charsize = charSize(pointer);
+                    if(this->charsize == 0)
+                    {
+                        return 0;
+                    }
+                    this->nextpos = this->nextpos + this->charsize;
+                    this->codepoint = converter(pointer, this->charsize);
+                    if(this->codepoint == 0)
+                    {
+                        return 0;
+                    }
+                    this->currcount++;
+                    return 1;
+                }
+                this->currpos = this->nextpos;
+                return 0;
+            }
+
+            /* return current character in UFT8 - no same that this.codepoint (not codepoint/unicode) */
+            const char* getChar()
+            {
+                uint16_t i;
+                const char* pointer;
+                static char str[10];
+                str[0] = '\0';
+                if(this->plainstr == nullptr)
+                {
+                    return str;
+                }
+                if(this->charsize == 0)
+                {
+                    return str;
+                }
+                if(this->charsize == 1)
+                {
+                    str[0] = this->plainstr[this->currpos];
+                    str[1] = '\0';
+                    return str;
+                }
+                pointer = this->plainstr + this->currpos;
+                for(i = 0; i < this->charsize; i++)
+                {
+                    str[i] = pointer[i];
+                }
+                str[this->charsize] = '\0';
+                return str;
+            }
+
     };
 
-    class StringBuffer
+    class StrBuffer
     {
         public:
-            static StringBuffer* fromPtr(StringBuffer* sbuf, size_t len)
+            static StrBuffer* fromPtr(StrBuffer* sbuf, size_t len)
             {
                 sbuf->m_length = 0;
                 sbuf->m_capacity = 0;
@@ -546,8 +1733,8 @@ namespace neon
                 sbuf->m_isintern = false;
                 if(len > 0)
                 {
-                    sbuf->m_capacity = nn_util_rndup2pow64(len + 1);
-                    sbuf->m_data = (char*)nn_memory_malloc(sbuf->m_capacity);
+                    sbuf->m_capacity = Util::roundUpToPowe64(len + 1);
+                    sbuf->m_data = (char*)Memory::sysMalloc(sbuf->m_capacity);
                     if(!sbuf->m_data)
                     {
                         return NULL;
@@ -557,22 +1744,21 @@ namespace neon
                 return sbuf;
             }
 
-
-            static bool destroy(StringBuffer* sb)
+            static bool destroy(StrBuffer* sb)
             {
                 destroyFromPtr(sb);
                 if(!sb->m_isintern)
                 {
-                    nn_memory_free(sb);
+                    Memory::sysFree(sb);
                 }
                 return true;
             }
 
-            static bool destroyFromPtr(StringBuffer* sb)
+            static bool destroyFromPtr(StrBuffer* sb)
             {
                 if((sb->m_data != nullptr) && (sb->m_isintern == false))
                 {
-                    nn_memory_free(sb->m_data);
+                    Memory::sysFree(sb->m_data);
                 }
                 return true;
             }
@@ -616,9 +1802,9 @@ namespace neon
                 len++;
                 if(*sizeptr < len)
                 {
-                    *sizeptr = nn_util_rndup2pow64(len);
+                    *sizeptr = Util::roundUpToPowe64(len);
                     /* fprintf(stderr, "sizeptr=%ld\n", *sizeptr); */
-                    if((*buf = (char*)nn_memory_realloc(*buf, *sizeptr)) == NULL)
+                    if((*buf = (char*)Memory::sysRealloc(*buf, *sizeptr)) == NULL)
                     {
                         fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
                         abort();
@@ -630,7 +1816,7 @@ namespace neon
             {
                 if(pos > this->m_length)
                 {
-                    fprintf(stderr, "StringBuffer: out of bounds error [index: %ld, num_of_bits: %ld]\n", pos, this->m_length);
+                    fprintf(stderr, "StrBuffer: out of bounds error [index: %ld, num_of_bits: %ld]\n", pos, this->m_length);
                     errno = EDOM;
                     exitOnError();
                 }
@@ -643,7 +1829,7 @@ namespace neon
                 if(start + len > this->m_length)
                 {
                     endstr = (this->m_length > 5 ? "..." : "");
-                    fprintf(stderr,"StringBuffer: out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n", start, len, this->m_length, (int)utilMin(size_t(5), this->m_length), this->m_data, endstr);
+                    fprintf(stderr,"StrBuffer: out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n", start, len, this->m_length, (int)utilMin(size_t(5), this->m_length), this->m_data, endstr);
                     errno = EDOM;
                     exitOnError();
                 }
@@ -707,14 +1893,14 @@ namespace neon
             }
 
         public:
-            StringBuffer()
+            StrBuffer()
             {
                 this->m_length = 0;
                 this->m_capacity = 0;
                 this->m_data = NULL;
             }
 
-            StringBuffer(size_t len)
+            StrBuffer(size_t len)
             {
                 this->m_length = 0;
                 this->m_capacity = 0;
@@ -722,11 +1908,11 @@ namespace neon
                 assert(fromPtr(this, len));
             }
 
-            ~StringBuffer()
+            ~StrBuffer()
             {
             }
 
-            /* Clear the content of an existing StringBuffer (sets size to 0) */
+            /* Clear the content of an existing StrBuffer (sets size to 0) */
             void reset()
             {
                 if(m_data)
@@ -790,8 +1976,8 @@ namespace neon
             {
                 size_t cap;
                 char* newbuf;
-                cap = nn_util_rndup2pow64(newlen + 1);
-                newbuf = (char*)nn_memory_realloc(this->m_data, cap * sizeof(char));
+                cap = Util::roundUpToPowe64(newlen + 1);
+                newbuf = (char*)Memory::sysRealloc(this->m_data, cap * sizeof(char));
                 if(newbuf == NULL)
                 {
                     return false;
@@ -869,7 +2055,7 @@ namespace neon
             {
                 char* newstr;
                 checkBoundsReadRange(start, len);
-                newstr = (char*)nn_memory_malloc((len + 1) * sizeof(char));
+                newstr = (char*)Memory::sysMalloc((len + 1) * sizeof(char));
                 strncpy(newstr, m_data + start, len);
                 newstr[len] = '\0';
                 return newstr;
@@ -899,7 +2085,7 @@ namespace neon
             }
 
             /*
-            // Copy N characters from a character array to the end of this StringBuffer
+            // Copy N characters from a character array to the end of this StrBuffer
             // strlen(str) must be >= len
             */
             bool append(const char* str, size_t len)
@@ -973,7 +2159,7 @@ namespace neon
 
 
 
-            /* sprintf to the end of a StringBuffer (adds string terminator after sprint) */
+            /* sprintf to the end of a StrBuffer (adds string terminator after sprint) */
             template<typename... ArgsT>
             int appendFormat(const char* fmt, ArgsT&&... args)
             {
@@ -983,6 +2169,1721 @@ namespace neon
             }
     };
 
+
+    /************
+
+        REMIMU: SINGLE HEADER C/C++ REGEX LIBRARY
+
+    PERFORMANCE
+
+        On simple cases, Remimu's match speed is similar to PCRE2.
+        Regex parsing/compilation is also much faster (around 4x to 10x), so single-shot regexes are often faster than PCRE2.
+        HOWEVER: Remimu is a pure backtracking engine, and has `O(2^x)` complexity on regexes with catastrophic backtracking.
+        It can be much, much, MUCH slower than PCRE2. Beware!
+        Remimu uses length-checked fixed memory buffers with no recursion, so memory usage is statically known.
+
+    FEATURES
+
+        - Lowest-common-denominator common regex syntax
+        - Based on backtracking (slow in the worst case, but fast in the best case)
+        - 8-bit only, no utf-16 or utf-32
+        - Statically known memory usage (no heap allocation or recursion)
+        - Groups with or without capture, and with or without quantifiers
+        - Supported escapes:
+        - - 2-digit hex: e.g. \x00, \xFF, or lowercase, or mixed case
+        - - \r, \n, \t, \v, \f (whitespace characters)
+        - - \d, \s, \w, \D, \S, \W (digit, space, and word character classes)
+        - - \b, \B word boundary and non-word-boundary anchors (not fully supported in zero-size quantified groups, but even then, usually supported)
+        - - Escaped literal characters: {}[]-()|^$*+?:./\
+        - - - Escapes work in character classes, except for'b'
+        - Character classes, including disjoint ranges, proper handling of bare [ and trailing -, etc
+        - - Dot (.) matches all characters, including newlines, unless FLAG_DOTNONEWLINES is passed as a flag to parse()
+        - - Dot (.) only matches at most one byte at a time, so matching \r\n requires two dots (and not using FLAG_DOTNONEWLINES)
+        - Anchors (^ and $)
+        - - Same support caveats as \b, \B apply
+        - Basic quantifiers (*, +, ?)
+        - - Quantifiers are greedy by default.
+        - Explicit quantifiers ({2}, {5}, {5,}, {5,7})
+        - Alternation e.g. (asdf|foo)
+        - Lazy quantifiers e.g. (asdf)*? or \w+?
+        - Possessive greedy quantifiers e.g. (asdf)*+ or \w++
+        - - NOTE: Capture groups forand inside of possessive groups return no capture information.
+        - Atomic groups e.g. (?>(asdf))
+        - - NOTE: Capture groups inside of atomic groups return no capture information.
+
+    NOT SUPPORTED
+
+        - Strings with non-terminal null characters
+        - Unicode character classes (matching single utf-8 characters works regardless)
+        - Exact POSIX regex semantics (posix-style greediness etc)
+        - Backreferences
+        - Lookbehind/Lookahead
+        - Named groups
+        - Most other weird flavor-specific regex stuff
+        - Capture of or inside of possessive-quantified groups (still take up a capture slot, but no data is returned)
+
+    USAGE
+
+        // minimal:
+
+        RegexContext ctx;
+        RegexContext::Token tokens[1024];
+        int16_t tokencount = 1024;
+        RegexContext::initStack(&ctx);
+        int e = ctx.parse("[0-9]+\\.[0-9]+", tokens, &tokencount, 0);
+        assert(!e);
+
+        int64_t matchlen = ctx.match(tokens, "23.53) ", 0, 0, 0, 0);
+        printf("########### return: %d\n", matchlen);
+
+        // with captures:
+        RegexContext ctx;
+        RegexContext::Token tokens[256];
+        int16_t tokencount = sizeof(tokens)/sizeof(tokens[0]);
+        RegexContext::initStack(&xtx);
+        int e = ctx.parse("((a)|(b))++", tokens, &tokencount, 0);
+        assert(!e);
+
+        int64_t cappos[5];
+        int64_t capspan[5];
+        memset(cappos, 0xFF, sizeof(cappos));
+        memset(capspan, 0xFF, sizeof(capspan));
+
+        int64_t matchlen = ctx.match(tokens, "aaaaaabbbabaqa", 0, 5, cappos, capspan);
+        printf("Match length: %d\n", matchlen);
+        for(int i = 0; i < 5; i++)
+            printf("Capture %d: %d plus %d\n", i, cappos[i], capspan[i]);
+        RegexContext::printTokens(tokens);
+
+    LICENSE
+        Creative Commons Zero, public domain.
+    */
+
+    struct RegexContext
+    {
+        public:
+            enum
+            {
+                FLAG_DOTNONEWLINES = 1
+            };
+
+            enum
+            {
+                RXTOKTYP_NORMAL = 0,
+                RXTOKTYP_OPEN = 1,
+                RXTOKTYP_NCOPEN = 2,
+                RXTOKTYP_CLOSE = 3,
+                RXTOKTYP_OR = 4,
+                RXTOKTYP_CARET = 5,
+                RXTOKTYP_DOLLAR = 6,
+                RXTOKTYP_BOUND = 7,
+                RXTOKTYP_NBOUND = 8,
+                RXTOKTYP_END = 9
+            };
+
+            enum
+            {
+                RXTOKMODE_POSSESSIVE = 1,
+                RXTOKMODE_LAZY = 2,
+                /*  temporary; gets cleared later */
+                RXTOKMODE_INVERTED = 128
+            };
+
+            enum
+            {
+                /*
+                0: init
+                1: normal
+                2: in char class, initial state
+                3: in char class, but possibly looking fora range marker
+                4: in char class, but just saw a range marker
+                5: immediately after quantifiable token
+                6: immediately after quantifier
+                */
+                RXSTATE_NORMAL = 1,
+                RXSTATE_QUANT = 2,
+                RXSTATE_MODE = 3,
+                RXSTATE_CCINIT = 4,
+                RXSTATE_CCNORMAL = 5,
+                RXSTATE_CCRANGE = 6
+            };
+
+            enum
+            {
+                stacksizemax = 1024,
+                auxstatssize = 1024
+            };
+
+            struct Token
+            {
+                uint8_t kind;
+                uint8_t mode;
+                uint16_t count_lo;
+                /*  0 means no limit */
+                uint16_t count_hi;
+                /*  forgroups: mask 0 stores group-with-quantifier number (quantifiers are +, *, ?, {n}, {n,}, or {n,m}) */
+                uint16_t mask[16];
+                /*  from ( or ), offset in token list to matching paren. TODO: move into mask maybe */
+                int16_t pair_offset;
+            };
+
+            struct MState
+            {
+                uint32_t k;
+                uint32_t group_state; /*  quantified group temp state (e.g. number of repetitions) */
+                uint32_t prev; /*  for)s, stack index of corresponding previous quantified state */
+                uint64_t i;
+                uint64_t range_min;
+                uint64_t range_max;
+            };
+
+        public:
+            static void initStack(RegexContext* ctx, Token* tokens, size_t maxtokens)
+            {
+                ctx->isallocated = false;
+                ctx->haderror = false;
+                ctx->tokens = tokens;
+                ctx->maxtokens = maxtokens;
+            }
+
+            static RegexContext* initAlloc(Token* tokens, size_t maxtokens)
+            {
+                RegexContext* ctx;
+                ctx = (RegexContext*)Memory::sysMalloc(sizeof(RegexContext));
+                if(ctx == NULL)
+                {
+                    return NULL;
+                }
+                initStack(ctx, tokens, maxtokens);
+                ctx->isallocated = true;
+                return ctx;
+            }
+
+            static void destroy(RegexContext* ctx)
+            {
+                if(!ctx->isallocated)
+                {
+                    return;
+                }
+                Memory::sysFree(ctx);
+            }
+
+            static NEON_INLINE bool checkIsW(uint64_t* wmask, int byte)
+            {
+                return (!!(wmask[((uint8_t)byte) >> 4] & (1 << ((uint8_t)byte & 0xF))));
+            }
+
+            /*  NOTE: undef'd later */
+            static NEON_INLINE int checkMask(Token* tokens, size_t k, uint8_t byte)
+            {
+                return (!!(tokens[k].mask[((uint8_t)byte) >> 4] & (1 << ((uint8_t)byte & 0xF))));
+            }
+
+            static void printCSmart(int c)
+            {
+                if(c >= 0x20 && c <= 0x7E)
+                {
+                    printf("%c", c);
+                }
+                else
+                {
+                    printf("\\x%02x", c);
+                }
+            }
+
+            static void printTokens(Token* tokens)
+            {
+                int c;
+                int k;
+                int cold;
+                static const char* kindtostr[] = {
+                    "NORMAL", "OPEN", "NCOPEN", "CLOSE", "OR", "CARET", "DOLLAR", "BOUND", "NBOUND", "END",
+                };
+                static const char* modetostr[] = {
+                    "GREEDY",
+                    "POSSESS",
+                    "LAZY",
+                };
+                for(k = 0;; k++)
+                {
+                    printf("%s\t%s\t", kindtostr[tokens[k].kind], modetostr[tokens[k].mode]);
+                    cold = -1;
+                    for(c = 0; c < (tokens[k].kind ? 0 : 256); c++)
+                    {
+                        if(checkMask(tokens, k, c))
+                        {
+                            if(cold == -1)
+                            {
+                                cold = c;
+                            }
+                        }
+                        else if(cold != -1)
+                        {
+                            if(c - 1 == cold)
+                            {
+                                printCSmart(cold);
+                                cold = -1;
+                            }
+                            else if(c - 2 == cold)
+                            {
+                                printCSmart(cold);
+                                printCSmart(cold + 1);
+                                cold = -1;
+                            }
+                            else
+                            {
+                                printCSmart(cold);
+                                printf("-");
+                                printCSmart(c - 1);
+                                cold = -1;
+                            }
+                        }
+                    }
+                    /*
+                    printf("\t");
+                    for(int i = 0; i < 16; i++)
+                        printf("%04x", tokens[k].mask[i]);
+                    */
+                    printf("\t{%d,%d}\t(%d)\n", tokens[k].count_lo, tokens[k].count_hi - 1, tokens[k].pair_offset);
+                    if(tokens[k].kind == RXTOKTYP_END)
+                    {
+                        break;
+                    }
+                }
+            }
+
+        public:
+            bool haderror;
+            bool isallocated;
+            size_t maxtokens;
+            size_t tokencount;
+            char errorbuf[1024];
+            Token* tokens;
+
+        public:
+            template<typename... ArgsT>
+            NEON_INLINE void setError(const char* fmt, ArgsT&&... args)
+            {
+                static constexpr auto tmpsprintf = sprintf;
+                this->haderror = true;
+                fprintf(stderr, "ERROR: ");
+                tmpsprintf(this->errorbuf, fmt, args...);
+            }
+
+            bool rewindOrFail(uint64_t& k, uint32_t& i, uint16_t& stackn, uint8_t& justrewinded, uint64_t& range_min, uint64_t& range_max, uint32_t* qgroupstack, uint32_t* qgroupstate, MState* rewindstack)
+            {
+                if(stackn == 0)
+                {
+                    return false;
+                }
+                stackn -= 1;
+                while(stackn > 0 && rewindstack[stackn].prev == 0xFAC7)
+                {
+                    stackn -= 1;
+                }
+                justrewinded = 1;
+                range_min = rewindstack[stackn].range_min;
+                range_max = rewindstack[stackn].range_max;
+                assert(rewindstack[stackn].i <= i);
+                i = rewindstack[stackn].i;
+                k = rewindstack[stackn].k;
+                if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                {
+                    qgroupstate[this->tokens[k].mask[0]] = rewindstack[stackn].group_state;
+                    qgroupstack[this->tokens[k].mask[0]] = rewindstack[stackn].prev;
+                }
+                k -= 1;
+                return true;
+            }
+
+            bool rewindDoSaveRaw(uint32_t k, bool isdum, uint64_t& i, uint16_t& stackn, uint64_t& range_min, uint64_t& range_max, uint32_t* qgroupstack, uint32_t* qgroupstate, MState* rewindstack)
+            {
+                MState s;
+                if(stackn >= stacksizemax)
+                {
+                    setError("out of backtracking room. returning");
+                    return false;
+                }
+                memset(&s, 0, sizeof(MState));
+                s.i = i;
+                s.k = (k);
+                s.range_min = range_min;
+                s.range_max = range_max;
+                s.prev = 0;
+                if(isdum)
+                {
+                    s.prev = 0xFAC7;
+                }
+                else if(this->tokens[s.k].kind == RXTOKTYP_CLOSE)
+                {
+                    s.group_state = qgroupstate[this->tokens[s.k].mask[0]];
+                    s.prev = qgroupstack[this->tokens[s.k].mask[0]];
+                    qgroupstack[this->tokens[s.k].mask[0]] = stackn;
+                }
+                rewindstack[stackn++] = s;
+                return true;
+            }
+
+            /*
+             Returns a negative number on failure:
+             -1: Regex string is invalid or using unsupported features or too long.
+             -2: Provided buffer not long enough. Give up, or reallocate with more length and retry.
+              Returns 0 on success.
+              On call, tokencount pointer must point to the number of tokens that can be written to the tokens buffer.
+              On successful return, the number of actually used tokens is written to tokencount.
+              Sets tokencount to zero ifa regex is not created but no error happened (e.g. empty pattern).
+              Flags: Not yet used.
+              SAFETY: Pattern must be null-terminated.
+              SAFETY: tokens buffer must have at least the input tokencount number of Token objects. They are allowed to be uninitialized.
+            */
+            NEON_INLINE int parse(const char* pattern, int32_t flags)
+            {
+                int escstate;
+                int state;
+                int charclassmem;
+                int parencount;
+                int16_t k;
+                int64_t tokenslen;
+                uint64_t i;
+                uint64_t mi;
+                uint64_t patternlen;
+                uint8_t clsi;
+                char c;
+                ptrdiff_t l;
+                int macn;
+                uint32_t val;
+                uint32_t val2;
+                uint8_t escc;
+                uint8_t n0;
+                uint8_t n1;
+                uint8_t isupper;
+                uint64_t n;
+                int16_t k3;
+                int16_t k2;
+                ptrdiff_t diff;
+                int balance;
+                ptrdiff_t found;
+                uint16_t m[16];
+                Token token;
+                tokenslen = this->maxtokens;
+                patternlen = strlen(pattern);
+                if(this->maxtokens == 0)
+                {
+                    return -2;
+                }
+                /*
+                0: normal
+                1: just saw a backslash
+                */
+                escstate = 0;
+                state = RXSTATE_NORMAL;
+                charclassmem = -1;
+                clearToken(&token);
+                k = 0;
+                /*
+                start with an invisible group specifier
+                (this allows the matcher to not need to have a special root-level alternation operator case)
+                */
+                token.kind = RXTOKTYP_OPEN;
+                token.count_lo = 0;
+                token.count_hi = 0;
+                parencount = 0;
+                for(i = 0; i < patternlen; i++)
+                {
+                    c = pattern[i];
+                    if(state == RXSTATE_QUANT)
+                    {
+                        state = RXSTATE_MODE;
+                        if(c == '?')
+                        {
+                            /* first non-allowed amount */
+                            token.count_lo = 0;
+                            token.count_hi = 2;
+                            continue;
+                        }
+                        else if(c == '+')
+                        {
+                            /* unlimited */
+                            token.count_lo = 1;
+                            token.count_hi = 0;
+                            continue;
+                        }
+                        else if(c == '*')
+                        {
+                            /* unlimited */
+                            token.count_lo = 0;
+                            token.count_hi = 0;
+                            continue;
+                        }
+                        else if(c == '{')
+                        {
+                            if(pattern[i + 1] == 0 || pattern[i + 1] < '0' || pattern[i + 1] > '9')
+                            {
+                                state = RXSTATE_NORMAL;
+                            }
+                            else
+                            {
+                                i += 1;
+                                val = 0;
+                                while(pattern[i] >= '0' && pattern[i] <= '9')
+                                {
+                                    val *= 10;
+                                    val += (uint32_t)(pattern[i] - '0');
+                                    if(val > 0xFFFF)
+                                    {
+                                        /*  unsupported length */
+                                        setError("quantifier range too long");
+                                        return -1;
+                                    }
+                                    i += 1;
+                                }
+                                token.count_lo = val;
+                                token.count_hi = val + 1;
+                                if(pattern[i] == ',')
+                                {
+                                    token.count_hi = 0; /*  unlimited */
+                                    i += 1;
+
+                                    if(pattern[i] >= '0' && pattern[i] <= '9')
+                                    {
+                                        val2 = 0;
+                                        while(pattern[i] >= '0' && pattern[i] <= '9')
+                                        {
+                                            val2 *= 10;
+                                            val2 += (uint32_t)(pattern[i] - '0');
+                                            if(val2 > 0xFFFF)
+                                            {
+                                                /*  unsupported length */
+                                                setError("quantifier range too long");
+                                                return -1;
+                                            }
+                                            i += 1;
+                                        }
+                                        if(val2 < val)
+                                        {
+                                            setError("quantifier range is backwards");
+                                            return -1; /*  unsupported length */
+                                        }
+                                        token.count_hi = val2 + 1;
+                                    }
+                                }
+                                if(pattern[i] == '}')
+                                {
+                                    /*  quantifier range parsed successfully */
+                                    continue;
+                                }
+                                else
+                                {
+                                    setError("quantifier range syntax broken (no terminator)");
+                                    return -1;
+                                }
+                            }
+                        }
+                    }
+                    if(state == RXSTATE_MODE)
+                    {
+                        state = RXSTATE_NORMAL;
+                        if(c == '?')
+                        {
+                            token.mode |= RXTOKMODE_LAZY;
+                            continue;
+                        }
+                        else if(c == '+')
+                        {
+                            token.mode |= RXTOKMODE_POSSESSIVE;
+                            continue;
+                        }
+                    }
+                    if(state == RXSTATE_NORMAL)
+                    {
+                        if(escstate == 1)
+                        {
+                            escstate = 0;
+                            if(c == 'n')
+                            {
+                                setMask(&token, '\n');
+                            }
+                            else if(c == 'r')
+                            {
+                                setMask(&token, '\r');
+                            }
+                            else if(c == 't')
+                            {
+                                setMask(&token, '\t');
+                            }
+                            else if(c == 'v')
+                            {
+                                setMask(&token, '\v');
+                            }
+                            else if(c == 'f')
+                            {
+                                setMask(&token, '\f');
+                            }
+                            else if(c == 'x')
+                            {
+                                if(pattern[i + 1] == 0 || pattern[i + 2] == 0)
+                                {
+                                    return -1; /*  too-short hex pattern */
+                                }
+                                n0 = pattern[i + 1];
+                                n1 = pattern[i + 1];
+                                if(n0 < '0' || n0 > 'f' || n1 < '0' || n1 > 'f' || (n0 > '9' && n0 < 'A') || (n1 > '9' && n1 < 'A'))
+                                {
+                                    setError("invalid hex digit");
+                                    return -1; /*  invalid hex digit */
+                                }
+                                if(n0 > 'F')
+                                {
+                                    n0 -= 0x20;
+                                }
+                                if(n1 > 'F')
+                                {
+                                    n1 -= 0x20;
+                                }
+                                if(n0 >= 'A')
+                                {
+                                    n0 -= 'A' - 10;
+                                }
+                                if(n1 >= 'A')
+                                {
+                                    n1 -= 'A' - 10;
+                                }
+                                n0 -= '0';
+                                n1 -= '0';
+                                setMask(&token, (n1 << 4) | n0);
+                                i += 2;
+                            }
+                            else if(isQuantChar(c))
+                            {
+                                setMask(&token, c);
+                                state = RXSTATE_QUANT;
+                            }
+                            else if(c == 'd' || c == 's' || c == 'w' || c == 'D' || c == 'S' || c == 'W')
+                            {
+                                isupper = c <= 'Z';
+                                memset(m, 0, sizeof(m));
+                                if(isupper)
+                                {
+                                    c += 0x20;
+                                }
+                                if(c == 'd' || c == 'w')
+                                {
+                                    m[3] |= 0x03FF; /*  0~7 */
+                                }
+                                if(c == 's')
+                                {
+                                    m[0] |= 0x3E00; /*  \t-\r (includes \n, \v, and \f in the middle. 5 enabled bits.) */
+                                    m[2] |= 1; /*  ' ' */
+                                }
+                                if(c == 'w')
+                                {
+                                    m[4] |= 0xFFFE; /*  A-O */
+                                    m[5] |= 0x87FF; /*  P-Z_ */
+                                    m[6] |= 0xFFFE; /*  a-o */
+                                    m[7] |= 0x07FF; /*  p-z */
+                                }
+                                for(mi = 0; mi < 16; mi++)
+                                {
+                                    token.mask[mi] |= isupper ? ~m[mi] : m[mi];
+                                }
+                                token.kind = RXTOKTYP_NORMAL;
+                                state = RXSTATE_QUANT;
+                            }
+                            else if(c == 'b')
+                            {
+                                token.kind = RXTOKTYP_BOUND;
+                                state = RXSTATE_NORMAL;
+                            }
+                            else if(c == 'B')
+                            {
+                                token.kind = RXTOKTYP_NBOUND;
+                                state = RXSTATE_NORMAL;
+                            }
+                            else
+                            {
+                                setError("unsupported escape sequence");
+                                return -1; /*  unknown/unsupported escape sequence */
+                            }
+                        }
+                        else
+                        {
+                            if(!pushToken(token, tokenslen, &k, &macn))
+                            {
+                                return -2;
+                            }
+                            if(c == '\\')
+                            {
+                                escstate = 1;
+                            }
+                            else if(c == '[')
+                            {
+                                state = RXSTATE_CCINIT;
+                                charclassmem = -1;
+                                token.kind = RXTOKTYP_NORMAL;
+                                if(pattern[i + 1] == '^')
+                                {
+                                    token.mode |= RXTOKMODE_INVERTED;
+                                    i += 1;
+                                }
+                            }
+                            else if(c == '(')
+                            {
+                                parencount += 1;
+                                state = RXSTATE_NORMAL;
+                                token.kind = RXTOKTYP_OPEN;
+                                token.count_lo = 0;
+                                token.count_hi = 1;
+                                if(pattern[i + 1] == '?' && pattern[i + 2] == ':')
+                                {
+                                    token.kind = RXTOKTYP_NCOPEN;
+                                    i += 2;
+                                }
+                                else if(pattern[i + 1] == '?' && pattern[i + 2] == '>')
+                                {
+                                    token.kind = RXTOKTYP_NCOPEN;
+                                    if(!pushToken(token, tokenslen, &k, &macn))
+                                    {
+                                        return -2;
+                                    }
+                                    state = RXSTATE_NORMAL;
+                                    token.kind = RXTOKTYP_NCOPEN;
+                                    token.mode = RXTOKMODE_POSSESSIVE;
+                                    token.count_lo = 1;
+                                    token.count_hi = 2;
+                                    i += 2;
+                                }
+                            }
+                            else if(c == ')')
+                            {
+                                parencount -= 1;
+                                if(parencount < 0 || k == 0)
+                                {
+                                    setError("unbalanced parentheses");
+                                    return -1; /*  unbalanced parens */
+                                }
+                                token.kind = RXTOKTYP_CLOSE;
+                                state = RXSTATE_QUANT;
+                                balance = 0;
+                                found = -1;
+                                for(l = k - 1; l >= 0; l--)
+                                {
+                                    if(this->tokens[l].kind == RXTOKTYP_NCOPEN || this->tokens[l].kind == RXTOKTYP_OPEN)
+                                    {
+                                        if(balance == 0)
+                                        {
+                                            found = l;
+                                            break;
+                                        }
+                                        else
+                                        {
+                                            balance -= 1;
+                                        }
+                                    }
+                                    else if(this->tokens[l].kind == RXTOKTYP_CLOSE)
+                                    {
+                                        balance += 1;
+                                    }
+                                }
+                                if(found == -1)
+                                {
+                                    setError("unbalanced parentheses");
+                                    return -1; /*  unbalanced parens */
+                                }
+                                diff = k - found;
+                                if(diff > 32767)
+                                {
+                                    setError("difference too large");
+                                    return -1; /*  too long */
+                                }
+                                token.pair_offset = -diff;
+                                this->tokens[found].pair_offset = diff;
+                                /*  phantom group foratomic group emulation */
+                                if(this->tokens[found].mode == RXTOKMODE_POSSESSIVE)
+                                {
+                                    if(!pushToken(token, tokenslen, &k, &macn))
+                                    {
+                                        return -2;
+                                    }
+                                    token.kind = RXTOKTYP_CLOSE;
+                                    token.mode = RXTOKMODE_POSSESSIVE;
+                                    token.pair_offset = -diff - 2;
+                                    this->tokens[found - 1].pair_offset = diff + 2;
+                                }
+                            }
+                            else if(c == '?' || c == '+' || c == '*' || c == '{')
+                            {
+                                setError("quantifier in non-quantifier context");
+                                return -1; /*  quantifier in non-quantifier context */
+                            }
+                            else if(c == '.')
+                            {
+                                /* puts("setting ALL of mask..."); */
+                                macn = setMaskAll(&token, macn);
+                                if(flags & FLAG_DOTNONEWLINES)
+                                {
+                                    token.mask[1] ^= 0x04; /*  \n */
+                                    token.mask[1] ^= 0x20; /*  \r */
+                                }
+                                state = RXSTATE_QUANT;
+                            }
+                            else if(c == '^')
+                            {
+                                token.kind = RXTOKTYP_CARET;
+                                state = RXSTATE_NORMAL;
+                            }
+                            else if(c == '$')
+                            {
+                                token.kind = RXTOKTYP_DOLLAR;
+                                state = RXSTATE_NORMAL;
+                            }
+                            else if(c == '|')
+                            {
+                                token.kind = RXTOKTYP_OR;
+                                state = RXSTATE_NORMAL;
+                            }
+                            else
+                            {
+                                setMask(&token, c);
+                                state = RXSTATE_QUANT;
+                            }
+                        }
+                    }
+                    else if(state == RXSTATE_CCINIT || state == RXSTATE_CCNORMAL || state == RXSTATE_CCRANGE)
+                    {
+                        if(c == '\\' && escstate == 0)
+                        {
+                            escstate = 1;
+                            continue;
+                        }
+                        escc = 0;
+                        if(escstate == 1)
+                        {
+                            escstate = 0;
+                            if(c == 'n')
+                            {
+                                escc = '\n';
+                            }
+                            else if(c == 'r')
+                            {
+                                escc = '\r';
+                            }
+                            else if(c == 't')
+                            {
+                                escc = '\t';
+                            }
+                            else if(c == 'v')
+                            {
+                                escc = '\v';
+                            }
+                            else if(c == 'f')
+                            {
+                                escc = '\f';
+                            }
+                            else if(c == 'x')
+                            {
+                                if(pattern[i + 1] == 0 || pattern[i + 2] == 0)
+                                {
+                                    setError("hex pattern too short");
+                                    return -1; /*  too-short hex pattern */
+                                }
+                                n0 = pattern[i + 1];
+                                n1 = pattern[i + 1];
+                                if(n0 < '0' || n0 > 'f' || n1 < '0' || n1 > 'f' || (n0 > '9' && n0 < 'A') || (n1 > '9' && n1 < 'A'))
+                                {
+                                    setError("invalid hex digit");
+                                    return -1; /*  invalid hex digit */
+                                }
+                                if(n0 > 'F')
+                                {
+                                    n0 -= 0x20;
+                                }
+                                if(n1 > 'F')
+                                {
+                                    n1 -= 0x20;
+                                }
+                                if(n0 >= 'A')
+                                {
+                                    n0 -= 'A' - 10;
+                                }
+                                if(n1 >= 'A')
+                                {
+                                    n1 -= 'A' - 10;
+                                }
+                                n0 -= '0';
+                                n1 -= '0';
+                                escc = (n1 << 4) | n0;
+                                i += 2;
+                            }
+                            else if(c == '{' || c == '}' || c == '[' || c == ']' || c == '-' || c == '(' || c == ')' || c == '|' || c == '^' || c == '$' || c == '*' || c == '+' || c == '?' || c == ':' || c == '.' || c == '/' || c == '\\')
+                            {
+                                escc = c;
+                            }
+                            else if(c == 'd' || c == 's' || c == 'w' || c == 'D' || c == 'S' || c == 'W')
+                            {
+                                if(state == RXSTATE_CCRANGE)
+                                {
+                                    setError("tried to use a shorthand as part of a range");
+                                    return -1; /*  range shorthands can't be part of a range */
+                                }
+                                isupper = c <= 'Z';
+                                memset(m, 0, sizeof(m));
+                                if(isupper)
+                                {
+                                    c += 0x20;
+                                }
+                                if(c == 'd' || c == 'w')
+                                {
+                                    m[3] |= 0x03FF; /*  0~7 */
+                                }
+                                if(c == 's')
+                                {
+                                    m[0] |= 0x3E00; /*  \t-\r (includes \n, \v, and \f in the middle. 5 enabled bits.) */
+                                    m[2] |= 1; /*  ' ' */
+                                }
+                                if(c == 'w')
+                                {
+                                    m[4] |= 0xFFFE; /*  A-O */
+                                    m[5] |= 0x87FF; /*  P-Z_ */
+                                    m[6] |= 0xFFFE; /*  a-o */
+                                    m[7] |= 0x07FF; /*  p-z */
+                                }
+                                for(mi = 0; mi < 16; mi++)
+                                {
+                                    token.mask[mi] |= isupper ? ~m[mi] : m[mi];
+                                }
+                                charclassmem = -1; /*  range shorthands can't be part of a range */
+                                continue;
+                            }
+                            else
+                            {
+                                printf("unknown/unsupported escape sequence in character class (\\%c)\n", c);
+                                return -1; /*  unknown/unsupported escape sequence */
+                            }
+                        }
+                        if(state == RXSTATE_CCINIT)
+                        {
+                            charclassmem = c;
+                            setMask(&token, c);
+                            state = RXSTATE_CCNORMAL;
+                        }
+                        else if(state == RXSTATE_CCNORMAL)
+                        {
+                            if(c == ']' && escc == 0)
+                            {
+                                charclassmem = -1;
+                                state = RXSTATE_QUANT;
+                                continue;
+                            }
+                            else if(c == '-' && escc == 0 && charclassmem >= 0)
+                            {
+                                state = RXSTATE_CCRANGE;
+                                continue;
+                            }
+                            else
+                            {
+                                charclassmem = c;
+                                setMask(&token, c);
+                                state = RXSTATE_CCNORMAL;
+                            }
+                        }
+                        else if(state == RXSTATE_CCRANGE)
+                        {
+                            if(c == ']' && escc == 0)
+                            {
+                                charclassmem = -1;
+                                setMask(&token, '-');
+                                state = RXSTATE_QUANT;
+                                continue;
+                            }
+                            else
+                            {
+                                if(charclassmem == -1)
+                                {
+                                    setError("character class range is broken");
+                                    return -1; /*  probably tried to use a character class shorthand as part of a range */
+                                }
+                                if((uint8_t)c < charclassmem)
+                                {
+                                    setError("character class range is misordered");
+                                    return -1; /*  range is in wrong order */
+                                }
+                                /* printf("enabling char class from %d to %d...\n", charclassmem, c); */
+                                for(clsi = c; clsi > charclassmem; clsi--)
+                                {
+                                    setMask(&token, clsi);
+                                }
+                                state = RXSTATE_CCNORMAL;
+                                charclassmem = -1;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        assert(0);
+                    }
+                }
+                if(parencount > 0)
+                {
+                    setError("(parencount > 0)");
+                    return -1; /*  unbalanced parens */
+                }
+                if(escstate != 0)
+                {
+                    setError("(escstate != 0)");
+                    return -1; /*  open escape sequence */
+                }
+                if(state >= RXSTATE_CCINIT)
+                {
+                    setError("(state >= RXSTATE_CCINIT)");
+                    return -1; /*  open character class */
+                }
+                if(!pushToken(token, tokenslen, &k, &macn))
+                {
+                    return -2;
+                }
+                /*  add invisible non-capturing group specifier */
+                token.kind = RXTOKTYP_CLOSE;
+                token.count_lo = 1;
+                token.count_hi = 2;
+                if(!pushToken(token, tokenslen, &k, &macn))
+                {
+                    return -2;
+                }
+                /*  add end token (tells matcher that it's done) */
+                token.kind = RXTOKTYP_END;
+                if(!pushToken(token, tokenslen, &k, &macn))
+                {
+                    return -2;
+                }
+                this->tokens[0].pair_offset = k - 2;
+                this->tokens[k - 2].pair_offset = -(k - 2);
+                this->tokencount = k;
+                /*  copy quantifiers from )s to (s (so (s know whether they're optional) */
+                /*  also take the opportunity to smuggle "quantified group index" into the mask field forthe ) */
+                n = 0;
+                for(k2 = 0; k2 < k; k2++)
+                {
+                    if(this->tokens[k2].kind == RXTOKTYP_CLOSE)
+                    {
+                        this->tokens[k2].mask[0] = n++;
+                        k3 = k2 + this->tokens[k2].pair_offset;
+                        this->tokens[k3].count_lo = this->tokens[k2].count_lo;
+                        this->tokens[k3].count_hi = this->tokens[k2].count_hi;
+                        this->tokens[k3].mask[0] = n++;
+                        this->tokens[k3].mode = this->tokens[k2].mode;
+                        /* if(n > 65535) */
+                        if(n > 1024)
+                        {
+                            return -1; /*  too many quantified groups */
+                        }
+                    }
+                    else if(this->tokens[k2].kind == RXTOKTYP_OR || this->tokens[k2].kind == RXTOKTYP_OPEN || this->tokens[k2].kind == RXTOKTYP_NCOPEN)
+                    {
+                        /*  find next | or ) and how far away it is. store in token */
+                        balance = 0;
+                        found = -1;
+                        for(l = k2 + 1; l < tokenslen; l++)
+                        {
+                            if(this->tokens[l].kind == RXTOKTYP_OR && balance == 0)
+                            {
+                                found = l;
+                                break;
+                            }
+                            else if(this->tokens[l].kind == RXTOKTYP_CLOSE)
+                            {
+                                if(balance == 0)
+                                {
+                                    found = l;
+                                    break;
+                                }
+                                else
+                                {
+                                    balance -= 1;
+                                }
+                            }
+                            else if(this->tokens[l].kind == RXTOKTYP_NCOPEN || this->tokens[l].kind == RXTOKTYP_OPEN)
+                            {
+                                balance += 1;
+                            }
+                        }
+                        if(found == -1)
+                        {
+                            setError("unbalanced parens...");
+                            return -1; /*  unbalanced parens */
+                        }
+                        diff = found - k2;
+                        if(diff > 32767)
+                        {
+                            setError("too long...");
+                            return -1; /*  too long */
+                        }
+                        if(this->tokens[k2].kind == RXTOKTYP_OR)
+                        {
+                            this->tokens[k2].pair_offset = diff;
+                        }
+                        else
+                        {
+                            this->tokens[k2].mask[15] = diff;
+                        }
+                    }
+                }
+                return 0;
+            }
+
+            /*  Returns match length iftext starts with a regex match.
+             * Returns -1 ifthe text doesn't start with a regex match.
+             * Returns -2 ifthe matcher ran out of memory or the regex is too complex.
+             * Returns -3 ifthe regex is somehow invalid.
+             * The first capslots capture positions and spans (lengths) will be written to cappos and capspan. If zero, will not be written to.
+             * SAFETY: The text variable must be null-terminated, and starti must be the index of a character within the string or its null terminator.
+             * SAFETY: Tokens array must be terminated by a RXTOKTYP_END token (done by default by parse()).
+             * SAFETY: Partial capture data may be written even ifthe match fails.
+             */
+
+            NEON_INLINE int64_t match(const char* text, size_t starti, uint16_t capslots, int64_t* cappos, int64_t* capspan)
+            {
+                int kind;
+                size_t n;
+                uint64_t tokenslen;
+                uint32_t k;
+                uint16_t caps;
+                uint16_t stackn;
+                uint64_t i;
+                uint64_t range_min;
+                uint64_t range_max;
+                uint8_t justrewinded;
+                size_t iterlimit;
+                uint64_t origk;
+                ptrdiff_t kdiff;
+                uint32_t prev;
+                uint8_t forcezero;
+                uint32_t k2;
+                uint64_t ntcnt;
+                uint64_t oldi;
+                uint64_t hiclimit;
+                uint64_t rangelimit;
+                uint16_t capindex;
+                uint64_t wmask[16];
+                /* quantified group state */
+                uint8_t qgroupacceptszero[auxstatssize];
+                /* number of repetitions */
+                uint32_t qgroupstate[auxstatssize];
+                /* location of most recent corresponding ) on stack. 0 means nowhere */
+                uint32_t qgroupstack[auxstatssize];
+                uint16_t qgroupcapindex[auxstatssize];
+                MState rewindstack[stacksizemax];
+
+                if(capslots > auxstatssize)
+                {
+                    capslots = auxstatssize;
+                }
+                memset(qgroupcapindex, 0xFF, sizeof(qgroupcapindex));
+                tokenslen = 0;
+                k = 0;
+                caps = 0;
+                while(this->tokens[k].kind != RXTOKTYP_END)
+                {
+                    if(this->tokens[k].kind == RXTOKTYP_OPEN && caps < capslots)
+                    {
+                        qgroupcapindex[this->tokens[k].mask[0]] = caps;
+                        qgroupcapindex[this->tokens[k + this->tokens[k].pair_offset].mask[0]] = caps;
+                        cappos[caps] = -1;
+                        capspan[caps] = -1;
+                        caps += 1;
+                    }
+                    k += 1;
+                    if(this->tokens[k].kind == RXTOKTYP_CLOSE || this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                    {
+                        if(this->tokens[k].mask[0] >= auxstatssize)
+                        {
+                            setError("too many qualified groups. returning");
+                            /* OOM: too many quantified groups */
+                            return -2;
+                        }
+                        qgroupstate[this->tokens[k].mask[0]] = 0;
+                        qgroupstack[this->tokens[k].mask[0]] = 0;
+                        qgroupacceptszero[this->tokens[k].mask[0]] = 0;
+                    }
+                }
+                tokenslen = k;
+                stackn = 0;
+                i = starti;
+                range_min = 0;
+                range_max = 0;
+                justrewinded = 0;
+                /* used in boundary anchor checker */
+                memset(wmask, 0, sizeof(wmask));
+                wmask[3] = 0x03FF;
+                wmask[4] = 0xFFFE;
+                wmask[5] = 0x87FF;
+                wmask[6] = 0xFFFE;
+                wmask[7] = 0x07FF;
+                iterlimit = 10000;
+                for(k = 0; k < tokenslen; k++)
+                {
+                    /* iterlimit--; */
+                    if(iterlimit == 0)
+                    {
+                        setError("iteration limit exceeded. returning");
+                        return -2;
+                    }
+                    if(this->tokens[k].kind == RXTOKTYP_CARET)
+                    {
+                        if(i != 0)
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        continue;
+                    }
+                    else if(this->tokens[k].kind == RXTOKTYP_DOLLAR)
+                    {
+                        if(text[i] != 0)
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        continue;
+                    }
+                    else if(this->tokens[k].kind == RXTOKTYP_BOUND)
+                    {
+                        if(i == 0 && !checkIsW(wmask, text[i]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        else if(i != 0 && text[i] == 0 && !checkIsW(wmask, text[i - 1]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        else if(i != 0 && text[i] != 0 && checkIsW(wmask, text[i - 1]) == checkIsW(wmask, text[i]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                    }
+                    else if(this->tokens[k].kind == RXTOKTYP_NBOUND)
+                    {
+                        if(i == 0 && checkIsW(wmask, text[i]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        else if(i != 0 && text[i] == 0 && checkIsW(wmask, text[i - 1]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                        else if(i != 0 && text[i] != 0 && checkIsW(wmask, text[i - 1]) != checkIsW(wmask, text[i]))
+                        {
+                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                            {
+                                return -1;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        /* deliberately unmatchable token (e.g. a{0}, a{0,0}) */
+                        if(this->tokens[k].count_hi == 1)
+                        {
+                            if(this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                            {
+                                k += this->tokens[k].pair_offset;
+                            }
+                            else
+                            {
+                                k += 1;
+                            }
+                            continue;
+                        }
+                        if(this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                        {
+                            if(!justrewinded)
+                            {
+                                /*  need this to be able to detect and reject zero-size matches */
+                                /* qgroupstate[this->tokens[k].mask[0]] = i; */
+
+                                /*  ifwe're lazy and the min length is 0, we need to try the non-group case first */
+                                if((this->tokens[k].mode & RXTOKMODE_LAZY) && (this->tokens[k].count_lo == 0 || qgroupacceptszero[this->tokens[k + this->tokens[k].pair_offset].mask[0]]))
+                                {
+                                    range_min = 0;
+                                    range_max = 0;
+                                    if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                    {
+                                        return -2;
+                                    };
+                                    k += this->tokens[k].pair_offset; /*  automatic += 1 will put us past the matching ) */
+                                }
+                                else
+                                {
+                                    range_min = 1;
+                                    range_max = 0;
+                                    if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                    {
+                                        return -2;
+                                    };
+                                }
+                            }
+                            else
+                            {
+                                justrewinded = 0;
+                                origk = k;
+                                if(range_min != 0)
+                                {
+                                    k += range_min;
+                                    if(this->tokens[k - 1].kind == RXTOKTYP_OR)
+                                    {
+                                        k += this->tokens[k - 1].pair_offset - 1;
+                                    }
+                                    else if(this->tokens[k - 1].kind == RXTOKTYP_OPEN || this->tokens[k - 1].kind == RXTOKTYP_NCOPEN)
+                                    {
+                                        k += this->tokens[k - 1].mask[15] - 1;
+                                    }
+                                    if(this->tokens[k].kind == RXTOKTYP_END) /*  unbalanced parens */
+                                    {
+                                        return -3;
+                                    }
+                                    if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                                    {
+                                        /*  do nothing and continue on ifwe don't need this group */
+                                        if(this->tokens[k].count_lo == 0 || qgroupacceptszero[this->tokens[k].mask[0]])
+                                        {
+                                            qgroupstate[this->tokens[k].mask[0]] = 0;
+                                            if(!(this->tokens[k].mode & RXTOKMODE_LAZY))
+                                            {
+                                                qgroupstack[this->tokens[k].mask[0]] = 0;
+                                            }
+                                            continue;
+                                        }
+                                        /*  otherwise go to the last point before the group */
+                                        else
+                                        {
+                                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                            {
+                                                return -1;
+                                            }
+                                            continue;
+                                        }
+                                    }
+
+                                    assert(this->tokens[k].kind == RXTOKTYP_OR);
+                                }
+                                kdiff = k - origk;
+                                range_min = kdiff + 1;
+                                if(!rewindDoSaveRaw(k - kdiff, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                {
+                                    return -2;
+                                };
+                            }
+                        }
+                        else if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                        {
+                            /*  unquantified */
+                            if(this->tokens[k].count_lo == 1 && this->tokens[k].count_hi == 2)
+                            {
+                                /*  forcaptures */
+                                capindex = qgroupcapindex[this->tokens[k].mask[0]];
+                                if(capindex != 0xFFFF)
+                                {
+                                    if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                    {
+                                        return -2;
+                                    };
+                                }
+                            }
+                            /*  quantified */
+                            else
+                            {
+                                if(!justrewinded)
+                                {
+                                    prev = qgroupstack[this->tokens[k].mask[0]];
+
+                                    range_max = this->tokens[k].count_hi;
+                                    range_max -= 1;
+                                    range_min = qgroupacceptszero[this->tokens[k].mask[0]] ? 0 : this->tokens[k].count_lo;
+                                    /* assert(qgroupstate[this->tokens[k + this->tokens[k].pair_offset].mask[0]] <= i); */
+                                    /* if(prev) assert(rewindstack[prev].i <= i); */
+                                    /*  minimum requirement not yet met */
+                                    if(qgroupstate[this->tokens[k].mask[0]] + 1 < range_min)
+                                    {
+                                        qgroupstate[this->tokens[k].mask[0]] += 1;
+                                        if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+
+                                        k += this->tokens[k].pair_offset; /*  back to start of group */
+                                        k -= 1; /*  ensure we actually hit the group node next and not the node after it */
+                                        continue;
+                                    }
+                                    /*  maximum allowance exceeded */
+                                    else if(this->tokens[k].count_hi != 0 && qgroupstate[this->tokens[k].mask[0]] + 1 > range_max)
+                                    {
+                                        range_max -= 1;
+                                        if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -1;
+                                        }
+                                        continue;
+                                    }
+
+                                    /*  fallback case to detect zero-length matches when we backtracked into the inside of this group */
+                                    /*  after an attempted parse of a second copy of itself */
+                                    forcezero = 0;
+                                    if(prev != 0 && (uint32_t)rewindstack[prev].i > (uint32_t)i)
+                                    {
+                                        /*  find matching open paren */
+                                        n = stackn - 1;
+                                        while(n > 0 && rewindstack[n].k != k + this->tokens[k].pair_offset)
+                                        {
+                                            n -= 1;
+                                        }
+                                        assert(n > 0);
+                                        if(rewindstack[n].i == i)
+                                        {
+                                            forcezero = 1;
+                                        }
+                                    }
+
+                                    /*  reject zero-length matches */
+                                    if((forcezero || (prev != 0 && (uint32_t)rewindstack[prev].i == (uint32_t)i))) /*   && qgroupstate[this->tokens[k].mask[0]] > 0 */
+                                    {
+                                        qgroupacceptszero[this->tokens[k].mask[0]] = 1;
+                                        if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -1;
+                                        }
+                                        /* range_max = qgroupstate[this->tokens[k].mask[0]]; */
+                                        /* range_min = 0; */
+                                    }
+                                    else if(this->tokens[k].mode & RXTOKMODE_LAZY) /*  lazy */
+                                    {
+                                        if(prev)
+                                        {
+                                        }
+                                        /*  continue on to past the group; group retry is in rewind state */
+                                        qgroupstate[this->tokens[k].mask[0]] += 1;
+                                        if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+
+                                        qgroupstate[this->tokens[k].mask[0]] = 0;
+                                    }
+                                    else /*  greedy */
+                                    {
+                                        /*  clear unwanted memory ifpossessive */
+                                        if((this->tokens[k].mode & RXTOKMODE_POSSESSIVE))
+                                        {
+                                            k2 = k;
+                                            /*  special case forfirst, only rewind to (, not to ) */
+                                            if(qgroupstate[this->tokens[k].mask[0]] == 0)
+                                            {
+                                                k2 = k + this->tokens[k].pair_offset;
+                                            }
+                                            if(stackn == 0)
+                                            {
+                                                return -1;
+                                            }
+                                            stackn -= 1;
+                                            while(stackn > 0 && rewindstack[stackn].k != k2)
+                                            {
+                                                stackn -= 1;
+                                            }
+                                            if(stackn == 0)
+                                            {
+                                                return -1;
+                                            }
+                                        }
+                                        /*  continue to next match ifsane */
+                                        if((uint32_t)qgroupstate[this->tokens[k + this->tokens[k].pair_offset].mask[0]] < (uint32_t)i)
+                                        {
+                                            qgroupstate[this->tokens[k].mask[0]] += 1;
+                                            if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                            {
+                                                return -2;
+                                            };
+
+                                            k += this->tokens[k].pair_offset; /*  back to start of group */
+                                            k -= 1; /*  ensure we actually hit the group node next and not the node after it */
+                                        }
+                                        else
+                                        {
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    justrewinded = 0;
+
+                                    if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                    {
+                                        /*  lazy rewind: need to try matching the group again */
+                                        if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+
+                                        qgroupstack[this->tokens[k].mask[0]] = stackn;
+                                        k += this->tokens[k].pair_offset; /*  back to start of group */
+                                        k -= 1; /*  ensure we actually hit the group node next and not the node after it */
+                                    }
+                                    else
+                                    {
+                                        /*  greedy. ifwe're going to go outside the acceptable range, rewind */
+                                        /* uint64_t oldi = i; */
+                                        if(qgroupstate[this->tokens[k].mask[0]] < range_min && !qgroupacceptszero[this->tokens[k].mask[0]])
+                                        {
+                                            /* i = oldi; */
+                                            if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                            {
+                                                return -1;
+                                            }
+                                        }
+                                        /*  otherwise continue on to past the group */
+                                        else
+                                        {
+                                            qgroupstate[this->tokens[k].mask[0]] = 0;
+                                            /*  forcaptures */
+                                            capindex = qgroupcapindex[this->tokens[k].mask[0]];
+                                            if(capindex != 0xFFFF)
+                                            {
+                                                if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                                {
+                                                    return -2;
+                                                };
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else if(this->tokens[k].kind == RXTOKTYP_OR)
+                        {
+                            k += this->tokens[k].pair_offset;
+                            k -= 1;
+                        }
+                        else if(this->tokens[k].kind == RXTOKTYP_NORMAL)
+                        {
+                            if(!justrewinded)
+                            {
+                                ntcnt = 0;
+                                /*  do whatever the obligatory minimum amount of matching is */
+                                oldi = i;
+                                while(ntcnt < this->tokens[k].count_lo && text[i] != 0 && checkMask(this->tokens, k, text[i]))
+                                {
+                                    i += 1;
+                                    ntcnt += 1;
+                                }
+                                if(ntcnt < this->tokens[k].count_lo)
+                                {
+                                    i = oldi;
+                                    if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                    {
+                                        return -1;
+                                    }
+                                    continue;
+                                }
+                                if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                {
+                                    range_min = ntcnt;
+                                    range_max = this->tokens[k].count_hi - 1;
+                                    if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                    {
+                                        return -2;
+                                    };
+                                }
+                                else
+                                {
+                                    hiclimit = this->tokens[k].count_hi;
+                                    if(hiclimit == 0)
+                                    {
+                                        hiclimit = ~hiclimit;
+                                    }
+                                    range_min = ntcnt;
+                                    while(text[i] != 0 && checkMask(this->tokens, k, text[i]) && ntcnt + 1 < hiclimit)
+                                    {
+                                        i += 1;
+                                        ntcnt += 1;
+                                    }
+                                    range_max = ntcnt;
+                                    if(!(this->tokens[k].mode & RXTOKMODE_POSSESSIVE))
+                                    {
+                                        if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                justrewinded = 0;
+                                if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                {
+                                    rangelimit = range_max;
+                                    if(rangelimit == 0)
+                                    {
+                                        rangelimit = ~rangelimit;
+                                    }
+                                    if(checkMask(this->tokens, k, text[i]) && text[i] != 0 && range_min < rangelimit)
+                                    {
+                                        i += 1;
+                                        range_min += 1;
+                                        if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+                                    }
+                                    else
+                                    {
+                                        if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -1;
+                                        }
+                                    }
+                                }
+                                else
+                                {
+                                    if(range_max > range_min)
+                                    {
+                                        i -= 1;
+                                        range_max -= 1;
+                                        if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -2;
+                                        };
+                                    }
+                                    else
+                                    {
+                                        if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
+                                        {
+                                            return -1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            fprintf(stderr, "unimplemented token kind %d\n", this->tokens[k].kind);
+                            assert(0);
+                        }
+                    }
+                    /*
+                    printf("k... %d\n", k);
+                    */
+                }
+                if(caps != 0)
+                {
+                    /*
+                    printf("stackn: %d\n", stackn);
+                    */
+                    fflush(stdout);
+                    for(n = 0; n < stackn; n++)
+                    {
+                        MState s = rewindstack[n];
+                        kind = this->tokens[s.k].kind;
+                        if(kind == RXTOKTYP_OPEN || kind == RXTOKTYP_CLOSE)
+                        {
+                            capindex = qgroupcapindex[this->tokens[s.k].mask[0]];
+                            if(capindex == 0xFFFF)
+                            {
+                                continue;
+                            }
+                            if(this->tokens[s.k].kind == RXTOKTYP_OPEN)
+                            {
+                                cappos[capindex] = s.i;
+                            }
+                            else if(cappos[capindex] >= 0)
+                            {
+                                capspan[capindex] = s.i - cappos[capindex];
+                            }
+                        }
+                    }
+                    /*  re-deinitialize capture positions that have no associated capture span */
+                    for(n = 0; n < caps; n++)
+                    {
+                        if(capspan[n] == -1)
+                        {
+                            cappos[n] = -1;
+                        }
+                    }
+                }
+                return i;
+            }
+
+            NEON_INLINE int doInvert(Token* token, int macn)
+            {
+                for(macn = 0; macn < 16; macn++)
+                {
+                    token->mask[macn] = ~token->mask[macn];
+                }
+                token->mode &= ~RXTOKMODE_INVERTED;
+                return macn;
+            }
+
+            NEON_INLINE void clearToken(Token* token)
+            {
+                memset(token, 0, sizeof(Token));
+                token->count_lo = 1;
+                token->count_hi = 2;
+            }
+
+            NEON_INLINE bool pushToken(Token token, int64_t tokenslen, int16_t* k, int* macn)
+            {
+                if(((*k) == 0) || this->tokens[(*k) - 1].kind != token.kind || (token.kind != RXTOKTYP_BOUND && token.kind != RXTOKTYP_NBOUND))
+                {
+                    if(token.mode & RXTOKMODE_INVERTED)
+                    {
+                        (*macn) = doInvert(&token, *macn);
+                    }
+                    if((*k) >= tokenslen)
+                    {
+                        puts("buffer overflow");
+                        return false;
+                    }
+                    this->tokens[(*k)++] = token;
+                    clearToken(&token);
+                }
+                return true;
+            }
+
+            NEON_INLINE void setMask(Token* token, int byte)
+            {
+                token->mask[((uint8_t)(byte)) >> 4] |= 1 << ((uint8_t)(byte) & 0xF);
+            }
+
+            NEON_INLINE int setMaskAll(Token* token, int macn)
+            {
+                for(macn = 0; macn < 16; macn++)
+                {
+                    token->mask[macn] = 0xFFFF;
+                }
+                return macn;
+            }
+
+            NEON_INLINE int isQuantChar(int c)
+            {
+                return ((c == '{') || (c == '}') || (c == '[') || (c == ']') || (c == '-') || (c == '(') || (c == ')') || (c == '|') || (c == '^') || (c == '$') || (c == '*') || (c == '+') || (c == '?') || (c == ':') || (c == '.') || (c == '/') || (c == '\\'));
+            }
+    };
 
 
     class IOResult
@@ -1018,7 +3919,7 @@ namespace neon
                 initStreamVars(pr, PRMODE_STRING);
                 pr->fromstack = true;
                 pr->wrmode = PRMODE_STRING;
-                StringBuffer::fromPtr(&pr->strbuf, 0);
+                StrBuffer::fromPtr(&pr->strbuf, 0);
                 return true;
             }
 
@@ -1059,7 +3960,7 @@ namespace neon
                 {
                     if(!pr->stringtaken)
                     {
-                        StringBuffer::destroyFromPtr(&pr->strbuf);
+                        StrBuffer::destroyFromPtr(&pr->strbuf);
                     }
                 }
                 else if(pr->wrmode == PRMODE_FILE)
@@ -1073,7 +3974,7 @@ namespace neon
                 }
                 if(!pr->fromstack)
                 {
-                    nn_memory_free(pr);
+                    Memory::sysFree(pr);
                     pr = nullptr;
                 }
             }
@@ -1097,7 +3998,7 @@ namespace neon
             uint8_t shouldclose;
             /* if file: should write operations be flushed via fflush()? */
             uint8_t shouldflush;
-            /* if string: true if $strbuf was taken via nn_iostream_take */
+            /* if string: true if $strbuf was taken via take() */
             uint8_t stringtaken;
             /* was this writer instance created on stack? */
             uint8_t fromstack;
@@ -1106,7 +4007,7 @@ namespace neon
             size_t maxvallength;
             /* the mode that determines what writer actually does */
             Mode wrmode;
-            StringBuffer strbuf;
+            StrBuffer strbuf;
             FILE* handle;
 
         public:
@@ -1116,7 +4017,7 @@ namespace neon
                 size_t xlen;
                 String* os;
                 xlen = this->strbuf.length();
-                os = Wrappers::wrapMakeFromStrBuf(this->strbuf, nn_util_hashstring(this->strbuf.data(), xlen), xlen);
+                os = Wrappers::wrapMakeFromStrBuf(this->strbuf, Util::hashString(this->strbuf.data(), xlen), xlen);
                 this->stringtaken = true;
                 return os;
             }
@@ -1313,6 +4214,7 @@ namespace neon
                 OTYP_USERDATA
             };
 
+
         public:
             static void markObject(Object* object);
 
@@ -1351,6 +4253,100 @@ namespace neon
             };
 
         public:
+
+            static uint32_t hashObject(Object* object)
+            {
+                switch(object->m_objtype)
+                {
+                    case Object::OTYP_CLASS:
+                        {
+                            auto cl = (Class*)object;
+                            /* Classes just use their name. */
+                            return Wrappers::wrapStrGetHash(Wrappers::wrapClassGetName(cl));
+                        }
+                        break;
+                    case Object::OTYP_FUNCSCRIPT:
+                    {
+                        /*
+                        // Allow bare (non-closure) functions so that we can use a map to find
+                        // existing constants in a function's constant table. This is only used
+                        // internally. Since user code never sees a non-closure function, they
+                        // cannot use them as map keys.
+                        */
+                        uint32_t tmpa;
+                        uint32_t tmpb;
+                        uint32_t tmpres;
+                        uint32_t tmpptr;
+                        uint32_t arity;
+                        uint32_t blobcnt;
+                        Function* fn;
+                        fn = (Function*)object;
+                        tmpptr = (uint32_t)(uintptr_t)fn;
+                        arity = Wrappers::wrapGetArityOfFuncScript(fn);
+                        blobcnt = Wrappers::wrapGetBlobcountOfFuncScript(fn);
+                        tmpa = Util::hashDouble(arity);
+                        tmpb = Util::hashDouble(blobcnt);
+                        tmpres = tmpa ^ tmpb;
+                        tmpres = tmpres ^ tmpptr;
+                        return tmpres;
+                    }
+                    break;
+                    case Object::OTYP_STRING:
+                    {
+                        auto os = (String*)object;
+                        return Wrappers::wrapStrGetHash(os);
+                    }
+                    break;
+                    default:
+                        break;
+                }
+                return 0;
+            }
+
+            static uint32_t hashValue(Value value)
+            {
+                if(value.isBool())
+                {
+                    return value.asBool() ? 3 : 5;
+                }
+                else if(value.isNull())
+                {
+                    return 7;
+                }
+                else if(value.isNumber())
+                {
+                    return Util::hashDouble(value.asNumber());
+                }
+                else if(value.isObject())
+                {
+                    return hashObject(value.asObject());
+                }
+                return 0;
+            }
+
+            static bool compareArrays(Array* oa, Array* ob);
+            static bool compareStrings(Object* oa, Object* ob);
+            static bool compareDicts(Object* oa, Object* ob);
+            static bool compareObjects(Value a, Value b);
+            static bool compareValActual(Value a, Value b);
+
+            static bool compareValues(Value a, Value b);
+
+            /**
+             * returns the greater of the two values.
+             * this function encapsulates the object hierarchy
+             */
+            static Value findGreater(Value a, Value b);
+
+            /**
+             * sorts values in an array using the bubble-sort algorithm
+             */
+            static void sortValues(Value* values, int count);
+
+            static Value copyValue(Value value);
+
+
+            static void valtabRemoveWhites(HashTable<Value, Value>* table);
             static void markValArray(ValArray<Value>* list);
             static void markValTable(HashTable<Value, Value>* table);
             static void markDict(Dict* dict);
@@ -1395,7 +4391,7 @@ namespace neon
             }
 
             template<typename FNType>
-            static NEON_INLINE const char* typeFroFunction(FNType func)
+            static NEON_INLINE const char* typeFromFunction(FNType func)
             {
                 (void)func;
             #if 1
@@ -1564,7 +4560,6 @@ namespace neon
                 v.m_valunion.vobjpointer = obj;
                 return v;
             }
-
 
             static NEON_INLINE Value makeNull()
             {
@@ -1786,7 +4781,7 @@ namespace neon
                 if(list != nullptr)
                 {
                     list->deInit();
-                    nn_memory_free(list);
+                    Memory::sysFree(list);
                     list = nullptr;
                 }
             }
@@ -1800,7 +4795,7 @@ namespace neon
                         destroyAndClear(list, dfn);
                     }
                     list->deInit();
-                    nn_memory_free(list);
+                    Memory::sysFree(list);
                 }
             }
 
@@ -1875,12 +4870,12 @@ namespace neon
                     m_listcapacity = ncap;
                     if(m_listitems == nullptr)
                     {
-                        m_listitems = (StoredTyp*)nn_memory_malloc(sizeof(StoredTyp) * ncap);
+                        m_listitems = (StoredTyp*)Memory::sysMalloc(sizeof(StoredTyp) * ncap);
                         initItems(m_listitems, 0, ncap);
                     }
                     else
                     {
-                        m_listitems = (StoredTyp*)nn_memory_realloc(m_listitems, sizeof(StoredTyp) * ncap);
+                        m_listitems = (StoredTyp*)Memory::sysRealloc(m_listitems, sizeof(StoredTyp) * ncap);
                         initItems(m_listitems, m_listcount, ncap);
                     }
 
@@ -1940,7 +4935,7 @@ namespace neon
             {
                 if(m_listitems != nullptr)
                 {
-                    nn_memory_free(m_listitems);
+                    Memory::sysFree(m_listitems);
                 }
                 //m_listitems = nullptr;
                 m_listcount = 0;
@@ -2065,38 +5060,6 @@ namespace neon
             NEON_INLINE StoredTyp* getp(size_t idx) const
             {
                 return &m_listitems[idx];
-            }
-
-            NEON_INLINE StoredTyp& top() const
-            {
-                if(m_listcount == 0)
-                {
-                    if constexpr(std::is_pointer<StoredTyp>::value)
-                    {
-                        static StoredTyp nv = nullptr;
-                        return nv;
-                    }
-                    else
-                    {
-                        static StoredTyp nv = {};
-                        return nv;
-                    }
-                }
-                return get(m_listcount - 1);
-            }
-
-            StoredTyp* topp() const
-            {
-                int ofs = 0;
-                if(m_listcount == 0)
-                {
-                    return nullptr;
-                }
-                if(m_listcount > 0)
-                {
-                    ofs = m_listcount - 1;
-                }
-                return getp(ofs);
             }
 
             NEON_INLINE StoredTyp* set(size_t idx, const StoredTyp& val)
@@ -2235,6 +5198,12 @@ namespace neon
     class HashTable
     {
         public:
+            /*
+            // Maximum load factor of 12/14
+            // see: https://engineering.fb.com/2019/04/25/developer-tools/f14/
+            */
+            static constexpr auto CONF_MAXTABLELOAD = (0.85714286);
+
             struct Entry
             {
                 HTKeyT key;
@@ -2262,7 +5231,7 @@ namespace neon
                 {
                     return 4;
                 }
-                return nn_util_rndup2pow64(capacity + 1);
+                return Util::roundUpToPowe64(capacity + 1);
             }
 
             void initTable()
@@ -2275,7 +5244,7 @@ namespace neon
 
             void deInit()
             {
-                nn_memory_free(this->htentries);
+                Memory::sysFree(this->htentries);
             }
 
             NEON_INLINE size_t count() const
@@ -2299,7 +5268,7 @@ namespace neon
                 uint32_t index;
                 Entry* entry;
                 Entry* tombstone;
-                hsv = nn_value_hashvalue(key);
+                hsv = Value::hashValue(key);
                 index = hsv & (capacity - 1);
                 tombstone = nullptr;
                 while(true)
@@ -2328,7 +5297,7 @@ namespace neon
                             }
                         }
                     }
-                    else if(nn_value_compare(key, (HTKeyT)entry->key))
+                    else if(Value::compareValues(key, (HTKeyT)entry->key))
                     {
                         return entry;
                     }
@@ -2392,7 +5361,7 @@ namespace neon
                     {
                         if(!valkey.isNull())
                         {
-                            if(nn_value_compare(valkey, (HTKeyT)entry->key))
+                            if(Value::compareValues(valkey, (HTKeyT)entry->key))
                             {
                                 return entry;
                             }
@@ -2458,7 +5427,7 @@ namespace neon
                 Entry* entry;
                 Entry* entries;
                 sz = sizeof(Entry) * capacity;
-                entries = (Entry*)nn_memory_malloc(sz);
+                entries = (Entry*)Memory::sysMalloc(sz);
                 if(entries == nullptr)
                 {
                     fprintf(stderr, "hashtab:adjustcapacity: failed to allocate %zd bytes\n", sz);
@@ -2483,7 +5452,7 @@ namespace neon
                     dest->value = entry->value;
                     this->htcount++;
                 }
-                nn_memory_free(this->htentries);
+                Memory::sysFree(this->htentries);
                 this->htentries = entries;
                 this->htcapacity = capacity;
                 return true;
@@ -2495,7 +5464,7 @@ namespace neon
                 int capacity;
                 Entry* entry;
                 (void)keyisstring;
-                if((this->htcount + 1) > (this->htcapacity * NEON_CONFIG_MAXTABLELOAD))
+                if((this->htcount + 1) > (this->htcapacity * CONF_MAXTABLELOAD))
                 {
                     capacity = getNextCapacity(this->htcapacity);
                     if(!adjustcapacity(capacity))
@@ -2583,7 +5552,7 @@ namespace neon
                     entry = &this->htentries[i];
                     if(!entry->key.isNull())
                     {
-                        to->setwithtype((HTKeyT)entry->key, nn_value_copyvalue((HTValT)entry->value.value), entry->value.m_fieldtype, false);
+                        to->setwithtype((HTKeyT)entry->key, Value::copyValue((HTValT)entry->value.value), entry->value.m_fieldtype, false);
                     }
                 }
                 return true;
@@ -2600,7 +5569,7 @@ namespace neon
                     entry = &this->htentries[i];
                     if(!entry->key.isNull() && !entry->key.isNull())
                     {
-                        if(nn_value_compare((HTValT)entry->value.value, value))
+                        if(Value::compareValues((HTValT)entry->value.value, value))
                         {
                             return (HTKeyT)entry->key;
                         }
@@ -2729,7 +5698,7 @@ namespace neon
             {
                 if(blob->instrucs != nullptr)
                 {
-                    nn_memory_free(blob->instrucs);
+                    Memory::sysFree(blob->instrucs);
                 }
                 blob->constants.deInit();
                 blob->argdefvals.deInit();
@@ -2755,8 +5724,8 @@ namespace neon
                 if(this->capacity < this->count + 1)
                 {
                     oldcapacity = this->capacity;
-                    this->capacity = NN_ASTPARSER_GROWCAPACITY(oldcapacity);
-                    this->instrucs = (Instruction*)nn_memory_realloc(this->instrucs, this->capacity * sizeof(Instruction));
+                    this->capacity = Memory::getNextCapacity(oldcapacity);
+                    this->instrucs = (Instruction*)Memory::sysRealloc(this->instrucs, this->capacity * sizeof(Instruction));
                 }
                 this->instrucs[this->count] = ins;
                 this->count++;
@@ -2772,6 +5741,12 @@ namespace neon
     class CallFrame
     {
         public:
+            enum
+            {
+                /* how many catch() clauses per try statement */
+                CONF_MAXEXCEPTHANDLERS = (2),
+            };
+
             struct ExceptionInfo
             {
                 uint16_t address = 0;
@@ -2785,7 +5760,7 @@ namespace neon
             Instruction* inscode = nullptr;
             Function* closure = nullptr;
             /* TODO: should be dynamically allocated */
-            ExceptionInfo handlers[NEON_CONFIG_MAXEXCEPTHANDLERS];
+            ExceptionInfo handlers[CONF_MAXEXCEPTHANDLERS];
     };
 
     class ProcessInfo
@@ -2804,6 +5779,12 @@ namespace neon
     class SharedState
     {
         public:
+            /* how much memory can be allocated before the garbage collector kicks in */
+            static constexpr auto CONF_DEFAULTGCSTART = (1024 * 1024);
+
+            /* growth factor for GC heap objects */
+            static constexpr auto CONF_GCHEAPGROWTHFACTOR = 1.25;
+
             class InternedStringTab
             {
                 public:
@@ -2995,7 +5976,7 @@ namespace neon
                 gcs->markvalue = true;
                 gcs->m_gcstate.bytesallocated = 0;
                 /* default is 1mb. Can be modified via the -g flag. */
-                gcs->m_gcstate.nextgc = NEON_CONFIG_DEFAULTGCSTART;
+                gcs->m_gcstate.nextgc = CONF_DEFAULTGCSTART;
                 gcs->m_gcstate.graycount = 0;
                 gcs->m_gcstate.graycapacity = 0;
                 gcs->m_gcstate.graystack = nullptr;
@@ -3055,7 +6036,7 @@ namespace neon
                 {
                     gcMaybeCollect(newsize - oldsize, newsize > oldsize);
                 }
-                result = nn_memory_malloc(newsize * amount);
+                result = Memory::sysMalloc(newsize * amount);
                 /*
                 // just in case reallocation fails... computers ain't infinite!
                 */
@@ -3148,7 +6129,7 @@ namespace neon
                     Object::destroyObject(object);
                     object = next;
                 }
-                nn_memory_free(gcs->m_gcstate.graystack);
+                Memory::sysFree(gcs->m_gcstate.graystack);
                 gcs->m_gcstate.graystack = nullptr;
             }
 
@@ -3177,10 +6158,10 @@ namespace neon
 
                 gcMarkRoots();
                 gcTraceRefs();
-                nn_valtable_removewhites(&gcs->m_allocatedstrings.m_htab);
-                nn_valtable_removewhites(&gcs->m_openedmodules);
+                Value::valtabRemoveWhites(&gcs->m_allocatedstrings.m_htab);
+                Value::valtabRemoveWhites(&gcs->m_openedmodules);
                 gcSweep();
-                gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated * NEON_CONFIG_GCHEAPGROWTHFACTOR;
+                gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated * CONF_GCHEAPGROWTHFACTOR;
                 gcs->markvalue = !gcs->markvalue;
             }
 
@@ -3212,7 +6193,7 @@ namespace neon
                 }
                 // N.B.: Memory::destroy() MIGHT call InputT::destroy() if InputT defines such a function,
                 // which would lead to illegal double-frees!
-                nn_memory_free(pointer);
+                Memory::sysFree(pointer);
                 pointer = nullptr;
             }
 
@@ -3271,7 +6252,7 @@ namespace neon
                 newsz = oldsz + nforvals;
                 allocsz = ((newsz + 1) * sizeof(Value));
                 oldbuf = m_vmstate.stackvalues;
-                newbuf = (Value*)nn_memory_realloc(oldbuf, allocsz);
+                newbuf = (Value*)Memory::sysRealloc(oldbuf, allocsz);
                 if(newbuf == nullptr)
                 {
                     fprintf(stderr, "internal error: failed to resize stackvalues!\n");
@@ -3303,7 +6284,7 @@ namespace neon
                 newsz = oldsz + needed;
                 allocsz = ((newsz + 1) * sizeof(CallFrame));
                 oldbuf = m_vmstate.framevalues;
-                newbuf = (CallFrame*)nn_memory_realloc(oldbuf, allocsz);
+                newbuf = (CallFrame*)Memory::sysRealloc(oldbuf, allocsz);
                 if(newbuf == nullptr)
                 {
                     fprintf(stderr, "internal error: failed to resize framevalues!\n");
@@ -3329,7 +6310,7 @@ namespace neon
             {
                 if((m_vmstate.stackidx + 1) >= m_vmstate.stackcapacity)
                 {
-                    if(!resizeStack(nn_util_rndup2pow64(m_vmstate.stackidx + 1)))
+                    if(!resizeStack(Util::roundUpToPowe64(m_vmstate.stackidx + 1)))
                     {
                         fprintf(stderr, "failed to resize stack due to overflow");
                         return false;
@@ -3344,7 +6325,7 @@ namespace neon
                 //fprintf(stderr, "checking if frames need resizing...\n");
                 if(m_vmstate.framecount >= m_vmstate.framecapacity)
                 {
-                    if(!resizeFrames(nn_util_rndup2pow64(m_vmstate.framecapacity + 1)))
+                    if(!resizeFrames(Util::roundUpToPowe64(m_vmstate.framecapacity + 1)))
                     {
                         fprintf(stderr, "failed to resize frames due to overflow");
                         return false;
@@ -3377,7 +6358,7 @@ namespace neon
                 {
                     m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
                     finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(Value);
-                    newbufvals = (Value*)nn_memory_malloc(finalsz);
+                    newbufvals = (Value*)Memory::sysMalloc(finalsz);
                     if(newbufvals == nullptr)
                     {
                         fprintf(stderr, "error: failed to allocate stackvalues!\n");
@@ -3389,7 +6370,7 @@ namespace neon
                 {
                     m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
                     finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(CallFrame);
-                    newbufframes = (CallFrame*)nn_memory_malloc(finalsz);
+                    newbufframes = (CallFrame*)Memory::sysMalloc(finalsz);
                     if(newbufframes == nullptr)
                     {
                         fprintf(stderr, "error: failed to allocate framevalues!\n");
@@ -3623,14 +6604,350 @@ namespace neon
 
     SharedState* SharedState::m_myself = nullptr;
 
+    class Array : public Object
+    {
+        public:
+            ValArray<Value> m_objvarray;
+
+        public:
+            static Array* makeFilled(size_t cnt, Value filler)
+            {
+                size_t i;
+                Array* list;
+                list = SharedState::gcMakeObject<Array>(Object::OTYP_ARRAY, false);
+                if(cnt > 0)
+                {
+                    for(i = 0; i < cnt; i++)
+                    {
+                        list->push(filler);
+                    }
+                }
+                return list;
+            }
+
+            static Array* make()
+            {
+                return makeFilled(0, Value::makeNull());
+            }
+
+            NEON_INLINE void push(Value value)
+            {
+                auto gcs = SharedState::get();
+                (void)gcs;
+                /*gcs->vmStackPush(value);*/
+                m_objvarray.push(value);
+                /*gcs->vmStackPop(); */
+            }
+
+            NEON_INLINE size_t count() const
+            {
+                return m_objvarray.count();
+            }
+
+            NEON_INLINE Value* data() const
+            {
+                return (Value*)m_objvarray.data();
+            }
+
+            NEON_INLINE bool pop(Value* dest)
+            {
+                return m_objvarray.pop(dest);
+            }
+
+
+            NEON_INLINE bool set(size_t idx, Value val)
+            {
+                return m_objvarray.set(idx, val);
+            }
+
+            NEON_INLINE bool get(size_t idx, Value* vdest) const
+            {
+                size_t vc;
+                vc = count();
+                if((vc > 0) && (idx < vc))
+                {
+                    *vdest = m_objvarray.get(idx);
+                    return true;
+                }
+                return false;
+            }
+
+            NEON_INLINE Value get(size_t idx) const
+            {
+                Value vd;
+                if(get(idx, &vd))
+                {
+                    return vd;
+                }
+                return Value::makeNull();
+            }
+
+            NEON_INLINE Array* copy(long start, long length)
+            {
+                size_t i;
+                Array* newlist;
+                newlist = Array::make();
+                if(start == -1)
+                {
+                    start = 0;
+                }
+                if(length == -1)
+                {
+                    length = count() - start;
+                }
+                for(i = start; i < (size_t)(start + length); i++)
+                {
+                    newlist->push(get(i));
+                }
+                return newlist;
+            }
+
+
+    };
+
+    class Dict : public Object
+    {
+        public:
+            ValArray<Value> htnames;
+            HashTable<Value, Value> htab;
+
+        public:
+            static Dict* make()
+            {
+                Dict* dict;
+                dict = SharedState::gcMakeObject<Dict>(Object::OTYP_DICT, false);
+                dict->htab.initTable();
+                return dict;
+            }
+
+            static void destroy(Dict* dict)
+            {
+                dict->htnames.deInit();
+                dict->htab.deInit();
+            }
+
+            bool set(Value key, Value value)
+            {
+                Value tempvalue;
+                if(!this->htab.get(key, &tempvalue))
+                {
+                    /* add key if it doesn't exist. */
+                    this->htnames.push(key);
+                }
+                return this->htab.set(key, value);
+            }
+
+            void add(Value key, Value value)
+            {
+                this->set(key, value);
+            }
+
+            void addCstr(const char* ckey, Value value)
+            {
+                String* os;
+                os = Wrappers::wrapStringCopy(ckey);
+                this->add(Value::fromObject(os), value);
+            }
+
+            Property* get(Value key)
+            {
+                return this->htab.getfield(key);
+            }
+
+            Dict* copy()
+            {
+                size_t i;
+                size_t dsz;
+                Value key;
+                Property* field;
+                Dict* ndict;
+                ndict = Dict::make();
+                /*
+                // @TODO: Figure out how to handle dictionary values correctly
+                // remember that copying keys is redundant and unnecessary
+                */
+                dsz = this->htnames.count();
+                for(i = 0; i < dsz; i++)
+                {
+                    key = this->htnames.get(i);
+                    field = this->htab.getfield(this->htnames.get(i));
+                    ndict->htnames.push(key);
+                    ndict->htab.setwithtype(key, field->value, field->m_fieldtype, key.isString());
+                }
+                return ndict;
+            }
+    };
+
+
+
     class String : public Object
     {
         public:
+            static String* utilNumberToBinString(long n)
+            {
+                int i;
+                int rem;
+                int count;
+                int length;
+                long j;
+                /* assume maximum of 1024 bits */
+                char str[1024];
+                char newstr[1027];
+                count = 0;
+                j = n;
+                if(j == 0)
+                {
+                    str[count++] = '0';
+                }
+                while(j != 0)
+                {
+                    rem = abs((int)(j % 2));
+                    j /= 2;
+                    if(rem == 1)
+                    {
+                        str[count] = '1';
+                    }
+                    else
+                    {
+                        str[count] = '0';
+                    }
+                    count++;
+                }
+                /* assume maximum of 1024 bits + 0b (indicator) + sign (-). */
+                length = 0;
+                if(n < 0)
+                {
+                    newstr[length++] = '-';
+                }
+                newstr[length++] = '0';
+                newstr[length++] = 'b';
+                for(i = count - 1; i >= 0; i--)
+                {
+                    newstr[length++] = str[i];
+                }
+                newstr[length++] = 0;
+                return String::copy(newstr, length);
+                /*
+                //  // To store the binary number
+                //  int64_t number = 0;
+                //  int cnt = 0;
+                //  while (n != 0) {
+                //    int64_t rem = n % 2;
+                //    int64_t c = (int64_t) pow(10, cnt);
+                //    number += rem * c;
+                //    n /= 2;
+                //
+                //    // Count used to store exponent value
+                //    cnt++;
+                //  }
+                //
+                //  char str[67]; // assume maximum of 64 bits + 2 binary indicators (0b)
+                //  int length = sprintf(str, "0b%lld", number);
+                //
+                //  return String::copy(str, length);
+                */
+            }
+
+            static String* utilNumberToOctString(int64_t n, bool numeric)
+            {
+                int length;
+                /* assume maximum of 64 bits + 2 octal indicators (0c) */
+                char str[66];
+                length = sprintf(str, numeric ? "0c%lo" : "%lo", n);
+                return String::copy(str, length);
+            }
+
+            static String* utilNumberToHexString(int64_t n, bool numeric)
+            {
+                int length;
+                /* assume maximum of 64 bits + 2 hex indicators (0x) */
+                char str[66];
+                length = sprintf(str, numeric ? "0x%lx" : "%lx", n);
+                return String::copy(str, length);
+            }
+
+            static Value regexMatch(String* string, String* pattern, bool capture)
+            {
+                enum
+                {
+                    matchMaxTokens = 128 * 4,
+                    matchMaxCaptures = 128,
+                };
+                int prc;
+                int64_t i;
+                int64_t mtstart;
+                int64_t mtlength;
+                int64_t actualmaxcaptures;
+                int64_t cpres;
+                int16_t restokens;
+                int64_t capstarts[matchMaxCaptures + 1];
+                int64_t caplengths[matchMaxCaptures + 1];
+                RegexContext::Token tokens[matchMaxTokens + 1];
+                RegexContext pctx;
+                auto gcs = SharedState::get();
+                memset(tokens, 0, (matchMaxTokens + 1) * sizeof(RegexContext::Token));
+                memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
+                memset(capstarts, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
+                const char* strstart;
+                String* rstr;
+                Array* oa;
+                Dict* dm;
+                restokens = matchMaxTokens;
+                actualmaxcaptures = 0;
+                RegexContext::initStack(&pctx, tokens, restokens);
+                if(capture)
+                {
+                    actualmaxcaptures = matchMaxCaptures;
+                }
+                prc = pctx.parse(pattern->data(), 0);
+                if(prc == 0)
+                {
+                    cpres = pctx.match(string->data(), 0, actualmaxcaptures, capstarts, caplengths);
+                    if(cpres > 0)
+                    {
+                        if(capture)
+                        {
+                            oa = Array::make();
+                            for(i = 0; i < cpres; i++)
+                            {
+                                mtstart = capstarts[i];
+                                mtlength = caplengths[i];
+                                if(mtlength > 0)
+                                {
+                                    strstart = &string->data()[mtstart];
+                                    rstr = String::copy(strstart, mtlength);
+                                    dm = Dict::make();
+                                    dm->addCstr("string", Value::fromObject(rstr));
+                                    dm->addCstr("start", Value::makeNumber(mtstart));
+                                    dm->addCstr("length", Value::makeNumber(mtlength));
+                                    oa->push(Value::fromObject(dm));
+                                }
+                            }
+                            return Value::fromObject(oa);
+                        }
+                        else
+                        {
+                            return Value::makeBool(true);
+                        }
+                    }
+                }
+                else
+                {
+                    NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.regexerror, pctx.errorbuf);
+                }
+                RegexContext::destroy(&pctx);
+                if(capture)
+                {
+                    return Value::makeNull();
+                }
+                return Value::makeBool(false);
+            }
+
+
             static void strtabStore(String* os)
             {
                 auto gcs = SharedState::get();
                 gcs->m_allocatedstrings.store(os);
-
             }
 
             static String* strTabFind(const char* str, size_t len, uint32_t hsv)
@@ -3641,7 +6958,7 @@ namespace neon
                 return rs;
             }
 
-            static String* makeFromStrbuf(const StringBuffer& buf, uint32_t hsv, size_t length)
+            static String* makeFromStrbuf(const StrBuffer& buf, uint32_t hsv, size_t length)
             {
                 String* rs;
                 rs = SharedState::gcMakeObject<String>(Object::OTYP_STRING, false);
@@ -3656,21 +6973,21 @@ namespace neon
 
             static void destroy(String* str)
             {
-                StringBuffer::destroyFromPtr(&str->m_sbuf);
+                StrBuffer::destroyFromPtr(&str->m_sbuf);
             }
 
             static String* intern(const char* strdata, int length)
             {
                 uint32_t hsv;
-                StringBuffer buf;
+                StrBuffer buf;
                 String* rs;
-                hsv = nn_util_hashstring(strdata, length);
+                hsv = Util::hashString(strdata, length);
                 rs = strTabFind(strdata, length, hsv);
                 if(rs != nullptr)
                 {
                     return rs;
                 }
-                StringBuffer::fromPtr(&buf, 0);
+                StrBuffer::fromPtr(&buf, 0);
                 buf.m_isintern = true;
                 buf.setData(strdata);
                 buf.setLength(length);
@@ -3686,15 +7003,15 @@ namespace neon
             {
                 uint32_t hsv;
                 String* rs;
-                StringBuffer buf;
-                hsv = nn_util_hashstring(strdata, length);
+                StrBuffer buf;
+                hsv = Util::hashString(strdata, length);
                 rs = strTabFind(strdata, length, hsv);
                 if(rs != nullptr)
                 {
-                    nn_memory_free(strdata);
+                    Memory::sysFree(strdata);
                     return rs;
                 }
-                StringBuffer::fromPtr(&buf, 0);
+                StrBuffer::fromPtr(&buf, 0);
                 buf.setData(strdata);
                 buf.setLength(length);
                 return makeFromStrbuf(buf, hsv, length);
@@ -3708,9 +7025,9 @@ namespace neon
             static String* copy(const char* strdata, int length)
             {
                 uint32_t hsv;
-                StringBuffer sb;
+                StrBuffer sb;
                 String* rs;
-                hsv = nn_util_hashstring(strdata, length);
+                hsv = Util::hashString(strdata, length);
                 if(length == 0)
                 {
                     return intern(strdata, length);
@@ -3722,7 +7039,7 @@ namespace neon
                         return rs;
                     }
                 }
-                StringBuffer::fromPtr(&sb, length);
+                StrBuffer::fromPtr(&sb, length);
                 sb.append(strdata, length);
                 rs = makeFromStrbuf(sb, hsv, length);
                 return rs;
@@ -3740,7 +7057,7 @@ namespace neon
 
         public:
             uint32_t m_hashvalue;
-            StringBuffer m_sbuf;
+            StrBuffer m_sbuf;
 
         public:
             const char* data() const
@@ -3811,6 +7128,42 @@ namespace neon
                 return rt;
             }
 
+            String* substring(size_t start, size_t end, bool likejs)
+            {
+                size_t asz;
+                size_t len;
+                size_t tmp;
+                size_t maxlen;
+                char* raw;
+                (void)likejs;
+                maxlen = this->length();
+                len = maxlen;
+                if(end > maxlen)
+                {
+                    tmp = start;
+                    start = end;
+                    end = tmp;
+                    len = maxlen;
+                }
+                if(end < start)
+                {
+                    tmp = end;
+                    end = start;
+                    start = tmp;
+                    len = end;
+                }
+                len = (end - start);
+                if(len > maxlen)
+                {
+                    len = maxlen;
+                }
+                asz = ((end + 1) * sizeof(char));
+                raw = (char*)Memory::sysMalloc(sizeof(char) * asz);
+                memset(raw, 0, asz);
+                memcpy(raw, this->data() + start, len);
+                return String::take(raw, len);
+            }
+
             String* substr(size_t start)
             {
                 return this->substr(start, this->length());
@@ -3820,10 +7173,23 @@ namespace neon
     class Upvalue : public Object
     {
         public:
+            static Upvalue* make(Value* slot, int stackpos)
+            {
+                Upvalue* upvalue;
+                upvalue = SharedState::gcMakeObject<Upvalue>(Object::OTYP_UPVALUE, false);
+                upvalue->closed = Value::makeNull();
+                upvalue->location = *slot;
+                upvalue->next = nullptr;
+                upvalue->stackpos = stackpos;
+                return upvalue;
+            }
+
+        public:
             int stackpos;
             Value closed;
             Value location;
             Upvalue* next;
+
     };
 
 
@@ -3840,6 +7206,23 @@ namespace neon
                 CTXTYPE_STATIC,
                 CTXTYPE_SCRIPT
             };
+
+        public:
+            static NEON_INLINE Function::ContextType getMethodType(Value method)
+            {
+                Function* ofn;
+                ofn = method.asFunction();
+                switch(method.objType())
+                {
+                    case Object::OTYP_FUNCNATIVE:
+                        return ofn->m_contexttype;
+                    case Object::OTYP_FUNCCLOSURE:
+                        return ofn->m_fnvals.fnclosure.scriptfunc->m_contexttype;
+                    default:
+                        break;
+                }
+                return Function::CTXTYPE_FUNCTION;
+            }
 
         public:
             ContextType m_contexttype;
@@ -3939,7 +7322,7 @@ namespace neon
             static void destroy(Function* ofn)
             {
                 Blob::destroy(ofn->m_fnvals.fnscriptfunc.blob);
-                nn_memory_free(ofn->m_fnvals.fnscriptfunc.blob);
+                Memory::sysFree(ofn->m_fnvals.fnscriptfunc.blob);
             }
 
         public:
@@ -4488,6 +7871,26 @@ namespace neon
     class File : public Object
     {
         public:
+            static bool fileExists(const char* path)
+            {
+                return Util::nn_util_fsfileexists(path);
+            }
+
+            static bool pathIsFile(const char* path)
+            {
+                return Util::nn_util_fsfileisfile(path);
+            }
+
+            static bool pathIsDirectory(const char* path)
+            {
+                return Util::nn_util_fsfileisdirectory(path);
+            }
+
+            static char* getBasename(const char* path)
+            {
+                return Util::nn_util_fsgetbasename(path);
+            }
+
             static char* readFromHandle(FILE* hnd, size_t* dlen, bool havemaxsz, size_t maxsize)
             {
                 long rawtold;
@@ -4520,7 +7923,7 @@ namespace neon
                         toldlen = maxsize;
                     }
                 }
-                buf = (char*)nn_memory_malloc(sizeof(char) * (toldlen + 1));
+                buf = (char*)Memory::sysMalloc(sizeof(char) * (toldlen + 1));
                 memset(buf, 0, toldlen + 1);
                 if(buf != nullptr)
                 {
@@ -4629,7 +8032,7 @@ namespace neon
                 linelen = getlen;
                 if((linelen + 1) < kInitialStrBufSize)
                 {
-                    heapbuf = (char*)nn_memory_realloc(*lineptr, kInitialStrBufSize);
+                    heapbuf = (char*)Memory::sysRealloc(*lineptr, kInitialStrBufSize);
                     if(heapbuf == nullptr)
                     {
                         return -1;
@@ -4693,7 +8096,7 @@ namespace neon
                 dest->data = nullptr;
                 if(!this->isstd)
                 {
-                    if(!nn_util_fsfileexists(this->path->data()))
+                    if(!File::fileExists(this->path->data()))
                     {
                         return false;
                     }
@@ -4713,7 +8116,7 @@ namespace neon
                     {
                         return false;
                     }
-                    if(osfn_lstat(this->path->data(), &stats) == 0)
+                    if(Util::osfn_lstat(this->path->data(), &stats) == 0)
                     {
                         filesizereal = (size_t)stats.st_size;
                     }
@@ -4741,7 +8144,7 @@ namespace neon
                     }
                 }
                 /* +1 for terminator '\0' */
-                dest->data = (char*)nn_memory_malloc(sizeof(char) * (readhowmuch + 1));
+                dest->data = (char*)Memory::sysMalloc(sizeof(char) * (readhowmuch + 1));
                 if(dest->data == nullptr && readhowmuch != 0)
                 {
                     return false;
@@ -4788,7 +8191,7 @@ namespace neon
                     {
                         this->isopen = true;
                         this->number = fileno(this->handle);
-                        this->istty = osfn_isatty(this->number);
+                        this->istty = Util::osfn_isatty(this->number);
                         return true;
                     }
                     else
@@ -4827,6 +8230,11 @@ namespace neon
                 return true;
             }
 
+            static void closeImportHandle(void* hnd)
+            {
+                (void)hnd;
+            }
+
             static bool addSearchPath(const char* path)
             {
                 return addSearchPathObj(String::copy(path));
@@ -4837,8 +8245,8 @@ namespace neon
                 ModLoaderFN asfn;
                 module->deftable.deInit();
                 /*
-                nn_memory_free(module->m_modname);
-                nn_memory_free(module->physicalpath);
+                Memory::sysFree(module->m_modname);
+                Memory::sysFree(module->physicalpath);
                 */
                 if(module->fnunloaderptr != nullptr && module->imported)
                 {
@@ -4847,7 +8255,7 @@ namespace neon
                 }
                 if(module->handle != nullptr)
                 {
-                    nn_import_closemodule(module->handle);
+                    Module::closeImportHandle(module->handle);
                 }
             }
 
@@ -4863,7 +8271,7 @@ namespace neon
                 struct stat stroot;
                 struct stat stmod;
                 String* pitem;
-                StringBuffer* pathbuf;
+                StrBuffer* pathbuf;
                 (void)rootfile;
                 (void)isrelative;
                 (void)stroot;
@@ -4871,7 +8279,7 @@ namespace neon
                 auto gcs = SharedState::get();
                 mlen = strlen(modulename);
                 splen = gcs->m_importpath.count();
-                pathbuf = Memory::make<StringBuffer>();
+                pathbuf = Memory::make<StrBuffer>();
                 for(i = 0; i < splen; i++)
                 {
                     pitem = gcs->m_importpath.get(i).asString();
@@ -4889,7 +8297,7 @@ namespace neon
                     }
                     cstrpath = pathbuf->data();
                     fprintf(stderr, "import: trying '%s' ... ", cstrpath);
-                    if(nn_util_fsfileexists(cstrpath))
+                    if(File::fileExists(cstrpath))
                     {
                         fprintf(stderr, "found!\n");
             /* stop a core library from importing itself */
@@ -4911,8 +8319,8 @@ namespace neon
                         }
             #endif
             #if 1
-                        path1 = osfn_realpath(cstrpath, nullptr);
-                        path2 = osfn_realpath(currentfile, nullptr);
+                        path1 = Util::osfn_realpath(cstrpath, nullptr);
+                        path2 = Util::osfn_realpath(currentfile, nullptr);
             #else
                         path1 = strdup(cstrpath);
                         path2 = strdup(currentfile);
@@ -4921,8 +8329,8 @@ namespace neon
                         {
                             if(memcmp(path1, path2, (int)strlen(path2)) == 0)
                             {
-                                nn_memory_free(path1);
-                                nn_memory_free(path2);
+                                Memory::sysFree(path1);
+                                Memory::sysFree(path2);
                                 path1 = nullptr;
                                 path2 = nullptr;
                                 fprintf(stderr, "resolvepath: refusing to import itself\n");
@@ -4930,14 +8338,14 @@ namespace neon
                             }
                             if(path2 != nullptr)
                             {
-                                nn_memory_free(path2);
+                                Memory::sysFree(path2);
                             }
                             Memory::destroy(pathbuf);
                             pathbuf = nullptr;
-                            retme = nn_util_strdup(path1);
+                            retme = Util::stringDup(path1);
                             if(path1 != nullptr)
                             {
-                                nn_memory_free(path1);
+                                Memory::sysFree(path1);
                             }
                             return retme;
                         }
@@ -4989,9 +8397,9 @@ namespace neon
                     return nullptr;
                 }
                 module = Module::make(modulename->data(), physpath, true, true);
-                nn_memory_free(physpath);
+                Memory::sysFree(physpath);
                 function = compileSourceIntern(module, source, &blob, true, false);
-                nn_memory_free(source);
+                Memory::sysFree(source);
                 closure = Function::makeFuncClosure(function, Value::makeNull());
                 callable = Value::fromObject(closure);
                 gcs->vmNestCallPrepare(callable, Value::makeNull(), nullptr, 0);
@@ -5163,191 +8571,47 @@ namespace neon
     };
 
 
-    class Array : public Object
-    {
-        public:
-            ValArray<Value> m_objvarray;
-
-        public:
-            static Array* makeFilled(size_t cnt, Value filler)
-            {
-                size_t i;
-                Array* list;
-                list = SharedState::gcMakeObject<Array>(Object::OTYP_ARRAY, false);
-                if(cnt > 0)
-                {
-                    for(i = 0; i < cnt; i++)
-                    {
-                        list->push(filler);
-                    }
-                }
-                return list;
-            }
-
-            static Array* make()
-            {
-                return makeFilled(0, Value::makeNull());
-            }
-
-            NEON_INLINE void push(Value value)
-            {
-                auto gcs = SharedState::get();
-                (void)gcs;
-                /*gcs->vmStackPush(value);*/
-                m_objvarray.push(value);
-                /*gcs->vmStackPop(); */
-            }
-
-            NEON_INLINE size_t count() const
-            {
-                return m_objvarray.count();
-            }
-
-            NEON_INLINE Value* data() const
-            {
-                return (Value*)m_objvarray.data();
-            }
-
-            NEON_INLINE bool pop(Value* dest)
-            {
-                return m_objvarray.pop(dest);
-            }
-
-
-            NEON_INLINE bool set(size_t idx, Value val)
-            {
-                return m_objvarray.set(idx, val);
-            }
-
-            NEON_INLINE bool get(size_t idx, Value* vdest) const
-            {
-                size_t vc;
-                vc = count();
-                if((vc > 0) && (idx < vc))
-                {
-                    *vdest = m_objvarray.get(idx);
-                    return true;
-                }
-                return false;
-            }
-
-            NEON_INLINE Value get(size_t idx) const
-            {
-                Value vd;
-                if(get(idx, &vd))
-                {
-                    return vd;
-                }
-                return Value::makeNull();
-            }
-
-            NEON_INLINE Array* copy(long start, long length)
-            {
-                size_t i;
-                Array* newlist;
-                newlist = Array::make();
-                if(start == -1)
-                {
-                    start = 0;
-                }
-                if(length == -1)
-                {
-                    length = count() - start;
-                }
-                for(i = start; i < (size_t)(start + length); i++)
-                {
-                    newlist->push(get(i));
-                }
-                return newlist;
-            }
-
-
-    };
 
     class Range : public Object
     {
+        public:
+            static Range* make(int lower, int upper)
+            {
+                Range* range;
+                range = SharedState::gcMakeObject<Range>(Object::OTYP_RANGE, false);
+                range->lower = lower;
+                range->upper = upper;
+                if(upper > lower)
+                {
+                    range->range = upper - lower;
+                }
+                else
+                {
+                    range->range = lower - upper;
+                }
+                return range;
+            }
+
         public:
             int lower;
             int upper;
             int range;
     };
 
-    class Dict : public Object
-    {
-        public:
-            ValArray<Value> htnames;
-            HashTable<Value, Value> htab;
-
-        public:
-            static Dict* make()
-            {
-                Dict* dict;
-                dict = SharedState::gcMakeObject<Dict>(Object::OTYP_DICT, false);
-                dict->htab.initTable();
-                return dict;
-            }
-
-            static void destroy(Dict* dict)
-            {
-                dict->htnames.deInit();
-                dict->htab.deInit();
-            }
-
-            bool set(Value key, Value value)
-            {
-                Value tempvalue;
-                if(!this->htab.get(key, &tempvalue))
-                {
-                    /* add key if it doesn't exist. */
-                    this->htnames.push(key);
-                }
-                return this->htab.set(key, value);
-            }
-
-            void add(Value key, Value value)
-            {
-                this->set(key, value);
-            }
-
-            void addCstr(const char* ckey, Value value)
-            {
-                String* os;
-                os = String::copy(ckey);
-                this->add(Value::fromObject(os), value);
-            }
-
-            Property* get(Value key)
-            {
-                return this->htab.getfield(key);
-            }
-
-            Dict* copy()
-            {
-                size_t i;
-                size_t dsz;
-                Value key;
-                Property* field;
-                Dict* ndict;
-                ndict = Dict::make();
-                /*
-                // @TODO: Figure out how to handle dictionary values correctly
-                // remember that copying keys is redundant and unnecessary
-                */
-                dsz = this->htnames.count();
-                for(i = 0; i < dsz; i++)
-                {
-                    key = this->htnames.get(i);
-                    field = this->htab.getfield(this->htnames.get(i));
-                    ndict->htnames.push(key);
-                    ndict->htab.setwithtype(key, field->value, field->m_fieldtype, key.isString());
-                }
-                return ndict;
-            }
-    };
-
 
     class Switch : public Object
     {
+        public:
+            static Switch* make()
+            {
+                Switch* sw;
+                sw = SharedState::gcMakeObject<Switch>(Object::OTYP_SWITCH, false);
+                sw->table.initTable();
+                sw->defaultjump = -1;
+                sw->exitjump = -1;
+                return sw;
+            }
+
         public:
             int defaultjump;
             int exitjump;
@@ -5356,6 +8620,17 @@ namespace neon
 
     class Userdata : public Object
     {
+        public:
+            static Userdata* make(void* pointer, const char* name)
+            {
+                Userdata* ptr;
+                ptr = SharedState::gcMakeObject<Userdata>(Object::OTYP_USERDATA, false);
+                ptr->pointer = pointer;
+                ptr->m_udname = Util::stringDup(name);
+                ptr->ondestroyfn = nullptr;
+                return ptr;
+            }
+
         public:
             void* pointer;
             char* m_udname;
@@ -6256,7 +9531,7 @@ namespace neon
             {
                 if(!lex->m_onstack)
                 {
-                    nn_memory_free(lex);
+                    Memory::sysFree(lex);
                 }
             }
 
@@ -6305,7 +9580,7 @@ namespace neon
                 int length;
                 char* buf;
                 AstToken t;
-                buf = (char*)nn_memory_malloc(sizeof(char) * 1024);
+                buf = (char*)Memory::sysMalloc(sizeof(char) * 1024);
                 /* TODO: used to be vasprintf. need to check how much to actually allocate! */
                 length = tmpsprintf(buf, fmt, args...);
                 t.m_toktype = AstToken::T_ERROR;
@@ -7001,6 +10276,21 @@ namespace neon
     class AstParser
     {
         public:
+            enum
+            {
+                /* how many locals per function can be compiled */
+                CONF_MAXLOCALS = (64 * 2),
+
+                /* how many upvalues per function can be compiled */
+                CONF_MAXUPVALS = (64 * 2),
+
+                /* how many switch cases per switch statement */
+                CONF_MAXSWITCHES = (32),
+
+                /* max number of function parameters */
+                CONF_MAXFUNCPARAMS = (32),              
+            };
+
             class Rule
             {
                 public:
@@ -7073,8 +10363,8 @@ namespace neon
                     Function* m_targetfunc;
                     Function::ContextType m_contexttype;
                     /* TODO: these should be dynamically allocated */
-                    LocalVarInfo m_locals[NEON_CONFIG_ASTMAXLOCALS];
-                    UpvalInfo m_upvalues[NEON_CONFIG_ASTMAXUPVALS];
+                    LocalVarInfo m_locals[CONF_MAXLOCALS];
+                    UpvalInfo m_upvalues[CONF_MAXUPVALS];
 
                 public:
                     FuncCompiler(AstParser* prs, Function::ContextType type, bool isanon)
@@ -7164,7 +10454,7 @@ namespace neon
                                 return i;
                             }
                         }
-                        if(upcnt == NEON_CONFIG_ASTMAXUPVALS)
+                        if(upcnt == CONF_MAXUPVALS)
                         {
                             m_sharedprs->raiseerror("too many closure variables in function");
                             return 0;
@@ -7346,7 +10636,7 @@ namespace neon
 
             static void destroy(AstParser* parser)
             {
-                nn_memory_free(parser);
+                Memory::sysFree(parser);
             }
 
             static Value utilConvertNumberString(AstToken::Type type, const char* source)
@@ -8120,8 +11410,8 @@ namespace neon
                 const char* colred;
                 const char* colreset;
                 auto gcs = SharedState::get();
-                colred = nn_util_color(NEON_COLOR_RED);
-                colreset = nn_util_color(NEON_COLOR_RESET);
+                colred = Util::termColor(NEON_COLOR_RED);
+                colreset = Util::termColor(NEON_COLOR_RESET);
                 fflush(stdout);
                 if(m_stopprintingsyntaxerrors)
                 {
@@ -8723,7 +12013,7 @@ namespace neon
             int addlocal(AstToken name)
             {
                 LocalVarInfo* local;
-                if(m_currentfunccompiler->m_localcount == NEON_CONFIG_ASTMAXLOCALS)
+                if(m_currentfunccompiler->m_localcount == CONF_MAXLOCALS)
                 {
                     /* we've reached maximum local variables per scope */
                     raiseerror("too many local variables in scope");
@@ -8800,27 +12090,11 @@ namespace neon
 
             Function* endcompiler(bool istoplevel)
             {
-                const char* fname;
-                Function* function;
-                auto gcs = SharedState::get();
                 emitreturn();
                 if(istoplevel)
                 {
                 }
-                function = m_currentfunccompiler->m_targetfunc;
-                fname = nullptr;
-                if(function->m_funcname == nullptr)
-                {
-                    fname = m_currentmodule->physicalpath->data();
-                }
-                else
-                {
-                    fname = function->m_funcname->data();
-                }
-                if(!m_haderror && gcs->m_conf.dumpbytecode)
-                {
-                    nn_dbg_disasmblob(gcs->m_debugwriter, currentblob(), fname);
-                }
+                auto function = m_currentfunccompiler->m_targetfunc;
                 m_currentfunccompiler = m_currentfunccompiler->m_enclosing;
                 return function;
             }
@@ -9197,7 +12471,7 @@ namespace neon
                 size_t len;
                 char* chr;
                 value = readhexescape(realstring, realindex, numberbytes);
-                count = nn_util_utf8numbytes(value);
+                count = Util::utf8NumBytes(value);
                 if(count == -1)
                 {
                     raiseerror("cannot encode a negative unicode value");
@@ -9209,11 +12483,11 @@ namespace neon
                 }
                 if(count != 0)
                 {
-                    chr = nn_util_utf8encode(value, &len);
+                    chr = Util::utf8Encode(value, &len);
                     if(chr)
                     {
                         memcpy(string + index, chr, (size_t)count + 1);
-                        nn_memory_free(chr);
+                        Memory::sysFree(chr);
                     }
                     else
                     {
@@ -9242,7 +12516,7 @@ namespace neon
                 char* deststr;
                 char* realstr;
                 rawlen = (((size_t)m_prevtoken.length - 2) + 1);
-                deststr = (char*)nn_memory_malloc(sizeof(char) * rawlen);
+                deststr = (char*)Memory::sysMalloc(sizeof(char) * rawlen);
                 quote = m_prevtoken.m_start[0];
                 realstr = (char*)m_prevtoken.m_start + 1;
                 reallength = m_prevtoken.length - 2;
@@ -9558,9 +12832,9 @@ namespace neon
                     {
                         ignorewhitespace();
                         parseexpression();
-                        if(argcount == NEON_CONFIG_ASTMAXFUNCPARAMS)
+                        if(argcount == CONF_MAXFUNCPARAMS)
                         {
-                            raiseerror("cannot have more than %d arguments to a function", NEON_CONFIG_ASTMAXFUNCPARAMS);
+                            raiseerror("cannot have more than %d arguments to a function", CONF_MAXFUNCPARAMS);
                         }
                         argcount++;
                     } while(match(AstToken::T_COMMA));
@@ -10015,9 +13289,9 @@ namespace neon
                 /* Evaluate the sequence expression and store it in a hidden local variable. */
                 parseexpression();
                 consume(AstToken::T_PARENCLOSE, "expected ')' after 'foreach'");
-                if(m_currentfunccompiler->m_localcount + 3 > NEON_CONFIG_ASTMAXLOCALS)
+                if(m_currentfunccompiler->m_localcount + 3 > CONF_MAXLOCALS)
                 {
-                    raiseerror("cannot declare more than %d variables in one scope", NEON_CONFIG_ASTMAXLOCALS);
+                    raiseerror("cannot declare more than %d variables in one scope", CONF_MAXLOCALS);
                     return;
                 }
                 /* add the iterator to the local scope */
@@ -10090,7 +13364,7 @@ namespace neon
                 int casecount;
                 int switchcode;
                 int startoffset;
-                int caseends[NEON_CONFIG_ASTMAXSWITCHCASES];
+                int caseends[CONF_MAXSWITCHES];
                 char* str;
                 Value jump;
                 AstToken::Type casetype;
@@ -10108,7 +13382,7 @@ namespace neon
                 /* 0: before all cases, 1: before default, 2: after default */
                 swstate = 0;
                 casecount = 0;
-                sw = nn_object_makeswitch();
+                sw = Switch::make();
                 gcs->vmStackPush(Value::fromObject(sw));
                 switchcode = emitswitch();
                 /* emitbyteandshort(Instruction::OPC_SWITCH, pushconst(Value::fromObject(sw))); */
@@ -10264,7 +13538,7 @@ namespace neon
                 bool catchexists;
                 bool finalexists;
             #if 0
-                if(m_currentfunccompiler->m_handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
+                if(m_currentfunccompiler->m_handlercount == CallFrame::CONF_MAXEXCEPTHANDLERS)
                 {
                     raiseerror("maximum exception handler in scope exceeded");
                 }
@@ -10553,14 +13827,12 @@ namespace neon
             double im;
     };
 
-    #if defined(NEON_CONFIG_DEBUGMEMORY) && (NEON_CONFIG_DEBUGMEMORY == 1)
-        #define nn_memory_malloc(...) nn_memory_debugmalloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
-        #define nn_memory_calloc(...) nn_memory_debugcalloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
-        #define nn_memory_realloc(...) nn_memory_debugrealloc(__FILE__, __LINE__, #__VA_ARGS__, __VA_ARGS__)
-    #endif
-
     /* bottom */
 
+    String* Wrappers::wrapClassGetName(Class* cl)
+    {
+        return cl->m_classname;
+    }
 
     uint32_t Wrappers::wrapStrGetHash(String* os)
     {
@@ -10577,7 +13849,7 @@ namespace neon
         return os->length();
     }
 
-    String* Wrappers::wrapMakeFromStrBuf(const StringBuffer& buf, uint32_t hsv, size_t length)
+    String* Wrappers::wrapMakeFromStrBuf(const StrBuffer& buf, uint32_t hsv, size_t length)
     {
         return String::makeFromStrbuf(buf, hsv, length);
     }
@@ -10585,6 +13857,11 @@ namespace neon
     String* wrapStringCopy(const char* data, size_t len)
     {
         return String::copy(data, len);
+    }
+
+    String* Wrappers::wrapStringCopy(const char* str)
+    {
+        return String::copy(str);
     }
 
     Blob* Wrappers::wrapGetBlobOfClosure(Function* fn)
@@ -10600,6 +13877,11 @@ namespace neon
     size_t Wrappers::wrapGetArityOfFuncScript(Function* ofn)
     {
         return ofn->m_fnvals.fnscriptfunc.arity;
+    }
+
+    size_t Wrappers::wrapGetBlobcountOfFuncScript(Function* ofn)
+    {
+        return ofn->m_fnvals.fnscriptfunc.blob->count;
     }
 
     const char* Wrappers::wrapGetInstanceName(Instance* inst)
@@ -10631,6 +13913,20 @@ namespace neon
         for(i = 0; i < list->count(); i++)
         {
             SharedState::markValue(list->get(i));
+        }
+    }
+
+    void Value::valtabRemoveWhites(HashTable<Value, Value>* table)
+    {
+        int i;
+        auto gcs = SharedState::get();
+        for(i = 0; i < table->htcapacity; i++)
+        {
+            auto entry = &table->htentries[i];
+            if(entry->key.isObject() && entry->key.asObject()->m_objmark != gcs->markvalue)
+            {
+                table->remove(entry->key);
+            }
         }
     }
 
@@ -10701,6 +13997,371 @@ namespace neon
         return false;
     }
 
+    bool Value::compareArrays(Array* oa, Array* ob)
+    {
+        size_t i;
+        Array* arra;
+        Array* arrb;
+        arra = (Array*)oa;
+        arrb = (Array*)ob;
+        /* unlike Dict, array order matters */
+        if(arra->count() != arrb->count())
+        {
+            return false;
+        }
+        for(i = 0; i < (size_t)arra->count(); i++)
+        {
+            if(!Value::compareValues(arra->get(i), arrb->get(i)))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool Value::compareStrings(Object* oa, Object* ob)
+    {
+        size_t alen;
+        size_t blen;
+        const char* adata;
+        const char* bdata;
+        String* stra;
+        String* strb;
+        stra = (String*)oa;
+        strb = (String*)ob;
+        alen = stra->length();
+        blen = strb->length();
+        if(alen != blen)
+        {
+            return false;
+        }
+        adata = stra->data();
+        bdata = strb->data();
+        return (memcmp(adata, bdata, alen) == 0);
+    }
+
+    bool Value::compareDicts(Object* oa, Object* ob)
+    {
+        Dict* dicta;
+        Dict* dictb;
+        Property* fielda;
+        Property* fieldb;
+        size_t ai;
+        size_t lena;
+        size_t lenb;
+        Value keya;
+        dicta = (Dict*)oa;
+        dictb = (Dict*)ob;
+        lena = dicta->htnames.count();
+        lenb = dictb->htnames.count();
+        if(lena != lenb)
+        {
+            return false;
+        }
+        ai = 0;
+        while(ai < lena)
+        {
+            /* first, get the key name off of dicta ... */
+            keya = dicta->htnames.get(ai);
+            fielda = dicta->htab.getfield(dicta->htnames.get(ai));
+            if(fielda != nullptr)
+            {
+                /* then look up that key in dictb ... */
+                fieldb = dictb->get(keya);
+                if((fielda != nullptr) && (fieldb != nullptr))
+                {
+                    /* if it exists, compare their values */
+                    if(!Value::compareValues(fielda->value, fieldb->value))
+                    {
+                        return false;
+                    }
+                }
+            }
+            ai++;
+        }
+        return true;
+    }
+
+    bool Value::compareObjects(Value a, Value b)
+    {
+        Object::Type ta;
+        Object::Type tb;
+        Object* oa;
+        Object* ob;
+        oa = a.asObject();
+        ob = b.asObject();
+        ta = oa->m_objtype;
+        tb = ob->m_objtype;
+        if(ta == tb)
+        {
+            /* we might not need to do a deep comparison if its the same object */
+            if(oa == ob)
+            {
+                return true;
+            }
+            else if(ta == Object::OTYP_STRING)
+            {
+                return compareStrings(oa, ob);
+            }
+            else if(ta == Object::OTYP_ARRAY)
+            {
+                return compareArrays(a.asArray(), b.asArray());
+            }
+            else if(ta == Object::OTYP_DICT)
+            {
+                return compareDicts(oa, ob);
+            }
+        }
+        return false;
+    }
+
+    bool Value::compareValActual(Value a, Value b)
+    {
+        /*
+        if(a.m_valtype != b.m_valtype)
+        {
+            return false;
+        }
+        */
+        if(a.isNull())
+        {
+            return true;
+        }
+        else if(a.isBool())
+        {
+            return a.asBool() == b.asBool();
+        }
+        else if(a.isNumber())
+        {
+            return (a.asNumber() == b.asNumber());
+        }
+        else
+        {
+            if(a.isObject() && b.isObject())
+            {
+                if(a.asObject() == b.asObject())
+                {
+                    return true;
+                }
+                return compareObjects(a, b);
+            }
+        }
+
+        return false;
+    }
+
+    bool Value::compareValues(Value a, Value b)
+    {
+        bool r;
+        r = compareValActual(a, b);
+        return r;
+    }
+
+    /**
+     * returns the greater of the two values.
+     * this function encapsulates the object hierarchy
+     */
+    Value Value::findGreater(Value a, Value b)
+    {
+        size_t alen;
+        const char* adata;
+        const char* bdata;
+        String* osa;
+        String* osb;
+        if(a.isNull())
+        {
+            return b;
+        }
+        else if(a.isBool())
+        {
+            if(b.isNull() || (b.isBool() && b.asBool() == false))
+            {
+                /* only null, false and false are lower than numbers */
+                return a;
+            }
+            else
+            {
+                return b;
+            }
+        }
+        else if(a.isNumber())
+        {
+            if(b.isNull() || b.isBool())
+            {
+                return a;
+            }
+            else if(b.isNumber())
+            {
+                if(a.asNumber() >= b.asNumber())
+                {
+                    return a;
+                }
+                return b;
+            }
+            else
+            {
+                /* every other thing is greater than a number */
+                return b;
+            }
+        }
+        else if(a.isObject())
+        {
+            if(a.isString() && b.isString())
+            {
+                osa = a.asString();
+                osb = b.asString();
+                adata = osa->data();
+                bdata = osb->data();
+                alen = osa->length();
+                if(strncmp(adata, bdata, alen) >= 0)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isFuncscript() && b.isFuncscript())
+            {
+                if(a.asFunction()->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnscriptfunc.arity)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isFuncclosure() && b.isFuncclosure())
+            {
+                if(a.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isRange() && b.isRange())
+            {
+                if(a.asRange()->lower >= b.asRange()->lower)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isClass() && b.isClass())
+            {
+                if(a.asClass()->m_instmethods.count() >= b.asClass()->m_instmethods.count())
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isArray() && b.isArray())
+            {
+                if(a.asArray()->count() >= b.asArray()->count())
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isDict() && b.isDict())
+            {
+                if(a.asDict()->htnames.count() >= b.asDict()->htnames.count())
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(a.isFile() && b.isFile())
+            {
+                if(strcmp(a.asFile()->path->data(), b.asFile()->path->data()) >= 0)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else if(b.isObject())
+            {
+                if(a.asObject()->m_objtype >= b.asObject()->m_objtype)
+                {
+                    return a;
+                }
+                return b;
+            }
+            else
+            {
+                return a;
+            }
+        }
+        return a;
+    }
+
+    /**
+     * sorts values in an array using the bubble-sort algorithm
+     */
+    void Value::sortValues(Value* values, int count)
+    {
+        int i;
+        int j;
+        Value temp;
+        for(i = 0; i < count; i++)
+        {
+            for(j = 0; j < count; j++)
+            {
+                if(Value::compareValues(values[j], Value::findGreater(values[i], values[j])))
+                {
+                    temp = values[i];
+                    values[i] = values[j];
+                    values[j] = temp;
+                    if(values[i].isArray())
+                    {
+                        sortValues((Value*)values[i].asArray()->data(), values[i].asArray()->count());
+                    }
+
+                    if(values[j].isArray())
+                    {
+                        sortValues((Value*)values[j].asArray()->data(), values[j].asArray()->count());
+                    }
+                }
+            }
+        }
+    }
+
+    Value Value::copyValue(Value value)
+    {
+        if(value.isObject())
+        {
+            switch(value.asObject()->m_objtype)
+            {
+                case Object::OTYP_STRING:
+                {
+                    String* string;
+                    string = value.asString();
+                    return Value::fromObject(String::copyObject(string));
+                }
+                break;
+                case Object::OTYP_ARRAY:
+                {
+                    size_t i;
+                    Array* list;
+                    Array* newlist;
+                    list = value.asArray();
+                    newlist = Array::make();
+                    for(i = 0; i < list->count(); i++)
+                    {
+                        newlist->push(list->get(i));
+                    }
+                    return Value::fromObject(newlist);
+                }
+                break;
+                case Object::OTYP_DICT:
+                {
+                    Dict* dict;
+                    dict = value.asDict();
+                    return Value::fromObject(dict->copy());
+                }
+                break;
+                default:
+                    break;
+            }
+        }
+        return value;
+    }
 
     void Object::markObject(Object* object)
     {
@@ -10721,8 +14382,8 @@ namespace neon
         object->m_objmark = gcs->markvalue;
         if(gcs->m_gcstate.graycapacity < gcs->m_gcstate.graycount + 1)
         {
-            gcs->m_gcstate.graycapacity = NEON_MEMORY_GROWCAPACITY(gcs->m_gcstate.graycapacity);
-            gcs->m_gcstate.graystack = (Object**)nn_memory_realloc(gcs->m_gcstate.graystack, sizeof(Object*) * gcs->m_gcstate.graycapacity);
+            gcs->m_gcstate.graycapacity = Memory::getNextCapacity(gcs->m_gcstate.graycapacity);
+            gcs->m_gcstate.graystack = (Object**)Memory::sysRealloc(gcs->m_gcstate.graystack, sizeof(Object*) * gcs->m_gcstate.graycapacity);
             if(gcs->m_gcstate.graystack == nullptr)
             {
                 fflush(stdout);
@@ -11021,7 +14682,7 @@ namespace neon
         size_t klen;
         uint32_t hsv;
         klen = strlen(kstr);
-        hsv = nn_util_hashstring(kstr, klen);
+        hsv = Util::hashString(kstr, klen);
         return getfieldbystr(Value::makeNull(), kstr, klen, hsv);
     }
 
@@ -11084,7 +14745,7 @@ namespace neon
         Value stacktrace;
         Instance* instance;
         auto gcs = SharedState::get();
-        message = (char*)nn_memory_malloc(kMaxBufSize + 1);
+        message = (char*)Memory::sysMalloc(kMaxBufSize + 1);
         length = tmpsnprintf(message, kMaxBufSize, format, args...);
         instance = makeExceptionInstance(exklass, srcfile, srcline, String::take(message, length));
         gcs->vmStackPush(Value::fromObject(instance));
@@ -11100,7 +14761,7 @@ namespace neon
     */
 
     template<typename... ArgsT>
-    void nn_state_raisefatalerror(const char* format, ArgsT&&... args)
+    void raiseFatalError(const char* format, ArgsT&&... args)
     {
         constexpr static auto tmpfprintf = fprintf;
         int i;
@@ -11144,1649 +14805,496 @@ namespace neon
     }
 
 
-
-
-
-
-
-
-    /*
-    via: https://github.com/adrianwk94/utf8-iterator
-    UTF-8 Iterator. Version 0.1.3
-
-    Original code by Adrian Guerrero Vera (adrianwk94@gmail.com)
-    MIT License
-    Copyright (c) 2016 Adrian Guerrero Vera
-
-    Permission is hereby granted, free of charge, to any person obtaining a copy
-    of this software and associated documentation files (the "Software"), to deal
-    in the Software without restriction, including without limitation the rights
-    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-    copies of the Software, and to permit persons to whom the Software is
-    furnished to do so, subject to the following conditions:
-    The above copyright notice and this permission notice shall be included in all
-    copies or substantial portions of the Software.
-    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-    SOFTWARE.
-
-    */
-
-    /* allows you to set a custom length. */
-    void nn_utf8iter_init(utf8iterator_t* iter, const char* ptr, uint32_t length)
-    {
-        iter->plainstr = ptr;
-        iter->plainlen = length;
-        iter->codepoint = 0;
-        iter->currpos = 0;
-        iter->nextpos = 0;
-        iter->currcount = 0;
-    }
-
-    /* calculate the number of bytes a UTF8 character occupies in a string. */
-    uint16_t nn_utf8iter_charsize(const char* character)
-    {
-        if(character == nullptr)
-        {
-            return 0;
-        }
-        if(character[0] == 0)
-        {
-            return 0;
-        }
-        if((character[0] & 0x80) == 0)
-        {
-            return 1;
-        }
-        else if((character[0] & 0xE0) == 0xC0)
-        {
-            return 2;
-        }
-        else if((character[0] & 0xF0) == 0xE0)
-        {
-            return 3;
-        }
-        else if((character[0] & 0xF8) == 0xF0)
-        {
-            return 4;
-        }
-        else if((character[0] & 0xFC) == 0xF8)
-        {
-            return 5;
-        }
-        else if((character[0] & 0xFE) == 0xFC)
-        {
-            return 6;
-        }
-        return 0;
-    }
-
-    uint32_t nn_utf8iter_converter(const char* character, uint16_t size)
-    {
-        uint16_t i;
-        static uint32_t codepoint = 0;
-        static const uint16_t g_utf8iter_table_unicode[] = { 0, 0, 0x1F, 0xF, 0x7, 0x3, 0x1 };
-        if(size == 0)
-        {
-            return 0;
-        }
-        if(character == nullptr)
-        {
-            return 0;
-        }
-        if(character[0] == 0)
-        {
-            return 0;
-        }
-        if(size == 1)
-        {
-            return character[0];
-        }
-        codepoint = g_utf8iter_table_unicode[size] & character[0];
-        for(i = 1; i < size; i++)
-        {
-            codepoint = codepoint << 6;
-            codepoint = codepoint | (character[i] & 0x3F);
-        }
-        return codepoint;
-    }
-
-    /* returns 1 if there is a character in the next position. If there is not, return 0. */
-    uint16_t nn_utf8iter_next(utf8iterator_t* iter)
-    {
-        const char* pointer;
-        if(iter == nullptr)
-        {
-            return 0;
-        }
-        if(iter->plainstr == nullptr)
-        {
-            return 0;
-        }
-        if(iter->nextpos < iter->plainlen)
-        {
-            iter->currpos = iter->nextpos;
-            /* Set Current Pointer */
-            pointer = iter->plainstr + iter->nextpos;
-            iter->charsize = nn_utf8iter_charsize(pointer);
-            if(iter->charsize == 0)
-            {
-                return 0;
-            }
-            iter->nextpos = iter->nextpos + iter->charsize;
-            iter->codepoint = nn_utf8iter_converter(pointer, iter->charsize);
-            if(iter->codepoint == 0)
-            {
-                return 0;
-            }
-            iter->currcount++;
-            return 1;
-        }
-        iter->currpos = iter->nextpos;
-        return 0;
-    }
-
-    /* return current character in UFT8 - no same that iter.codepoint (not codepoint/unicode) */
-    const char* nn_utf8iter_getchar(utf8iterator_t* iter)
-    {
-        uint16_t i;
-        const char* pointer;
-        static char str[10];
-        str[0] = '\0';
-        if(iter == nullptr)
-        {
-            return str;
-        }
-        if(iter->plainstr == nullptr)
-        {
-            return str;
-        }
-        if(iter->charsize == 0)
-        {
-            return str;
-        }
-        if(iter->charsize == 1)
-        {
-            str[0] = iter->plainstr[iter->currpos];
-            str[1] = '\0';
-            return str;
-        }
-        pointer = iter->plainstr + iter->currpos;
-        for(i = 0; i < iter->charsize; i++)
-        {
-            str[i] = pointer[i];
-        }
-        str[iter->charsize] = '\0';
-        return str;
-    }
-
-    /* returns the number of bytes contained in a unicode character */
-    int nn_util_utf8numbytes(int value)
-    {
-        if(value < 0)
-        {
-            return -1;
-        }
-        if(value <= 0x7f)
-        {
-            return 1;
-        }
-        if(value <= 0x7ff)
-        {
-            return 2;
-        }
-        if(value <= 0xffff)
-        {
-            return 3;
-        }
-        if(value <= 0x10ffff)
-        {
-            return 4;
-        }
-        return 0;
-    }
-
-    char* nn_util_utf8encode(unsigned int code, size_t* dlen)
-    {
-        int count;
-        char* chars;
-        *dlen = 0;
-        count = nn_util_utf8numbytes((int)code);
-        if(NEON_LIKELY(count > 0))
-        {
-            *dlen = count;
-            chars = (char*)nn_memory_malloc(sizeof(char) * ((size_t)count + 1));
-            if(chars != nullptr)
-            {
-                if(code <= 0x7F)
-                {
-                    chars[0] = (char)(code & 0x7F);
-                    chars[1] = '\0';
-                }
-                else if(code <= 0x7FF)
-                {
-                    /* one continuation byte */
-                    chars[1] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[0] = (char)(0xC0 | (code & 0x1F));
-                }
-                else if(code <= 0xFFFF)
-                {
-                    /* two continuation bytes */
-                    chars[2] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[1] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[0] = (char)(0xE0 | (code & 0xF));
-                }
-                else if(code <= 0x10FFFF)
-                {
-                    /* three continuation bytes */
-                    chars[3] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[2] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[1] = (char)(0x80 | (code & 0x3F));
-                    code = (code >> 6);
-                    chars[0] = (char)(0xF0 | (code & 0x7));
-                }
-                else
-                {
-                    /* unicode replacement character */
-                    chars[2] = (char)0xEF;
-                    chars[1] = (char)0xBF;
-                    chars[0] = (char)0xBD;
-                }
-                return chars;
-            }
-        }
-        return nullptr;
-    }
-
-    int nn_util_utf8decode(const uint8_t* bytes, uint32_t length)
-    {
-        int value;
-        uint32_t remainingbytes;
-        /* Single byte (i.e. fits in ASCII). */
-        if(*bytes <= 0x7f)
-        {
-            return *bytes;
-        }
-        if((*bytes & 0xe0) == 0xc0)
-        {
-            /* Two byte sequence: 110xxxxx 10xxxxxx. */
-            value = *bytes & 0x1f;
-            remainingbytes = 1;
-        }
-        else if((*bytes & 0xf0) == 0xe0)
-        {
-            /* Three byte sequence: 1110xxxx	 10xxxxxx 10xxxxxx. */
-            value = *bytes & 0x0f;
-            remainingbytes = 2;
-        }
-        else if((*bytes & 0xf8) == 0xf0)
-        {
-            /* Four byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx. */
-            value = *bytes & 0x07;
-            remainingbytes = 3;
-        }
-        else
-        {
-            /* Invalid UTF-8 sequence. */
-            return -1;
-        }
-        /* Don't read past the end of the buffer on truncated UTF-8. */
-        if(remainingbytes > length - 1)
-        {
-            return -1;
-        }
-        while(remainingbytes > 0)
-        {
-            bytes++;
-            remainingbytes--;
-            /* Remaining bytes must be of form 10xxxxxx. */
-            if((*bytes & 0xc0) != 0x80)
-            {
-                return -1;
-            }
-            value = value << 6 | (*bytes & 0x3f);
-        }
-        return value;
-    }
-
-    char* nn_util_utf8codepoint(const char* str, char* outcodepoint)
-    {
-        if(0xf0 == (0xf8 & str[0]))
-        {
-            /* 4 byte utf8 codepoint */
-            *outcodepoint = (((0x07 & str[0]) << 18) | ((0x3f & str[1]) << 12) | ((0x3f & str[2]) << 6) | (0x3f & str[3]));
-            str += 4;
-        }
-        else if(0xe0 == (0xf0 & str[0]))
-        {
-            /* 3 byte utf8 codepoint */
-            *outcodepoint = (((0x0f & str[0]) << 12) | ((0x3f & str[1]) << 6) | (0x3f & str[2]));
-            str += 3;
-        }
-        else if(0xc0 == (0xe0 & str[0]))
-        {
-            /* 2 byte utf8 codepoint */
-            *outcodepoint = (((0x1f & str[0]) << 6) | (0x3f & str[1]));
-            str += 2;
-        }
-        else
-        {
-            /* 1 byte utf8 codepoint otherwise */
-            *outcodepoint = str[0];
-            str += 1;
-        }
-        return (char*)str;
-    }
-
-    char* nn_util_utf8strstr(const char* haystack, const char* needle)
-    {
-        char throwawaycodepoint;
-        const char* n;
-        const char* maybematch;
-        throwawaycodepoint = 0;
-        /* if needle has no utf8 codepoints before the null terminating
-         * byte then return haystack */
-        if('\0' == *needle)
-        {
-            return (char*)haystack;
-        }
-        while('\0' != *haystack)
-        {
-            maybematch = haystack;
-            n = needle;
-            while(*haystack == *n && (*haystack != '\0' && *n != '\0'))
-            {
-                n++;
-                haystack++;
-            }
-            if('\0' == *n)
-            {
-                /* we found the whole utf8 string for needle in haystack at
-                 * maybematch, so return it */
-                return (char*)maybematch;
-            }
-            else
-            {
-                /* h could be in the middle of an unmatching utf8 codepoint,
-                 * so we need to march it on to the next character beginning
-                 * starting from the current character */
-                haystack = nn_util_utf8codepoint(maybematch, &throwawaycodepoint);
-            }
-        }
-        /* no match */
-        return nullptr;
-    }
-
-    /*
-    // returns a pointer to the beginning of the pos'th utf8 codepoint
-    // in the buffer at s
-    */
-    char* nn_util_utf8index(char* s, int pos)
-    {
-        ++pos;
-        for(; *s; ++s)
-        {
-            if((*s & 0xC0) != 0x80)
-            {
-                --pos;
-            }
-            if(pos == 0)
-            {
-                return s;
-            }
-        }
-        return nullptr;
-    }
-
-    /*
-    // converts codepoint indexes start and end to byte offsets in the buffer at s
-    */
-    void nn_util_utf8slice(char* s, int* start, int* end)
-    {
-        char* p;
-        p = nn_util_utf8index(s, *start);
-        if(p != nullptr)
-        {
-            *start = (int)(p - s);
-        }
-        else
-        {
-            *start = -1;
-        }
-        p = nn_util_utf8index(s, *end);
-        if(p != nullptr)
-        {
-            *end = (int)(p - s);
-        }
-        else
-        {
-            *end = (int)strlen(s);
-        }
-    }
-
-    static int g_neon_ttycheck = -1;
-
-    const char* nn_util_color(Color tc)
-    {
-    #if !defined(NEON_CONFIG_FORCEDISABLECOLOR)
-        int fdstdout;
-        int fdstderr;
-        if(g_neon_ttycheck == -1)
-        {
-            fdstdout = fileno(stdout);
-            fdstderr = fileno(stderr);
-            g_neon_ttycheck = (osfn_isatty(fdstderr) && osfn_isatty(fdstdout));
-        }
-        if(g_neon_ttycheck)
-        {
-            switch(tc)
-            {
-                case NEON_COLOR_RESET:
-                    return "\x1B[0m";
-                case NEON_COLOR_RED:
-                    return "\x1B[31m";
-                case NEON_COLOR_GREEN:
-                    return "\x1B[32m";
-                case NEON_COLOR_YELLOW:
-                    return "\x1B[33m";
-                case NEON_COLOR_BLUE:
-                    return "\x1B[34m";
-                case NEON_COLOR_MAGENTA:
-                    return "\x1B[35m";
-                case NEON_COLOR_CYAN:
-                    return "\x1B[36m";
-            }
-        }
-    #else
-        (void)tc;
-    #endif
-        return "";
-    }
-
-    char* nn_util_strndup(const char* src, size_t len)
-    {
-        char* buf;
-        buf = (char*)nn_memory_malloc(sizeof(char) * (len + 1));
-        if(buf == nullptr)
-        {
-            return nullptr;
-        }
-        memset(buf, 0, len + 1);
-        memcpy(buf, src, len);
-        return buf;
-    }
-
-    char* nn_util_strdup(const char* src)
-    {
-        return nn_util_strndup(src, strlen(src));
-    }
-
-    void nn_util_mtseed(uint32_t seed, uint32_t* binst, uint32_t* index)
-    {
-        uint32_t i;
-        binst[0] = seed;
-        for(i = 1; i < NEON_CONFIG_MTSTATESIZE; i++)
-        {
-            binst[i] = (uint32_t)(1812433253UL * (binst[i - 1] ^ (binst[i - 1] >> 30)) + i);
-        }
-        *index = NEON_CONFIG_MTSTATESIZE;
-    }
-
-    uint32_t nn_util_mtgenerate(uint32_t* binst, uint32_t* index)
-    {
-        uint32_t i;
-        uint32_t y;
-        if(*index >= NEON_CONFIG_MTSTATESIZE)
-        {
-            for(i = 0; i < NEON_CONFIG_MTSTATESIZE - 397; i++)
-            {
-                y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-                binst[i] = binst[i + 397] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-            }
-            for(; i < NEON_CONFIG_MTSTATESIZE - 1; i++)
-            {
-                y = (binst[i] & 0x80000000) | (binst[i + 1] & 0x7fffffff);
-                binst[i] = binst[i + (397 - NEON_CONFIG_MTSTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-            }
-            y = (binst[NEON_CONFIG_MTSTATESIZE - 1] & 0x80000000) | (binst[0] & 0x7fffffff);
-            binst[NEON_CONFIG_MTSTATESIZE - 1] = binst[396] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
-            *index = 0;
-        }
-        y = binst[*index];
-        *index = *index + 1;
-        y = y ^ (y >> 11);
-        y = y ^ ((y << 7) & 0x9d2c5680);
-        y = y ^ ((y << 15) & 0xefc60000);
-        y = y ^ (y >> 18);
-        return y;
-    }
-
-    double nn_util_mtrand(double lowerlimit, double upperlimit)
-    {
-        double randnum;
-        uint32_t randval;
-        struct timeval tv;
-        static uint32_t mtstate[NEON_CONFIG_MTSTATESIZE];
-        static uint32_t mtindex = NEON_CONFIG_MTSTATESIZE + 1;
-        if(mtindex >= NEON_CONFIG_MTSTATESIZE)
-        {
-            osfn_gettimeofday(&tv, nullptr);
-            nn_util_mtseed((uint32_t)(1000000 * tv.tv_sec + tv.tv_usec), mtstate, &mtindex);
-        }
-        randval = nn_util_mtgenerate(mtstate, &mtindex);
-        randnum = lowerlimit + ((double)randval / UINT32_MAX) * (upperlimit - lowerlimit);
-        return randnum;
-    }
-
-
-    char* nn_util_strtoupper(char* str, size_t length)
-    {
-        int c;
-        size_t i;
-        for(i = 0; i < length; i++)
-        {
-            c = str[i];
-            str[i] = toupper(c);
-        }
-        return str;
-    }
-
-    char* nn_util_strtolower(char* str, size_t length)
-    {
-        int c;
-        size_t i;
-        for(i = 0; i < length; i++)
-        {
-            c = str[i];
-            str[i] = toupper(c);
-        }
-        return str;
-    }
-
-    String* nn_util_numbertobinstring(long n)
-    {
-        int i;
-        int rem;
-        int count;
-        int length;
-        long j;
-        /* assume maximum of 1024 bits */
-        char str[1024];
-        char newstr[1027];
-        count = 0;
-        j = n;
-        if(j == 0)
-        {
-            str[count++] = '0';
-        }
-        while(j != 0)
-        {
-            rem = abs((int)(j % 2));
-            j /= 2;
-            if(rem == 1)
-            {
-                str[count] = '1';
-            }
-            else
-            {
-                str[count] = '0';
-            }
-            count++;
-        }
-        /* assume maximum of 1024 bits + 0b (indicator) + sign (-). */
-        length = 0;
-        if(n < 0)
-        {
-            newstr[length++] = '-';
-        }
-        newstr[length++] = '0';
-        newstr[length++] = 'b';
-        for(i = count - 1; i >= 0; i--)
-        {
-            newstr[length++] = str[i];
-        }
-        newstr[length++] = 0;
-        return String::copy(newstr, length);
-        /*
-        //  // To store the binary number
-        //  int64_t number = 0;
-        //  int cnt = 0;
-        //  while (n != 0) {
-        //    int64_t rem = n % 2;
-        //    int64_t c = (int64_t) pow(10, cnt);
-        //    number += rem * c;
-        //    n /= 2;
-        //
-        //    // Count used to store exponent value
-        //    cnt++;
-        //  }
-        //
-        //  char str[67]; // assume maximum of 64 bits + 2 binary indicators (0b)
-        //  int length = sprintf(str, "0b%lld", number);
-        //
-        //  return String::copy(str, length);
-        */
-    }
-
-    String* nn_util_numbertooctstring(int64_t n, bool numeric)
-    {
-        int length;
-        /* assume maximum of 64 bits + 2 octal indicators (0c) */
-        char str[66];
-        length = sprintf(str, numeric ? "0c%lo" : "%lo", n);
-        return String::copy(str, length);
-    }
-
-    String* nn_util_numbertohexstring(int64_t n, bool numeric)
-    {
-        int length;
-        /* assume maximum of 64 bits + 2 hex indicators (0x) */
-        char str[66];
-        length = sprintf(str, numeric ? "0x%lx" : "%lx", n);
-        return String::copy(str, length);
-    }
-
-    uint32_t nn_object_hashobject(Object* object)
-    {
-        switch(object->m_objtype)
-        {
-            case Object::OTYP_CLASS:
-            {
-                /* Classes just use their name. */
-                return ((Class*)object)->m_classname->m_hashvalue;
-            }
-            break;
-            case Object::OTYP_FUNCSCRIPT:
-            {
-                /*
-                // Allow bare (non-closure) functions so that we can use a map to find
-                // existing constants in a function's constant table. This is only used
-                // internally. Since user code never sees a non-closure function, they
-                // cannot use them as map keys.
-                */
-                uint32_t tmpa;
-                uint32_t tmpb;
-                uint32_t tmpres;
-                uint32_t tmpptr;
-                Function* fn;
-                fn = (Function*)object;
-                tmpptr = (uint32_t)(uintptr_t)fn;
-    #if 1
-                tmpa = nn_util_hashdouble(fn->m_fnvals.fnscriptfunc.arity);
-                tmpb = nn_util_hashdouble(fn->m_fnvals.fnscriptfunc.blob->count);
-                tmpres = tmpa ^ tmpb;
-                tmpres = tmpres ^ tmpptr;
-    #else
-                tmpres = tmpptr;
-    #endif
-                return tmpres;
-            }
-            break;
-            case Object::OTYP_STRING:
-            {
-                return ((String*)object)->m_hashvalue;
-            }
-            break;
-            default:
-                break;
-        }
-        return 0;
-    }
-
-    uint32_t nn_value_hashvalue(Value value)
-    {
-        if(value.isBool())
-        {
-            return value.asBool() ? 3 : 5;
-        }
-        else if(value.isNull())
-        {
-            return 7;
-        }
-        else if(value.isNumber())
-        {
-            return nn_util_hashdouble(value.asNumber());
-        }
-        else if(value.isObject())
-        {
-            return nn_object_hashobject(value.asObject());
-        }
-        return 0;
-    }
-
-
-    void nn_valtable_removewhites(HashTable<Value, Value>* table)
-    {
-        int i;
-        auto gcs = SharedState::get();
-        for(i = 0; i < table->htcapacity; i++)
-        {
-            auto entry = &table->htentries[i];
-            if(entry->key.isObject() && entry->key.asObject()->m_objmark != gcs->markvalue)
-            {
-                table->remove(entry->key);
-            }
-        }
-    }
-
-
-
     /*
      * TODO: get rid of unused functions
      */
 
-    double nn_string_tabhashvaluecombine(const char* data, size_t len, uint32_t hsv)
+    class Debug
     {
-        double dn;
-        dn = 0;
-        dn += hsv;
-        dn += len;
-        dn += data[0];
-        return dn;
-    }
-
-    void nn_dbg_disasmblob(IOStream* pr, Blob* blob, const char* name)
-    {
-        int offset;
-        pr->format("== compiled '%s' [[\n", name);
-        for(offset = 0; offset < blob->count;)
-        {
-            offset = nn_dbg_printinstructionat(pr, blob, offset);
-        }
-        pr->format("]]\n");
-    }
-
-    void nn_dbg_printinstrname(IOStream* pr, const char* name)
-    {
-        pr->format("%s%-16s%s ", nn_util_color(NEON_COLOR_RED), name, nn_util_color(NEON_COLOR_RESET));
-    }
-
-    int nn_dbg_printsimpleinstr(IOStream* pr, const char* name, int offset)
-    {
-        nn_dbg_printinstrname(pr, name);
-        pr->format("\n");
-        return offset + 1;
-    }
-
-    int nn_dbg_printconstinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        uint16_t constant;
-        constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d ", constant);
-        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
-        pr->format("\n");
-        return offset + 3;
-    }
-
-    int nn_dbg_printpropertyinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        const char* proptn;
-        uint16_t constant;
-        constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d ", constant);
-        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
-        proptn = "";
-        if(blob->instrucs[offset + 3].code == 1)
-        {
-            proptn = "static";
-        }
-        pr->format(" (%s)", proptn);
-        pr->format("\n");
-        return offset + 4;
-    }
-
-    int nn_dbg_printshortinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        uint16_t slot;
-        slot = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d\n", slot);
-        return offset + 3;
-    }
-
-    int nn_dbg_printbyteinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        uint16_t slot;
-        slot = blob->instrucs[offset + 1].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d\n", slot);
-        return offset + 2;
-    }
-
-    int nn_dbg_printjumpinstr(IOStream* pr, const char* name, int sign, Blob* blob, int offset)
-    {
-        uint16_t jump;
-        jump = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-        jump |= blob->instrucs[offset + 2].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d -> %d\n", offset, offset + 3 + sign * jump);
-        return offset + 3;
-    }
-
-    int nn_dbg_printtryinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        uint16_t finally;
-        uint16_t type;
-        uint16_t address;
-        type = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-        type |= blob->instrucs[offset + 2].code;
-        address = (uint16_t)(blob->instrucs[offset + 3].code << 8);
-        address |= blob->instrucs[offset + 4].code;
-        finally = (uint16_t)(blob->instrucs[offset + 5].code << 8);
-        finally |= blob->instrucs[offset + 6].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("%8d -> %d, %d\n", type, address, finally);
-        return offset + 7;
-    }
-
-    int nn_dbg_printinvokeinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        uint16_t constant;
-        uint16_t argcount;
-        constant = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-        constant |= blob->instrucs[offset + 2].code;
-        argcount = blob->instrucs[offset + 3].code;
-        nn_dbg_printinstrname(pr, name);
-        pr->format("(%d args) %8d ", argcount, constant);
-        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
-        pr->format("\n");
-        return offset + 4;
-    }
-
-    const char* nn_dbg_op2str(uint16_t instruc)
-    {
-        switch(instruc)
-        {
-            case Instruction::OPC_GLOBALDEFINE:
-                return "OPC_GLOBALDEFINE";
-            case Instruction::OPC_GLOBALGET:
-                return "OPC_GLOBALGET";
-            case Instruction::OPC_GLOBALSET:
-                return "OPC_GLOBALSET";
-            case Instruction::OPC_LOCALGET:
-                return "OPC_LOCALGET";
-            case Instruction::OPC_LOCALSET:
-                return "OPC_LOCALSET";
-            case Instruction::OPC_FUNCARGOPTIONAL:
-                return "OPC_FUNCARGOPTIONAL";
-            case Instruction::OPC_FUNCARGSET:
-                return "OPC_FUNCARGSET";
-            case Instruction::OPC_FUNCARGGET:
-                return "OPC_FUNCARGGET";
-            case Instruction::OPC_UPVALUEGET:
-                return "OPC_UPVALUEGET";
-            case Instruction::OPC_UPVALUESET:
-                return "OPC_UPVALUESET";
-            case Instruction::OPC_UPVALUECLOSE:
-                return "OPC_UPVALUECLOSE";
-            case Instruction::OPC_PROPERTYGET:
-                return "OPC_PROPERTYGET";
-            case Instruction::OPC_PROPERTYGETSELF:
-                return "OPC_PROPERTYGETSELF";
-            case Instruction::OPC_PROPERTYSET:
-                return "OPC_PROPERTYSET";
-            case Instruction::OPC_JUMPIFFALSE:
-                return "OPC_JUMPIFFALSE";
-            case Instruction::OPC_JUMPNOW:
-                return "OPC_JUMPNOW";
-            case Instruction::OPC_LOOP:
-                return "OPC_LOOP";
-            case Instruction::OPC_EQUAL:
-                return "OPC_EQUAL";
-            case Instruction::OPC_PRIMGREATER:
-                return "OPC_PRIMGREATER";
-            case Instruction::OPC_PRIMLESSTHAN:
-                return "OPC_PRIMLESSTHAN";
-            case Instruction::OPC_PUSHEMPTY:
-                return "OPC_PUSHEMPTY";
-            case Instruction::OPC_PUSHNULL:
-                return "OPC_PUSHNULL";
-            case Instruction::OPC_PUSHTRUE:
-                return "OPC_PUSHTRUE";
-            case Instruction::OPC_PUSHFALSE:
-                return "OPC_PUSHFALSE";
-            case Instruction::OPC_PRIMADD:
-                return "OPC_PRIMADD";
-            case Instruction::OPC_PRIMSUBTRACT:
-                return "OPC_PRIMSUBTRACT";
-            case Instruction::OPC_PRIMMULTIPLY:
-                return "OPC_PRIMMULTIPLY";
-            case Instruction::OPC_PRIMDIVIDE:
-                return "OPC_PRIMDIVIDE";
-            case Instruction::OPC_PRIMMODULO:
-                return "OPC_PRIMMODULO";
-            case Instruction::OPC_PRIMPOW:
-                return "OPC_PRIMPOW";
-            case Instruction::OPC_PRIMNEGATE:
-                return "OPC_PRIMNEGATE";
-            case Instruction::OPC_PRIMNOT:
-                return "OPC_PRIMNOT";
-            case Instruction::OPC_PRIMBITNOT:
-                return "OPC_PRIMBITNOT";
-            case Instruction::OPC_PRIMAND:
-                return "OPC_PRIMAND";
-            case Instruction::OPC_PRIMOR:
-                return "OPC_PRIMOR";
-            case Instruction::OPC_PRIMBITXOR:
-                return "OPC_PRIMBITXOR";
-            case Instruction::OPC_PRIMSHIFTLEFT:
-                return "OPC_PRIMSHIFTLEFT";
-            case Instruction::OPC_PRIMSHIFTRIGHT:
-                return "OPC_PRIMSHIFTRIGHT";
-            case Instruction::OPC_PUSHONE:
-                return "OPC_PUSHONE";
-            case Instruction::OPC_PUSHCONSTANT:
-                return "OPC_PUSHCONSTANT";
-            case Instruction::OPC_ECHO:
-                return "OPC_ECHO";
-            case Instruction::OPC_POPONE:
-                return "OPC_POPONE";
-            case Instruction::OPC_DUPONE:
-                return "OPC_DUPONE";
-            case Instruction::OPC_POPN:
-                return "OPC_POPN";
-            case Instruction::OPC_ASSERT:
-                return "OPC_ASSERT";
-            case Instruction::OPC_EXTHROW:
-                return "OPC_EXTHROW";
-            case Instruction::OPC_MAKECLOSURE:
-                return "OPC_MAKECLOSURE";
-            case Instruction::OPC_CALLFUNCTION:
-                return "OPC_CALLFUNCTION";
-            case Instruction::OPC_CALLMETHOD:
-                return "OPC_CALLMETHOD";
-            case Instruction::OPC_CLASSINVOKETHIS:
-                return "OPC_CLASSINVOKETHIS";
-            case Instruction::OPC_CLASSGETTHIS:
-                return "OPC_CLASSGETTHIS";
-            case Instruction::OPC_RETURN:
-                return "OPC_RETURN";
-            case Instruction::OPC_MAKECLASS:
-                return "OPC_MAKECLASS";
-            case Instruction::OPC_MAKEMETHOD:
-                return "OPC_MAKEMETHOD";
-            case Instruction::OPC_CLASSPROPERTYDEFINE:
-                return "OPC_CLASSPROPERTYDEFINE";
-            case Instruction::OPC_CLASSINHERIT:
-                return "OPC_CLASSINHERIT";
-            case Instruction::OPC_CLASSGETSUPER:
-                return "OPC_CLASSGETSUPER";
-            case Instruction::OPC_CLASSINVOKESUPER:
-                return "OPC_CLASSINVOKESUPER";
-            case Instruction::OPC_CLASSINVOKESUPERSELF:
-                return "OPC_CLASSINVOKESUPERSELF";
-            case Instruction::OPC_MAKERANGE:
-                return "OPC_MAKERANGE";
-            case Instruction::OPC_MAKEARRAY:
-                return "OPC_MAKEARRAY";
-            case Instruction::OPC_MAKEDICT:
-                return "OPC_MAKEDICT";
-            case Instruction::OPC_INDEXGET:
-                return "OPC_INDEXGET";
-            case Instruction::OPC_INDEXGETRANGED:
-                return "OPC_INDEXGETRANGED";
-            case Instruction::OPC_INDEXSET:
-                return "OPC_INDEXSET";
-            case Instruction::OPC_IMPORTIMPORT:
-                return "OPC_IMPORTIMPORT";
-            case Instruction::OPC_EXTRY:
-                return "OPC_EXTRY";
-            case Instruction::OPC_EXPOPTRY:
-                return "OPC_EXPOPTRY";
-            case Instruction::OPC_EXPUBLISHTRY:
-                return "OPC_EXPUBLISHTRY";
-            case Instruction::OPC_STRINGIFY:
-                return "OPC_STRINGIFY";
-            case Instruction::OPC_SWITCH:
-                return "OPC_SWITCH";
-            case Instruction::OPC_TYPEOF:
-                return "OPC_TYPEOF";
-            case Instruction::OPC_BREAK_PL:
-                return "OPC_BREAK_PL";
-            case Instruction::OPC_OPINSTANCEOF:
-                return "OPC_OPINSTANCEOF";
-            case Instruction::OPC_HALT:
-                return "OPC_HALT";
-        }
-        return "<?unknown?>";
-    }
-
-    int nn_dbg_printclosureinstr(IOStream* pr, const char* name, Blob* blob, int offset)
-    {
-        int j;
-        int islocal;
-        uint16_t index;
-        uint16_t constant;
-        const char* locn;
-        Function* function;
-        offset++;
-        constant = blob->instrucs[offset++].code << 8;
-        constant |= blob->instrucs[offset++].code;
-        pr->format("%-16s %8d ", name, constant);
-        ValPrinter::printValue(pr, blob->constants.get(constant), true, false);
-        pr->format("\n");
-        function = blob->constants.get(constant).asFunction();
-        for(j = 0; j < function->upvalcount; j++)
-        {
-            islocal = blob->instrucs[offset++].code;
-            index = blob->instrucs[offset++].code << 8;
-            index |= blob->instrucs[offset++].code;
-            locn = "upvalue";
-            if(islocal)
+        public:
+            static const char* opcodeToString(uint16_t instruc)
             {
-                locn = "local";
-            }
-            pr->format("%04d      |                     %s %d\n", offset - 3, locn, (int)index);
-        }
-        return offset;
-    }
-
-    int nn_dbg_printinstructionat(IOStream* pr, Blob* blob, int offset)
-    {
-        uint16_t instruction;
-        const char* opname;
-        pr->format("%08d ", offset);
-        if(offset > 0 && blob->instrucs[offset].fromsourceline == blob->instrucs[offset - 1].fromsourceline)
-        {
-            pr->format("       | ");
-        }
-        else
-        {
-            pr->format("%8d ", blob->instrucs[offset].fromsourceline);
-        }
-        instruction = blob->instrucs[offset].code;
-        opname = nn_dbg_op2str(instruction);
-        switch(instruction)
-        {
-            case Instruction::OPC_JUMPIFFALSE:
-                return nn_dbg_printjumpinstr(pr, opname, 1, blob, offset);
-            case Instruction::OPC_JUMPNOW:
-                return nn_dbg_printjumpinstr(pr, opname, 1, blob, offset);
-            case Instruction::OPC_EXTRY:
-                return nn_dbg_printtryinstr(pr, opname, blob, offset);
-            case Instruction::OPC_LOOP:
-                return nn_dbg_printjumpinstr(pr, opname, -1, blob, offset);
-            case Instruction::OPC_GLOBALDEFINE:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_GLOBALGET:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_GLOBALSET:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_LOCALGET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_LOCALSET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_FUNCARGOPTIONAL:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_FUNCARGGET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_FUNCARGSET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_PROPERTYGET:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_PROPERTYGETSELF:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_PROPERTYSET:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_UPVALUEGET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_UPVALUESET:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_EXPOPTRY:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_EXPUBLISHTRY:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHCONSTANT:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_EQUAL:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMGREATER:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMLESSTHAN:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHEMPTY:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHNULL:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHTRUE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHFALSE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMADD:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMSUBTRACT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMMULTIPLY:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMDIVIDE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMMODULO:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMPOW:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMNEGATE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMNOT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMBITNOT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMAND:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMOR:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMBITXOR:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMSHIFTLEFT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PRIMSHIFTRIGHT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_PUSHONE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_IMPORTIMPORT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_TYPEOF:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_ECHO:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_STRINGIFY:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_EXTHROW:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_POPONE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_OPINSTANCEOF:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_UPVALUECLOSE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_DUPONE:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_ASSERT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_POPN:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-                /* non-user objects... */
-            case Instruction::OPC_SWITCH:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-                /* data container manipulators */
-            case Instruction::OPC_MAKERANGE:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_MAKEARRAY:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_MAKEDICT:
-                return nn_dbg_printshortinstr(pr, opname, blob, offset);
-            case Instruction::OPC_INDEXGET:
-                return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-            case Instruction::OPC_INDEXGETRANGED:
-                return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-            case Instruction::OPC_INDEXSET:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_MAKECLOSURE:
-                return nn_dbg_printclosureinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CALLFUNCTION:
-                return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CALLMETHOD:
-                return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CLASSINVOKETHIS:
-                return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-            case Instruction::OPC_RETURN:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_CLASSGETTHIS:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_MAKECLASS:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_MAKEMETHOD:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CLASSPROPERTYDEFINE:
-                return nn_dbg_printpropertyinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CLASSGETSUPER:
-                return nn_dbg_printconstinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CLASSINHERIT:
-                return nn_dbg_printsimpleinstr(pr, opname, offset);
-            case Instruction::OPC_CLASSINVOKESUPER:
-                return nn_dbg_printinvokeinstr(pr, opname, blob, offset);
-            case Instruction::OPC_CLASSINVOKESUPERSELF:
-                return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-            case Instruction::OPC_HALT:
-                return nn_dbg_printbyteinstr(pr, opname, blob, offset);
-            default:
-            {
-                pr->format("unknown opcode %d\n", instruction);
-            }
-            break;
-        }
-        return offset + 1;
-    }
-
-
-
-
-    bool nn_value_compobjarray(Object* oa, Object* ob)
-    {
-        size_t i;
-        Array* arra;
-        Array* arrb;
-        arra = (Array*)oa;
-        arrb = (Array*)ob;
-        /* unlike Dict, array order matters */
-        if(arra->count() != arrb->count())
-        {
-            return false;
-        }
-        for(i = 0; i < (size_t)arra->count(); i++)
-        {
-            if(!nn_value_compare(arra->get(i), arrb->get(i)))
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    bool nn_value_compobjstring(Object* oa, Object* ob)
-    {
-        size_t alen;
-        size_t blen;
-        const char* adata;
-        const char* bdata;
-        String* stra;
-        String* strb;
-        stra = (String*)oa;
-        strb = (String*)ob;
-        alen = stra->length();
-        blen = strb->length();
-        if(alen != blen)
-        {
-            return false;
-        }
-        adata = stra->data();
-        bdata = strb->data();
-        return (memcmp(adata, bdata, alen) == 0);
-    }
-
-    bool nn_value_compobjdict(Object* oa, Object* ob)
-    {
-        Dict* dicta;
-        Dict* dictb;
-        Property* fielda;
-        Property* fieldb;
-        size_t ai;
-        size_t lena;
-        size_t lenb;
-        Value keya;
-        dicta = (Dict*)oa;
-        dictb = (Dict*)ob;
-        lena = dicta->htnames.count();
-        lenb = dictb->htnames.count();
-        if(lena != lenb)
-        {
-            return false;
-        }
-        ai = 0;
-        while(ai < lena)
-        {
-            /* first, get the key name off of dicta ... */
-            keya = dicta->htnames.get(ai);
-            fielda = dicta->htab.getfield(dicta->htnames.get(ai));
-            if(fielda != nullptr)
-            {
-                /* then look up that key in dictb ... */
-                fieldb = dictb->get(keya);
-                if((fielda != nullptr) && (fieldb != nullptr))
+                switch(instruc)
                 {
-                    /* if it exists, compare their values */
-                    if(!nn_value_compare(fielda->value, fieldb->value))
+                    case Instruction::OPC_GLOBALDEFINE:
+                        return "OPC_GLOBALDEFINE";
+                    case Instruction::OPC_GLOBALGET:
+                        return "OPC_GLOBALGET";
+                    case Instruction::OPC_GLOBALSET:
+                        return "OPC_GLOBALSET";
+                    case Instruction::OPC_LOCALGET:
+                        return "OPC_LOCALGET";
+                    case Instruction::OPC_LOCALSET:
+                        return "OPC_LOCALSET";
+                    case Instruction::OPC_FUNCARGOPTIONAL:
+                        return "OPC_FUNCARGOPTIONAL";
+                    case Instruction::OPC_FUNCARGSET:
+                        return "OPC_FUNCARGSET";
+                    case Instruction::OPC_FUNCARGGET:
+                        return "OPC_FUNCARGGET";
+                    case Instruction::OPC_UPVALUEGET:
+                        return "OPC_UPVALUEGET";
+                    case Instruction::OPC_UPVALUESET:
+                        return "OPC_UPVALUESET";
+                    case Instruction::OPC_UPVALUECLOSE:
+                        return "OPC_UPVALUECLOSE";
+                    case Instruction::OPC_PROPERTYGET:
+                        return "OPC_PROPERTYGET";
+                    case Instruction::OPC_PROPERTYGETSELF:
+                        return "OPC_PROPERTYGETSELF";
+                    case Instruction::OPC_PROPERTYSET:
+                        return "OPC_PROPERTYSET";
+                    case Instruction::OPC_JUMPIFFALSE:
+                        return "OPC_JUMPIFFALSE";
+                    case Instruction::OPC_JUMPNOW:
+                        return "OPC_JUMPNOW";
+                    case Instruction::OPC_LOOP:
+                        return "OPC_LOOP";
+                    case Instruction::OPC_EQUAL:
+                        return "OPC_EQUAL";
+                    case Instruction::OPC_PRIMGREATER:
+                        return "OPC_PRIMGREATER";
+                    case Instruction::OPC_PRIMLESSTHAN:
+                        return "OPC_PRIMLESSTHAN";
+                    case Instruction::OPC_PUSHEMPTY:
+                        return "OPC_PUSHEMPTY";
+                    case Instruction::OPC_PUSHNULL:
+                        return "OPC_PUSHNULL";
+                    case Instruction::OPC_PUSHTRUE:
+                        return "OPC_PUSHTRUE";
+                    case Instruction::OPC_PUSHFALSE:
+                        return "OPC_PUSHFALSE";
+                    case Instruction::OPC_PRIMADD:
+                        return "OPC_PRIMADD";
+                    case Instruction::OPC_PRIMSUBTRACT:
+                        return "OPC_PRIMSUBTRACT";
+                    case Instruction::OPC_PRIMMULTIPLY:
+                        return "OPC_PRIMMULTIPLY";
+                    case Instruction::OPC_PRIMDIVIDE:
+                        return "OPC_PRIMDIVIDE";
+                    case Instruction::OPC_PRIMMODULO:
+                        return "OPC_PRIMMODULO";
+                    case Instruction::OPC_PRIMPOW:
+                        return "OPC_PRIMPOW";
+                    case Instruction::OPC_PRIMNEGATE:
+                        return "OPC_PRIMNEGATE";
+                    case Instruction::OPC_PRIMNOT:
+                        return "OPC_PRIMNOT";
+                    case Instruction::OPC_PRIMBITNOT:
+                        return "OPC_PRIMBITNOT";
+                    case Instruction::OPC_PRIMAND:
+                        return "OPC_PRIMAND";
+                    case Instruction::OPC_PRIMOR:
+                        return "OPC_PRIMOR";
+                    case Instruction::OPC_PRIMBITXOR:
+                        return "OPC_PRIMBITXOR";
+                    case Instruction::OPC_PRIMSHIFTLEFT:
+                        return "OPC_PRIMSHIFTLEFT";
+                    case Instruction::OPC_PRIMSHIFTRIGHT:
+                        return "OPC_PRIMSHIFTRIGHT";
+                    case Instruction::OPC_PUSHONE:
+                        return "OPC_PUSHONE";
+                    case Instruction::OPC_PUSHCONSTANT:
+                        return "OPC_PUSHCONSTANT";
+                    case Instruction::OPC_ECHO:
+                        return "OPC_ECHO";
+                    case Instruction::OPC_POPONE:
+                        return "OPC_POPONE";
+                    case Instruction::OPC_DUPONE:
+                        return "OPC_DUPONE";
+                    case Instruction::OPC_POPN:
+                        return "OPC_POPN";
+                    case Instruction::OPC_ASSERT:
+                        return "OPC_ASSERT";
+                    case Instruction::OPC_EXTHROW:
+                        return "OPC_EXTHROW";
+                    case Instruction::OPC_MAKECLOSURE:
+                        return "OPC_MAKECLOSURE";
+                    case Instruction::OPC_CALLFUNCTION:
+                        return "OPC_CALLFUNCTION";
+                    case Instruction::OPC_CALLMETHOD:
+                        return "OPC_CALLMETHOD";
+                    case Instruction::OPC_CLASSINVOKETHIS:
+                        return "OPC_CLASSINVOKETHIS";
+                    case Instruction::OPC_CLASSGETTHIS:
+                        return "OPC_CLASSGETTHIS";
+                    case Instruction::OPC_RETURN:
+                        return "OPC_RETURN";
+                    case Instruction::OPC_MAKECLASS:
+                        return "OPC_MAKECLASS";
+                    case Instruction::OPC_MAKEMETHOD:
+                        return "OPC_MAKEMETHOD";
+                    case Instruction::OPC_CLASSPROPERTYDEFINE:
+                        return "OPC_CLASSPROPERTYDEFINE";
+                    case Instruction::OPC_CLASSINHERIT:
+                        return "OPC_CLASSINHERIT";
+                    case Instruction::OPC_CLASSGETSUPER:
+                        return "OPC_CLASSGETSUPER";
+                    case Instruction::OPC_CLASSINVOKESUPER:
+                        return "OPC_CLASSINVOKESUPER";
+                    case Instruction::OPC_CLASSINVOKESUPERSELF:
+                        return "OPC_CLASSINVOKESUPERSELF";
+                    case Instruction::OPC_MAKERANGE:
+                        return "OPC_MAKERANGE";
+                    case Instruction::OPC_MAKEARRAY:
+                        return "OPC_MAKEARRAY";
+                    case Instruction::OPC_MAKEDICT:
+                        return "OPC_MAKEDICT";
+                    case Instruction::OPC_INDEXGET:
+                        return "OPC_INDEXGET";
+                    case Instruction::OPC_INDEXGETRANGED:
+                        return "OPC_INDEXGETRANGED";
+                    case Instruction::OPC_INDEXSET:
+                        return "OPC_INDEXSET";
+                    case Instruction::OPC_IMPORTIMPORT:
+                        return "OPC_IMPORTIMPORT";
+                    case Instruction::OPC_EXTRY:
+                        return "OPC_EXTRY";
+                    case Instruction::OPC_EXPOPTRY:
+                        return "OPC_EXPOPTRY";
+                    case Instruction::OPC_EXPUBLISHTRY:
+                        return "OPC_EXPUBLISHTRY";
+                    case Instruction::OPC_STRINGIFY:
+                        return "OPC_STRINGIFY";
+                    case Instruction::OPC_SWITCH:
+                        return "OPC_SWITCH";
+                    case Instruction::OPC_TYPEOF:
+                        return "OPC_TYPEOF";
+                    case Instruction::OPC_BREAK_PL:
+                        return "OPC_BREAK_PL";
+                    case Instruction::OPC_OPINSTANCEOF:
+                        return "OPC_OPINSTANCEOF";
+                    case Instruction::OPC_HALT:
+                        return "OPC_HALT";
+                }
+                return "<?unknown?>";
+            }
+
+        public:
+            IOStream* m_outstream;
+
+        public:
+            Debug(IOStream* pr)
+            {
+                m_outstream = pr;
+            }
+
+            void disasmBlob(Blob* blob, const char* name)
+            {
+                int offset;
+                m_outstream->format("== compiled '%s' [[\n", name);
+                for(offset = 0; offset < blob->count;)
+                {
+                    offset = printInstructionAt(blob, offset);
+                }
+                m_outstream->format("]]\n");
+            }
+
+            void printInstructionName(const char* name)
+            {
+                m_outstream->format("%s%-16s%s ", Util::termColor(NEON_COLOR_RED), name, Util::termColor(NEON_COLOR_RESET));
+            }
+
+            int printSimpleInstruction(const char* name, int offset)
+            {
+                printInstructionName(name);
+                m_outstream->format("\n");
+                return offset + 1;
+            }
+
+            int printConstInstruction(const char* name, Blob* blob, int offset)
+            {
+                uint16_t constant;
+                constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                printInstructionName(name);
+                m_outstream->format("%8d ", constant);
+                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                m_outstream->format("\n");
+                return offset + 3;
+            }
+
+            int printPropertyInstruction(const char* name, Blob* blob, int offset)
+            {
+                const char* proptn;
+                uint16_t constant;
+                constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                printInstructionName(name);
+                m_outstream->format("%8d ", constant);
+                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                proptn = "";
+                if(blob->instrucs[offset + 3].code == 1)
+                {
+                    proptn = "static";
+                }
+                m_outstream->format(" (%s)", proptn);
+                m_outstream->format("\n");
+                return offset + 4;
+            }
+
+            int printShortInstruction(const char* name, Blob* blob, int offset)
+            {
+                uint16_t slot;
+                slot = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                printInstructionName(name);
+                m_outstream->format("%8d\n", slot);
+                return offset + 3;
+            }
+
+            int printByteInstruction(const char* name, Blob* blob, int offset)
+            {
+                uint16_t slot;
+                slot = blob->instrucs[offset + 1].code;
+                printInstructionName(name);
+                m_outstream->format("%8d\n", slot);
+                return offset + 2;
+            }
+
+            int printJumpInstruction(const char* name, int sign, Blob* blob, int offset)
+            {
+                uint16_t jump;
+                jump = (uint16_t)(blob->instrucs[offset + 1].code << 8);
+                jump |= blob->instrucs[offset + 2].code;
+                printInstructionName(name);
+                m_outstream->format("%8d -> %d\n", offset, offset + 3 + sign * jump);
+                return offset + 3;
+            }
+
+            int printTryInstruction(const char* name, Blob* blob, int offset)
+            {
+                uint16_t finally;
+                uint16_t type;
+                uint16_t address;
+                type = (uint16_t)(blob->instrucs[offset + 1].code << 8);
+                type |= blob->instrucs[offset + 2].code;
+                address = (uint16_t)(blob->instrucs[offset + 3].code << 8);
+                address |= blob->instrucs[offset + 4].code;
+                finally = (uint16_t)(blob->instrucs[offset + 5].code << 8);
+                finally |= blob->instrucs[offset + 6].code;
+                printInstructionName(name);
+                m_outstream->format("%8d -> %d, %d\n", type, address, finally);
+                return offset + 7;
+            }
+
+            int printInvokeInstruction(const char* name, Blob* blob, int offset)
+            {
+                uint16_t constant;
+                uint16_t argcount;
+                constant = (uint16_t)(blob->instrucs[offset + 1].code << 8);
+                constant |= blob->instrucs[offset + 2].code;
+                argcount = blob->instrucs[offset + 3].code;
+                printInstructionName(name);
+                m_outstream->format("(%d args) %8d ", argcount, constant);
+                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                m_outstream->format("\n");
+                return offset + 4;
+            }
+
+            int printClosureInstruction(const char* name, Blob* blob, int offset)
+            {
+                int j;
+                int islocal;
+                uint16_t index;
+                uint16_t constant;
+                const char* locn;
+                Function* function;
+                offset++;
+                constant = blob->instrucs[offset++].code << 8;
+                constant |= blob->instrucs[offset++].code;
+                m_outstream->format("%-16s %8d ", name, constant);
+                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                m_outstream->format("\n");
+                function = blob->constants.get(constant).asFunction();
+                for(j = 0; j < function->upvalcount; j++)
+                {
+                    islocal = blob->instrucs[offset++].code;
+                    index = blob->instrucs[offset++].code << 8;
+                    index |= blob->instrucs[offset++].code;
+                    locn = "upvalue";
+                    if(islocal)
                     {
-                        return false;
+                        locn = "local";
                     }
+                    m_outstream->format("%04d      |                     %s %d\n", offset - 3, locn, (int)index);
                 }
+                return offset;
             }
-            ai++;
-        }
-        return true;
-    }
 
-    bool nn_value_compobject(Value a, Value b)
-    {
-        Object::Type ta;
-        Object::Type tb;
-        Object* oa;
-        Object* ob;
-        oa = a.asObject();
-        ob = b.asObject();
-        ta = oa->m_objtype;
-        tb = ob->m_objtype;
-        if(ta == tb)
-        {
-            /* we might not need to do a deep comparison if its the same object */
-            if(oa == ob)
+            int printInstructionAt(Blob* blob, int offset)
             {
-                return true;
-            }
-            else if(ta == Object::OTYP_STRING)
-            {
-                return nn_value_compobjstring(oa, ob);
-            }
-            else if(ta == Object::OTYP_ARRAY)
-            {
-                return nn_value_compobjarray(oa, ob);
-            }
-            else if(ta == Object::OTYP_DICT)
-            {
-                return nn_value_compobjdict(oa, ob);
-            }
-        }
-        return false;
-    }
-
-    bool nn_value_compare_actual(Value a, Value b)
-    {
-        /*
-        if(a.m_valtype != b.m_valtype)
-        {
-            return false;
-        }
-        */
-        if(a.isNull())
-        {
-            return true;
-        }
-        else if(a.isBool())
-        {
-            return a.asBool() == b.asBool();
-        }
-        else if(a.isNumber())
-        {
-            return (a.asNumber() == b.asNumber());
-        }
-        else
-        {
-            if(a.isObject() && b.isObject())
-            {
-                if(a.asObject() == b.asObject())
+                uint16_t instruction;
+                const char* opname;
+                m_outstream->format("%08d ", offset);
+                if(offset > 0 && blob->instrucs[offset].fromsourceline == blob->instrucs[offset - 1].fromsourceline)
                 {
-                    return true;
+                    m_outstream->format("       | ");
                 }
-                return nn_value_compobject(a, b);
-            }
-        }
-
-        return false;
-    }
-
-    bool nn_value_compare(Value a, Value b)
-    {
-        bool r;
-        r = nn_value_compare_actual(a, b);
-        return r;
-    }
-
-    /**
-     * returns the greater of the two values.
-     * this function encapsulates the object hierarchy
-     */
-    Value nn_value_findgreater(Value a, Value b)
-    {
-        size_t alen;
-        const char* adata;
-        const char* bdata;
-        String* osa;
-        String* osb;
-        if(a.isNull())
-        {
-            return b;
-        }
-        else if(a.isBool())
-        {
-            if(b.isNull() || (b.isBool() && b.asBool() == false))
-            {
-                /* only null, false and false are lower than numbers */
-                return a;
-            }
-            else
-            {
-                return b;
-            }
-        }
-        else if(a.isNumber())
-        {
-            if(b.isNull() || b.isBool())
-            {
-                return a;
-            }
-            else if(b.isNumber())
-            {
-                if(a.asNumber() >= b.asNumber())
+                else
                 {
-                    return a;
+                    m_outstream->format("%8d ", blob->instrucs[offset].fromsourceline);
                 }
-                return b;
-            }
-            else
-            {
-                /* every other thing is greater than a number */
-                return b;
-            }
-        }
-        else if(a.isObject())
-        {
-            if(a.isString() && b.isString())
-            {
-                osa = a.asString();
-                osb = b.asString();
-                adata = osa->data();
-                bdata = osb->data();
-                alen = osa->length();
-                if(strncmp(adata, bdata, alen) >= 0)
+                instruction = blob->instrucs[offset].code;
+                opname = Debug::opcodeToString(instruction);
+                switch(instruction)
                 {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isFuncscript() && b.isFuncscript())
-            {
-                if(a.asFunction()->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnscriptfunc.arity)
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isFuncclosure() && b.isFuncclosure())
-            {
-                if(a.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity >= b.asFunction()->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity)
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isRange() && b.isRange())
-            {
-                if(a.asRange()->lower >= b.asRange()->lower)
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isClass() && b.isClass())
-            {
-                if(a.asClass()->m_instmethods.count() >= b.asClass()->m_instmethods.count())
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isArray() && b.isArray())
-            {
-                if(a.asArray()->count() >= b.asArray()->count())
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isDict() && b.isDict())
-            {
-                if(a.asDict()->htnames.count() >= b.asDict()->htnames.count())
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(a.isFile() && b.isFile())
-            {
-                if(strcmp(a.asFile()->path->data(), b.asFile()->path->data()) >= 0)
-                {
-                    return a;
-                }
-                return b;
-            }
-            else if(b.isObject())
-            {
-                if(a.asObject()->m_objtype >= b.asObject()->m_objtype)
-                {
-                    return a;
-                }
-                return b;
-            }
-            else
-            {
-                return a;
-            }
-        }
-        return a;
-    }
-
-    /**
-     * sorts values in an array using the bubble-sort algorithm
-     */
-    void nn_value_sortvalues(Value* values, int count)
-    {
-        int i;
-        int j;
-        Value temp;
-        for(i = 0; i < count; i++)
-        {
-            for(j = 0; j < count; j++)
-            {
-                if(nn_value_compare(values[j], nn_value_findgreater(values[i], values[j])))
-                {
-                    temp = values[i];
-                    values[i] = values[j];
-                    values[j] = temp;
-                    if(values[i].isArray())
+                    case Instruction::OPC_JUMPIFFALSE:
+                        return printJumpInstruction(opname, 1, blob, offset);
+                    case Instruction::OPC_JUMPNOW:
+                        return printJumpInstruction(opname, 1, blob, offset);
+                    case Instruction::OPC_EXTRY:
+                        return printTryInstruction(opname, blob, offset);
+                    case Instruction::OPC_LOOP:
+                        return printJumpInstruction(opname, -1, blob, offset);
+                    case Instruction::OPC_GLOBALDEFINE:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_GLOBALGET:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_GLOBALSET:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_LOCALGET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_LOCALSET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_FUNCARGOPTIONAL:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_FUNCARGGET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_FUNCARGSET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_PROPERTYGET:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_PROPERTYGETSELF:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_PROPERTYSET:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_UPVALUEGET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_UPVALUESET:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_EXPOPTRY:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_EXPUBLISHTRY:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHCONSTANT:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_EQUAL:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMGREATER:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMLESSTHAN:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHEMPTY:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHNULL:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHTRUE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHFALSE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMADD:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMSUBTRACT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMMULTIPLY:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMDIVIDE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMMODULO:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMPOW:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMNEGATE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMNOT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMBITNOT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMAND:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMOR:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMBITXOR:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMSHIFTLEFT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PRIMSHIFTRIGHT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_PUSHONE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_IMPORTIMPORT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_TYPEOF:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_ECHO:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_STRINGIFY:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_EXTHROW:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_POPONE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_OPINSTANCEOF:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_UPVALUECLOSE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_DUPONE:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_ASSERT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_POPN:
+                        return printShortInstruction(opname, blob, offset);
+                        /* non-user objects... */
+                    case Instruction::OPC_SWITCH:
+                        return printShortInstruction(opname, blob, offset);
+                        /* data container manipulators */
+                    case Instruction::OPC_MAKERANGE:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_MAKEARRAY:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_MAKEDICT:
+                        return printShortInstruction(opname, blob, offset);
+                    case Instruction::OPC_INDEXGET:
+                        return printByteInstruction(opname, blob, offset);
+                    case Instruction::OPC_INDEXGETRANGED:
+                        return printByteInstruction(opname, blob, offset);
+                    case Instruction::OPC_INDEXSET:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_MAKECLOSURE:
+                        return printClosureInstruction(opname, blob, offset);
+                    case Instruction::OPC_CALLFUNCTION:
+                        return printByteInstruction(opname, blob, offset);
+                    case Instruction::OPC_CALLMETHOD:
+                        return printInvokeInstruction(opname, blob, offset);
+                    case Instruction::OPC_CLASSINVOKETHIS:
+                        return printInvokeInstruction(opname, blob, offset);
+                    case Instruction::OPC_RETURN:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_CLASSGETTHIS:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_MAKECLASS:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_MAKEMETHOD:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_CLASSPROPERTYDEFINE:
+                        return printPropertyInstruction(opname, blob, offset);
+                    case Instruction::OPC_CLASSGETSUPER:
+                        return printConstInstruction(opname, blob, offset);
+                    case Instruction::OPC_CLASSINHERIT:
+                        return printSimpleInstruction(opname, offset);
+                    case Instruction::OPC_CLASSINVOKESUPER:
+                        return printInvokeInstruction(opname, blob, offset);
+                    case Instruction::OPC_CLASSINVOKESUPERSELF:
+                        return printByteInstruction(opname, blob, offset);
+                    case Instruction::OPC_HALT:
+                        return printByteInstruction(opname, blob, offset);
+                    default:
                     {
-                        nn_value_sortvalues((Value*)values[i].asArray()->data(), values[i].asArray()->count());
+                        m_outstream->format("unknown opcode %d\n", instruction);
                     }
-
-                    if(values[j].isArray())
-                    {
-                        nn_value_sortvalues((Value*)values[j].asArray()->data(), values[j].asArray()->count());
-                    }
-                }
-            }
-        }
-    }
-
-    Value nn_value_copyvalue(Value value)
-    {
-        if(value.isObject())
-        {
-            switch(value.asObject()->m_objtype)
-            {
-                case Object::OTYP_STRING:
-                {
-                    String* string;
-                    string = value.asString();
-                    return Value::fromObject(String::copyObject(string));
-                }
-                break;
-                case Object::OTYP_ARRAY:
-                {
-                    size_t i;
-                    Array* list;
-                    Array* newlist;
-                    list = value.asArray();
-                    newlist = Array::make();
-                    for(i = 0; i < list->count(); i++)
-                    {
-                        newlist->push(list->get(i));
-                    }
-                    return Value::fromObject(newlist);
-                }
-                break;
-                case Object::OTYP_DICT:
-                {
-                    Dict* dict;
-                    dict = value.asDict();
-                    return Value::fromObject(dict->copy());
-                }
-                break;
-                default:
                     break;
+                }
+                return offset + 1;
             }
-        }
-        return value;
-    }
-
-
-    Upvalue* nn_object_makeupvalue(Value* slot, int stackpos)
-    {
-        Upvalue* upvalue;
-        upvalue = SharedState::gcMakeObject<Upvalue>(Object::OTYP_UPVALUE, false);
-        upvalue->closed = Value::makeNull();
-        upvalue->location = *slot;
-        upvalue->next = nullptr;
-        upvalue->stackpos = stackpos;
-        return upvalue;
-    }
-
-    Userdata* nn_object_makeuserdata(void* pointer, const char* name)
-    {
-        Userdata* ptr;
-        ptr = SharedState::gcMakeObject<Userdata>(Object::OTYP_USERDATA, false);
-        ptr->pointer = pointer;
-        ptr->m_udname = nn_util_strdup(name);
-        ptr->ondestroyfn = nullptr;
-        return ptr;
-    }
-
-
-
-    Switch* nn_object_makeswitch()
-    {
-        Switch* sw;
-        sw = SharedState::gcMakeObject<Switch>(Object::OTYP_SWITCH, false);
-        sw->table.initTable();
-        sw->defaultjump = -1;
-        sw->exitjump = -1;
-        return sw;
-    }
-
-    Range* nn_object_makerange(int lower, int upper)
-    {
-        Range* range;
-        range = SharedState::gcMakeObject<Range>(Object::OTYP_RANGE, false);
-        range->lower = lower;
-        range->upper = upper;
-        if(upper > lower)
-        {
-            range->range = upper - lower;
-        }
-        else
-        {
-            range->range = lower - upper;
-        }
-        return range;
-    }
+    };
 
 
     void initBuiltinObjects()
@@ -12903,10 +15411,10 @@ namespace neon
             m_vmstate.framecount--;
         }
         /* at this point, the exception is unhandled; so, print it out. */
-        colred = nn_util_color(NEON_COLOR_RED);
-        colblue = nn_util_color(NEON_COLOR_BLUE);
-        colreset = nn_util_color(NEON_COLOR_RESET);
-        colyellow = nn_util_color(NEON_COLOR_YELLOW);
+        colred = Util::termColor(NEON_COLOR_RED);
+        colblue = Util::termColor(NEON_COLOR_BLUE);
+        colreset = Util::termColor(NEON_COLOR_RESET);
+        colyellow = Util::termColor(NEON_COLOR_YELLOW);
         m_debugwriter->format("%sunhandled %s%s", colred, exception->m_instanceclass->m_classname->data(), colreset);
         srcfile = "none";
         srcline = 0;
@@ -12971,16 +15479,16 @@ namespace neon
     }
 
     /**
-     * push an exception handler, assuming it does not exceed NEON_CONFIG_MAXEXCEPTHANDLERS.
+     * push an exception handler, assuming it does not exceed CallFrame::CONF_MAXEXCEPTHANDLERS.
      */
     bool SharedState::vmExceptionPushHandler(Class* type, int address, int finallyaddress)
     {
         CallFrame* frame;
         (void)type;
         frame = &m_vmstate.framevalues[m_vmstate.framecount - 1];
-        if(frame->m_handlercount == NEON_CONFIG_MAXEXCEPTHANDLERS)
+        if(frame->m_handlercount == CallFrame::CONF_MAXEXCEPTHANDLERS)
         {
-            nn_state_raisefatalerror("too many nested exception handlers in one function");
+            raiseFatalError("too many nested exception handlers in one function");
             return false;
         }
         frame->handlers[frame->m_handlercount].address = address;
@@ -13044,13 +15552,22 @@ namespace neon
         AstParser* parser;
         Function* function;
         (void)blob;
+        auto gcs = SharedState::get();
         lexer = AstLexer::make(source);
         parser = AstParser::make(lexer, module, keeplast);
         AstParser::FuncCompiler fnc(parser, Function::CTXTYPE_SCRIPT, true);
         fnc.m_fromimport = fromimport;
         parser->runparser();
         function = parser->endcompiler(true);
-        if(parser->m_haderror)
+        if(!parser->m_haderror)
+        {
+            if(gcs->m_conf.dumpbytecode)
+            {
+                Debug dbg(gcs->m_debugwriter);
+                dbg.disasmBlob(parser->currentblob(), "<file>");
+            }
+        }
+        else
         {
             function = nullptr;
         }
@@ -13066,8 +15583,8 @@ namespace neon
         Value filler;
         Array* arr;
         ArgCheck check("constructor", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         filler = Value::makeNull();
         if(scfn.argc > 1)
         {
@@ -13147,7 +15664,7 @@ namespace neon
     static Value objfnarray_clear(const FuncContext& scfn)
     {
         ArgCheck check("clear", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         scfn.thisval.asArray()->m_objvarray.deInit();
         return Value::makeNull();
     }
@@ -13156,7 +15673,7 @@ namespace neon
     {
         Array* list;
         ArgCheck check("clone", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         return Value::fromObject(list->copy(0, list->count()));
     }
@@ -13167,12 +15684,12 @@ namespace neon
         int count;
         Array* list;
         ArgCheck check("count", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         list = scfn.thisval.asArray();
         count = 0;
         for(i = 0; i < list->count(); i++)
         {
-            if(nn_value_compare(list->get(i), scfn.argv[0]))
+            if(Value::compareValues(list->get(i), scfn.argv[0]))
             {
                 count++;
             }
@@ -13186,8 +15703,8 @@ namespace neon
         Array* list;
         Array* list2;
         ArgCheck check("extend", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isArray);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isArray);
         list = scfn.thisval.asArray();
         list2 = scfn.argv[0].asArray();
         for(i = 0; i < list2->count(); i++)
@@ -13202,17 +15719,17 @@ namespace neon
         size_t i;
         Array* list;
         ArgCheck check("indexOf", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
         list = scfn.thisval.asArray();
         i = 0;
         if(scfn.argc == 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             i = scfn.argv[1].asNumber();
         }
         for(; i < list->count(); i++)
         {
-            if(nn_value_compare(list->get(i), scfn.argv[0]))
+            if(Value::compareValues(list->get(i), scfn.argv[0]))
             {
                 return Value::makeNumber(i);
             }
@@ -13228,8 +15745,8 @@ namespace neon
         int index;
         Array* list;
         ArgCheck check("insert", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 2);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 2);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         list = scfn.thisval.asArray();
         index = (int)scfn.argv[1].asNumber();
         list->m_objvarray.insert(scfn.argv[0], index);
@@ -13242,7 +15759,7 @@ namespace neon
         Value value;
         Array* list;
         ArgCheck check("pop", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         if(list->pop(&value))
         {
@@ -13262,11 +15779,11 @@ namespace neon
         Array* list;
         Array* newlist;
         ArgCheck check("shift", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         count = 1;
         if(scfn.argc == 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
             count = scfn.argv[0].asNumber();
         }
         list = scfn.thisval.asArray();
@@ -13307,8 +15824,8 @@ namespace neon
         Value value;
         Array* list;
         ArgCheck check("removeAt", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         list = scfn.thisval.asArray();
         index = scfn.argv[0].asNumber();
         if(((int)index < 0) || index >= list->count())
@@ -13330,12 +15847,12 @@ namespace neon
         size_t index;
         Array* list;
         ArgCheck check("remove", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         list = scfn.thisval.asArray();
         index = -1;
         for(i = 0; i < list->count(); i++)
         {
-            if(nn_value_compare(list->get(i), scfn.argv[0]))
+            if(Value::compareValues(list->get(i), scfn.argv[0]))
             {
                 index = i;
                 break;
@@ -13358,7 +15875,7 @@ namespace neon
         Array* list;
         Array* nlist;
         ArgCheck check("reverse", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         nlist = SharedState::gcProtect(Array::make());
         /* in-place reversal:*/
@@ -13385,9 +15902,9 @@ namespace neon
     {
         Array* list;
         ArgCheck check("sort", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
-        nn_value_sortvalues((Value*)list->data(), list->count());
+        Value::sortValues((Value*)list->data(), list->count());
         return Value::makeNull();
     }
 
@@ -13396,11 +15913,11 @@ namespace neon
         size_t i;
         Array* list;
         ArgCheck check("contains", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         list = scfn.thisval.asArray();
         for(i = 0; i < list->count(); i++)
         {
-            if(nn_value_compare(scfn.argv[0], list->get(i)))
+            if(Value::compareValues(scfn.argv[0], list->get(i)))
             {
                 return Value::makeBool(true);
             }
@@ -13418,13 +15935,13 @@ namespace neon
         size_t idxlower;
         Array* list;
         ArgCheck check("delete", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         idxlower = scfn.argv[0].asNumber();
         idxupper = idxlower;
         if(scfn.argc == 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             idxupper = scfn.argv[1].asNumber();
         }
         list = scfn.thisval.asArray();
@@ -13450,7 +15967,7 @@ namespace neon
     {
         Array* list;
         ArgCheck check("first", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         if(list->count() > 0)
         {
@@ -13463,7 +15980,7 @@ namespace neon
     {
         Array* list;
         ArgCheck check("last", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         if(list->count() > 0)
         {
@@ -13475,7 +15992,7 @@ namespace neon
     static Value objfnarray_isempty(const FuncContext& scfn)
     {
         ArgCheck check("isEmpty", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeBool(scfn.thisval.asArray()->count() == 0);
     }
 
@@ -13484,8 +16001,8 @@ namespace neon
         size_t count;
         Array* list;
         ArgCheck check("take", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         list = scfn.thisval.asArray();
         count = scfn.argv[0].asNumber();
         if((int)count < 0)
@@ -13504,8 +16021,8 @@ namespace neon
         size_t index;
         Array* list;
         ArgCheck check("get", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         list = scfn.thisval.asArray();
         index = scfn.argv[0].asNumber();
         if((int)index < 0 || index >= list->count())
@@ -13521,12 +16038,12 @@ namespace neon
         Array* list;
         Array* newlist;
         ArgCheck check("compact", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         newlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
         {
-            if(!nn_value_compare(list->get(i), Value::makeNull()))
+            if(!Value::compareValues(list->get(i), Value::makeNull()))
             {
                 newlist->push(list->get(i));
             }
@@ -13542,7 +16059,7 @@ namespace neon
         Array* list;
         Array* newlist;
         ArgCheck check("unique", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         list = scfn.thisval.asArray();
         newlist = SharedState::gcProtect(Array::make());
         for(i = 0; i < list->count(); i++)
@@ -13550,7 +16067,7 @@ namespace neon
             found = false;
             for(j = 0; j < newlist->count(); j++)
             {
-                if(nn_value_compare(newlist->get(j), list->get(i)))
+                if(Value::compareValues(newlist->get(j), list->get(i)))
                 {
                     found = true;
                     continue;
@@ -13578,7 +16095,7 @@ namespace neon
         arglist = (Array**)SharedState::gcAllocate(sizeof(Array*), scfn.argc, false);
         for(i = 0; i < scfn.argc; i++)
         {
-            NEON_ARGS_CHECKTYPE(&check, i, &Value::isArray);
+            NEON_ARGS_CHECKTYPE(check, i, &Value::isArray);
             arglist[i] = scfn.argv[i].asArray();
         }
         for(i = 0; i < list->count(); i++)
@@ -13611,8 +16128,8 @@ namespace neon
         Array* alist;
         Array* arglist;
         ArgCheck check("zipFrom", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isArray);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isArray);
         list = scfn.thisval.asArray();
         newlist = SharedState::gcProtect(Array::make());
         arglist = scfn.argv[0].asArray();
@@ -13649,7 +16166,7 @@ namespace neon
         Dict* dict;
         Array* list;
         ArgCheck check("toDict", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = SharedState::gcProtect(Dict::make());
         list = scfn.thisval.asArray();
         for(i = 0; i < list->count(); i++)
@@ -13664,8 +16181,8 @@ namespace neon
         size_t index;
         Array* list;
         ArgCheck check("iter", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         list = scfn.thisval.asArray();
         index = scfn.argv[0].asNumber();
         if(((int)index > -1) && index < list->count())
@@ -13680,7 +16197,7 @@ namespace neon
         size_t index;
         Array* list;
         ArgCheck check("itern", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         list = scfn.thisval.asArray();
         if(scfn.argv[0].isNull())
         {
@@ -13713,8 +16230,8 @@ namespace neon
         ArgCheck check("each", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -13748,8 +16265,8 @@ namespace neon
         ArgCheck check("map", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -13792,8 +16309,8 @@ namespace neon
         ArgCheck check("filter", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -13834,8 +16351,8 @@ namespace neon
         ArgCheck check("some", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -13875,8 +16392,8 @@ namespace neon
         ArgCheck check("every", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -13917,8 +16434,8 @@ namespace neon
         ArgCheck check("reduce", scfn);
         Value nestargs[5];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         list = scfn.thisval.asArray();
         callable = scfn.argv[0];
         startindex = 0;
@@ -13977,8 +16494,8 @@ namespace neon
         Array* selfarr;
         Array* narr;
         ArgCheck check("slice", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         selfarr = scfn.thisval.asArray();
         salen = selfarr->count();
         end = salen;
@@ -14031,7 +16548,7 @@ namespace neon
     static Value objfndict_length(const FuncContext& scfn)
     {
         ArgCheck check("length", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeNumber(scfn.thisval.asDict()->htnames.count());
     }
 
@@ -14040,7 +16557,7 @@ namespace neon
         Value tempvalue;
         Dict* dict;
         ArgCheck check("add", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 2);
+        NEON_ARGS_CHECKCOUNT(check, 2);
         dict = scfn.thisval.asDict();
         if(dict->htab.get(scfn.argv[0], &tempvalue))
         {
@@ -14055,7 +16572,7 @@ namespace neon
         Value value;
         Dict* dict;
         ArgCheck check("set", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 2);
+        NEON_ARGS_CHECKCOUNT(check, 2);
         dict = scfn.thisval.asDict();
         if(!dict->htab.get(scfn.argv[0], &value))
         {
@@ -14072,7 +16589,7 @@ namespace neon
     {
         Dict* dict;
         ArgCheck check("clear", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         dict->htnames.deInit();
         dict->htab.deInit();
@@ -14086,7 +16603,7 @@ namespace neon
         Dict* newdict;
         ArgCheck check("clone", scfn);
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         newdict = SharedState::gcProtect(Dict::make());
         if(!dict->htab.copyTo(&newdict->htab, true))
@@ -14108,14 +16625,14 @@ namespace neon
         Dict* newdict;
         Value tmpvalue;
         ArgCheck check("compact", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         newdict = (Dict*)SharedState::gcProtect(Dict::make());
         tmpvalue = Value::makeNull();
         for(i = 0; i < dict->htnames.count(); i++)
         {
             dict->htab.get(dict->htnames.get(i), &tmpvalue);
-            if(!nn_value_compare(tmpvalue, Value::makeNull()))
+            if(!Value::compareValues(tmpvalue, Value::makeNull()))
             {
                 newdict->add(dict->htnames.get(i), tmpvalue);
             }
@@ -14128,7 +16645,7 @@ namespace neon
         Value value;
         Dict* dict;
         ArgCheck check("contains", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
         return Value::makeBool(dict->htab.get(scfn.argv[0], &value));
     }
@@ -14140,8 +16657,8 @@ namespace neon
         Dict* dict;
         Dict* dictcpy;
         ArgCheck check("extend", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isDict);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isDict);
         dict = scfn.thisval.asDict();
         dictcpy = scfn.argv[0].asDict();
         for(i = 0; i < dictcpy->htnames.count(); i++)
@@ -14160,7 +16677,7 @@ namespace neon
         Dict* dict;
         Property* field;
         ArgCheck check("get", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
         dict = scfn.thisval.asDict();
         field = dict->get(scfn.argv[0]);
         if(field == nullptr)
@@ -14183,7 +16700,7 @@ namespace neon
         Dict* dict;
         Array* list;
         ArgCheck check("keys", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         list = SharedState::gcProtect(Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
@@ -14200,7 +16717,7 @@ namespace neon
         Array* list;
         Property* field;
         ArgCheck check("values", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         list =SharedState::gcProtect(Array::make());
         for(i = 0; i < dict->htnames.count(); i++)
@@ -14218,7 +16735,7 @@ namespace neon
         Value value;
         Dict* dict;
         ArgCheck check("remove", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
         if(dict->htab.get(scfn.argv[0], &value))
         {
@@ -14226,7 +16743,7 @@ namespace neon
             index = -1;
             for(i = 0; i < dict->htnames.count(); i++)
             {
-                if(nn_value_compare(dict->htnames.get(i), scfn.argv[0]))
+                if(Value::compareValues(dict->htnames.get(i), scfn.argv[0]))
                 {
                     index = i;
                     break;
@@ -14245,14 +16762,14 @@ namespace neon
     static Value objfndict_isempty(const FuncContext& scfn)
     {
         ArgCheck check("isempty", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeBool(scfn.thisval.asDict()->htnames.count() == 0);
     }
 
     static Value objfndict_findkey(const FuncContext& scfn)
     {
         ArgCheck check("findkey", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         auto ht = scfn.thisval.asDict()->htab;
         return ht.findkey(scfn.argv[0], Value::makeNull());
     }
@@ -14265,7 +16782,7 @@ namespace neon
         Array* namelist;
         Array* valuelist;
         ArgCheck check("tolist", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         namelist = SharedState::gcProtect(Array::make());
         valuelist = SharedState::gcProtect(Array::make());
@@ -14294,7 +16811,7 @@ namespace neon
         Value result;
         Dict* dict;
         ArgCheck check("iter", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
         if(dict->htab.get(scfn.argv[0], &result))
         {
@@ -14308,7 +16825,7 @@ namespace neon
         size_t i;
         Dict* dict;
         ArgCheck check("itern", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
         if(scfn.argv[0].isNull())
         {
@@ -14320,7 +16837,7 @@ namespace neon
         }
         for(i = 0; i < dict->htnames.count(); i++)
         {
-            if(nn_value_compare(scfn.argv[0], dict->htnames.get(i)) && (i + 1) < dict->htnames.count())
+            if(Value::compareValues(scfn.argv[0], dict->htnames.get(i)) && (i + 1) < dict->htnames.count())
             {
                 return dict->htnames.get(i + 1);
             }
@@ -14340,8 +16857,8 @@ namespace neon
         ArgCheck check("each", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -14378,8 +16895,8 @@ namespace neon
         ArgCheck check("filter", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -14421,8 +16938,8 @@ namespace neon
         ArgCheck check("some", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -14464,8 +16981,8 @@ namespace neon
         ArgCheck check("every", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -14507,8 +17024,8 @@ namespace neon
         ArgCheck check("reduce", scfn);
         Value nestargs[5];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         dict = scfn.thisval.asDict();
         callable = scfn.argv[0];
         startindex = 0;
@@ -14580,8 +17097,8 @@ namespace neon
         File* file;
         (void)hnd;
         ArgCheck check("constructor", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         opath = scfn.argv[0].asString();
         if(opath->length() == 0)
         {
@@ -14590,7 +17107,7 @@ namespace neon
         mode = "r";
         if(scfn.argc == 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isString);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
             mode = scfn.argv[1].asString()->data();
         }
         path = opath->data();
@@ -14603,30 +17120,30 @@ namespace neon
     {
         String* file;
         ArgCheck check("exists", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         file = scfn.argv[0].asString();
-        return Value::makeBool(nn_util_fsfileexists(file->data()));
+        return Value::makeBool(File::fileExists(file->data()));
     }
 
     static Value objfnfile_isfile(const FuncContext& scfn)
     {
         String* file;
         ArgCheck check("isfile", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         file = scfn.argv[0].asString();
-        return Value::makeBool(nn_util_fsfileisfile(file->data()));
+        return Value::makeBool(File::pathIsFile(file->data()));
     }
 
     static Value objfnfile_isdirectory(const FuncContext& scfn)
     {
         String* file;
         ArgCheck check("isdirectory", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         file = scfn.argv[0].asString();
-        return Value::makeBool(nn_util_fsfileisdirectory(file->data()));
+        return Value::makeBool(File::pathIsDirectory(file->data()));
     }
 
     static Value objfnfile_readstatic(const FuncContext& scfn)
@@ -14638,10 +17155,10 @@ namespace neon
         ArgCheck check("read", scfn);
         auto gcs = SharedState::get();
         thismuch = -1;
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         if(scfn.argc > 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             thismuch = (size_t)scfn.argv[1].asNumber();
         }
         filepath = scfn.argv[0].asString();
@@ -14666,11 +17183,11 @@ namespace neon
         auto gcs = SharedState::get();
         appending = false;
         mode = "wb";
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
         if(scfn.argc > 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 2, &Value::isBool);
+            NEON_ARGS_CHECKTYPE(check, 2, &Value::isBool);
             appending = scfn.argv[2].asBool();
         }
         if(appending)
@@ -14693,7 +17210,7 @@ namespace neon
     static Value objfnfile_close(const FuncContext& scfn)
     {
         ArgCheck check("close", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         scfn.thisval.asFile()->closeFile();
         return Value::makeNull();
     }
@@ -14701,7 +17218,7 @@ namespace neon
     static Value objfnfile_open(const FuncContext& scfn)
     {
         ArgCheck check("open", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         scfn.thisval.asFile()->openWithoutParams();
         return Value::makeNull();
     }
@@ -14726,11 +17243,11 @@ namespace neon
         IOResult res;
         File* file;
         ArgCheck check("read", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         readhowmuch = -1;
         if(scfn.argc == 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
             readhowmuch = (size_t)scfn.argv[0].asNumber();
         }
         file = scfn.thisval.asFile();
@@ -14751,7 +17268,7 @@ namespace neon
         File* file;
         String* nos;
         ArgCheck check("readLine", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         file = scfn.thisval.asFile();
         linelen = 0;
         strline = nullptr;
@@ -14769,7 +17286,7 @@ namespace neon
         int ch;
         File* file;
         ArgCheck check("get", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         ch = fgetc(file->handle);
         if(ch == EOF)
@@ -14788,17 +17305,17 @@ namespace neon
         char* buffer;
         File* file;
         ArgCheck check("gets", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         length = -1;
         if(scfn.argc == 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
             length = (size_t)scfn.argv[0].asNumber();
         }
         file = scfn.thisval.asFile();
         if(!file->isstd)
         {
-            if(!nn_util_fsfileexists(file->path->data()))
+            if(!File::fileExists(file->path->data()))
             {
                 NEON_RETURNERROR(scfn, "NotFound -> %s" , "no such file or directory");
             }
@@ -14838,7 +17355,7 @@ namespace neon
                 length = 1;
             }
         }
-        buffer = (char*)nn_memory_malloc(sizeof(char) * (length + 1));
+        buffer = (char*)Memory::sysMalloc(sizeof(char) * (length + 1));
         if(buffer == nullptr && length != 0)
         {
             NEON_RETURNERROR(scfn, "Buffer -> %s" , "not enough memory to read file");
@@ -14863,9 +17380,9 @@ namespace neon
         File* file;
         String* string;
         ArgCheck check("write", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         file = scfn.thisval.asFile();
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.argv[0].asString();
         data = (unsigned char*)string->data();
         length = string->length();
@@ -14914,7 +17431,7 @@ namespace neon
         File* file;
         String* string;
         ArgCheck check("puts", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         file = scfn.thisval.asFile();
 
         if(!file->isstd)
@@ -14942,7 +17459,7 @@ namespace neon
         rc = 0;
         for(i = 0; i < scfn.argc; i++)
         {
-            NEON_ARGS_CHECKTYPE(&check, i, &Value::isString);
+            NEON_ARGS_CHECKTYPE(check, i, &Value::isString);
             string = scfn.argv[i].asString();
             data = (unsigned char*)string->data();
             length = string->length();
@@ -14962,7 +17479,7 @@ namespace neon
         int rc;
         File* file;
         ArgCheck check("puts", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         file = scfn.thisval.asFile();
         if(!file->isstd)
         {
@@ -14989,7 +17506,7 @@ namespace neon
         rc = 0;
         for(i = 0; i < scfn.argc; i++)
         {
-            NEON_ARGS_CHECKTYPE(&check, i, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, i, &Value::isNumber);
             int cv = scfn.argv[i].asNumber();
             rc += fputc(cv, file->handle);
         }
@@ -15003,8 +17520,8 @@ namespace neon
         String* ofmt;
         ArgCheck check("printf", scfn);
         file = scfn.thisval.asFile();
-        NEON_ARGS_CHECKMINARG(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKMINARG(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         ofmt = scfn.argv[0].asString();
         IOStream::makeStackIO(&pr, file->handle, false);
         FormatInfo nfi(&pr, ofmt->data(), ofmt->length());
@@ -15017,7 +17534,7 @@ namespace neon
     static Value objfnfile_number(const FuncContext& scfn)
     {
         ArgCheck check("number", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeNumber(scfn.thisval.asFile()->number);
     }
 
@@ -15025,7 +17542,7 @@ namespace neon
     {
         File* file;
         ArgCheck check("istty", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         return Value::makeBool(file->istty);
     }
@@ -15034,7 +17551,7 @@ namespace neon
     {
         File* file;
         ArgCheck check("flush", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         if(!file->isopen)
         {
@@ -15061,7 +17578,7 @@ namespace neon
     {
         File* file;
         ArgCheck check("path", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         if(file->isstd)
         {
@@ -15074,7 +17591,7 @@ namespace neon
     {
         File* file;
         ArgCheck check("mode", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         return Value::fromObject(file->mode);
     }
@@ -15084,11 +17601,11 @@ namespace neon
         char* name;
         File* file;
         ArgCheck check("name", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         if(!file->isstd)
         {
-            name = nn_util_fsgetbasename(file->path->data());
+            name = File::getBasename(file->path->data());
             return Value::fromObject(String::copy(name));
         }
         else if(file->istty)
@@ -15104,9 +17621,9 @@ namespace neon
         int seektype;
         File* file;
         ArgCheck check("seek", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         file = scfn.thisval.asFile();
         if(file->isstd)
         {
@@ -15125,7 +17642,7 @@ namespace neon
     {
         File* file;
         ArgCheck check("tell", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
         if(file->isstd)
         {
@@ -15171,7 +17688,7 @@ namespace neon
     {
         int i;
         static ModInitFN g_builtinmodules[] = {
-            nn_natmodule_load_null, nn_natmodule_load_os, nn_natmodule_load_astscan, nn_natmodule_load_complex, nullptr,
+            natmodule_load_null, natmodule_load_os, natmodule_load_astscan, natmodule_load_complex, nullptr,
         };
         for(i = 0; g_builtinmodules[i] != nullptr; i++)
         {
@@ -15192,17 +17709,9 @@ namespace neon
         }
     }
 
-
-
-
-    void nn_import_closemodule(void* hnd)
-    {
-        (void)hnd;
-    }
-
     static Value objfnnumber_tohexstring(const FuncContext& scfn)
     {
-        return Value::fromObject(nn_util_numbertohexstring(scfn.thisval.asNumber(), false));
+        return Value::fromObject(String::utilNumberToHexString(scfn.thisval.asNumber(), false));
     }
 
     static Value objfnmath_hypot(const FuncContext& scfn)
@@ -15248,12 +17757,12 @@ namespace neon
 
     static Value objfnnumber_tobinstring(const FuncContext& scfn)
     {
-        return Value::fromObject(nn_util_numbertobinstring(scfn.thisval.asNumber()));
+        return Value::fromObject(String::utilNumberToBinString(scfn.thisval.asNumber()));
     }
 
     static Value objfnnumber_tooctstring(const FuncContext& scfn)
     {
-        return Value::fromObject(nn_util_numbertooctstring(scfn.thisval.asNumber(), false));
+        return Value::fromObject(String::utilNumberToOctString(scfn.thisval.asNumber(), false));
     }
 
     static Value objfnnumber_constructor(const FuncContext& scfn)
@@ -15562,7 +18071,7 @@ namespace neon
         int code;
         pid = scfn.argv[0].asNumber();
         code = scfn.argv[1].asNumber();
-        osfn_kill(pid, code);
+        Util::osfn_kill(pid, code);
         return Value::makeNull();
     }
 
@@ -15587,21 +18096,21 @@ namespace neon
     static Value objfnrange_lower(const FuncContext& scfn)
     {
         ArgCheck check("lower", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeNumber(scfn.thisval.asRange()->lower);
     }
 
     static Value objfnrange_upper(const FuncContext& scfn)
     {
         ArgCheck check("upper", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeNumber(scfn.thisval.asRange()->upper);
     }
 
     static Value objfnrange_range(const FuncContext& scfn)
     {
         ArgCheck check("range", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         return Value::makeNumber(scfn.thisval.asRange()->range);
     }
 
@@ -15611,8 +18120,8 @@ namespace neon
         int index;
         Range* range;
         ArgCheck check("iter", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         range = scfn.thisval.asRange();
         index = scfn.argv[0].asNumber();
         if(index >= 0 && index < range->range)
@@ -15639,7 +18148,7 @@ namespace neon
         int index;
         Range* range;
         ArgCheck check("itern", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         range = scfn.thisval.asRange();
         if(scfn.argv[0].isNull())
         {
@@ -15684,7 +18193,7 @@ namespace neon
         Range* orng;
         a = scfn.argv[0].asNumber();
         b = scfn.argv[1].asNumber();
-        orng = nn_object_makerange(a, b);
+        orng = Range::make(a, b);
         return Value::fromObject(orng);
     }
 
@@ -15703,10 +18212,10 @@ namespace neon
         int incode;
         int res;
         ArgCheck check("utf8NumBytes", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         incode = scfn.argv[0].asNumber();
-        res = nn_util_utf8numbytes(incode);
+        res = Util::utf8NumBytes(incode);
         return Value::makeNumber(res);
     }
 
@@ -15715,10 +18224,10 @@ namespace neon
         int res;
         String* instr;
         ArgCheck check("utf8Decode", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         instr = scfn.argv[0].asString();
-        res = nn_util_utf8decode((const uint8_t*)instr->data(), instr->length());
+        res = Util::utf8Decode((const uint8_t*)instr->data(), instr->length());
         return Value::makeNumber(res);
     }
 
@@ -15729,10 +18238,10 @@ namespace neon
         String* res;
         char* buf;
         ArgCheck check("utf8Encode", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         incode = scfn.argv[0].asNumber();
-        buf = nn_util_utf8encode(incode, &len);
+        buf = Util::utf8Encode(incode, &len);
         res = String::take(buf, len);
         return Value::fromObject(res);
     }
@@ -15747,7 +18256,6 @@ namespace neon
         Array* res;
         String* os;
         String* instr;
-        utf8iterator_t iter;
         havemax = false;
         instr = scfn.thisval.asString();
         if(scfn.argc > 0)
@@ -15756,12 +18264,12 @@ namespace neon
             maxamount = scfn.argv[0].asNumber();
         }
         res = Array::make();
-        nn_utf8iter_init(&iter, instr->data(), instr->length());
+        utf8iterator_t iter(instr->data(), instr->length());
         counter = 0;
-        while(nn_utf8iter_next(&iter))
+        while(iter.next())
         {
             cp = iter.codepoint;
-            cstr = nn_utf8iter_getchar(&iter);
+            cstr = iter.getChar();
             counter++;
             if(havemax)
             {
@@ -15799,8 +18307,8 @@ namespace neon
         char ch;
         String* os;
         ArgCheck check("fromCharCode", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         ch = scfn.argv[0].asNumber();
         os = String::copy(&ch, 1);
         return Value::fromObject(os);
@@ -15810,7 +18318,7 @@ namespace neon
     {
         String* os;
         ArgCheck check("constructor", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         os = String::intern("", 0);
         return Value::fromObject(os);
     }
@@ -15819,58 +18327,12 @@ namespace neon
     {
         String* selfstr;
         ArgCheck check("length", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         return Value::makeNumber(selfstr->length());
     }
 
-    static Value nn_string_fromrange(const char* buf, int len)
-    {
-        String* str;
-        if(len <= 0)
-        {
-            return Value::fromObject(String::intern("", 0));
-        }
-        str = String::intern("", 0);
-        str->append(buf, len);
-        return Value::fromObject(str);
-    }
 
-    String* nn_string_substring(String* selfstr, size_t start, size_t end, bool likejs)
-    {
-        size_t asz;
-        size_t len;
-        size_t tmp;
-        size_t maxlen;
-        char* raw;
-        (void)likejs;
-        maxlen = selfstr->length();
-        len = maxlen;
-        if(end > maxlen)
-        {
-            tmp = start;
-            start = end;
-            end = tmp;
-            len = maxlen;
-        }
-        if(end < start)
-        {
-            tmp = end;
-            end = start;
-            start = tmp;
-            len = end;
-        }
-        len = (end - start);
-        if(len > maxlen)
-        {
-            len = maxlen;
-        }
-        asz = ((end + 1) * sizeof(char));
-        raw = (char*)nn_memory_malloc(sizeof(char) * asz);
-        memset(raw, 0, asz);
-        memcpy(raw, selfstr->data() + start, len);
-        return String::take(raw, len);
-    }
 
     static Value objfnstring_substring(const FuncContext& scfn)
     {
@@ -15881,16 +18343,16 @@ namespace neon
         String* selfstr;
         ArgCheck check("substring", scfn);
         selfstr = scfn.thisval.asString();
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         maxlen = selfstr->length();
         end = maxlen;
         start = scfn.argv[0].asNumber();
         if(scfn.argc > 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             end = scfn.argv[1].asNumber();
         }
-        nos = nn_string_substring(selfstr, start, end, true);
+        nos = selfstr->substring(start, end, true);
         return Value::fromObject(nos);
     }
 
@@ -15901,8 +18363,8 @@ namespace neon
         int selflen;
         String* selfstr;
         ArgCheck check("charCodeAt", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         selfstr = scfn.thisval.asString();
         idx = scfn.argv[0].asNumber();
         selflen = (int)selfstr->length();
@@ -15924,8 +18386,8 @@ namespace neon
         int selflen;
         String* selfstr;
         ArgCheck check("charAt", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         selfstr = scfn.thisval.asString();
         idx = scfn.argv[0].asNumber();
         selflen = (int)selfstr->length();
@@ -15946,10 +18408,10 @@ namespace neon
         char* string;
         String* str;
         ArgCheck check("upper", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         str = scfn.thisval.asString();
         slen = str->length();
-        string = nn_util_strtoupper(str->mutdata(), slen);
+        string = Util::stringToUpper(str->mutdata(), slen);
         return Value::fromObject(String::copy(string, slen));
     }
 
@@ -15959,10 +18421,10 @@ namespace neon
         char* string;
         String* str;
         ArgCheck check("lower", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         str = scfn.thisval.asString();
         slen = str->length();
-        string = nn_util_strtolower(str->mutdata(), slen);
+        string = Util::stringToLower(str->mutdata(), slen);
         return Value::fromObject(String::copy(string, slen));
     }
 
@@ -15972,7 +18434,7 @@ namespace neon
         size_t len;
         String* selfstr;
         ArgCheck check("isAlpha", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         len = selfstr->length();
         for(i = 0; i < len; i++)
@@ -15991,7 +18453,7 @@ namespace neon
         size_t len;
         String* selfstr;
         ArgCheck check("isAlnum", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         len = selfstr->length();
         for(i = 0; i < len; i++)
@@ -16011,7 +18473,7 @@ namespace neon
         String* selfstr;
         ArgCheck check("isFloat", scfn);
         (void)f;
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         errno = 0;
         if(selfstr->length() == 0)
@@ -16039,7 +18501,7 @@ namespace neon
         size_t len;
         String* selfstr;
         ArgCheck check("isNumber", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         len = selfstr->length();
         for(i = 0; i < len; i++)
@@ -16059,7 +18521,7 @@ namespace neon
         bool alphafound;
         String* selfstr;
         ArgCheck check("isLower", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         alphafound = false;
         len = selfstr->length();
@@ -16084,7 +18546,7 @@ namespace neon
         bool alphafound;
         String* selfstr;
         ArgCheck check("isUpper", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         alphafound = false;
         len = selfstr->length();
@@ -16108,7 +18570,7 @@ namespace neon
         size_t len;
         String* selfstr;
         ArgCheck check("isSpace", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         len = selfstr->length();
         for(i = 0; i < len; i++)
@@ -16128,7 +18590,7 @@ namespace neon
         char* string;
         String* selfstr;
         ArgCheck check("trim", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         trimmer = '\0';
         if(scfn.argc == 1)
         {
@@ -16184,7 +18646,7 @@ namespace neon
         char* string;
         String* selfstr;
         ArgCheck check("ltrim", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         trimmer = '\0';
         if(scfn.argc == 1)
         {
@@ -16225,7 +18687,7 @@ namespace neon
         char* string;
         String* selfstr;
         ArgCheck check("rtrim", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         trimmer = '\0';
         if(scfn.argc == 1)
         {
@@ -16267,14 +18729,14 @@ namespace neon
         String* string;
         String* needle;
         ArgCheck check("indexOf", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         needle = scfn.argv[0].asString();
         startindex = 0;
         if(scfn.argc == 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             startindex = scfn.argv[1].asNumber();
         }
         if(string->length() > 0 && needle->length() > 0)
@@ -16294,8 +18756,8 @@ namespace neon
         String* substr;
         String* string;
         ArgCheck check("startsWith", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         substr = scfn.argv[0].asString();
         if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
@@ -16311,8 +18773,8 @@ namespace neon
         String* substr;
         String* string;
         ArgCheck check("endsWith", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         substr = scfn.argv[0].asString();
         if(string->length() == 0 || substr->length() == 0 || substr->length() > string->length())
@@ -16323,93 +18785,17 @@ namespace neon
         return Value::makeBool(memcmp(substr->data(), string->data() + difference, substr->length()) == 0);
     }
 
-    static Value nn_util_stringregexmatch(String* string, String* pattern, bool capture)
-    {
-        enum
-        {
-            matchMaxTokens = 128 * 4,
-            matchMaxCaptures = 128,
-        };
-        int prc;
-        int64_t i;
-        int64_t mtstart;
-        int64_t mtlength;
-        int64_t actualmaxcaptures;
-        int64_t cpres;
-        int16_t restokens;
-        int64_t capstarts[matchMaxCaptures + 1];
-        int64_t caplengths[matchMaxCaptures + 1];
-        RegexContext::Token tokens[matchMaxTokens + 1];
-        RegexContext pctx;
-        auto gcs = SharedState::get();
-        memset(tokens, 0, (matchMaxTokens + 1) * sizeof(RegexContext::Token));
-        memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
-        memset(capstarts, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
-        const char* strstart;
-        String* rstr;
-        Array* oa;
-        Dict* dm;
-        restokens = matchMaxTokens;
-        actualmaxcaptures = 0;
-        RegexContext::initStack(&pctx, tokens, restokens);
-        if(capture)
-        {
-            actualmaxcaptures = matchMaxCaptures;
-        }
-        prc = pctx.parse(pattern->data(), 0);
-        if(prc == 0)
-        {
-            cpres = pctx.match(string->data(), 0, actualmaxcaptures, capstarts, caplengths);
-            if(cpres > 0)
-            {
-                if(capture)
-                {
-                    oa = Array::make();
-                    for(i = 0; i < cpres; i++)
-                    {
-                        mtstart = capstarts[i];
-                        mtlength = caplengths[i];
-                        if(mtlength > 0)
-                        {
-                            strstart = &string->data()[mtstart];
-                            rstr = String::copy(strstart, mtlength);
-                            dm = Dict::make();
-                            dm->addCstr("string", Value::fromObject(rstr));
-                            dm->addCstr("start", Value::makeNumber(mtstart));
-                            dm->addCstr("length", Value::makeNumber(mtlength));
-                            oa->push(Value::fromObject(dm));
-                        }
-                    }
-                    return Value::fromObject(oa);
-                }
-                else
-                {
-                    return Value::makeBool(true);
-                }
-            }
-        }
-        else
-        {
-            NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.regexerror, pctx.errorbuf);
-        }
-        RegexContext::destroy(&pctx);
-        if(capture)
-        {
-            return Value::makeNull();
-        }
-        return Value::makeBool(false);
-    }
 
     static Value objfnstring_matchcapture(const FuncContext& scfn)
     {
         String* pattern;
         String* string;
         ArgCheck check("match", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         pattern = scfn.argv[0].asString();
-        return nn_util_stringregexmatch(string, pattern, true);
+        return String::regexMatch(string, pattern, true);
     }
 
     static Value objfnstring_matchonly(const FuncContext& scfn)
@@ -16417,11 +18803,11 @@ namespace neon
         String* pattern;
         String* string;
         ArgCheck check("match", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         pattern = scfn.argv[0].asString();
-        return nn_util_stringregexmatch(string, pattern, false);
+        return String::regexMatch(string, pattern, false);
     }
 
     static Value objfnstring_count(const FuncContext& scfn)
@@ -16431,8 +18817,8 @@ namespace neon
         String* substr;
         String* string;
         ArgCheck check("count", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         substr = scfn.argv[0].asString();
         if(substr->length() == 0 || string->length() == 0)
@@ -16441,7 +18827,7 @@ namespace neon
         }
         count = 0;
         tmp = string->data();
-        while((tmp = nn_util_utf8strstr(tmp, substr->data())))
+        while((tmp = Util::utf8Strstr(tmp, substr->data())))
         {
             count++;
             tmp++;
@@ -16453,7 +18839,7 @@ namespace neon
     {
         String* selfstr;
         ArgCheck check("toNumber", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         selfstr = scfn.thisval.asString();
         return Value::makeNumber(strtod(selfstr->data(), nullptr));
     }
@@ -16462,10 +18848,10 @@ namespace neon
     {
         String* string;
         ArgCheck check("isAscii", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         if(scfn.argc == 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 0, &Value::isBool);
+            NEON_ARGS_CHECKTYPE(check, 0, &Value::isBool);
         }
         string = scfn.thisval.asString();
         return Value::fromObject(string);
@@ -16480,7 +18866,7 @@ namespace neon
         Array* list;
         String* string;
         ArgCheck check("toList", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         string = scfn.thisval.asString();
         list = SharedState::gcProtect(Array::make());
         length = string->length();
@@ -16503,7 +18889,7 @@ namespace neon
         Array* list;
         String* string;
         ArgCheck check("toBytes", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
+        NEON_ARGS_CHECKCOUNT(check, 0);
         string = scfn.thisval.asString();
         list = SharedState::gcProtect(Array::make());
         length = string->length();
@@ -16530,8 +18916,8 @@ namespace neon
         String* result;
         String* string;
         ArgCheck check("lpad", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         string = scfn.thisval.asString();
         width = scfn.argv[0].asNumber();
         fillchar = ' ';
@@ -16545,17 +18931,17 @@ namespace neon
             return scfn.thisval;
         }
         fillsize = width - string->length();
-        fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
+        fill = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)fillsize + 1));
         finalsize = string->length() + fillsize;
         for(i = 0; i < fillsize; i++)
         {
             fill[i] = fillchar;
         }
-        str = (char*)nn_memory_malloc(sizeof(char) * ((size_t)finalsize + 1));
+        str = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)finalsize + 1));
         memcpy(str, fill, fillsize);
         memcpy(str + fillsize, string->data(), string->length());
         str[finalsize] = '\0';
-        nn_memory_free(fill);
+        Memory::sysFree(fill);
         result = String::take(str, finalsize);
         result->setLength(finalsize);
         return Value::fromObject(result);
@@ -16574,8 +18960,8 @@ namespace neon
         String* string;
         String* result;
         ArgCheck check("rpad", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         string = scfn.thisval.asString();
         width = scfn.argv[0].asNumber();
         fillchar = ' ';
@@ -16589,17 +18975,17 @@ namespace neon
             return scfn.thisval;
         }
         fillsize = width - string->length();
-        fill = (char*)nn_memory_malloc(sizeof(char) * ((size_t)fillsize + 1));
+        fill = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)fillsize + 1));
         finalsize = string->length() + fillsize;
         for(i = 0; i < fillsize; i++)
         {
             fill[i] = fillchar;
         }
-        str = (char*)nn_memory_malloc(sizeof(char) * ((size_t)finalsize + 1));
+        str = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)finalsize + 1));
         memcpy(str, string->data(), string->length());
         memcpy(str + string->length(), fill, fillsize);
         str[finalsize] = '\0';
-        nn_memory_free(fill);
+        Memory::sysFree(fill);
         result = String::take(str, finalsize);
         result->setLength(finalsize);
         return Value::fromObject(result);
@@ -16615,8 +19001,8 @@ namespace neon
         String* string;
         String* delimeter;
         ArgCheck check("split", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 1, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 1, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.thisval.asString();
         delimeter = scfn.argv[0].asString();
         /* empty string matches empty string to empty list */
@@ -16657,15 +19043,15 @@ namespace neon
         size_t i;
         size_t xlen;
         size_t totallength;
-        StringBuffer result;
+        StrBuffer result;
         String* substr;
         String* string;
         String* repsubstr;
         ArgCheck check("replace", scfn);
         (void)totallength;
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 2, 3);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isString);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 2, 3);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
         string = scfn.thisval.asString();
         substr = scfn.argv[0].asString();
         repsubstr = scfn.argv[1].asString();
@@ -16673,7 +19059,7 @@ namespace neon
         {
             return Value::fromObject(String::copy(string->data(), string->length()));
         }
-        StringBuffer::fromPtr(&result, 0);
+        StrBuffer::fromPtr(&result, 0);
         totallength = 0;
         for(i = 0; i < string->length(); i++)
         {
@@ -16693,7 +19079,7 @@ namespace neon
             }
         }
         xlen = result.length();
-        return Value::fromObject(String::makeFromStrbuf(result, nn_util_hashstring(result.data(), xlen), xlen));
+        return Value::fromObject(String::makeFromStrbuf(result, Util::hashString(result.data(), xlen), xlen));
     }
 
     static Value objfnstring_iter(const FuncContext& scfn)
@@ -16703,8 +19089,8 @@ namespace neon
         String* string;
         String* result;
         ArgCheck check("iter", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         string = scfn.thisval.asString();
         length = string->length();
         index = scfn.argv[0].asNumber();
@@ -16722,7 +19108,7 @@ namespace neon
         size_t length;
         String* string;
         ArgCheck check("itern", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         string = scfn.thisval.asString();
         length = string->length();
         if(scfn.argv[0].isNull())
@@ -16756,8 +19142,8 @@ namespace neon
         ArgCheck check("each", scfn);
         Value nestargs[3];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isCallable);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isCallable);
         string = scfn.thisval.asString();
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
@@ -16897,7 +19283,7 @@ namespace neon
         Dict* itm;
         AstToken token;
         ArgCheck check("scan", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         insrc = scfn.argv[0].asString();
         scn = AstLexer::make(insrc->data());
         arr = Array::make();
@@ -16915,7 +19301,7 @@ namespace neon
         return Value::fromObject(arr);
     }
 
-    DefExport* nn_natmodule_load_astscan()
+    DefExport* natmodule_load_astscan()
     {
         DefExport* ret;
         static DefExport::Function modfuncs[] = {
@@ -16937,7 +19323,7 @@ namespace neon
     }
 
 
-    static Value nn_pcomplex_makeinstance(Class* klass, double re, double im)
+    static Value pcomplex_makeinstance(Class* klass, double re, double im)
     {
         UClassComplex* inst;
         inst = (UClassComplex*)Instance::makeInstanceOfSize<UClassComplex>(klass);
@@ -16951,7 +19337,7 @@ namespace neon
         UClassComplex* inst;
         assert(scfn.thisval.isInstance());
         inst = (UClassComplex*)scfn.thisval.asInstance();
-        return nn_pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, scfn.argv[0].asNumber(), scfn.argv[1].asNumber());
+        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, scfn.argv[0].asNumber(), scfn.argv[1].asNumber());
     }
 
     static Value complexclass_opadd(const FuncContext& scfn)
@@ -16965,7 +19351,7 @@ namespace neon
         inst = (UClassComplex*)scfn.thisval.asInstance();
         pv = (UClassComplex*)inst;
         other = (UClassComplex*)vother.asInstance();
-        return nn_pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re + other->re, pv->im + other->im);
+        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re + other->re, pv->im + other->im);
     }
 
     static Value complexclass_opsub(const FuncContext& scfn)
@@ -16979,7 +19365,7 @@ namespace neon
         inst = (UClassComplex*)scfn.thisval.asInstance();
         pv = (UClassComplex*)inst;
         other = (UClassComplex*)vother.asInstance();
-        return nn_pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re - other->re, pv->im - other->im);
+        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re - other->re, pv->im - other->im);
     }
 
     static Value complexclass_opmul(const FuncContext& scfn)
@@ -16997,7 +19383,7 @@ namespace neon
         other = (UClassComplex*)vother.asInstance();
         vre = (pv->re * other->re - pv->im * other->im);
         vim = (pv->re * other->im + pv->im * other->re);
-        return nn_pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, vre, vim);
+        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, vre, vim);
     }
 
     static Value complexclass_opdiv(const FuncContext& scfn)
@@ -17033,7 +19419,7 @@ namespace neon
             r = -pv->im;
             i = pv->re;
         }
-        return nn_pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, (r * ti + i) / tr, (i * ti - r) / tr);
+        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, (r * ti + i) / tr, (i * ti - r) / tr);
     }
 
     static Value complexclass_getre(const FuncContext& scfn)
@@ -17056,7 +19442,7 @@ namespace neon
         return Value::makeNumber(pv->im);
     }
 
-    DefExport* nn_natmodule_load_complex()
+    DefExport* natmodule_load_complex()
     {
         static DefExport::Function modfuncs[] = {
             { nullptr, false, nullptr },
@@ -17088,8 +19474,8 @@ namespace neon
     {
         struct timeval tv;
         ArgCheck check("time", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
-        osfn_gettimeofday(&tv, nullptr);
+        NEON_ARGS_CHECKCOUNT(check, 0);
+        Util::osfn_gettimeofday(&tv, nullptr);
         return Value::makeNumber((double)tv.tv_sec + ((double)tv.tv_usec / 10000000));
     }
 
@@ -17097,8 +19483,8 @@ namespace neon
     {
         struct timeval tv;
         ArgCheck check("microtime", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 0);
-        osfn_gettimeofday(&tv, nullptr);
+        NEON_ARGS_CHECKCOUNT(check, 0);
+        Util::osfn_gettimeofday(&tv, nullptr);
         return Value::makeNumber((1000000 * (double)tv.tv_sec) + ((double)tv.tv_usec / 10));
     }
 
@@ -17106,7 +19492,7 @@ namespace neon
     {
         Value val;
         ArgCheck check("id", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         val = scfn.argv[0];
         return Value::makeNumber(*(long*)&val);
     }
@@ -17114,12 +19500,12 @@ namespace neon
     static Value nativefn_int(const FuncContext& scfn)
     {
         ArgCheck check("int", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 1);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         if(scfn.argc == 0)
         {
             return Value::makeNumber(0);
         }
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         return Value::makeNumber((double)((int)scfn.argv[0].asNumber()));
     }
 
@@ -17129,10 +19515,10 @@ namespace neon
         char* string;
         int ch;
         ArgCheck check("chr", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         ch = scfn.argv[0].asNumber();
-        string = nn_util_utf8encode(ch, &len);
+        string = Util::utf8Encode(ch, &len);
         return Value::fromObject(String::take(string, len));
     }
 
@@ -17142,8 +19528,8 @@ namespace neon
         int length;
         String* string;
         ArgCheck check("ord", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKCOUNT(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         string = scfn.argv[0].asString();
         length = string->length();
         if(length > 1)
@@ -17164,17 +19550,17 @@ namespace neon
         int lowerlimit;
         int upperlimit;
         ArgCheck check("rand", scfn);
-        NEON_ARGS_CHECKCOUNTRANGE(&check, 0, 2);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 2);
         lowerlimit = 0;
         upperlimit = 1;
         if(scfn.argc > 0)
         {
-            NEON_ARGS_CHECKTYPE(&check, 0, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
             lowerlimit = scfn.argv[0].asNumber();
         }
         if(scfn.argc == 2)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
             upperlimit = scfn.argv[1].asNumber();
         }
         if(lowerlimit > upperlimit)
@@ -17183,7 +19569,7 @@ namespace neon
             upperlimit = lowerlimit;
             lowerlimit = tmp;
         }
-        return Value::makeNumber(nn_util_mtrand(lowerlimit, upperlimit));
+        return Value::makeNumber(Util::mtrandRandom(lowerlimit, upperlimit));
     }
 
     static Value nativefn_eval(const FuncContext& scfn)
@@ -17191,7 +19577,7 @@ namespace neon
         Value result;
         String* os;
         ArgCheck check("eval", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         os = scfn.argv[0].asString();
         /*fprintf(stderr, "eval:src=%s\n", os->data());*/
         result = evalSource(os->data());
@@ -17204,7 +19590,7 @@ namespace neon
         Value result;
         String* os;
         ArgCheck check("loadfile", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 1);
+        NEON_ARGS_CHECKCOUNT(check, 1);
         os = scfn.argv[0].asString();
         fprintf(stderr, "eval:src=%s\n", os->data());
         result = evalSource(os->data());
@@ -17215,9 +19601,9 @@ namespace neon
     static Value nativefn_instanceof(const FuncContext& scfn)
     {
         ArgCheck check("instanceof", scfn);
-        NEON_ARGS_CHECKCOUNT(&check, 2);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isInstance);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isClass);
+        NEON_ARGS_CHECKCOUNT(check, 2);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isInstance);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isClass);
         return Value::makeBool(Class::isInstanceOf(scfn.argv[0].asInstance()->m_instanceclass, scfn.argv[1].asClass()));
     }
 
@@ -17227,8 +19613,8 @@ namespace neon
         String* res;
         String* ofmt;
         ArgCheck check("sprintf", scfn);
-        NEON_ARGS_CHECKMINARG(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKMINARG(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         ofmt = scfn.argv[0].asString();
         IOStream::makeStackString(&pr);
         FormatInfo nfi(&pr, ofmt->data(), ofmt->length());
@@ -17246,8 +19632,8 @@ namespace neon
         String* ofmt;
         ArgCheck check("printf", scfn);
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKMINARG(&check, 1);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKMINARG(check, 1);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         ofmt = scfn.argv[0].asString();
         FormatInfo nfi(gcs->m_stdoutprinter, ofmt->data(), ofmt->length());
         if(!nfi.formatWithArgs(scfn.argc, 1, scfn.argv))
@@ -17325,12 +19711,12 @@ namespace neon
 
     /*
      * you can use this file as a template for new native modules.
-     * just fill out the fields, give the load function a meaningful name (i.e., nn_natmodule_load_foobar if your module is "foobar"),
+     * just fill out the fields, give the load function a meaningful name (i.e., natmodule_load_foobar if your module is "foobar"),
      * et cetera.
      * then, add said function in libmodule.c's loadBuiltinMethods, and you're good to go!
      */
 
-    DefExport* nn_natmodule_load_null()
+    DefExport* natmodule_load_null()
     {
         static DefExport::Function modfuncs[] = {
             /* {"somefunc",   true,  myfancymodulefunction},*/
@@ -17358,8 +19744,8 @@ namespace neon
     static Value modfn_os_readdir(const FuncContext& scfn)
     {
         const char* dirn;
-        FSDirReader rd;
-        FSDirItem itm;
+        Util::FSDirReader rd;
+        Util::FSDirReader::Item itm;
         Value res;
         Value itemval;
         Value callable;
@@ -17368,25 +19754,21 @@ namespace neon
         ArgCheck check("readdir", scfn);
         Value nestargs[2];
         auto gcs = SharedState::get();
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isCallable);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isCallable);
         os = scfn.argv[0].asString();
         callable = scfn.argv[1];
         dirn = os->data();
-        if(fslib_diropen(&rd, dirn))
+        if(rd.openDir(dirn))
         {
-            while(fslib_dirread(&rd, &itm))
+            while(rd.readItem(&itm))
             {
-    #if 0
-                    itemstr = String::intern(itm.name);
-    #else
                 itemstr = String::copy(itm.name);
-    #endif
                 itemval = Value::fromObject(itemstr);
                 nestargs[0] = itemval;
                 gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, 1, &res, false);
             }
-            fslib_dirclose(&rd);
+            rd.closeDir();
             return Value::makeNull();
         }
         else
@@ -17403,11 +19785,11 @@ namespace neon
         int64_t mod;
         String* path;
         ArgCheck check("chmod", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         path = scfn.argv[0].asString();
         mod = scfn.argv[1].asNumber();
-        r = osfn_chmod(path->data(), mod);
+        r = Util::osfn_chmod(path->data(), mod);
         return Value::makeNumber(r);
     }
     */
@@ -17418,11 +19800,11 @@ namespace neon
         int64_t mod;
         String* path;
         ArgCheck check("chmod", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         path = scfn.argv[0].asString();
         mod = scfn.argv[1].asNumber();
-        r = osfn_chmod(path->data(), mod);
+        r = Util::osfn_chmod(path->data(), mod);
         return Value::makeNumber(r);
     }
 
@@ -17432,11 +19814,11 @@ namespace neon
         int64_t mod;
         String* path;
         ArgCheck check("mkdir", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         path = scfn.argv[0].asString();
         mod = scfn.argv[1].asNumber();
-        r = osfn_mkdir(path->data(), mod);
+        r = Util::osfn_mkdir(path->data(), mod);
         return Value::makeNumber(r);
     }
 
@@ -17445,9 +19827,9 @@ namespace neon
         int64_t r;
         String* path;
         ArgCheck check("chdir", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
-        r = osfn_chdir(path->data());
+        r = Util::osfn_chdir(path->data());
         return Value::makeNumber(r);
     }
 
@@ -17456,10 +19838,10 @@ namespace neon
         int64_t r;
         String* path;
         ArgCheck check("rmdir", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isNumber);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         path = scfn.argv[0].asString();
-        r = osfn_rmdir(path->data());
+        r = Util::osfn_rmdir(path->data());
         return Value::makeNumber(r);
     }
 
@@ -17468,9 +19850,9 @@ namespace neon
         int64_t r;
         String* path;
         ArgCheck check("unlink", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
-        r = osfn_unlink(path->data());
+        r = Util::osfn_unlink(path->data());
         return Value::makeNumber(r);
     }
 
@@ -17479,9 +19861,9 @@ namespace neon
         const char* r;
         String* key;
         ArgCheck check("getenv", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         key = scfn.argv[0].asString();
-        r = osfn_getenv(key->data());
+        r = Util::osfn_getenv(key->data());
         if(r == nullptr)
         {
             return Value::makeNull();
@@ -17494,11 +19876,11 @@ namespace neon
         String* key;
         String* value;
         ArgCheck check("setenv", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(&check, 1, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
         key = scfn.argv[0].asString();
         value = scfn.argv[1].asString();
-        return Value::makeBool(osfn_setenv(key->data(), value->data(), true));
+        return Value::makeBool(Util::osfn_setenv(key->data(), value->data(), true));
     }
 
     static Value modfn_os_cwdhelper(const FuncContext& scfn, const char* name)
@@ -17510,7 +19892,7 @@ namespace neon
         char* r;
         char buf[kMaxBufSz];
         ArgCheck check(name, scfn);
-        r = osfn_getcwd(buf, kMaxBufSz);
+        r = Util::osfn_getcwd(buf, kMaxBufSz);
         if(r == nullptr)
         {
             return Value::makeNull();
@@ -17533,9 +19915,9 @@ namespace neon
         const char* r;
         String* path;
         ArgCheck check("basename", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
-        r = osfn_basename(path->data());
+        r = Util::osfn_basename(path->data());
         if(r == nullptr)
         {
             return Value::makeNull();
@@ -17548,9 +19930,9 @@ namespace neon
         const char* r;
         String* path;
         ArgCheck check("dirname", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
-        r = osfn_dirname(path->data());
+        r = Util::osfn_dirname(path->data());
         if(r == nullptr)
         {
             return Value::makeNull();
@@ -17563,7 +19945,7 @@ namespace neon
         FILE* fh;
         String* path;
         ArgCheck check("touch", scfn);
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
         fh = fopen(path->data(), "rb");
         if(fh == nullptr)
@@ -17595,23 +19977,23 @@ namespace neon
         String* keywanted;
         String* path;
         Dict* md;
-        NNFSStat nfs;
+        Util::NNFSStat nfs;
         const char* strp;
         ArgCheck check("stat", scfn);
         auto gcs = SharedState::get();
         havekey = false;
         keywanted = nullptr;
         md = nullptr;
-        NEON_ARGS_CHECKTYPE(&check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         path = scfn.argv[0].asString();
         if(scfn.argc > 1)
         {
-            NEON_ARGS_CHECKTYPE(&check, 1, &Value::isString);
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
             keywanted = scfn.argv[1].asString();
             havekey = true;
         }
         strp = path->data();
-        if(!nn_filestat_initfrompath(&nfs, strp))
+        if(!Util::filestat_initfrompath(&nfs, strp))
         {
             NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.ioerror, "%s: %s", strp, strerror(errno));
             return Value::makeNull();
@@ -17631,14 +20013,14 @@ namespace neon
         putorgetkey(md, "blocksize", Value::makeNumber(nfs.blocksize));
         putorgetkey(md, "blocks", Value::makeNumber(nfs.blockcount));
         putorgetkey(md, "filesize", Value::makeNumber(nfs.filesize));
-        putorgetkey(md, "lastchanged", Value::fromObject(String::copy(nn_filestat_ctimetostring(nfs.tmlastchanged))));
-        putorgetkey(md, "lastaccess", Value::fromObject(String::copy(nn_filestat_ctimetostring(nfs.tmlastaccessed))));
-        putorgetkey(md, "lastmodified", Value::fromObject(String::copy(nn_filestat_ctimetostring(nfs.tmlastmodified))));
+        putorgetkey(md, "lastchanged", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.tmlastchanged))));
+        putorgetkey(md, "lastaccess", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.tmlastaccessed))));
+        putorgetkey(md, "lastmodified", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.tmlastmodified))));
         return Value::fromObject(md);
     }
 
 
-    DefExport* nn_natmodule_load_os()
+    DefExport* natmodule_load_os()
     {
         static DefExport::Function modfuncs[] = {
             { "readdir", true, modfn_os_readdir },
@@ -17876,21 +20258,7 @@ namespace neon
         return vmCallWithObject(callable, thisval, argcount, fromoperator);
     }
 
-    NEON_INLINE Function::ContextType nn_value_getmethodtype(Value method)
-    {
-        Function* ofn;
-        ofn = method.asFunction();
-        switch(method.objType())
-        {
-            case Object::OTYP_FUNCNATIVE:
-                return ofn->m_contexttype;
-            case Object::OTYP_FUNCCLOSURE:
-                return ofn->m_fnvals.fnclosure.scriptfunc->m_contexttype;
-            default:
-                break;
-        }
-        return Function::CTXTYPE_FUNCTION;
-    }
+
 
     Class* SharedState::getClassFor(Value receiver)
     {
@@ -17957,7 +20325,7 @@ namespace neon
         field = klass->m_instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            if(nn_value_getmethodtype(field->value) == Function::CTXTYPE_PRIVATE)
+            if(Function::getMethodType(field->value) == Function::CTXTYPE_PRIVATE)
             {
                 return NEON_THROWEXCEPTION("cannot call private method '%s' from instance of %s", name->data(), klass->m_classname->data());
             }
@@ -17995,7 +20363,7 @@ namespace neon
             field = receiver.asClass()->m_instmethods.getfieldbyostr(name);
             if(field != nullptr)
             {
-                if(nn_value_getmethodtype(field->value) == Function::CTXTYPE_STATIC)
+                if(Function::getMethodType(field->value) == Function::CTXTYPE_STATIC)
                 {
                     return vmCallWithObject(field->value, receiver, argcount, false);
                 }
@@ -18062,7 +20430,7 @@ namespace neon
                         field = klass->m_instmethods.getfieldbyostr(name);
                         if(field != nullptr)
                         {
-                            fntyp = nn_value_getmethodtype(field->value);
+                            fntyp = Function::getMethodType(field->value);
                             fprintf(stderr, "fntyp: %d\n", fntyp);
                             if(fntyp == Function::CTXTYPE_PRIVATE)
                             {
@@ -18142,7 +20510,7 @@ namespace neon
         field = klass->m_instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            if(nn_value_getmethodtype(field->value) == Function::CTXTYPE_PRIVATE)
+            if(Function::getMethodType(field->value) == Function::CTXTYPE_PRIVATE)
             {
                 return NEON_THROWEXCEPTION("cannot get private property '%s' from instance", name->data());
             }
@@ -18171,7 +20539,7 @@ namespace neon
         {
             return upvalue;
         }
-        createdupvalue = nn_object_makeupvalue(local, stackpos);
+        createdupvalue = Upvalue::make(local, stackpos);
         createdupvalue->next = upvalue;
         if(prevupvalue == nullptr)
         {
@@ -18203,7 +20571,7 @@ namespace neon
         method = vmStackPeek(0);
         klass = vmStackPeek(1).asClass();
         klass->m_instmethods.set(Value::fromObject(name), method);
-        if(nn_value_getmethodtype(method) == Function::CTXTYPE_INITIALIZER)
+        if(Function::getMethodType(method) == Function::CTXTYPE_INITIALIZER)
         {
             klass->m_constructor = method;
         }
@@ -18948,7 +21316,7 @@ namespace neon
         field = klass->m_instmethods.getfieldbyostr(name);
         if(field != nullptr)
         {
-            if(nn_value_getmethodtype(field->value) == Function::CTXTYPE_STATIC)
+            if(Function::getMethodType(field->value) == Function::CTXTYPE_STATIC)
             {
                 if(Class::methodNameIsPrivate(name))
                 {
@@ -19230,7 +21598,7 @@ namespace neon
             field = klass->m_instmethods.getfieldbyostr(name);
             if(field != nullptr)
             {
-                if(nn_value_getmethodtype(field->value) == Function::CTXTYPE_STATIC)
+                if(Function::getMethodType(field->value) == Function::CTXTYPE_STATIC)
                 {
                     /* pop the class... */
                     vmStackPop();
@@ -19428,7 +21796,7 @@ namespace neon
         isfail = ((!binvalright.isNumber() && !binvalright.isBool() && !binvalright.isNull()) || (!binvalleft.isNumber() && !binvalleft.isBool() && !binvalleft.isNull()));
         if(isfail)
         {
-            VMMAC_TRYRAISE(false, "unsupported operand %s for %s and %s", nn_dbg_op2str(instruction), Value::typeName(binvalleft, false), Value::typeName(binvalright, false));
+            VMMAC_TRYRAISE(false, "unsupported operand %s for %s and %s", Debug::opcodeToString(instruction), Value::typeName(binvalleft, false), Value::typeName(binvalright, false));
             return false;
         }
         binvalright = vmStackPop();
@@ -19532,7 +21900,7 @@ namespace neon
             break;
             default:
             {
-                fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, nn_dbg_op2str(instruction));
+                fprintf(stderr, "unhandled instruction %d (%s)!\n", instruction, Debug::opcodeToString(instruction));
                 return false;
             }
             break;
@@ -19914,6 +22282,7 @@ namespace neon
     #endif
         you_are_calling_exit_vm_outside_of_runvm = false;
         m_vmstate.currentframe = &m_vmstate.framevalues[m_vmstate.framecount - 1];
+        Debug vmdbg(m_debugwriter);
         while(true)
         {
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
@@ -19932,7 +22301,7 @@ namespace neon
             if(NEON_UNLIKELY(m_conf.shoulddumpstack))
             {
                 ofs = (int)(m_vmstate.currentframe->inscode - m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->instrucs);
-                nn_dbg_printinstructionat(m_debugwriter, m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
+                vmdbg.printInstructionAt(m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
                 fprintf(stderr, "stack (before)=[\n");
                 iterpos = 0;
                 dbgslot = m_vmstate.stackvalues;
@@ -19940,10 +22309,10 @@ namespace neon
                 {
                     printpos = iterpos + 1;
                     iterpos++;
-                    fprintf(stderr, "  [%s%d%s] ", nn_util_color(NEON_COLOR_YELLOW), printpos, nn_util_color(NEON_COLOR_RESET));
-                    m_debugwriter->format("%s", nn_util_color(NEON_COLOR_YELLOW));
+                    fprintf(stderr, "  [%s%d%s] ", Util::termColor(NEON_COLOR_YELLOW), printpos, Util::termColor(NEON_COLOR_RESET));
+                    m_debugwriter->format("%s", Util::termColor(NEON_COLOR_YELLOW));
                     ValPrinter::printValue(m_debugwriter, *dbgslot, true, false);
-                    m_debugwriter->format("%s", nn_util_color(NEON_COLOR_RESET));
+                    m_debugwriter->format("%s", Util::termColor(NEON_COLOR_RESET));
                     fprintf(stderr, "\n");
                     dbgslot++;
                 }
@@ -19958,7 +22327,7 @@ namespace neon
             m_vmstate.currentinstr = currinstr;
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
             auto address = dispatchtable[currinstr.code];
-            fprintf(stderr, "gotoaddress=%p (for %s (%d))\n", address, nn_dbg_op2str(currinstr.code), currinstr.code);
+            fprintf(stderr, "gotoaddress=%p (for %s (%d))\n", address, Debug::opcodeToString(currinstr.code), currinstr.code);
             goto* address;
     #else
             switch(currinstr.code)
@@ -20156,7 +22525,7 @@ namespace neon
                     Value b;
                     b = vmStackPop();
                     a = vmStackPop();
-                    vmStackPush(Value::makeBool(nn_value_compare(a, b)));
+                    vmStackPush(Value::makeBool(Value::compareValues(a, b)));
                 }
                 VMMAC_DISPATCH();
                 VM_CASE(OPC_PRIMGREATER)
@@ -20625,7 +22994,7 @@ namespace neon
                     lower = vlower.asNumber();
                     upper = vupper.asNumber();
                     vmStackPop(2);
-                    vmStackPush(Value::fromObject(nn_object_makerange(lower, upper)));
+                    vmStackPush(Value::fromObject(Range::make(lower, upper)));
                 }
                 VMMAC_DISPATCH();
                 VM_CASE(OPC_MAKEDICT)
@@ -20844,7 +23213,7 @@ namespace neon
         gcs->m_processinfo->cliscriptdirectory = nullptr;
         gcs->m_processinfo->cliargv = Array::make();
         {
-            pathp = osfn_getcwd(pathbuf, kMaxBuf);
+            pathp = Util::osfn_getcwd(pathbuf, kMaxBuf);
             if(pathp == nullptr)
             {
                 pathp = (char*)".";
@@ -20852,7 +23221,7 @@ namespace neon
             gcs->m_processinfo->cliexedirectory = String::copy(pathp);
         }
         {
-            gcs->m_processinfo->cliprocessid = osfn_getpid();
+            gcs->m_processinfo->cliprocessid = Util::osfn_getpid();
         }
         {
             {
@@ -20877,12 +23246,12 @@ namespace neon
         auto gcs = SharedState::get();
         if(gcs->m_rootphysfile != nullptr)
         {
-            prealpath = osfn_realpath(gcs->m_rootphysfile, nullptr);
-            prealdir = osfn_dirname(prealpath);
+            prealpath = Util::osfn_realpath(gcs->m_rootphysfile, nullptr);
+            prealdir = Util::osfn_dirname(prealpath);
             gcs->m_processinfo->cliscriptfile = String::copy(prealpath);
             gcs->m_processinfo->cliscriptdirectory = String::copy(prealdir);
-            nn_memory_free(prealpath);
-            nn_memory_free(prealdir);
+            Memory::sysFree(prealpath);
+            Memory::sysFree(prealdir);
         }
         if(gcs->m_processinfo->cliscriptdirectory != nullptr)
         {
@@ -20892,7 +23261,7 @@ namespace neon
 
     bool initState()
     {
-        nn_memory_init();
+        Memory::mempoolInit();
         if(!SharedState::init())
         {
             return false;
@@ -21040,14 +23409,14 @@ namespace neon
         destrdebug("destroying m_debugwriter...");
         IOStream::destroy(gcs->m_debugwriter);
         destrdebug("destroying framevalues...");
-        nn_memory_free(gcs->m_vmstate.framevalues);
+        Memory::sysFree(gcs->m_vmstate.framevalues);
         destrdebug("destroying stackvalues...");
-        nn_memory_free(gcs->m_vmstate.stackvalues);
-        nn_memory_free(gcs->m_processinfo);
+        Memory::sysFree(gcs->m_vmstate.stackvalues);
+        Memory::sysFree(gcs->m_processinfo);
         destrdebug("destroying state...");
         SharedState::destroy();
         destrdebug("done destroying!");
-        nn_memory_finish();
+        Memory::mempoolDestroy();
     }
 
     Function* compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel)
@@ -21132,9 +23501,6 @@ namespace neon
 }
 // endnamespace
 
-#define OPTTOSTRIFY_(thing) #thing
-#define OPTTOSTRIFY(thing) OPTTOSTRIFY_(thing)
-
 #if defined(NEON_PLAT_ISWASM)
 int __multi3(int a, int b)
 {
@@ -21187,7 +23553,7 @@ struct ConsoleProg
                 bool continuerepl;
                 char* line;
                 char varnamebuf[kMaxVarName];
-                neon::StringBuffer* source;
+                neon::StrBuffer* source;
                 const char* cursor;
                 neon::Value dest;
                 neon::IOStream* pr;
@@ -21197,7 +23563,7 @@ struct ConsoleProg
                 gcs->m_isrepl = true;
                 continuerepl = true;
                 printf("Type \".exit\" to quit or \".credits\" for more information\n");
-                source = Memory::make<neon::StringBuffer>();
+                source = neon::Memory::make<neon::StrBuffer>();
                 bracecount = 0;
                 parencount = 0;
                 bracketcount = 0;
@@ -21229,7 +23595,7 @@ struct ConsoleProg
                     line = replGetInput(cursor);
                     if(line == nullptr || strcmp(line, ".exit") == 0)
                     {
-                        Memory::destroy(source);
+                        neon::Memory::destroy(source);
                         return true;
                     }
                     linelength = (int)strlen(line);
@@ -21346,7 +23712,7 @@ struct ConsoleProg
             }
         }
         result = neon::execSource(gcs->m_topmodule, source, file, nullptr);
-        nn_memory_free(source);
+        neon::Memory::sysFree(source);
         fflush(stdout);
         if(result == neon::NEON_STATUS_FAILCOMPILE)
         {
@@ -21521,7 +23887,7 @@ struct ConsoleProg
             { "quit", 'q', OPTPARSE_NONE, "initiate, then immediately destroy the interpreter state" },
             { "types", 't', OPTPARSE_NONE, "print sizeof() of types" },
             { "apidebug", 'a', OPTPARSE_NONE, "print calls to API (very verbose, very slow)" },
-            { "gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC (default is " OPTTOSTRIFY(NEON_CONFIG_DEFAULTGCSTART) ")" },
+            { "gcstart", 'g', OPTPARSE_REQUIRED, "set minimum bytes at which the GC should kick in. 0 disables GC" },
             { 0, 0, (optargtype_t)0, nullptr }
         };
     #if defined(NEON_PLAT_ISWINDOWS) || defined(_MSC_VER)
@@ -21533,7 +23899,7 @@ struct ConsoleProg
         wasusage = false;
         quitafterinit = false;
         evalmesrc = nullptr;
-        nextgcstart = NEON_CONFIG_DEFAULTGCSTART;
+        nextgcstart = neon::SharedState::CONF_DEFAULTGCSTART;
         if(!neon::initState())
         {
             fprintf(stderr, "failed to create state\n");
