@@ -177,8 +177,6 @@ extern "C"
 
 namespace neon
 {
-
-
     enum Status
     {
         NEON_STATUS_OK,
@@ -255,8 +253,6 @@ namespace neon
     bool defineGlobalNativeFuncPtr(const char* name, NativeFN fptr, void* uptr);
     bool defineGlobalNativeFunction(const char* name, NativeFN fptr);
 
-    Status execSource(Module* module, const char* source, const char* filename, Value* dest);
-    Value evalSource(const char* source);
 
     void installObjArray();
     /* libdict.c */
@@ -405,12 +401,12 @@ namespace neon
             {
                 if constexpr (MemoryClassHasDestroyFunc<ClassT>)
                 {
-                    //std::cerr << "Memory::destroy: using destroy" << std::endl;
+                    //fprintf(stderr, "Memory::destroy: using destroy\n");
                     ClassT::destroy(cls, args...);
                 }
                 else
                 {
-                    //std::cerr << "Memory::destroy: using free()" << std::endl;
+                    //fprintf(stderr, "Memory::destroy: using free()");
                     sysFree(cls);
                 }
             }
@@ -468,7 +464,7 @@ namespace neon
                 bool openDir(const char* path)
                 {
                     #if defined(NEON_PLAT_ISLINUX)
-                        if((this->m_handle = opendir(path)) == NULL)
+                        if((m_handle = opendir(path)) == NULL)
                         {
                             return false;
                         }
@@ -491,9 +487,9 @@ namespace neon
                         {
                             strncat(itempattern, "/*", 2);
                         }
-                        this->m_findhnd = FindFirstFile(itempattern, &this->m_finddata);
+                        m_findhnd = FindFirstFile(itempattern, &m_finddata);
                         mc_memory_free(itempattern);
-                        if(INVALID_HANDLE_VALUE == this->m_findhnd)
+                        if(INVALID_HANDLE_VALUE == m_findhnd)
                         {
                            return false;
                         }
@@ -513,7 +509,7 @@ namespace neon
                     itm->isfile = false;
                     memset(itm->name, 0, NEON_CONF_OSPATHSIZE);
                     #if defined(NEON_PLAT_ISLINUX)
-                        if((ent = readdir((DIR*)(this->m_handle))) == NULL)
+                        if((ent = readdir((DIR*)(m_handle))) == NULL)
                         {
                             return false;
                         }
@@ -528,14 +524,14 @@ namespace neon
                         strcpy(itm->name, ent->d_name);
                         return true;
                     #else
-                        ok = FindNextFile(this->m_findhnd, &this->m_finddata);
+                        ok = FindNextFile(m_findhnd, &m_finddata);
                         if(ok != 0)
                         {
-                            if(INVALID_HANDLE_VALUE == this->m_findhnd)
+                            if(INVALID_HANDLE_VALUE == m_findhnd)
                             {
                                 return false;
                             }
-                            if(this->m_finddata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+                            if(m_finddata.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                             {
                                 itm->isfile = false;
                                 itm->isdir = true;
@@ -545,7 +541,7 @@ namespace neon
                                 itm->isfile = true;
                                 itm->isdir = false;
                             }
-                            strcpy(itm->name, this->m_finddata.cFileName);
+                            strcpy(itm->name, m_finddata.cFileName);
                             return true;
                         }
                     #endif
@@ -555,9 +551,9 @@ namespace neon
                 bool closeDir()
                 {
                     #if defined(NEON_PLAT_ISLINUX)
-                        closedir((DIR*)(this->m_handle));
+                        closedir((DIR*)(m_handle));
                     #else
-                        FindClose(this->m_findhnd);
+                        FindClose(m_findhnd);
                     #endif
                     return false;
                 }
@@ -1475,9 +1471,6 @@ namespace neon
         #endif
             return "";
         }
-
-
-    /* topproto */
     }
 
 
@@ -1502,36 +1495,36 @@ namespace neon
     {
         public:
             /*input string pointer */
-            const char* plainstr;
+            const char* m_plainstr;
 
             /* input string length */
-            uint32_t plainlen;
+            uint32_t m_plainlen;
 
             /* the codepoint, or char */
-            uint32_t codepoint;
+            uint32_t m_codepoint;
 
             /* character size in bytes */
-            uint16_t charsize;
+            uint16_t m_charsize;
 
             /* current character position */
-            uint32_t currpos;
+            uint32_t m_currpos;
 
             /* next character position */
-            uint32_t nextpos;
+            uint32_t m_nextpos;
 
             /* number of counter characters currently */
-            uint32_t currcount;
+            uint32_t m_currcount;
 
         public:
             /* allows you to set a custom length. */
             utf8iterator_t(const char* ptr, uint32_t length)
             {
-                this->plainstr = ptr;
-                this->plainlen = length;
-                this->codepoint = 0;
-                this->currpos = 0;
-                this->nextpos = 0;
-                this->currcount = 0;
+                m_plainstr = ptr;
+                m_plainlen = length;
+                m_codepoint = 0;
+                m_currpos = 0;
+                m_nextpos = 0;
+                m_currcount = 0;
             }
 
             /* calculate the number of bytes a UTF8 character occupies in a string. */
@@ -1606,30 +1599,30 @@ namespace neon
             uint16_t next()
             {
                 const char* pointer;
-                if(this->plainstr == nullptr)
+                if(m_plainstr == nullptr)
                 {
                     return 0;
                 }
-                if(this->nextpos < this->plainlen)
+                if(m_nextpos < m_plainlen)
                 {
-                    this->currpos = this->nextpos;
+                    m_currpos = m_nextpos;
                     /* Set Current Pointer */
-                    pointer = this->plainstr + this->nextpos;
-                    this->charsize = charSize(pointer);
-                    if(this->charsize == 0)
+                    pointer = m_plainstr + m_nextpos;
+                    m_charsize = charSize(pointer);
+                    if(m_charsize == 0)
                     {
                         return 0;
                     }
-                    this->nextpos = this->nextpos + this->charsize;
-                    this->codepoint = converter(pointer, this->charsize);
-                    if(this->codepoint == 0)
+                    m_nextpos = m_nextpos + m_charsize;
+                    m_codepoint = converter(pointer, m_charsize);
+                    if(m_codepoint == 0)
                     {
                         return 0;
                     }
-                    this->currcount++;
+                    m_currcount++;
                     return 1;
                 }
-                this->currpos = this->nextpos;
+                m_currpos = m_nextpos;
                 return 0;
             }
 
@@ -1640,26 +1633,26 @@ namespace neon
                 const char* pointer;
                 static char str[10];
                 str[0] = '\0';
-                if(this->plainstr == nullptr)
+                if(m_plainstr == nullptr)
                 {
                     return str;
                 }
-                if(this->charsize == 0)
+                if(m_charsize == 0)
                 {
                     return str;
                 }
-                if(this->charsize == 1)
+                if(m_charsize == 1)
                 {
-                    str[0] = this->plainstr[this->currpos];
+                    str[0] = m_plainstr[m_currpos];
                     str[1] = '\0';
                     return str;
                 }
-                pointer = this->plainstr + this->currpos;
-                for(i = 0; i < this->charsize; i++)
+                pointer = m_plainstr + m_currpos;
+                for(i = 0; i < m_charsize; i++)
                 {
                     str[i] = pointer[i];
                 }
-                str[this->charsize] = '\0';
+                str[m_charsize] = '\0';
                 return str;
             }
 
@@ -1757,9 +1750,9 @@ namespace neon
 
             inline void checkBoundsInsert(size_t pos) const
             {
-                if(pos > this->m_length)
+                if(pos > m_length)
                 {
-                    fprintf(stderr, "StrBuffer: out of bounds error [index: %ld, num_of_bits: %ld]\n", pos, this->m_length);
+                    fprintf(stderr, "StrBuffer: out of bounds error [index: %ld, num_of_bits: %ld]\n", pos, m_length);
                     errno = EDOM;
                     exitOnError();
                 }
@@ -1769,10 +1762,10 @@ namespace neon
             inline void checkBoundsReadRange(size_t start, size_t len) const
             {
                 const char* endstr;
-                if(start + len > this->m_length)
+                if(start + len > m_length)
                 {
-                    endstr = (this->m_length > 5 ? "..." : "");
-                    fprintf(stderr,"StrBuffer: out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n", start, len, this->m_length, (int)utilMin(size_t(5), this->m_length), this->m_data, endstr);
+                    endstr = (m_length > 5 ? "..." : "");
+                    fprintf(stderr,"StrBuffer: out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n", start, len, m_length, (int)utilMin(size_t(5), m_length), m_data, endstr);
                     errno = EDOM;
                     exitOnError();
                 }
@@ -1838,16 +1831,16 @@ namespace neon
         public:
             StrBuffer()
             {
-                this->m_length = 0;
-                this->m_capacity = 0;
-                this->m_data = NULL;
+                m_length = 0;
+                m_capacity = 0;
+                m_data = NULL;
             }
 
             StrBuffer(size_t len)
             {
-                this->m_length = 0;
-                this->m_capacity = 0;
-                this->m_data = NULL;
+                m_length = 0;
+                m_capacity = 0;
+                m_data = NULL;
                 assert(fromPtr(this, len));
             }
 
@@ -1920,18 +1913,18 @@ namespace neon
                 size_t cap;
                 char* newbuf;
                 cap = Util::roundUpToPowe64(newlen + 1);
-                newbuf = (char*)Memory::sysRealloc(this->m_data, cap * sizeof(char));
+                newbuf = (char*)Memory::sysRealloc(m_data, cap * sizeof(char));
                 if(newbuf == NULL)
                 {
                     return false;
                 }
-                this->m_data = newbuf;
-                this->m_capacity = cap;
-                if(this->m_length > newlen)
+                m_data = newbuf;
+                m_capacity = cap;
+                if(m_length > newlen)
                 {
                     /* Buffer was shrunk - re-add null byte */
-                    this->m_length = newlen;
-                    this->m_data[this->m_length] = '\0';
+                    m_length = newlen;
+                    m_data[m_length] = '\0';
                 }
                 return true;
             }
@@ -1940,7 +1933,7 @@ namespace neon
             /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
             void ensureCapacity(size_t len)
             {
-                checkBufCapacity(&this->m_data, &this->m_capacity, len);
+                checkBufCapacity(&m_data, &m_capacity, len);
             }
 
             /* Same as above, but update pointer if it pointed to resized array */
@@ -1948,22 +1941,22 @@ namespace neon
             {
                 size_t oldcap;
                 char* oldbuf;
-                if(this->m_capacity <= size + 1)
+                if(m_capacity <= size + 1)
                 {
-                    oldcap = this->m_capacity;
-                    oldbuf = this->m_data;
-                    if(!this->resize(size))
+                    oldcap = m_capacity;
+                    oldbuf = m_data;
+                    if(!resize(size))
                     {
                         fprintf(stderr,
                                 "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
                                 "buffer. [requested %ld bytes; capacity: %ld bytes]\n",
-                                __FILE__, __LINE__, size, this->m_capacity);
+                                __FILE__, __LINE__, size, m_capacity);
                         exitOnError();
                     }
                     /* ptr may have pointed to this, which has now moved */
                     if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
                     {
-                        *ptr = this->m_data + (*ptr - oldbuf);
+                        *ptr = m_data + (*ptr - oldbuf);
                     }
                 }
             }
@@ -1982,7 +1975,7 @@ namespace neon
 
             void setData(const char* str)
             {
-                this->m_data = (char*)str;
+                m_data = (char*)str;
             }
 
             void setLength(size_t sz)
@@ -2009,8 +2002,8 @@ namespace neon
             {
                 char* pos;
                 char* end;
-                end = this->m_data + this->m_length;
-                for(pos = this->m_data; pos < end; pos++)
+                end = m_data + m_length;
+                for(pos = m_data; pos < end; pos++)
                 {
                     *pos = (char)toupper(*pos);
                 }
@@ -2020,8 +2013,8 @@ namespace neon
             {
                 char* pos;
                 char* end;
-                end = this->m_data + this->m_length;
-                for(pos = this->m_data; pos < end; pos++)
+                end = m_data + m_length;
+                for(pos = m_data; pos < end; pos++)
                 {
                     *pos = (char)tolower(*pos);
                 }
@@ -2033,9 +2026,9 @@ namespace neon
             */
             bool append(const char* str, size_t len)
             {
-                this->ensureCapacityUpdatePtr(this->m_length + len, &str);
-                memcpy(this->m_data + this->m_length, str, len);
-                this->m_data[this->m_length = this->m_length + len] = '\0';
+                ensureCapacityUpdatePtr(m_length + len, &str);
+                memcpy(m_data + m_length, str, len);
+                m_data[m_length = m_length + len] = '\0';
                 return true;
             }
 
@@ -2058,16 +2051,16 @@ namespace neon
                 static auto wrapsprintf = sprintf;
                 size_t buflen;
                 int numchars;
-                this->checkBoundsInsert(pos);
+                checkBoundsInsert(pos);
                 /* Length of remaining buffer */
-                buflen = this->m_capacity - pos;
-                if(buflen == 0 && !this->resize(this->m_capacity << 1))
+                buflen = m_capacity - pos;
+                if(buflen == 0 && !resize(m_capacity << 1))
                 {
                     fprintf(stderr, "%s:%i:Error: Out of memory\n", __FILE__, __LINE__);
                     exitOnError();
                 }
                 /* Make a copy of the list of args incase we need to resize buff and try again */
-                numchars = wrapsnprintf(this->m_data + pos, buflen, fmt, args...);
+                numchars = wrapsnprintf(m_data + pos, buflen, fmt, args...);
                 /*
                 // numchars is the number of chars that would be written (not including '\0')
                 // numchars < 0 => failure
@@ -2080,12 +2073,12 @@ namespace neon
                 /* numchars does not include the null terminating byte */
                 if((size_t)numchars + 1 > buflen)
                 {
-                    this->ensureCapacity(pos + (size_t)numchars);
+                    ensureCapacity(pos + (size_t)numchars);
                     /*
                     // now use the argptr copy we made earlier
                     // Don't need to use vsnprintf now, vsprintf will do since we know it'll fit
                     */
-                    numchars = wrapsprintf(this->m_data + pos, fmt, args...);
+                    numchars = wrapsprintf(m_data + pos, fmt, args...);
                     if(numchars < 0)
                     {
                         fprintf(stderr, "Warning: dyn_strbuf_appendformatv something went wrong..\n");
@@ -2096,7 +2089,7 @@ namespace neon
                 // Don't need to NUL terminate, vsprintf/vnsprintf does that for us
                 // Update m_length
                 */
-                this->m_length = pos + (size_t)numchars;
+                m_length = pos + (size_t)numchars;
                 return numchars;
             }
 
@@ -2107,7 +2100,7 @@ namespace neon
             int appendFormat(const char* fmt, ArgsT&&... args)
             {
                 int numchars;
-                numchars = this->appendFormatAtPos(this->m_length, fmt, args...);
+                numchars = appendFormatAtPos(m_length, fmt, args...);
                 return numchars;
             }
     };
@@ -2283,10 +2276,10 @@ namespace neon
         public:
             static void initStack(RegexContext* ctx, Token* tokens, size_t maxtokens)
             {
-                ctx->isallocated = false;
-                ctx->haderror = false;
-                ctx->tokens = tokens;
-                ctx->maxtokens = maxtokens;
+                ctx->m_isallocated = false;
+                ctx->m_haderror = false;
+                ctx->m_tokens = tokens;
+                ctx->m_maxtokens = maxtokens;
             }
 
             static RegexContext* initAlloc(Token* tokens, size_t maxtokens)
@@ -2298,13 +2291,13 @@ namespace neon
                     return NULL;
                 }
                 initStack(ctx, tokens, maxtokens);
-                ctx->isallocated = true;
+                ctx->m_isallocated = true;
                 return ctx;
             }
 
             static void destroy(RegexContext* ctx)
             {
-                if(!ctx->isallocated)
+                if(!ctx->m_isallocated)
                 {
                     return;
                 }
@@ -2396,21 +2389,21 @@ namespace neon
             }
 
         public:
-            bool haderror;
-            bool isallocated;
-            size_t maxtokens;
-            size_t tokencount;
-            char errorbuf[1024];
-            Token* tokens;
+            bool m_haderror;
+            bool m_isallocated;
+            size_t m_maxtokens;
+            size_t m_tokencount;
+            char m_errorbuf[1024];
+            Token* m_tokens;
 
         public:
             template<typename... ArgsT>
             NEON_INLINE void setError(const char* fmt, ArgsT&&... args)
             {
                 static constexpr auto tmpsprintf = sprintf;
-                this->haderror = true;
+                m_haderror = true;
                 fprintf(stderr, "ERROR: ");
-                tmpsprintf(this->errorbuf, fmt, args...);
+                tmpsprintf(m_errorbuf, fmt, args...);
             }
 
             bool rewindOrFail(uint64_t& k, uint32_t& i, uint16_t& stackn, uint8_t& justrewinded, uint64_t& range_min, uint64_t& range_max, uint32_t* qgroupstack, uint32_t* qgroupstate, MState* rewindstack)
@@ -2430,10 +2423,10 @@ namespace neon
                 assert(rewindstack[stackn].i <= i);
                 i = rewindstack[stackn].i;
                 k = rewindstack[stackn].k;
-                if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                if(m_tokens[k].kind == RXTOKTYP_CLOSE)
                 {
-                    qgroupstate[this->tokens[k].mask[0]] = rewindstack[stackn].group_state;
-                    qgroupstack[this->tokens[k].mask[0]] = rewindstack[stackn].prev;
+                    qgroupstate[m_tokens[k].mask[0]] = rewindstack[stackn].group_state;
+                    qgroupstack[m_tokens[k].mask[0]] = rewindstack[stackn].prev;
                 }
                 k -= 1;
                 return true;
@@ -2457,11 +2450,11 @@ namespace neon
                 {
                     s.prev = 0xFAC7;
                 }
-                else if(this->tokens[s.k].kind == RXTOKTYP_CLOSE)
+                else if(m_tokens[s.k].kind == RXTOKTYP_CLOSE)
                 {
-                    s.group_state = qgroupstate[this->tokens[s.k].mask[0]];
-                    s.prev = qgroupstack[this->tokens[s.k].mask[0]];
-                    qgroupstack[this->tokens[s.k].mask[0]] = stackn;
+                    s.group_state = qgroupstate[m_tokens[s.k].mask[0]];
+                    s.prev = qgroupstack[m_tokens[s.k].mask[0]];
+                    qgroupstack[m_tokens[s.k].mask[0]] = stackn;
                 }
                 rewindstack[stackn++] = s;
                 return true;
@@ -2472,12 +2465,12 @@ namespace neon
              -1: Regex string is invalid or using unsupported features or too long.
              -2: Provided buffer not long enough. Give up, or reallocate with more length and retry.
               Returns 0 on success.
-              On call, tokencount pointer must point to the number of tokens that can be written to the tokens buffer.
+              On call, m_tokencount pointer must point to the number of tokens that can be written to the m_tokens buffer.
               On successful return, the number of actually used tokens is written to tokencount.
-              Sets tokencount to zero ifa regex is not created but no error happened (e.g. empty pattern).
+              Sets m_tokencount to zero ifa regex is not created but no error happened (e.g. empty pattern).
               Flags: Not yet used.
               SAFETY: Pattern must be null-terminated.
-              SAFETY: tokens buffer must have at least the input tokencount number of Token objects. They are allowed to be uninitialized.
+              SAFETY: m_tokens buffer must have at least the input m_tokencount number of Token objects. They are allowed to be uninitialized.
             */
             NEON_INLINE int parse(const char* pattern, int32_t flags)
             {
@@ -2508,9 +2501,9 @@ namespace neon
                 ptrdiff_t found;
                 uint16_t m[16];
                 Token token;
-                tokenslen = this->maxtokens;
+                tokenslen = m_maxtokens;
                 patternlen = strlen(pattern);
-                if(this->maxtokens == 0)
+                if(m_maxtokens == 0)
                 {
                     return -2;
                 }
@@ -2810,7 +2803,7 @@ namespace neon
                                 found = -1;
                                 for(l = k - 1; l >= 0; l--)
                                 {
-                                    if(this->tokens[l].kind == RXTOKTYP_NCOPEN || this->tokens[l].kind == RXTOKTYP_OPEN)
+                                    if(m_tokens[l].kind == RXTOKTYP_NCOPEN || m_tokens[l].kind == RXTOKTYP_OPEN)
                                     {
                                         if(balance == 0)
                                         {
@@ -2822,7 +2815,7 @@ namespace neon
                                             balance -= 1;
                                         }
                                     }
-                                    else if(this->tokens[l].kind == RXTOKTYP_CLOSE)
+                                    else if(m_tokens[l].kind == RXTOKTYP_CLOSE)
                                     {
                                         balance += 1;
                                     }
@@ -2839,9 +2832,9 @@ namespace neon
                                     return -1; /*  too long */
                                 }
                                 token.pair_offset = -diff;
-                                this->tokens[found].pair_offset = diff;
+                                m_tokens[found].pair_offset = diff;
                                 /*  phantom group foratomic group emulation */
-                                if(this->tokens[found].mode == RXTOKMODE_POSSESSIVE)
+                                if(m_tokens[found].mode == RXTOKMODE_POSSESSIVE)
                                 {
                                     if(!pushToken(token, tokenslen, &k, &macn))
                                     {
@@ -2850,7 +2843,7 @@ namespace neon
                                     token.kind = RXTOKTYP_CLOSE;
                                     token.mode = RXTOKMODE_POSSESSIVE;
                                     token.pair_offset = -diff - 2;
-                                    this->tokens[found - 1].pair_offset = diff + 2;
+                                    m_tokens[found - 1].pair_offset = diff + 2;
                                 }
                             }
                             else if(c == '?' || c == '+' || c == '*' || c == '{')
@@ -3098,41 +3091,41 @@ namespace neon
                 {
                     return -2;
                 }
-                this->tokens[0].pair_offset = k - 2;
-                this->tokens[k - 2].pair_offset = -(k - 2);
-                this->tokencount = k;
+                m_tokens[0].pair_offset = k - 2;
+                m_tokens[k - 2].pair_offset = -(k - 2);
+                m_tokencount = k;
                 /*  copy quantifiers from )s to (s (so (s know whether they're optional) */
                 /*  also take the opportunity to smuggle "quantified group index" into the mask field forthe ) */
                 n = 0;
                 for(k2 = 0; k2 < k; k2++)
                 {
-                    if(this->tokens[k2].kind == RXTOKTYP_CLOSE)
+                    if(m_tokens[k2].kind == RXTOKTYP_CLOSE)
                     {
-                        this->tokens[k2].mask[0] = n++;
-                        k3 = k2 + this->tokens[k2].pair_offset;
-                        this->tokens[k3].count_lo = this->tokens[k2].count_lo;
-                        this->tokens[k3].count_hi = this->tokens[k2].count_hi;
-                        this->tokens[k3].mask[0] = n++;
-                        this->tokens[k3].mode = this->tokens[k2].mode;
+                        m_tokens[k2].mask[0] = n++;
+                        k3 = k2 + m_tokens[k2].pair_offset;
+                        m_tokens[k3].count_lo = m_tokens[k2].count_lo;
+                        m_tokens[k3].count_hi = m_tokens[k2].count_hi;
+                        m_tokens[k3].mask[0] = n++;
+                        m_tokens[k3].mode = m_tokens[k2].mode;
                         /* if(n > 65535) */
                         if(n > 1024)
                         {
                             return -1; /*  too many quantified groups */
                         }
                     }
-                    else if(this->tokens[k2].kind == RXTOKTYP_OR || this->tokens[k2].kind == RXTOKTYP_OPEN || this->tokens[k2].kind == RXTOKTYP_NCOPEN)
+                    else if(m_tokens[k2].kind == RXTOKTYP_OR || m_tokens[k2].kind == RXTOKTYP_OPEN || m_tokens[k2].kind == RXTOKTYP_NCOPEN)
                     {
                         /*  find next | or ) and how far away it is. store in token */
                         balance = 0;
                         found = -1;
                         for(l = k2 + 1; l < tokenslen; l++)
                         {
-                            if(this->tokens[l].kind == RXTOKTYP_OR && balance == 0)
+                            if(m_tokens[l].kind == RXTOKTYP_OR && balance == 0)
                             {
                                 found = l;
                                 break;
                             }
-                            else if(this->tokens[l].kind == RXTOKTYP_CLOSE)
+                            else if(m_tokens[l].kind == RXTOKTYP_CLOSE)
                             {
                                 if(balance == 0)
                                 {
@@ -3144,7 +3137,7 @@ namespace neon
                                     balance -= 1;
                                 }
                             }
-                            else if(this->tokens[l].kind == RXTOKTYP_NCOPEN || this->tokens[l].kind == RXTOKTYP_OPEN)
+                            else if(m_tokens[l].kind == RXTOKTYP_NCOPEN || m_tokens[l].kind == RXTOKTYP_OPEN)
                             {
                                 balance += 1;
                             }
@@ -3160,13 +3153,13 @@ namespace neon
                             setError("too long...");
                             return -1; /*  too long */
                         }
-                        if(this->tokens[k2].kind == RXTOKTYP_OR)
+                        if(m_tokens[k2].kind == RXTOKTYP_OR)
                         {
-                            this->tokens[k2].pair_offset = diff;
+                            m_tokens[k2].pair_offset = diff;
                         }
                         else
                         {
-                            this->tokens[k2].mask[15] = diff;
+                            m_tokens[k2].mask[15] = diff;
                         }
                     }
                 }
@@ -3224,28 +3217,28 @@ namespace neon
                 tokenslen = 0;
                 k = 0;
                 caps = 0;
-                while(this->tokens[k].kind != RXTOKTYP_END)
+                while(m_tokens[k].kind != RXTOKTYP_END)
                 {
-                    if(this->tokens[k].kind == RXTOKTYP_OPEN && caps < capslots)
+                    if(m_tokens[k].kind == RXTOKTYP_OPEN && caps < capslots)
                     {
-                        qgroupcapindex[this->tokens[k].mask[0]] = caps;
-                        qgroupcapindex[this->tokens[k + this->tokens[k].pair_offset].mask[0]] = caps;
+                        qgroupcapindex[m_tokens[k].mask[0]] = caps;
+                        qgroupcapindex[m_tokens[k + m_tokens[k].pair_offset].mask[0]] = caps;
                         cappos[caps] = -1;
                         capspan[caps] = -1;
                         caps += 1;
                     }
                     k += 1;
-                    if(this->tokens[k].kind == RXTOKTYP_CLOSE || this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                    if(m_tokens[k].kind == RXTOKTYP_CLOSE || m_tokens[k].kind == RXTOKTYP_OPEN || m_tokens[k].kind == RXTOKTYP_NCOPEN)
                     {
-                        if(this->tokens[k].mask[0] >= auxstatssize)
+                        if(m_tokens[k].mask[0] >= auxstatssize)
                         {
                             setError("too many qualified groups. returning");
                             /* OOM: too many quantified groups */
                             return -2;
                         }
-                        qgroupstate[this->tokens[k].mask[0]] = 0;
-                        qgroupstack[this->tokens[k].mask[0]] = 0;
-                        qgroupacceptszero[this->tokens[k].mask[0]] = 0;
+                        qgroupstate[m_tokens[k].mask[0]] = 0;
+                        qgroupstack[m_tokens[k].mask[0]] = 0;
+                        qgroupacceptszero[m_tokens[k].mask[0]] = 0;
                     }
                 }
                 tokenslen = k;
@@ -3270,7 +3263,7 @@ namespace neon
                         setError("iteration limit exceeded. returning");
                         return -2;
                     }
-                    if(this->tokens[k].kind == RXTOKTYP_CARET)
+                    if(m_tokens[k].kind == RXTOKTYP_CARET)
                     {
                         if(i != 0)
                         {
@@ -3281,7 +3274,7 @@ namespace neon
                         }
                         continue;
                     }
-                    else if(this->tokens[k].kind == RXTOKTYP_DOLLAR)
+                    else if(m_tokens[k].kind == RXTOKTYP_DOLLAR)
                     {
                         if(text[i] != 0)
                         {
@@ -3292,7 +3285,7 @@ namespace neon
                         }
                         continue;
                     }
-                    else if(this->tokens[k].kind == RXTOKTYP_BOUND)
+                    else if(m_tokens[k].kind == RXTOKTYP_BOUND)
                     {
                         if(i == 0 && !checkIsW(wmask, text[i]))
                         {
@@ -3316,7 +3309,7 @@ namespace neon
                             }
                         }
                     }
-                    else if(this->tokens[k].kind == RXTOKTYP_NBOUND)
+                    else if(m_tokens[k].kind == RXTOKTYP_NBOUND)
                     {
                         if(i == 0 && checkIsW(wmask, text[i]))
                         {
@@ -3343,11 +3336,11 @@ namespace neon
                     else
                     {
                         /* deliberately unmatchable token (e.g. a{0}, a{0,0}) */
-                        if(this->tokens[k].count_hi == 1)
+                        if(m_tokens[k].count_hi == 1)
                         {
-                            if(this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                            if(m_tokens[k].kind == RXTOKTYP_OPEN || m_tokens[k].kind == RXTOKTYP_NCOPEN)
                             {
-                                k += this->tokens[k].pair_offset;
+                                k += m_tokens[k].pair_offset;
                             }
                             else
                             {
@@ -3355,15 +3348,15 @@ namespace neon
                             }
                             continue;
                         }
-                        if(this->tokens[k].kind == RXTOKTYP_OPEN || this->tokens[k].kind == RXTOKTYP_NCOPEN)
+                        if(m_tokens[k].kind == RXTOKTYP_OPEN || m_tokens[k].kind == RXTOKTYP_NCOPEN)
                         {
                             if(!justrewinded)
                             {
                                 /*  need this to be able to detect and reject zero-size matches */
-                                /* qgroupstate[this->tokens[k].mask[0]] = i; */
+                                /* qgroupstate[m_tokens[k].mask[0]] = i; */
 
                                 /*  ifwe're lazy and the min length is 0, we need to try the non-group case first */
-                                if((this->tokens[k].mode & RXTOKMODE_LAZY) && (this->tokens[k].count_lo == 0 || qgroupacceptszero[this->tokens[k + this->tokens[k].pair_offset].mask[0]]))
+                                if((m_tokens[k].mode & RXTOKMODE_LAZY) && (m_tokens[k].count_lo == 0 || qgroupacceptszero[m_tokens[k + m_tokens[k].pair_offset].mask[0]]))
                                 {
                                     range_min = 0;
                                     range_max = 0;
@@ -3371,7 +3364,7 @@ namespace neon
                                     {
                                         return -2;
                                     };
-                                    k += this->tokens[k].pair_offset; /*  automatic += 1 will put us past the matching ) */
+                                    k += m_tokens[k].pair_offset; /*  automatic += 1 will put us past the matching ) */
                                 }
                                 else
                                 {
@@ -3390,27 +3383,27 @@ namespace neon
                                 if(range_min != 0)
                                 {
                                     k += range_min;
-                                    if(this->tokens[k - 1].kind == RXTOKTYP_OR)
+                                    if(m_tokens[k - 1].kind == RXTOKTYP_OR)
                                     {
-                                        k += this->tokens[k - 1].pair_offset - 1;
+                                        k += m_tokens[k - 1].pair_offset - 1;
                                     }
-                                    else if(this->tokens[k - 1].kind == RXTOKTYP_OPEN || this->tokens[k - 1].kind == RXTOKTYP_NCOPEN)
+                                    else if(m_tokens[k - 1].kind == RXTOKTYP_OPEN || m_tokens[k - 1].kind == RXTOKTYP_NCOPEN)
                                     {
-                                        k += this->tokens[k - 1].mask[15] - 1;
+                                        k += m_tokens[k - 1].mask[15] - 1;
                                     }
-                                    if(this->tokens[k].kind == RXTOKTYP_END) /*  unbalanced parens */
+                                    if(m_tokens[k].kind == RXTOKTYP_END) /*  unbalanced parens */
                                     {
                                         return -3;
                                     }
-                                    if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                                    if(m_tokens[k].kind == RXTOKTYP_CLOSE)
                                     {
                                         /*  do nothing and continue on ifwe don't need this group */
-                                        if(this->tokens[k].count_lo == 0 || qgroupacceptszero[this->tokens[k].mask[0]])
+                                        if(m_tokens[k].count_lo == 0 || qgroupacceptszero[m_tokens[k].mask[0]])
                                         {
-                                            qgroupstate[this->tokens[k].mask[0]] = 0;
-                                            if(!(this->tokens[k].mode & RXTOKMODE_LAZY))
+                                            qgroupstate[m_tokens[k].mask[0]] = 0;
+                                            if(!(m_tokens[k].mode & RXTOKMODE_LAZY))
                                             {
-                                                qgroupstack[this->tokens[k].mask[0]] = 0;
+                                                qgroupstack[m_tokens[k].mask[0]] = 0;
                                             }
                                             continue;
                                         }
@@ -3425,7 +3418,7 @@ namespace neon
                                         }
                                     }
 
-                                    assert(this->tokens[k].kind == RXTOKTYP_OR);
+                                    assert(m_tokens[k].kind == RXTOKTYP_OR);
                                 }
                                 kdiff = k - origk;
                                 range_min = kdiff + 1;
@@ -3435,13 +3428,13 @@ namespace neon
                                 };
                             }
                         }
-                        else if(this->tokens[k].kind == RXTOKTYP_CLOSE)
+                        else if(m_tokens[k].kind == RXTOKTYP_CLOSE)
                         {
                             /*  unquantified */
-                            if(this->tokens[k].count_lo == 1 && this->tokens[k].count_hi == 2)
+                            if(m_tokens[k].count_lo == 1 && m_tokens[k].count_hi == 2)
                             {
                                 /*  forcaptures */
-                                capindex = qgroupcapindex[this->tokens[k].mask[0]];
+                                capindex = qgroupcapindex[m_tokens[k].mask[0]];
                                 if(capindex != 0xFFFF)
                                 {
                                     if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3455,28 +3448,28 @@ namespace neon
                             {
                                 if(!justrewinded)
                                 {
-                                    prev = qgroupstack[this->tokens[k].mask[0]];
+                                    prev = qgroupstack[m_tokens[k].mask[0]];
 
-                                    range_max = this->tokens[k].count_hi;
+                                    range_max = m_tokens[k].count_hi;
                                     range_max -= 1;
-                                    range_min = qgroupacceptszero[this->tokens[k].mask[0]] ? 0 : this->tokens[k].count_lo;
-                                    /* assert(qgroupstate[this->tokens[k + this->tokens[k].pair_offset].mask[0]] <= i); */
+                                    range_min = qgroupacceptszero[m_tokens[k].mask[0]] ? 0 : m_tokens[k].count_lo;
+                                    /* assert(qgroupstate[m_tokens[k + m_tokens[k].pair_offset].mask[0]] <= i); */
                                     /* if(prev) assert(rewindstack[prev].i <= i); */
                                     /*  minimum requirement not yet met */
-                                    if(qgroupstate[this->tokens[k].mask[0]] + 1 < range_min)
+                                    if(qgroupstate[m_tokens[k].mask[0]] + 1 < range_min)
                                     {
-                                        qgroupstate[this->tokens[k].mask[0]] += 1;
+                                        qgroupstate[m_tokens[k].mask[0]] += 1;
                                         if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                         {
                                             return -2;
                                         };
 
-                                        k += this->tokens[k].pair_offset; /*  back to start of group */
+                                        k += m_tokens[k].pair_offset; /*  back to start of group */
                                         k -= 1; /*  ensure we actually hit the group node next and not the node after it */
                                         continue;
                                     }
                                     /*  maximum allowance exceeded */
-                                    else if(this->tokens[k].count_hi != 0 && qgroupstate[this->tokens[k].mask[0]] + 1 > range_max)
+                                    else if(m_tokens[k].count_hi != 0 && qgroupstate[m_tokens[k].mask[0]] + 1 > range_max)
                                     {
                                         range_max -= 1;
                                         if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3493,7 +3486,7 @@ namespace neon
                                     {
                                         /*  find matching open paren */
                                         n = stackn - 1;
-                                        while(n > 0 && rewindstack[n].k != k + this->tokens[k].pair_offset)
+                                        while(n > 0 && rewindstack[n].k != k + m_tokens[k].pair_offset)
                                         {
                                             n -= 1;
                                         }
@@ -3505,40 +3498,40 @@ namespace neon
                                     }
 
                                     /*  reject zero-length matches */
-                                    if((forcezero || (prev != 0 && (uint32_t)rewindstack[prev].i == (uint32_t)i))) /*   && qgroupstate[this->tokens[k].mask[0]] > 0 */
+                                    if((forcezero || (prev != 0 && (uint32_t)rewindstack[prev].i == (uint32_t)i))) /*   && qgroupstate[m_tokens[k].mask[0]] > 0 */
                                     {
-                                        qgroupacceptszero[this->tokens[k].mask[0]] = 1;
+                                        qgroupacceptszero[m_tokens[k].mask[0]] = 1;
                                         if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                         {
                                             return -1;
                                         }
-                                        /* range_max = qgroupstate[this->tokens[k].mask[0]]; */
+                                        /* range_max = qgroupstate[m_tokens[k].mask[0]]; */
                                         /* range_min = 0; */
                                     }
-                                    else if(this->tokens[k].mode & RXTOKMODE_LAZY) /*  lazy */
+                                    else if(m_tokens[k].mode & RXTOKMODE_LAZY) /*  lazy */
                                     {
                                         if(prev)
                                         {
                                         }
                                         /*  continue on to past the group; group retry is in rewind state */
-                                        qgroupstate[this->tokens[k].mask[0]] += 1;
+                                        qgroupstate[m_tokens[k].mask[0]] += 1;
                                         if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                         {
                                             return -2;
                                         };
 
-                                        qgroupstate[this->tokens[k].mask[0]] = 0;
+                                        qgroupstate[m_tokens[k].mask[0]] = 0;
                                     }
                                     else /*  greedy */
                                     {
                                         /*  clear unwanted memory ifpossessive */
-                                        if((this->tokens[k].mode & RXTOKMODE_POSSESSIVE))
+                                        if((m_tokens[k].mode & RXTOKMODE_POSSESSIVE))
                                         {
                                             k2 = k;
                                             /*  special case forfirst, only rewind to (, not to ) */
-                                            if(qgroupstate[this->tokens[k].mask[0]] == 0)
+                                            if(qgroupstate[m_tokens[k].mask[0]] == 0)
                                             {
-                                                k2 = k + this->tokens[k].pair_offset;
+                                                k2 = k + m_tokens[k].pair_offset;
                                             }
                                             if(stackn == 0)
                                             {
@@ -3555,15 +3548,15 @@ namespace neon
                                             }
                                         }
                                         /*  continue to next match ifsane */
-                                        if((uint32_t)qgroupstate[this->tokens[k + this->tokens[k].pair_offset].mask[0]] < (uint32_t)i)
+                                        if((uint32_t)qgroupstate[m_tokens[k + m_tokens[k].pair_offset].mask[0]] < (uint32_t)i)
                                         {
-                                            qgroupstate[this->tokens[k].mask[0]] += 1;
+                                            qgroupstate[m_tokens[k].mask[0]] += 1;
                                             if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                             {
                                                 return -2;
                                             };
 
-                                            k += this->tokens[k].pair_offset; /*  back to start of group */
+                                            k += m_tokens[k].pair_offset; /*  back to start of group */
                                             k -= 1; /*  ensure we actually hit the group node next and not the node after it */
                                         }
                                         else
@@ -3575,7 +3568,7 @@ namespace neon
                                 {
                                     justrewinded = 0;
 
-                                    if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                    if(m_tokens[k].mode & RXTOKMODE_LAZY)
                                     {
                                         /*  lazy rewind: need to try matching the group again */
                                         if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3583,15 +3576,15 @@ namespace neon
                                             return -2;
                                         };
 
-                                        qgroupstack[this->tokens[k].mask[0]] = stackn;
-                                        k += this->tokens[k].pair_offset; /*  back to start of group */
+                                        qgroupstack[m_tokens[k].mask[0]] = stackn;
+                                        k += m_tokens[k].pair_offset; /*  back to start of group */
                                         k -= 1; /*  ensure we actually hit the group node next and not the node after it */
                                     }
                                     else
                                     {
                                         /*  greedy. ifwe're going to go outside the acceptable range, rewind */
                                         /* uint64_t oldi = i; */
-                                        if(qgroupstate[this->tokens[k].mask[0]] < range_min && !qgroupacceptszero[this->tokens[k].mask[0]])
+                                        if(qgroupstate[m_tokens[k].mask[0]] < range_min && !qgroupacceptszero[m_tokens[k].mask[0]])
                                         {
                                             /* i = oldi; */
                                             if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3602,9 +3595,9 @@ namespace neon
                                         /*  otherwise continue on to past the group */
                                         else
                                         {
-                                            qgroupstate[this->tokens[k].mask[0]] = 0;
+                                            qgroupstate[m_tokens[k].mask[0]] = 0;
                                             /*  forcaptures */
-                                            capindex = qgroupcapindex[this->tokens[k].mask[0]];
+                                            capindex = qgroupcapindex[m_tokens[k].mask[0]];
                                             if(capindex != 0xFFFF)
                                             {
                                                 if(!rewindDoSaveRaw(k, 1, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3617,24 +3610,24 @@ namespace neon
                                 }
                             }
                         }
-                        else if(this->tokens[k].kind == RXTOKTYP_OR)
+                        else if(m_tokens[k].kind == RXTOKTYP_OR)
                         {
-                            k += this->tokens[k].pair_offset;
+                            k += m_tokens[k].pair_offset;
                             k -= 1;
                         }
-                        else if(this->tokens[k].kind == RXTOKTYP_NORMAL)
+                        else if(m_tokens[k].kind == RXTOKTYP_NORMAL)
                         {
                             if(!justrewinded)
                             {
                                 ntcnt = 0;
                                 /*  do whatever the obligatory minimum amount of matching is */
                                 oldi = i;
-                                while(ntcnt < this->tokens[k].count_lo && text[i] != 0 && checkMask(this->tokens, k, text[i]))
+                                while(ntcnt < m_tokens[k].count_lo && text[i] != 0 && checkMask(m_tokens, k, text[i]))
                                 {
                                     i += 1;
                                     ntcnt += 1;
                                 }
-                                if(ntcnt < this->tokens[k].count_lo)
+                                if(ntcnt < m_tokens[k].count_lo)
                                 {
                                     i = oldi;
                                     if(!rewindOrFail(i, k, stackn, justrewinded, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
@@ -3643,10 +3636,10 @@ namespace neon
                                     }
                                     continue;
                                 }
-                                if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                if(m_tokens[k].mode & RXTOKMODE_LAZY)
                                 {
                                     range_min = ntcnt;
-                                    range_max = this->tokens[k].count_hi - 1;
+                                    range_max = m_tokens[k].count_hi - 1;
                                     if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                     {
                                         return -2;
@@ -3654,19 +3647,19 @@ namespace neon
                                 }
                                 else
                                 {
-                                    hiclimit = this->tokens[k].count_hi;
+                                    hiclimit = m_tokens[k].count_hi;
                                     if(hiclimit == 0)
                                     {
                                         hiclimit = ~hiclimit;
                                     }
                                     range_min = ntcnt;
-                                    while(text[i] != 0 && checkMask(this->tokens, k, text[i]) && ntcnt + 1 < hiclimit)
+                                    while(text[i] != 0 && checkMask(m_tokens, k, text[i]) && ntcnt + 1 < hiclimit)
                                     {
                                         i += 1;
                                         ntcnt += 1;
                                     }
                                     range_max = ntcnt;
-                                    if(!(this->tokens[k].mode & RXTOKMODE_POSSESSIVE))
+                                    if(!(m_tokens[k].mode & RXTOKMODE_POSSESSIVE))
                                     {
                                         if(!rewindDoSaveRaw(k, 0, i, stackn, range_min, range_max, qgroupstack, qgroupstate, rewindstack))
                                         {
@@ -3678,14 +3671,14 @@ namespace neon
                             else
                             {
                                 justrewinded = 0;
-                                if(this->tokens[k].mode & RXTOKMODE_LAZY)
+                                if(m_tokens[k].mode & RXTOKMODE_LAZY)
                                 {
                                     rangelimit = range_max;
                                     if(rangelimit == 0)
                                     {
                                         rangelimit = ~rangelimit;
                                     }
-                                    if(checkMask(this->tokens, k, text[i]) && text[i] != 0 && range_min < rangelimit)
+                                    if(checkMask(m_tokens, k, text[i]) && text[i] != 0 && range_min < rangelimit)
                                     {
                                         i += 1;
                                         range_min += 1;
@@ -3725,7 +3718,7 @@ namespace neon
                         }
                         else
                         {
-                            fprintf(stderr, "unimplemented token kind %d\n", this->tokens[k].kind);
+                            fprintf(stderr, "unimplemented token kind %d\n", m_tokens[k].kind);
                             assert(0);
                         }
                     }
@@ -3742,15 +3735,15 @@ namespace neon
                     for(n = 0; n < stackn; n++)
                     {
                         MState s = rewindstack[n];
-                        kind = this->tokens[s.k].kind;
+                        kind = m_tokens[s.k].kind;
                         if(kind == RXTOKTYP_OPEN || kind == RXTOKTYP_CLOSE)
                         {
-                            capindex = qgroupcapindex[this->tokens[s.k].mask[0]];
+                            capindex = qgroupcapindex[m_tokens[s.k].mask[0]];
                             if(capindex == 0xFFFF)
                             {
                                 continue;
                             }
-                            if(this->tokens[s.k].kind == RXTOKTYP_OPEN)
+                            if(m_tokens[s.k].kind == RXTOKTYP_OPEN)
                             {
                                 cappos[capindex] = s.i;
                             }
@@ -3791,7 +3784,7 @@ namespace neon
 
             NEON_INLINE bool pushToken(Token token, int64_t tokenslen, int16_t* k, int* macn)
             {
-                if(((*k) == 0) || this->tokens[(*k) - 1].kind != token.kind || (token.kind != RXTOKTYP_BOUND && token.kind != RXTOKTYP_NBOUND))
+                if(((*k) == 0) || m_tokens[(*k) - 1].kind != token.kind || (token.kind != RXTOKTYP_BOUND && token.kind != RXTOKTYP_NBOUND))
                 {
                     if(token.mode & RXTOKMODE_INVERTED)
                     {
@@ -3802,7 +3795,7 @@ namespace neon
                         puts("buffer overflow");
                         return false;
                     }
-                    this->tokens[(*k)++] = token;
+                    m_tokens[(*k)++] = token;
                     clearToken(&token);
                 }
                 return true;
@@ -3851,18 +3844,18 @@ namespace neon
             static bool makeStackIO(IOStream* pr, FILE* fh, bool shouldclose)
             {
                 initStreamVars(pr, PRMODE_FILE);
-                pr->fromstack = true;
-                pr->handle = fh;
-                pr->shouldclose = shouldclose;
+                pr->m_fromstack = true;
+                pr->m_handle = fh;
+                pr->m_shouldclose = shouldclose;
                 return true;
             }
 
             static bool makeStackString(IOStream* pr)
             {
                 initStreamVars(pr, PRMODE_STRING);
-                pr->fromstack = true;
-                pr->wrmode = PRMODE_STRING;
-                StrBuffer::fromPtr(&pr->strbuf, 0);
+                pr->m_fromstack = true;
+                pr->m_wrmode = PRMODE_STRING;
+                StrBuffer::fromPtr(&pr->m_strbuf, 0);
                 return true;
             }
 
@@ -3883,8 +3876,8 @@ namespace neon
             {
                 IOStream* pr;
                 pr = makeUndefStream(PRMODE_FILE);
-                pr->handle = fh;
-                pr->shouldclose = shouldclose;
+                pr->m_handle = fh;
+                pr->m_shouldclose = shouldclose;
                 return pr;
             }
 
@@ -3894,28 +3887,28 @@ namespace neon
                 {
                     return;
                 }
-                if(pr->wrmode == PRMODE_UNDEFINED)
+                if(pr->m_wrmode == PRMODE_UNDEFINED)
                 {
                     return;
                 }
-                /*fprintf(stderr, "IOStream::destroy: pr->wrmode=%d\n", pr->wrmode);*/
-                if(pr->wrmode == PRMODE_STRING)
+                /*fprintf(stderr, "IOStream::destroy: pr->m_wrmode=%d\n", pr->m_wrmode);*/
+                if(pr->m_wrmode == PRMODE_STRING)
                 {
-                    if(!pr->stringtaken)
+                    if(!pr->m_stringtaken)
                     {
-                        StrBuffer::destroyFromPtr(&pr->strbuf);
+                        StrBuffer::destroyFromPtr(&pr->m_strbuf);
                     }
                 }
-                else if(pr->wrmode == PRMODE_FILE)
+                else if(pr->m_wrmode == PRMODE_FILE)
                 {
-                    if(pr->shouldclose)
+                    if(pr->m_shouldclose)
                     {
             #if 0
-                        fclose(pr->handle);
+                        fclose(pr->m_handle);
             #endif
                     }
                 }
-                if(!pr->fromstack)
+                if(!pr->m_fromstack)
                 {
                     Memory::sysFree(pr);
                     pr = nullptr;
@@ -3924,34 +3917,34 @@ namespace neon
 
             static void initStreamVars(IOStream* pr, Mode mode)
             {
-                pr->fromstack = false;
-                pr->wrmode = PRMODE_UNDEFINED;
-                pr->shouldclose = false;
-                pr->shouldflush = false;
-                pr->stringtaken = false;
-                pr->shortenvalues = false;
-                pr->jsonmode = false;
-                pr->maxvallength = 15;
-                pr->handle = nullptr;
-                pr->wrmode = mode;
+                pr->m_fromstack = false;
+                pr->m_wrmode = PRMODE_UNDEFINED;
+                pr->m_shouldclose = false;
+                pr->m_shouldflush = false;
+                pr->m_stringtaken = false;
+                pr->m_shortenvalues = false;
+                pr->m_jsonmode = false;
+                pr->m_maxvallength = 15;
+                pr->m_handle = nullptr;
+                pr->m_wrmode = mode;
             }
 
         public:
             /* if file: should be closed when writer is destroyed? */
-            uint8_t shouldclose;
+            uint8_t m_shouldclose;
             /* if file: should write operations be flushed via fflush()? */
-            uint8_t shouldflush;
-            /* if string: true if $strbuf was taken via take() */
-            uint8_t stringtaken;
+            uint8_t m_shouldflush;
+            /* if string: true if $m_strbuf was taken via take() */
+            uint8_t m_stringtaken;
             /* was this writer instance created on stack? */
-            uint8_t fromstack;
-            uint8_t shortenvalues;
-            uint8_t jsonmode;
-            size_t maxvallength;
+            uint8_t m_fromstack;
+            uint8_t m_shortenvalues;
+            uint8_t m_jsonmode;
+            size_t m_maxvallength;
             /* the mode that determines what writer actually does */
-            Mode wrmode;
-            StrBuffer strbuf;
-            FILE* handle;
+            Mode m_wrmode;
+            StrBuffer m_strbuf;
+            FILE* m_handle;
 
         public:
 
@@ -3959,24 +3952,24 @@ namespace neon
             {
                 size_t xlen;
                 String* os;
-                xlen = this->strbuf.length();
-                os = Wrappers::wrapMakeFromStrBuf(this->strbuf, Util::hashString(this->strbuf.data(), xlen), xlen);
-                this->stringtaken = true;
+                xlen = m_strbuf.length();
+                os = Wrappers::wrapMakeFromStrBuf(m_strbuf, Util::hashString(m_strbuf.data(), xlen), xlen);
+                m_stringtaken = true;
                 return os;
             }
 
             String* copyString()
             {
                 String* os;
-                os = Wrappers::wrapStringCopy(this->strbuf.data(), this->strbuf.length());
+                os = Wrappers::wrapStringCopy(m_strbuf.data(), m_strbuf.length());
                 return os;
             }
 
             void flush()
             {
-                // if(this->shouldflush)
+                // if(m_shouldflush)
                 {
-                    fflush(this->handle);
+                    fflush(m_handle);
                 }
             }
 
@@ -3987,14 +3980,14 @@ namespace neon
                 chlen = sizeof(char);
                 if(elen > 0)
                 {
-                    if(this->wrmode == PRMODE_FILE)
+                    if(m_wrmode == PRMODE_FILE)
                     {
-                        fwrite(estr, chlen, elen, this->handle);
+                        fwrite(estr, chlen, elen, m_handle);
                         flush();
                     }
-                    else if(this->wrmode == PRMODE_STRING)
+                    else if(m_wrmode == PRMODE_STRING)
                     {
-                        this->strbuf.append(estr, elen);
+                        m_strbuf.append(estr, elen);
                     }
                     else
                     {
@@ -4012,14 +4005,14 @@ namespace neon
             bool writeChar(int b)
             {
                 char ch;
-                if(this->wrmode == PRMODE_STRING)
+                if(m_wrmode == PRMODE_STRING)
                 {
                     ch = b;
                     writeString(&ch, 1);
                 }
-                else if(this->wrmode == PRMODE_FILE)
+                else if(m_wrmode == PRMODE_FILE)
                 {
-                    fputc(b, this->handle);
+                    fputc(b, m_handle);
                     flush();
                 }
                 return true;
@@ -4115,13 +4108,13 @@ namespace neon
             bool format(const char* fmt, ArgsT&&... args)
             {
                 constexpr static auto tmpfprintf = fprintf;
-                if(this->wrmode == PRMODE_STRING)
+                if(m_wrmode == PRMODE_STRING)
                 {
-                    this->strbuf.appendFormat(fmt, args...);
+                    m_strbuf.appendFormat(fmt, args...);
                 }
-                else if(this->wrmode == PRMODE_FILE)
+                else if(m_wrmode == PRMODE_FILE)
                 {
-                    tmpfprintf(this->handle, fmt, args...);
+                    tmpfprintf(m_handle, fmt, args...);
                     flush();
                 }
                 return true;
@@ -4715,46 +4708,25 @@ namespace neon
     class ValArray
     {
         public:
-            using OnCopyFN = std::function<StoredTyp(StoredTyp)>;
-            using OnDestroyFN = std::function<void(StoredTyp)>;
-
-        public:
             static void destroy(ValArray* list)
             {
                 if(list != nullptr)
                 {
                     list->deInit();
                     Memory::sysFree(list);
-                    list = nullptr;
                 }
             }
 
-            static void destroy(ValArray* list, OnDestroyFN dfn)
-            {
-                if(list != nullptr)
-                {
-                    if(dfn != nullptr)
-                    {
-                        destroyAndClear(list, dfn);
-                    }
-                    list->deInit();
-                    Memory::sysFree(list);
-                }
-            }
-
-            static void destroyAndClear(ValArray* list, OnDestroyFN dfn)
+            static void destroyAndClear(ValArray* list)
             {
                 size_t i;
                 for(i = 0; i < list->count(); i++)
                 {
                     auto& item = list->get(i);
-                    if(dfn != nullptr)
-                    {
-                        dfn(item);
-                    }
                 }
                 list->clear();
             }
+
             static size_t nextCapacity(size_t oldcap)
             {
                 if((oldcap) < 8)
@@ -4827,14 +4799,7 @@ namespace neon
 
             NEON_INLINE void ensureCapacity(size_t need)
             {
-                if constexpr(std::is_pointer<StoredTyp>::value)
-                {
-                    ensureCapacityActual(need);
-                }
-                else
-                {
-                    ensureCapacityActual(need);
-                }
+                ensureCapacityActual(need);
             }
 
         public:
@@ -4863,16 +4828,6 @@ namespace neon
                 ensureCapacityActual(sz);
             }
 
-            NEON_INLINE void deInit(OnDestroyFN dfn)
-            {
-                size_t i;
-                for(i=0; i<m_listcount; i++)
-                {
-                    auto& item = get(i);
-                    dfn(item);
-                }
-                deInit();
-            }
 
             NEON_INLINE void deInit()
             {
@@ -4888,96 +4843,6 @@ namespace neon
             NEON_INLINE void clear()
             {
                 m_listcount = 0;
-            }
-
-            NEON_INLINE ValArray* copyToHeap(OnCopyFN copyfn, OnDestroyFN dfn)
-            {
-                bool ok;
-                size_t i;
-                ValArray* arrcopy;
-                (void)ok;
-                arrcopy = Memory::make<ValArray<StoredTyp>>(m_listcapacity);
-                for(i = 0; i < count(); i++)
-                {
-                    auto& item = get(i);
-                    if(copyfn)
-                    {
-                        auto itemcopy = (StoredTyp)copyfn(item);
-                        if(!arrcopy->push(itemcopy))
-                        {
-                            goto listcopyfailed;
-                        }
-                    }
-                    else
-                    {
-                        if(!arrcopy->push(item))
-                        {
-                            goto listcopyfailed;
-                        }
-                    }
-                }
-                return arrcopy;
-            listcopyfailed:
-                Memory::destroy(arrcopy, dfn);
-                return nullptr;
-            }
-
-            NEON_INLINE ValArray* copyToHeap()
-            {
-                OnCopyFN dummycopy = nullptr;
-                OnDestroyFN dummydel = nullptr;
-                return copyToHeap(dummycopy, dummydel);
-            }
-
-            NEON_INLINE bool copyToStack(ValArray* dest, OnCopyFN copyfn, OnDestroyFN dfn)
-            {
-                bool ok;
-                size_t i;
-                (void)ok;
-                (void)dfn;
-                for(i = 0; i < count(); i++)
-                {
-                    auto& item = get(i);
-                    if(copyfn)
-                    {
-                        auto itemcopy = (StoredTyp)copyfn(item);
-                        if(!dest->push(itemcopy))
-                        {
-                            goto listcopyfailed;
-                        }
-                    }
-                    else
-                    {
-                        if(!dest->push(item))
-                        {
-                            goto listcopyfailed;
-                        }
-                    }
-                }
-                return true;
-            listcopyfailed:
-                return false;
-            }
-
-            NEON_INLINE bool copyToStack(ValArray* dest)
-            {
-                OnCopyFN dummycopy = nullptr;
-                OnDestroyFN dummydel = nullptr;
-                return copyToStack(dest, dummycopy, dummydel);
-            }
-
-            NEON_INLINE ValArray copyToStack(OnCopyFN copyfn, OnDestroyFN dfn)
-            {
-                ValArray dest;
-                copyToStack(&dest, copyfn, dfn);
-                return dest;
-            }
-
-            NEON_INLINE ValArray copyToStack()
-            {
-                ValArray dest;
-                copyToStack(&dest);
-                return dest;
             }
 
             NEON_INLINE size_t count() const
@@ -5155,17 +5020,17 @@ namespace neon
 
         public:
             /*
-             * FIXME: extremely stupid hack: $htactive ensures that a table that was destroyed
+             * FIXME: extremely stupid hack: $m_htactive ensures that a table that was destroyed
              * does not get marked again, et cetera.
              * since destroy() zeroes the data before freeing, $active will be
              * false, and thus, no further marking occurs.
              * obviously the reason is that somewhere a table (from Instance) is being
              * read after being freed, but for now, this will work(-ish).
              */
-            bool htactive;
-            int htcount;
-            int htcapacity;
-            Entry* htentries;
+            bool m_htactive;
+            int m_htcount;
+            int m_htcapacity;
+            Entry* m_htentries;
 
         public:
             static uint64_t getNextCapacity(uint64_t capacity)
@@ -5179,30 +5044,30 @@ namespace neon
 
             void initTable()
             {
-                this->htactive = true;
-                this->htcount = 0;
-                this->htcapacity = 0;
-                this->htentries = nullptr;
+                m_htactive = true;
+                m_htcount = 0;
+                m_htcapacity = 0;
+                m_htentries = nullptr;
             }
 
             void deInit()
             {
-                Memory::sysFree(this->htentries);
+                Memory::sysFree(m_htentries);
             }
 
             NEON_INLINE size_t count() const
             {
-                return this->htcount;
+                return m_htcount;
             }
 
             NEON_INLINE size_t capacity() const
             {
-                return this->htcapacity;
+                return m_htcapacity;
             }
 
             NEON_INLINE Entry* entryatindex(size_t idx) const
             {
-                return &this->htentries[idx];
+                return &m_htentries[idx];
             }
 
             NEON_INLINE Entry* findentrybyvalue(Entry* entries, int capacity, HTKeyT key) const
@@ -5318,11 +5183,11 @@ namespace neon
             NEON_INLINE Property* getfieldbyvalue(HTKeyT key) const
             {
                 Entry* entry;
-                if(this->htcount == 0 || this->htentries == nullptr)
+                if(m_htcount == 0 || m_htentries == nullptr)
                 {
                     return nullptr;
                 }
-                entry = findentrybyvalue(this->htentries, this->htcapacity, key);
+                entry = findentrybyvalue(m_htentries, m_htcapacity, key);
                 if(entry->key.isNull() || entry->key.isNull())
                 {
                     return nullptr;
@@ -5333,11 +5198,11 @@ namespace neon
             NEON_INLINE Property* getfieldbystr(HTKeyT valkey, const char* kstr, size_t klen, uint32_t hsv) const
             {
                 Entry* entry;
-                if(this->htcount == 0 || this->htentries == nullptr)
+                if(m_htcount == 0 || m_htentries == nullptr)
                 {
                     return nullptr;
                 }
-                entry = findentrybystr(this->htentries, this->htcapacity, valkey, kstr, klen, hsv);
+                entry = findentrybystr(m_htentries, m_htcapacity, valkey, kstr, klen, hsv);
                 if(entry->key.isNull() || entry->key.isNull())
                 {
                     return nullptr;
@@ -5382,10 +5247,10 @@ namespace neon
                     entries[i].key = HTKeyT{};
                     entries[i].value = Property::make(HTValT{}, Property::FTYP_VALUE);
                 }
-                this->htcount = 0;
-                for(i = 0; i < this->htcapacity; i++)
+                m_htcount = 0;
+                for(i = 0; i < m_htcapacity; i++)
                 {
-                    entry = &this->htentries[i];
+                    entry = &m_htentries[i];
                     if(entry->key.isNull())
                     {
                         continue;
@@ -5393,11 +5258,11 @@ namespace neon
                     dest = findentrybyvalue(entries, capacity, (HTKeyT)entry->key);
                     dest->key = entry->key;
                     dest->value = entry->value;
-                    this->htcount++;
+                    m_htcount++;
                 }
-                Memory::sysFree(this->htentries);
-                this->htentries = entries;
-                this->htcapacity = capacity;
+                Memory::sysFree(m_htentries);
+                m_htentries = entries;
+                m_htcapacity = capacity;
                 return true;
             }
 
@@ -5407,19 +5272,19 @@ namespace neon
                 int capacity;
                 Entry* entry;
                 (void)keyisstring;
-                if((this->htcount + 1) > (this->htcapacity * CONF_MAXTABLELOAD))
+                if((m_htcount + 1) > (m_htcapacity * CONF_MAXTABLELOAD))
                 {
-                    capacity = getNextCapacity(this->htcapacity);
+                    capacity = getNextCapacity(m_htcapacity);
                     if(!adjustcapacity(capacity))
                     {
                         return false;
                     }
                 }
-                entry = findentrybyvalue(this->htentries, this->htcapacity, key);
+                entry = findentrybyvalue(m_htentries, m_htcapacity, key);
                 isnew = entry->key.isNull();
                 if(isnew && entry->value.value.isNull())
                 {
-                    this->htcount++;
+                    m_htcount++;
                 }
                 /* overwrites existing entries. */
                 entry->key = key;
@@ -5440,9 +5305,9 @@ namespace neon
                 int failcnt;
                 Entry* entry;
                 failcnt = 0;
-                for(i = 0; i < this->htcapacity; i++)
+                for(i = 0; i < m_htcapacity; i++)
                 {
-                    entry = &this->htentries[i];
+                    entry = &m_htentries[i];
                     if(!entry->key.isNull())
                     {
                         if(!to->setwithtype((HTKeyT)entry->key, (HTValT)entry->value.value, entry->value.m_fieldtype, false))
@@ -5469,9 +5334,9 @@ namespace neon
             {
                 int i;
                 Entry* entry;
-                for(i = 0; i < (int)from->htcapacity; i++)
+                for(i = 0; i < (int)from->m_htcapacity; i++)
                 {
-                    entry = &from->htentries[i];
+                    entry = &from->m_htentries[i];
                     if(!entry->key.isNull() && !(HTValT)entry->value.value.isModule())
                     {
                         /* Don't import private values */
@@ -5490,9 +5355,9 @@ namespace neon
                 Entry* entry;
                 NN_NULLPTRCHECK_RETURNVALUE(this, false);
                 NN_NULLPTRCHECK_RETURNVALUE(to, false);
-                for(i = 0; i < (int)this->htcapacity; i++)
+                for(i = 0; i < (int)m_htcapacity; i++)
                 {
-                    entry = &this->htentries[i];
+                    entry = &m_htentries[i];
                     if(!entry->key.isNull())
                     {
                         to->setwithtype((HTKeyT)entry->key, Value::copyValue((HTValT)entry->value.value), entry->value.m_fieldtype, false);
@@ -5507,9 +5372,9 @@ namespace neon
                 int i;
                 Entry* entry;
                 NN_NULLPTRCHECK_RETURNVALUE(this, Value::makeNull());
-                for(i = 0; i < (int)this->htcapacity; i++)
+                for(i = 0; i < (int)m_htcapacity; i++)
                 {
-                    entry = &this->htentries[i];
+                    entry = &m_htentries[i];
                     if(!entry->key.isNull() && !entry->key.isNull())
                     {
                         if(Value::compareValues((HTValT)entry->value.value, value))
@@ -5632,28 +5497,28 @@ namespace neon
         public:
             static void init(Blob* blob)
             {
-                blob->count = 0;
-                blob->capacity = 0;
-                blob->instrucs = nullptr;
+                blob->m_count = 0;
+                blob->m_capacity = 0;
+                blob->m_instrucs = nullptr;
             }
 
             static void destroy(Blob* blob)
             {
-                if(blob->instrucs != nullptr)
+                if(blob->m_instrucs != nullptr)
                 {
-                    Memory::sysFree(blob->instrucs);
+                    Memory::sysFree(blob->m_instrucs);
                 }
-                blob->constants.deInit();
-                blob->argdefvals.deInit();
+                blob->m_constants.deInit();
+                blob->m_argdefvals.deInit();
             }
 
 
         public:
-            int count;
-            int capacity;
-            Instruction* instrucs;
-            ValArray<Value> constants;
-            ValArray<Value> argdefvals;
+            int m_count;
+            int m_capacity;
+            Instruction* m_instrucs;
+            ValArray<Value> m_constants;
+            ValArray<Value> m_argdefvals;
 
         public:
             Blob()
@@ -5664,20 +5529,20 @@ namespace neon
             void push(Instruction ins)
             {
                 int oldcapacity;
-                if(this->capacity < this->count + 1)
+                if(m_capacity < m_count + 1)
                 {
-                    oldcapacity = this->capacity;
-                    this->capacity = Memory::getNextCapacity(oldcapacity);
-                    this->instrucs = (Instruction*)Memory::sysRealloc(this->instrucs, this->capacity * sizeof(Instruction));
+                    oldcapacity = m_capacity;
+                    m_capacity = Memory::getNextCapacity(oldcapacity);
+                    m_instrucs = (Instruction*)Memory::sysRealloc(m_instrucs, m_capacity * sizeof(Instruction));
                 }
-                this->instrucs[this->count] = ins;
-                this->count++;
+                m_instrucs[m_count] = ins;
+                m_count++;
             }
 
             int addConstant(Value value)
             {
-                this->constants.push(value);
-                return this->constants.count() - 1;
+                m_constants.push(value);
+                return m_constants.count() - 1;
             }
     };
 
@@ -5761,14 +5626,14 @@ namespace neon
                         (void)findstr;
                         (void)sdata;
                         NN_NULLPTRCHECK_RETURNVALUE(m_htab, nullptr);
-                        if(m_htab.htcount == 0)
+                        if(m_htab.m_htcount == 0)
                         {
                             return nullptr;
                         }
-                        index = findhash & (m_htab.htcapacity - 1);
+                        index = findhash & (m_htab.m_htcapacity - 1);
                         while(true)
                         {
-                            auto entry = &m_htab.htentries[index];
+                            auto entry = &m_htab.m_htentries[index];
                             if(entry->key.isNull())
                             {
                                 /*
@@ -5790,7 +5655,7 @@ namespace neon
                                     return string;
                                 }
                             }
-                            index = (index + 1) & (m_htab.htcapacity - 1);
+                            index = (index + 1) & (m_htab.m_htcapacity - 1);
                         }
                         return nullptr;
                     }
@@ -6179,6 +6044,10 @@ namespace neon
                 }
             }
 
+            Function* compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel);
+            Status execSource(Module* module, const char* source, const char* filename, Value* dest);
+            Value evalSource(const char* source);
+
             bool vmExceptionPushHandler(Class* type, int address, int finallyaddress);
             Value vmExceptionGetStackTrace();
             bool vmExceptionPropagate();
@@ -6374,7 +6243,7 @@ namespace neon
                 uint16_t idx;
                 idx = vmReadShort();
                 auto blob = Wrappers::wrapGetBlobOfClosure(m_vmstate.currentframe->closure);
-                return blob->constants.get(idx);
+                return blob->m_constants.get(idx);
             }
 
             NEON_INLINE String* vmReadString()
@@ -6663,50 +6532,50 @@ namespace neon
     class Dict : public Object
     {
         public:
-            ValArray<Value> htnames;
-            HashTable<Value, Value> htab;
+            ValArray<Value> m_htkeys;
+            HashTable<Value, Value> m_htvalues;
 
         public:
             static Dict* make()
             {
                 Dict* dict;
                 dict = SharedState::gcMakeObject<Dict>(Object::OTYP_DICT, false);
-                dict->htab.initTable();
+                dict->m_htvalues.initTable();
                 return dict;
             }
 
             static void destroy(Dict* dict)
             {
-                dict->htnames.deInit();
-                dict->htab.deInit();
+                dict->m_htkeys.deInit();
+                dict->m_htvalues.deInit();
             }
 
             bool set(Value key, Value value)
             {
                 Value tempvalue;
-                if(!this->htab.get(key, &tempvalue))
+                if(!m_htvalues.get(key, &tempvalue))
                 {
                     /* add key if it doesn't exist. */
-                    this->htnames.push(key);
+                    m_htkeys.push(key);
                 }
-                return this->htab.set(key, value);
+                return m_htvalues.set(key, value);
             }
 
             void add(Value key, Value value)
             {
-                this->set(key, value);
+                set(key, value);
             }
 
             void addCstr(const char* ckey, Value value)
             {
                 String* os;
                 os = Wrappers::wrapStringCopy(ckey);
-                this->add(Value::fromObject(os), value);
+                add(Value::fromObject(os), value);
             }
 
             Property* get(Value key)
             {
-                return this->htab.getfield(key);
+                return m_htvalues.getfield(key);
             }
 
             Dict* copy()
@@ -6721,13 +6590,13 @@ namespace neon
                 // @TODO: Figure out how to handle dictionary values correctly
                 // remember that copying keys is redundant and unnecessary
                 */
-                dsz = this->htnames.count();
+                dsz = m_htkeys.count();
                 for(i = 0; i < dsz; i++)
                 {
-                    key = this->htnames.get(i);
-                    field = this->htab.getfield(this->htnames.get(i));
-                    ndict->htnames.push(key);
-                    ndict->htab.setwithtype(key, field->value, field->m_fieldtype, key.isString());
+                    key = m_htkeys.get(i);
+                    field = m_htvalues.getfield(m_htkeys.get(i));
+                    ndict->m_htkeys.push(key);
+                    ndict->m_htvalues.setwithtype(key, field->value, field->m_fieldtype, key.isString());
                 }
                 return ndict;
             }
@@ -6888,7 +6757,7 @@ namespace neon
                 }
                 else
                 {
-                    NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.regexerror, pctx.errorbuf);
+                    NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.regexerror, pctx.m_errorbuf);
                 }
                 RegexContext::destroy(&pctx);
                 if(capture)
@@ -7054,12 +6923,12 @@ namespace neon
 
             bool append(const char* str)
             {
-                return this->append(str, strlen(str));
+                return append(str, strlen(str));
             }
 
             bool appendObject(String* other)
             {
-                return this->append(other->data(), other->length());
+                return append(other->data(), other->length());
             }
 
             bool appendByte(int ch)
@@ -7091,7 +6960,7 @@ namespace neon
                 size_t maxlen;
                 char* raw;
                 (void)likejs;
-                maxlen = this->length();
+                maxlen = length();
                 len = maxlen;
                 if(end > maxlen)
                 {
@@ -7115,13 +6984,13 @@ namespace neon
                 asz = ((end + 1) * sizeof(char));
                 raw = (char*)Memory::sysMalloc(sizeof(char) * asz);
                 memset(raw, 0, asz);
-                memcpy(raw, this->data() + start, len);
+                memcpy(raw, data() + start, len);
                 return String::take(raw, len);
             }
 
             String* substr(size_t start)
             {
-                return this->substr(start, this->length());
+                return substr(start, length());
             }
     };
 
@@ -7132,18 +7001,18 @@ namespace neon
             {
                 Upvalue* upvalue;
                 upvalue = SharedState::gcMakeObject<Upvalue>(Object::OTYP_UPVALUE, false);
-                upvalue->closed = Value::makeNull();
-                upvalue->location = *slot;
-                upvalue->next = nullptr;
-                upvalue->stackpos = stackpos;
+                upvalue->m_closed = Value::makeNull();
+                upvalue->m_location = *slot;
+                upvalue->m_next = nullptr;
+                upvalue->m_stackpos = stackpos;
                 return upvalue;
             }
 
         public:
-            int stackpos;
-            Value closed;
-            Value location;
-            Upvalue* next;
+            int m_stackpos;
+            Value m_closed;
+            Value m_location;
+            Upvalue* m_next;
 
     };
 
@@ -7182,8 +7051,8 @@ namespace neon
         public:
             ContextType m_contexttype;
             String* m_funcname;
-            int upvalcount;
-            Value clsthisval;
+            int m_upvalcount;
+            Value m_clsthisval;
             union FuncUnion
             {
                 struct FNDataClosure
@@ -7215,7 +7084,7 @@ namespace neon
             {
                 Function* ofn;
                 ofn = SharedState::gcMakeObject<Function>(fntype, false);
-                ofn->clsthisval = thisval;
+                ofn->m_clsthisval = thisval;
                 ofn->m_funcname = name;
                 return ofn;
             }
@@ -7234,7 +7103,7 @@ namespace neon
                 Function* ofn;
                 ofn = makeFuncGeneric(String::intern("<script>"), Object::OTYP_FUNCSCRIPT, Value::makeNull());
                 ofn->m_fnvals.fnscriptfunc.arity = 0;
-                ofn->upvalcount = 0;
+                ofn->m_upvalcount = 0;
                 ofn->m_fnvals.fnscriptfunc.isvariadic = false;
                 ofn->m_funcname = nullptr;
                 ofn->m_contexttype = (Function::ContextType)type;
@@ -7259,10 +7128,10 @@ namespace neon
                 Upvalue** upvals;
                 Function* ofn;
                 upvals = nullptr;
-                if(innerfn->upvalcount > 0)
+                if(innerfn->m_upvalcount > 0)
                 {
-                    upvals = (Upvalue**)SharedState::gcAllocate(sizeof(Upvalue*), innerfn->upvalcount + 1, false);
-                    for(i = 0; i < innerfn->upvalcount; i++)
+                    upvals = (Upvalue**)SharedState::gcAllocate(sizeof(Upvalue*), innerfn->m_upvalcount + 1, false);
+                    for(i = 0; i < innerfn->m_upvalcount; i++)
                     {
                         upvals[i] = nullptr;
                     }
@@ -7270,7 +7139,7 @@ namespace neon
                 ofn = makeFuncGeneric(innerfn->m_funcname, Object::OTYP_FUNCCLOSURE, thisval);
                 ofn->m_fnvals.fnclosure.scriptfunc = innerfn;
                 ofn->m_fnvals.fnclosure.m_upvalues = upvals;
-                ofn->upvalcount = innerfn->upvalcount;
+                ofn->m_upvalcount = innerfn->m_upvalcount;
                 return ofn;
             }
 
@@ -7577,7 +7446,7 @@ namespace neon
 
             bool defCallableField(String* name, NativeFN function)
             {
-                return this->defCallableFieldPtr(name, function, nullptr);
+                return defCallableFieldPtr(name, function, nullptr);
             }
 
             bool defStaticCallableFieldPtr(String* name, NativeFN function, void* uptr)
@@ -7589,7 +7458,7 @@ namespace neon
 
             bool defStaticCallableField(String* name, NativeFN function)
             {
-                return this->defStaticCallableFieldPtr(name, function, nullptr);
+                return defStaticCallableFieldPtr(name, function, nullptr);
             }
 
             bool setStaticProperty(String* name, Value val)
@@ -7609,7 +7478,7 @@ namespace neon
 
             bool defNativeConstructor(NativeFN function)
             {
-                return this->defNativeConstructorPtr(function, nullptr);
+                return defNativeConstructorPtr(function, nullptr);
             }
 
             bool defMethod(String* name, Value val)
@@ -7621,12 +7490,12 @@ namespace neon
             {
                 Function* ofn;
                 ofn = Function::makeFuncNative(function, name->data(), ptr);
-                return this->defMethod(name, Value::fromObject(ofn));
+                return defMethod(name, Value::fromObject(ofn));
             }
 
             bool defNativeMethod(String* name, NativeFN function)
             {
-                return this->defNativeMethodPtr(name, function, nullptr);
+                return defNativeMethodPtr(name, function, nullptr);
             }
 
             bool defStaticNativeMethodPtr(String* name, NativeFN function, void* uptr)
@@ -7638,7 +7507,7 @@ namespace neon
 
             bool defStaticNativeMethod(String* name, NativeFN function)
             {
-                return this->defStaticNativeMethodPtr(name, function, nullptr);
+                return defStaticNativeMethodPtr(name, function, nullptr);
             }
 
             Property* getMethodField(String* name)
@@ -7798,7 +7667,7 @@ namespace neon
             {
                 String* os;
                 os = String::intern(name);
-                return this->getProperty(os);
+                return getProperty(os);
             }
 
             Property* getMethod(String* name)
@@ -7819,7 +7688,7 @@ namespace neon
             {
                 String* os;
                 os = String::intern(name);
-                return this->getMethod(os);
+                return getMethod(os);
             }
     };
 
@@ -8005,16 +7874,16 @@ namespace neon
             {
                 File* file;
                 file = SharedState::gcMakeObject<File>(Object::OTYP_FILE, false);
-                file->isopen = false;
-                file->mode = String::copy(mode);
-                file->path = String::copy(path);
-                file->isstd = isstd;
-                file->handle = handle;
-                file->istty = false;
-                file->number = -1;
-                if(file->handle != nullptr)
+                file->m_isopen = false;
+                file->m_mode = String::copy(mode);
+                file->m_path = String::copy(path);
+                file->m_isstd = isstd;
+                file->m_handle = handle;
+                file->m_istty = false;
+                file->m_number = -1;
+                if(file->m_handle != nullptr)
                 {
-                    file->isopen = true;
+                    file->m_isopen = true;
                 }
                 return file;
             }
@@ -8027,18 +7896,18 @@ namespace neon
 
             static void mark(File* file)
             {
-                Object::markObject((Object*)file->mode);
-                Object::markObject((Object*)file->path);
+                Object::markObject((Object*)file->m_mode);
+                Object::markObject((Object*)file->m_path);
             }
 
         public:
-            bool isopen;
-            bool isstd;
-            bool istty;
-            int number;
-            FILE* handle;
-            String* mode;
-            String* path;
+            bool m_isopen;
+            bool m_isstd;
+            bool m_istty;
+            int m_number;
+            FILE* m_handle;
+            String* m_mode;
+            String* m_path;
 
         public:
             bool readData(size_t readhowmuch, IOResult* dest)
@@ -8049,38 +7918,38 @@ namespace neon
                 dest->success = false;
                 dest->length = 0;
                 dest->data = nullptr;
-                if(!this->isstd)
+                if(!m_isstd)
                 {
-                    if(!File::fileExists(this->path->data()))
+                    if(!File::fileExists(m_path->data()))
                     {
                         return false;
                     }
                     /* file is in write only mode */
                     /*
-                    else if(strstr(this->mode->data(), "w") != nullptr && strstr(this->mode->data(), "+") == nullptr)
+                    else if(strstr(m_mode->data(), "w") != nullptr && strstr(m_mode->data(), "+") == nullptr)
                     {
                         NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
                     }
                     */
-                    if(!this->isopen)
+                    if(!m_isopen)
                     {
                         /* open the file if it isn't open */
-                        this->openWithoutParams();
+                        openWithoutParams();
                     }
-                    else if(this->handle == nullptr)
+                    else if(m_handle == nullptr)
                     {
                         return false;
                     }
-                    if(Util::osfn_lstat(this->path->data(), &stats) == 0)
+                    if(Util::osfn_lstat(m_path->data(), &stats) == 0)
                     {
                         filesizereal = (size_t)stats.st_size;
                     }
                     else
                     {
                         /* fallback */
-                        fseek(this->handle, 0L, SEEK_END);
-                        filesizereal = ftell(this->handle);
-                        rewind(this->handle);
+                        fseek(m_handle, 0L, SEEK_END);
+                        filesizereal = ftell(m_handle);
+                        rewind(m_handle);
                     }
                     if(readhowmuch == (size_t)-1 || readhowmuch > filesizereal)
                     {
@@ -8104,7 +7973,7 @@ namespace neon
                 {
                     return false;
                 }
-                dest->length = fread(dest->data, sizeof(char), readhowmuch, this->handle);
+                dest->length = fread(dest->data, sizeof(char), readhowmuch, m_handle);
                 if(dest->length == 0 && readhowmuch != 0 && readhowmuch == filesizereal)
                 {
                     return false;
@@ -8120,14 +7989,14 @@ namespace neon
             int closeFile()
             {
                 int result;
-                if(this->handle != nullptr && !this->isstd)
+                if(m_handle != nullptr && !m_isstd)
                 {
-                    fflush(this->handle);
-                    result = fclose(this->handle);
-                    this->handle = nullptr;
-                    this->isopen = false;
-                    this->number = -1;
-                    this->istty = false;
+                    fflush(m_handle);
+                    result = fclose(m_handle);
+                    m_handle = nullptr;
+                    m_isopen = false;
+                    m_number = -1;
+                    m_istty = false;
                     return result;
                 }
                 return -1;
@@ -8135,24 +8004,24 @@ namespace neon
 
             bool openWithoutParams()
             {
-                if(this->handle != nullptr)
+                if(m_handle != nullptr)
                 {
                     return true;
                 }
-                if(this->handle == nullptr && !this->isstd)
+                if(m_handle == nullptr && !m_isstd)
                 {
-                    this->handle = fopen(this->path->data(), this->mode->data());
-                    if(this->handle != nullptr)
+                    m_handle = fopen(m_path->data(), m_mode->data());
+                    if(m_handle != nullptr)
                     {
-                        this->isopen = true;
-                        this->number = fileno(this->handle);
-                        this->istty = Util::osfn_isatty(this->number);
+                        m_isopen = true;
+                        m_number = fileno(m_handle);
+                        m_istty = Util::osfn_isatty(m_number);
                         return true;
                     }
                     else
                     {
-                        this->number = -1;
-                        this->istty = false;
+                        m_number = -1;
+                        m_istty = false;
                     }
                     return false;
                 }
@@ -8168,13 +8037,13 @@ namespace neon
             {
                 Module* module;
                 module = SharedState::gcMakeObject<Module>(Object::OTYP_MODULE, retain);
-                module->deftable.initTable();
+                module->m_deftable.initTable();
                 module->m_modname = String::copy(name);
-                module->physicalpath = String::copy(file);
-                module->fnunloaderptr = nullptr;
-                module->fnpreloaderptr = nullptr;
-                module->handle = nullptr;
-                module->imported = imported;
+                module->m_physicalpath = String::copy(file);
+                module->m_fnunloaderptr = nullptr;
+                module->m_fnpreloaderptr = nullptr;
+                module->m_handle = nullptr;
+                module->m_imported = imported;
                 return module;
             }
 
@@ -8198,19 +8067,19 @@ namespace neon
             static void destroy(Module* module)
             {
                 ModLoaderFN asfn;
-                module->deftable.deInit();
+                module->m_deftable.deInit();
                 /*
                 Memory::sysFree(module->m_modname);
-                Memory::sysFree(module->physicalpath);
+                Memory::sysFree(module->m_physicalpath);
                 */
-                if(module->fnunloaderptr != nullptr && module->imported)
+                if(module->m_fnunloaderptr != nullptr && module->m_imported)
                 {
-                    asfn = *(ModLoaderFN*)module->fnunloaderptr;
+                    asfn = *(ModLoaderFN*)module->m_fnunloaderptr;
                     asfn();
                 }
-                if(module->handle != nullptr)
+                if(module->m_handle != nullptr)
                 {
-                    Module::closeImportHandle(module->handle);
+                    Module::closeImportHandle(module->m_handle);
                 }
             }
 
@@ -8336,7 +8205,7 @@ namespace neon
                     Blob::destroy(&blob);
                     return field->value.asModule();
                 }
-                physpath = resolvePath(modulename->data(), intomodule->physicalpath->data(), nullptr, false);
+                physpath = resolvePath(modulename->data(), intomodule->m_physicalpath->data(), nullptr, false);
                 if(physpath == nullptr)
                 {
                     Blob::destroy(&blob);
@@ -8406,8 +8275,8 @@ namespace neon
                 if(defmod != nullptr)
                 {
                     targetmod = SharedState::gcProtect(Module::make((char*)defmod->m_defmodname, source, false, true));
-                    targetmod->fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
-                    targetmod->fnunloaderptr = (void*)defmod->fnunloaderfunc;
+                    targetmod->m_fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
+                    targetmod->m_fnunloaderptr = (void*)defmod->fnunloaderfunc;
                     if(defmod->definedfields != nullptr)
                     {
                         for(j = 0; defmod->definedfields[j].m_deffieldname != nullptr; j++)
@@ -8416,7 +8285,7 @@ namespace neon
                             fieldname = Value::fromObject(SharedState::gcProtect(String::copy(field.m_deffieldname)));
                             v = field.fieldvalfn(FuncContext{Value::makeNull(), nullptr, 0});
                             gcs->vmStackPush(v);
-                            targetmod->deftable.set(fieldname, v);
+                            targetmod->m_deftable.set(fieldname, v);
                             gcs->vmStackPop();
                         }
                     }
@@ -8428,7 +8297,7 @@ namespace neon
                             funcname = Value::fromObject(SharedState::gcProtect(String::copy(func.m_deffuncname)));
                             funcrealvalue = Value::fromObject(SharedState::gcProtect(Function::makeFuncNative(func.function, func.m_deffuncname, nullptr)));
                             gcs->vmStackPush(funcrealvalue);
-                            targetmod->deftable.set(funcname, funcrealvalue);
+                            targetmod->m_deftable.set(funcname, funcrealvalue);
                             gcs->vmStackPop();
                         }
                     }
@@ -8482,12 +8351,12 @@ namespace neon
                                     k++;
                                 }
                             }
-                            targetmod->deftable.set(Value::fromObject(classname), Value::fromObject(klass));
+                            targetmod->m_deftable.set(Value::fromObject(classname), Value::fromObject(klass));
                         }
                     }
                     if(dlw != nullptr)
                     {
-                        targetmod->handle = dlw;
+                        targetmod->m_handle = dlw;
                     }
                     Module::addNativeModule(targetmod, targetmod->m_modname->data());
                     SharedState::clearGCProtect();
@@ -8503,25 +8372,25 @@ namespace neon
 
         public:
             /* was this module imported? */
-            bool imported;
+            bool m_imported;
             /* named exports */
-            HashTable<Value, Value> deftable;
+            HashTable<Value, Value> m_deftable;
             /* the name of this module */
             String* m_modname;
             /* physsical location of this module, or nullptr if some other non-physical location */
-            String* physicalpath;
+            String* m_physicalpath;
             /* callback to call BEFORE this module is loaded */
-            void* fnpreloaderptr;
+            void* m_fnpreloaderptr;
             /* callbac to call AFTER this module is unloaded */
-            void* fnunloaderptr;
+            void* m_fnunloaderptr;
             /* pointer that is based to preloader/unloader */
-            void* handle;
+            void* m_handle;
 
         public:
             void setInternFileField()
             {
                 return;
-                this->deftable.set(Value::fromObject(String::intern("__file__")), Value::fromObject(String::copyObject(this->physicalpath)));
+                m_deftable.set(Value::fromObject(String::intern("__file__")), Value::fromObject(String::copyObject(m_physicalpath)));
             }
     };
 
@@ -8534,23 +8403,23 @@ namespace neon
             {
                 Range* range;
                 range = SharedState::gcMakeObject<Range>(Object::OTYP_RANGE, false);
-                range->lower = lower;
-                range->upper = upper;
+                range->m_lower = lower;
+                range->m_upper = upper;
                 if(upper > lower)
                 {
-                    range->range = upper - lower;
+                    range->m_range = upper - lower;
                 }
                 else
                 {
-                    range->range = lower - upper;
+                    range->m_range = lower - upper;
                 }
                 return range;
             }
 
         public:
-            int lower;
-            int upper;
-            int range;
+            int m_lower;
+            int m_upper;
+            int m_range;
     };
 
 
@@ -8561,16 +8430,16 @@ namespace neon
             {
                 Switch* sw;
                 sw = SharedState::gcMakeObject<Switch>(Object::OTYP_SWITCH, false);
-                sw->table.initTable();
-                sw->defaultjump = -1;
-                sw->exitjump = -1;
+                sw->m_table.initTable();
+                sw->m_defaultjump = -1;
+                sw->m_exitjump = -1;
                 return sw;
             }
 
         public:
-            int defaultjump;
-            int exitjump;
-            HashTable<Value, Value> table;
+            int m_defaultjump;
+            int m_exitjump;
+            HashTable<Value, Value> m_table;
     };
 
     class Userdata : public Object
@@ -8580,16 +8449,16 @@ namespace neon
             {
                 Userdata* ptr;
                 ptr = SharedState::gcMakeObject<Userdata>(Object::OTYP_USERDATA, false);
-                ptr->pointer = pointer;
+                ptr->m_pointer = pointer;
                 ptr->m_udname = Util::stringDup(name);
-                ptr->ondestroyfn = nullptr;
+                ptr->m_ondestroyfn = nullptr;
                 return ptr;
             }
 
         public:
-            void* pointer;
+            void* m_pointer;
             char* m_udname;
-            PtrFreeFN ondestroyfn;
+            PtrFreeFN m_ondestroyfn;
     };
 
     class ValPrinter
@@ -8637,7 +8506,7 @@ namespace neon
                         {
                             Range* range;
                             range = value.asRange();
-                            pr->format("<range %d .. %d>", range->lower, range->upper);
+                            pr->format("<range %d .. %d>", range->m_lower, range->m_upper);
                         }
                         break;
                     case Object::OTYP_FILE:
@@ -8666,7 +8535,7 @@ namespace neon
                         {
                             Module* mod;
                             mod = value.asModule();
-                            pr->format("<module '%s' at '%s'>", mod->m_modname->data(), mod->physicalpath->data());
+                            pr->format("<module '%s' at '%s'>", mod->m_modname->data(), mod->m_physicalpath->data());
                         }
                         break;
                     case Object::OTYP_CLASS:
@@ -8784,7 +8653,7 @@ namespace neon
                     {
                         pr->format(",");
                     }
-                    if(pr->shortenvalues && (i >= pr->maxvallength))
+                    if(pr->m_shortenvalues && (i >= pr->m_maxvallength))
                     {
                         pr->format(" [%zd items]", vsz);
                         break;
@@ -8801,13 +8670,13 @@ namespace neon
                 bool valisrecur;
                 Value val;
                 Dict* subdict;
-                dsz = dict->htnames.count();
+                dsz = dict->m_htkeys.count();
                 pr->format("{");
                 for(i = 0; i < dsz; i++)
                 {
                     valisrecur = false;
                     keyisrecur = false;
-                    val = dict->htnames.get(i);
+                    val = dict->m_htkeys.get(i);
                     if(val.isDict())
                     {
                         subdict = val.asDict();
@@ -8825,7 +8694,7 @@ namespace neon
                         printValue(pr, val, true, true);
                     }
                     pr->format(": ");
-                    auto field = dict->htab.getfield(dict->htnames.get(i));
+                    auto field = dict->m_htvalues.getfield(dict->m_htkeys.get(i));
                     if(field != nullptr)
                     {
                         if(field->value.isDict())
@@ -8849,7 +8718,7 @@ namespace neon
                     {
                         pr->format(", ");
                     }
-                    if(pr->shortenvalues && (pr->maxvallength >= i))
+                    if(pr->m_shortenvalues && (pr->m_maxvallength >= i))
                     {
                         pr->format(" [%zd items]", dsz);
                         break;
@@ -8860,7 +8729,7 @@ namespace neon
 
             static void printFile(IOStream* pr, File* file)
             {
-                pr->format("<file at %s in mode %s>", file->path->data(), file->mode->data());
+                pr->format("<file at %s in mode %s>", file->m_path->data(), file->m_mode->data());
             }
 
             static void printInstance(IOStream* pr, Instance* instance, bool invmethod)
@@ -8964,7 +8833,7 @@ namespace neon
                 (void)fixstring;
                 (void)invmethod;
                 klass = value.asClass();
-                if(pr->jsonmode)
+                if(pr->m_jsonmode)
                 {
                     pr->format("{");
                     {
@@ -8975,10 +8844,10 @@ namespace neon
                         }
                         {
                             pr->format("superclass: ");
-                            oldexp = pr->jsonmode;
-                            pr->jsonmode = false;
+                            oldexp = pr->m_jsonmode;
+                            pr->m_jsonmode = false;
                             printValue(pr, Value::fromObject(klass->m_superclass), true, false);
-                            pr->jsonmode = oldexp;
+                            pr->m_jsonmode = oldexp;
                             pr->format(",");
                         }
                         {
@@ -10400,7 +10269,7 @@ namespace neon
                         int i;
                         int upcnt;
                         UpvalInfo* upvalue;
-                        upcnt = m_targetfunc->upvalcount;
+                        upcnt = m_targetfunc->m_upvalcount;
                         for(i = 0; i < upcnt; i++)
                         {
                             upvalue = &m_upvalues[i];
@@ -10416,7 +10285,7 @@ namespace neon
                         }
                         m_upvalues[upcnt].islocal = islocal;
                         m_upvalues[upcnt].index = index;
-                        return m_targetfunc->upvalcount++;
+                        return m_targetfunc->m_upvalcount++;
                     }
 
                     int resolveUpvalue(AstToken* name)
@@ -10431,12 +10300,12 @@ namespace neon
                         if(local != -1)
                         {
                             m_enclosing->m_locals[local].iscaptured = true;
-                            return this->addUpvalue((uint16_t)local, true);
+                            return addUpvalue((uint16_t)local, true);
                         }
                         upvalue = m_enclosing->resolveUpvalue(name);
                         if(upvalue != -1)
                         {
-                            return this->addUpvalue((uint16_t)upvalue, false);
+                            return addUpvalue((uint16_t)upvalue, false);
                         }
                         return -1;
                     }
@@ -10515,7 +10384,7 @@ namespace neon
                         function = m_sharedprs->endcompiler(false);
                         gcs->vmStackPush(Value::fromObject(function));
                         m_sharedprs->emitbyteandshort(Instruction::OPC_MAKECLOSURE, m_sharedprs->pushconst(Value::fromObject(function)));
-                        for(i = 0; i < function->upvalcount; i++)
+                        for(i = 0; i < function->m_upvalcount; i++)
                         {
                             m_sharedprs->emit1byte(m_upvalues[i].islocal ? 1 : 0);
                             m_sharedprs->emit1short(m_upvalues[i].index);
@@ -10585,7 +10454,7 @@ namespace neon
                 parser->m_lastwasstatement = false;
                 parser->m_infunction = false;
                 parser->m_inswitch = false;
-                parser->m_currentfile = parser->m_currentmodule->physicalpath->data();
+                parser->m_currentfile = parser->m_currentmodule->m_physicalpath->data();
                 return parser;
             }
 
@@ -11388,7 +11257,7 @@ namespace neon
                 }
                 m_panicmode = true;
                 fprintf(stderr, "(%d) %sSyntaxError%s", m_errorcount, colred, colreset);
-                fprintf(stderr, " in [%s:%d]: ", m_currentmodule->physicalpath->data(), t->m_line);
+                fprintf(stderr, " in [%s:%d]: ", m_currentmodule->m_physicalpath->data(), t->m_line);
                 vfprintf(stderr, message, args);
                 fprintf(stderr, " ");
                 if(t->m_toktype == AstToken::T_EOF)
@@ -11769,7 +11638,7 @@ namespace neon
                         constant = (bytecode[ip + 1].code << 8) | bytecode[ip + 2].code;
                         fn = constants[constant].asFunction();
                         /* There is two byte for the constant, then three for each up value. */
-                        return 2 + (fn->upvalcount * 3);
+                        return 2 + (fn->m_upvalcount * 3);
                     }
                     break;
                     default:
@@ -11789,7 +11658,7 @@ namespace neon
 
             void patchat(size_t idx, uint16_t byte)
             {
-                currentblob()->instrucs[idx].code = byte;
+                currentblob()->m_instrucs[idx].code = byte;
             }
 
             void emitinstruc(uint16_t byte)
@@ -11825,7 +11694,7 @@ namespace neon
             {
                 int offset;
                 emitinstruc(Instruction::OPC_LOOP);
-                offset = currentblob()->count - loopstart + 2;
+                offset = currentblob()->m_count - loopstart + 2;
                 if(offset > UINT16_MAX)
                 {
                     raiseerror("loop body too large");
@@ -11881,7 +11750,7 @@ namespace neon
                 /* placeholders */
                 emit1byte(0xff);
                 emit1byte(0xff);
-                return currentblob()->count - 2;
+                return currentblob()->m_count - 2;
             }
 
             int emitswitch()
@@ -11890,7 +11759,7 @@ namespace neon
                 /* placeholders */
                 emit1byte(0xff);
                 emit1byte(0xff);
-                return currentblob()->count - 2;
+                return currentblob()->m_count - 2;
             }
 
             int emittry()
@@ -11905,7 +11774,7 @@ namespace neon
                 /* finally placeholders */
                 emit1byte(0xff);
                 emit1byte(0xff);
-                return currentblob()->count - 6;
+                return currentblob()->m_count - 6;
             }
 
             void patchswitch(int offset, int constant)
@@ -11931,7 +11800,7 @@ namespace neon
             {
                 /* -2 to adjust the bytecode for the offset itself */
                 int jump;
-                jump = currentblob()->count - offset - 2;
+                jump = currentblob()->m_count - offset - 2;
                 if(jump > UINT16_MAX)
                 {
                     raiseerror("body of conditional block too large");
@@ -12140,18 +12009,18 @@ namespace neon
                 // find all Instruction::OPC_BREAK_PL placeholder and replace with the appropriate jump...
                 */
                 i = m_innermostloopstart;
-                while(i < m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->count)
+                while(i < m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_count)
                 {
-                    if(m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs[i].code == Instruction::OPC_BREAK_PL)
+                    if(m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_instrucs[i].code == Instruction::OPC_BREAK_PL)
                     {
-                        m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs[i].code = Instruction::OPC_JUMPNOW;
+                        m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_instrucs[i].code = Instruction::OPC_JUMPNOW;
                         patchjump(i + 1);
                         i += 3;
                     }
                     else
                     {
-                        bcode = m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->instrucs;
-                        cvals = (Value*)m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->constants.data();
+                        bcode = m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_instrucs;
+                        cvals = (Value*)m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_constants.data();
                         i += 1 + getcodeargscount(bcode, cvals, i);
                     }
                 }
@@ -13115,7 +12984,7 @@ namespace neon
                 surroundingloopstart = m_innermostloopstart;
                 surroundingscopedepth = m_innermostloopscopedepth;
                 /* update the this's loop start and depth to the current */
-                m_innermostloopstart = currentblob()->count;
+                m_innermostloopstart = currentblob()->m_count;
                 m_innermostloopscopedepth = m_currentfunccompiler->m_scopedepth;
                 exitjump = -1;
                 if(!match(AstToken::T_SEMICOLON))
@@ -13133,7 +13002,7 @@ namespace neon
                 if(!check(AstToken::T_BRACEOPEN))
                 {
                     bodyjump = emitjump(Instruction::OPC_JUMPNOW);
-                    incrstart = currentblob()->count;
+                    incrstart = currentblob()->m_count;
                     parseexpression();
                     ignorewhitespace();
                     emitinstruc(Instruction::OPC_POPONE);
@@ -13266,7 +13135,7 @@ namespace neon
                 // we'll be jumping back to right before the
                 // expression after the loop body
                 */
-                m_innermostloopstart = currentblob()->count;
+                m_innermostloopstart = currentblob()->m_count;
                 m_innermostloopscopedepth = m_currentfunccompiler->m_scopedepth;
                 /* key = iterable.iter_n__(key) */
                 emitbyteandshort(Instruction::OPC_LOCALGET, iteratorslot);
@@ -13341,7 +13210,7 @@ namespace neon
                 gcs->vmStackPush(Value::fromObject(sw));
                 switchcode = emitswitch();
                 /* emitbyteandshort(Instruction::OPC_SWITCH, pushconst(Value::fromObject(sw))); */
-                startoffset = currentblob()->count;
+                startoffset = currentblob()->m_count;
                 m_inswitch = true;
                 while(!match(AstToken::T_BRACECLOSE) && !check(AstToken::T_EOF))
                 {
@@ -13364,14 +13233,14 @@ namespace neon
                             {
                                 ignorewhitespace();
                                 advance();
-                                jump = Value::makeNumber((double)currentblob()->count - (double)startoffset);
+                                jump = Value::makeNumber((double)currentblob()->m_count - (double)startoffset);
                                 if(m_prevtoken.m_toktype == AstToken::T_KWTRUE)
                                 {
-                                    sw->table.set(Value::makeBool(true), jump);
+                                    sw->m_table.set(Value::makeBool(true), jump);
                                 }
                                 else if(m_prevtoken.m_toktype == AstToken::T_KWFALSE)
                                 {
-                                    sw->table.set(Value::makeBool(false), jump);
+                                    sw->m_table.set(Value::makeBool(false), jump);
                                 }
                                 else if(m_prevtoken.m_toktype == AstToken::T_LITERALSTRING || m_prevtoken.m_toktype == AstToken::T_LITERALRAWSTRING)
                                 {
@@ -13379,13 +13248,13 @@ namespace neon
                                     string = String::take(str, length);
                                     /* gc fix */
                                     gcs->vmStackPush(Value::fromObject(string));
-                                    sw->table.set(Value::fromObject(string), jump);
+                                    sw->m_table.set(Value::fromObject(string), jump);
                                     /* gc fix */
                                     gcs->vmStackPop();
                                 }
                                 else if(checknumber())
                                 {
-                                    sw->table.set(compilenumber(), jump);
+                                    sw->m_table.set(compilenumber(), jump);
                                 }
                                 else
                                 {
@@ -13401,7 +13270,7 @@ namespace neon
                         {
                             consume(AstToken::T_COLON, "expected ':' after 'default'");
                             swstate = 2;
-                            sw->defaultjump = currentblob()->count - startoffset;
+                            sw->m_defaultjump = currentblob()->m_count - startoffset;
                         }
                     }
                     else
@@ -13425,7 +13294,7 @@ namespace neon
                 {
                     patchjump(caseends[i]);
                 }
-                sw->exitjump = currentblob()->count - startoffset;
+                sw->m_exitjump = currentblob()->m_count - startoffset;
                 patchswitch(switchcode, pushconst(Value::fromObject(sw)));
                 /* pop the switch */
                 gcs->vmStackPop();
@@ -13526,7 +13395,7 @@ namespace neon
                     consume(AstToken::T_IDENTNORMAL, "missing exception class name");
                     */
                     type = makeidentconst(&m_prevtoken);
-                    address = currentblob()->count;
+                    address = currentblob()->m_count;
                     if(match(AstToken::T_IDENTNORMAL))
                     {
                         createdvar(m_prevtoken);
@@ -13554,7 +13423,7 @@ namespace neon
                     // we don't want to continue propagating the exception
                     */
                     emitinstruc(Instruction::OPC_PUSHFALSE);
-                    finally = currentblob()->count;
+                    finally = currentblob()->m_count;
                     ignorewhitespace();
                     parsestmt();
                     continueexecutionaddress = emitjump(Instruction::OPC_JUMPIFFALSE);
@@ -13612,7 +13481,7 @@ namespace neon
                 // we'll be jumping back to right before the
                 // expression after the loop body
                 */
-                m_innermostloopstart = currentblob()->count;
+                m_innermostloopstart = currentblob()->m_count;
                 m_innermostloopscopedepth = m_currentfunccompiler->m_scopedepth;
                 parseexpression();
                 exitjump = emitjump(Instruction::OPC_JUMPIFFALSE);
@@ -13637,7 +13506,7 @@ namespace neon
                 // we'll be jumping back to right before the
                 // statements after the loop body
                 */
-                m_innermostloopstart = currentblob()->count;
+                m_innermostloopstart = currentblob()->m_count;
                 m_innermostloopscopedepth = m_currentfunccompiler->m_scopedepth;
                 parsestmt();
                 consume(AstToken::T_KWWHILE, "expecting 'while' statement");
@@ -13836,7 +13705,7 @@ namespace neon
 
     size_t Wrappers::wrapGetBlobcountOfFuncScript(Function* ofn)
     {
-        return ofn->m_fnvals.fnscriptfunc.blob->count;
+        return ofn->m_fnvals.fnscriptfunc.blob->m_count;
     }
 
     const char* Wrappers::wrapGetInstanceName(Instance* inst)
@@ -13857,8 +13726,8 @@ namespace neon
 
     void Value::markDict(Dict* dict)
     {
-        Value::markValArray(&dict->htnames);
-        Value::markValTable(&dict->htab);
+        Value::markValArray(&dict->m_htkeys);
+        Value::markValTable(&dict->m_htvalues);
     }
 
     void Value::markValArray(ValArray<Value>* list)
@@ -13875,9 +13744,9 @@ namespace neon
     {
         int i;
         auto gcs = SharedState::get();
-        for(i = 0; i < table->htcapacity; i++)
+        for(i = 0; i < table->m_htcapacity; i++)
         {
-            auto entry = &table->htentries[i];
+            auto entry = &table->m_htentries[i];
             if(entry->key.isObject() && entry->key.asObject()->m_objmark != gcs->markvalue)
             {
                 table->remove(entry->key);
@@ -13893,14 +13762,14 @@ namespace neon
         {
             return;
         }
-        if(!table->htactive)
+        if(!table->m_htactive)
         {
             // SharedState::raiseWarning("trying to mark inactive hashtable <%p>!", table);
             return;
         }
-        for(i = 0; i < table->htcapacity; i++)
+        for(i = 0; i < table->m_htcapacity; i++)
         {
-            auto entry = &table->htentries[i];
+            auto entry = &table->m_htentries[i];
             if(entry != nullptr)
             {
                 if(!entry->key.isNull())
@@ -13940,7 +13809,7 @@ namespace neon
         /* Non-empty dicts are true, empty dicts are false. */
         if(isDict())
         {
-            return asDict()->htnames.count() == 0;
+            return asDict()->m_htkeys.count() == 0;
         }
         /*
         // All classes are true
@@ -14007,8 +13876,8 @@ namespace neon
         Value keya;
         dicta = (Dict*)oa;
         dictb = (Dict*)ob;
-        lena = dicta->htnames.count();
-        lenb = dictb->htnames.count();
+        lena = dicta->m_htkeys.count();
+        lenb = dictb->m_htkeys.count();
         if(lena != lenb)
         {
             return false;
@@ -14017,8 +13886,8 @@ namespace neon
         while(ai < lena)
         {
             /* first, get the key name off of dicta ... */
-            keya = dicta->htnames.get(ai);
-            fielda = dicta->htab.getfield(dicta->htnames.get(ai));
+            keya = dicta->m_htkeys.get(ai);
+            fielda = dicta->m_htvalues.getfield(dicta->m_htkeys.get(ai));
             if(fielda != nullptr)
             {
                 /* then look up that key in dictb ... */
@@ -14192,7 +14061,7 @@ namespace neon
             }
             else if(a.isRange() && b.isRange())
             {
-                if(a.asRange()->lower >= b.asRange()->lower)
+                if(a.asRange()->m_lower >= b.asRange()->m_lower)
                 {
                     return a;
                 }
@@ -14216,7 +14085,7 @@ namespace neon
             }
             else if(a.isDict() && b.isDict())
             {
-                if(a.asDict()->htnames.count() >= b.asDict()->htnames.count())
+                if(a.asDict()->m_htkeys.count() >= b.asDict()->m_htkeys.count())
                 {
                     return a;
                 }
@@ -14224,7 +14093,7 @@ namespace neon
             }
             else if(a.isFile() && b.isFile())
             {
-                if(strcmp(a.asFile()->path->data(), b.asFile()->path->data()) >= 0)
+                if(strcmp(a.asFile()->m_path->data(), b.asFile()->m_path->data()) >= 0)
                 {
                     return a;
                 }
@@ -14363,14 +14232,14 @@ namespace neon
             {
                 Module* module;
                 module = (Module*)object;
-                Value::markValTable(&module->deftable);
+                Value::markValTable(&module->m_deftable);
             }
             break;
             case Object::OTYP_SWITCH:
             {
                 Switch* sw;
                 sw = (Switch*)object;
-                Value::markValTable(&sw->table);
+                Value::markValTable(&sw->m_table);
             }
             break;
             case Object::OTYP_FILE:
@@ -14424,7 +14293,7 @@ namespace neon
                 Function* closure;
                 closure = (Function*)object;
                 Object::markObject((Object*)closure->m_fnvals.fnclosure.scriptfunc);
-                for(i = 0; i < closure->upvalcount; i++)
+                for(i = 0; i < closure->m_upvalcount; i++)
                 {
                     Object::markObject((Object*)closure->m_fnvals.fnclosure.m_upvalues[i]);
                 }
@@ -14436,7 +14305,7 @@ namespace neon
                 function = (Function*)object;
                 Object::markObject((Object*)function->m_funcname);
                 Object::markObject((Object*)function->m_fnvals.fnscriptfunc.module);
-                Value::markValArray(&function->m_fnvals.fnscriptfunc.blob->constants);
+                Value::markValArray(&function->m_fnvals.fnscriptfunc.blob->m_constants);
             }
             break;
             case Object::OTYP_INSTANCE:
@@ -14449,7 +14318,7 @@ namespace neon
             case Object::OTYP_UPVALUE:
             {
                 auto upv = (Upvalue*)object;
-                SharedState::markValue(upv->closed);
+                SharedState::markValue(upv->m_closed);
             }
             break;
             case Object::OTYP_RANGE:
@@ -14520,7 +14389,7 @@ namespace neon
             {
                 Function* closure;
                 closure = (Function*)object;
-                SharedState::gcRelease(closure->m_fnvals.fnclosure.m_upvalues, (sizeof(Upvalue*) * closure->upvalcount));
+                SharedState::gcRelease(closure->m_fnvals.fnclosure.m_upvalues, (sizeof(Upvalue*) * closure->m_upvalcount));
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
@@ -14573,7 +14442,7 @@ namespace neon
             {
                 Switch* sw;
                 sw = (Switch*)object;
-                sw->table.deInit();
+                sw->m_table.deInit();
                 SharedState::gcRelease(sw);
             }
             break;
@@ -14581,9 +14450,9 @@ namespace neon
             {
                 Userdata* ptr;
                 ptr = (Userdata*)object;
-                if(ptr->ondestroyfn)
+                if(ptr->m_ondestroyfn)
                 {
-                    ptr->ondestroyfn(ptr->pointer);
+                    ptr->m_ondestroyfn(ptr->m_pointer);
                 }
                 SharedState::gcRelease(ptr);
             }
@@ -14614,7 +14483,7 @@ namespace neon
                 handler = &gcs->m_vmstate.framevalues[i].handlers[j];
             }
         }
-        for(upvalue = gcs->m_vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->next)
+        for(upvalue = gcs->m_vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->m_next)
         {
             Object::markObject((Object*)upvalue);
         }
@@ -14657,12 +14526,12 @@ namespace neon
     bool HashTable<HTKeyT, HTValT>::remove(HTKeyT key)
     {
         Entry* entry;
-        if(this->htcount == 0)
+        if(m_htcount == 0)
         {
             return false;
         }
         /* find the entry */
-        entry = findentrybyvalue(this->htentries, this->htcapacity, key);
+        entry = findentrybyvalue(m_htentries, m_htcapacity, key);
         if(entry->key.isNull())
         {
             return false;
@@ -14729,11 +14598,11 @@ namespace neon
         auto gcs = SharedState::get();
         frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount - 1];
         function = frame->closure->m_fnvals.fnclosure.scriptfunc;
-        instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
-        line = function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline;
+        instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+        line = function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline;
         fprintf(stderr, "RuntimeError: ");
         tmpfprintf(stderr, format, args...);
-        fprintf(stderr, " -> %s:%d ", function->m_fnvals.fnscriptfunc.module->physicalpath->data(), line);
+        fprintf(stderr, " -> %s:%d ", function->m_fnvals.fnscriptfunc.module->m_physicalpath->data(), line);
         fputs("\n", stderr);
         if(gcs->m_vmstate.framecount > 1)
         {
@@ -14743,8 +14612,8 @@ namespace neon
                 frame = &gcs->m_vmstate.framevalues[i];
                 function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
-                fprintf(stderr, "    %s:%d -> ", function->m_fnvals.fnscriptfunc.module->physicalpath->data(), function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline);
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+                fprintf(stderr, "    %s:%d -> ", function->m_fnvals.fnscriptfunc.module->m_physicalpath->data(), function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline);
                 if(function->m_funcname == nullptr)
                 {
                     fprintf(stderr, "<script>");
@@ -14938,7 +14807,7 @@ namespace neon
             {
                 int offset;
                 m_outstream->format("== compiled '%s' [[\n", name);
-                for(offset = 0; offset < blob->count;)
+                for(offset = 0; offset < blob->m_count;)
                 {
                     offset = printInstructionAt(blob, offset);
                 }
@@ -14960,10 +14829,10 @@ namespace neon
             int printConstInstruction(const char* name, Blob* blob, int offset)
             {
                 uint16_t constant;
-                constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                constant = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
                 printInstructionName(name);
                 m_outstream->format("%8d ", constant);
-                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                ValPrinter::printValue(m_outstream, blob->m_constants.get(constant), true, false);
                 m_outstream->format("\n");
                 return offset + 3;
             }
@@ -14972,12 +14841,12 @@ namespace neon
             {
                 const char* proptn;
                 uint16_t constant;
-                constant = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                constant = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
                 printInstructionName(name);
                 m_outstream->format("%8d ", constant);
-                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                ValPrinter::printValue(m_outstream, blob->m_constants.get(constant), true, false);
                 proptn = "";
-                if(blob->instrucs[offset + 3].code == 1)
+                if(blob->m_instrucs[offset + 3].code == 1)
                 {
                     proptn = "static";
                 }
@@ -14989,7 +14858,7 @@ namespace neon
             int printShortInstruction(const char* name, Blob* blob, int offset)
             {
                 uint16_t slot;
-                slot = (blob->instrucs[offset + 1].code << 8) | blob->instrucs[offset + 2].code;
+                slot = (blob->m_instrucs[offset + 1].code << 8) | blob->m_instrucs[offset + 2].code;
                 printInstructionName(name);
                 m_outstream->format("%8d\n", slot);
                 return offset + 3;
@@ -14998,7 +14867,7 @@ namespace neon
             int printByteInstruction(const char* name, Blob* blob, int offset)
             {
                 uint16_t slot;
-                slot = blob->instrucs[offset + 1].code;
+                slot = blob->m_instrucs[offset + 1].code;
                 printInstructionName(name);
                 m_outstream->format("%8d\n", slot);
                 return offset + 2;
@@ -15007,8 +14876,8 @@ namespace neon
             int printJumpInstruction(const char* name, int sign, Blob* blob, int offset)
             {
                 uint16_t jump;
-                jump = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-                jump |= blob->instrucs[offset + 2].code;
+                jump = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
+                jump |= blob->m_instrucs[offset + 2].code;
                 printInstructionName(name);
                 m_outstream->format("%8d -> %d\n", offset, offset + 3 + sign * jump);
                 return offset + 3;
@@ -15019,12 +14888,12 @@ namespace neon
                 uint16_t finally;
                 uint16_t type;
                 uint16_t address;
-                type = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-                type |= blob->instrucs[offset + 2].code;
-                address = (uint16_t)(blob->instrucs[offset + 3].code << 8);
-                address |= blob->instrucs[offset + 4].code;
-                finally = (uint16_t)(blob->instrucs[offset + 5].code << 8);
-                finally |= blob->instrucs[offset + 6].code;
+                type = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
+                type |= blob->m_instrucs[offset + 2].code;
+                address = (uint16_t)(blob->m_instrucs[offset + 3].code << 8);
+                address |= blob->m_instrucs[offset + 4].code;
+                finally = (uint16_t)(blob->m_instrucs[offset + 5].code << 8);
+                finally |= blob->m_instrucs[offset + 6].code;
                 printInstructionName(name);
                 m_outstream->format("%8d -> %d, %d\n", type, address, finally);
                 return offset + 7;
@@ -15034,12 +14903,12 @@ namespace neon
             {
                 uint16_t constant;
                 uint16_t argcount;
-                constant = (uint16_t)(blob->instrucs[offset + 1].code << 8);
-                constant |= blob->instrucs[offset + 2].code;
-                argcount = blob->instrucs[offset + 3].code;
+                constant = (uint16_t)(blob->m_instrucs[offset + 1].code << 8);
+                constant |= blob->m_instrucs[offset + 2].code;
+                argcount = blob->m_instrucs[offset + 3].code;
                 printInstructionName(name);
                 m_outstream->format("(%d args) %8d ", argcount, constant);
-                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                ValPrinter::printValue(m_outstream, blob->m_constants.get(constant), true, false);
                 m_outstream->format("\n");
                 return offset + 4;
             }
@@ -15053,17 +14922,17 @@ namespace neon
                 const char* locn;
                 Function* function;
                 offset++;
-                constant = blob->instrucs[offset++].code << 8;
-                constant |= blob->instrucs[offset++].code;
+                constant = blob->m_instrucs[offset++].code << 8;
+                constant |= blob->m_instrucs[offset++].code;
                 m_outstream->format("%-16s %8d ", name, constant);
-                ValPrinter::printValue(m_outstream, blob->constants.get(constant), true, false);
+                ValPrinter::printValue(m_outstream, blob->m_constants.get(constant), true, false);
                 m_outstream->format("\n");
-                function = blob->constants.get(constant).asFunction();
-                for(j = 0; j < function->upvalcount; j++)
+                function = blob->m_constants.get(constant).asFunction();
+                for(j = 0; j < function->m_upvalcount; j++)
                 {
-                    islocal = blob->instrucs[offset++].code;
-                    index = blob->instrucs[offset++].code << 8;
-                    index |= blob->instrucs[offset++].code;
+                    islocal = blob->m_instrucs[offset++].code;
+                    index = blob->m_instrucs[offset++].code << 8;
+                    index |= blob->m_instrucs[offset++].code;
                     locn = "upvalue";
                     if(islocal)
                     {
@@ -15079,15 +14948,15 @@ namespace neon
                 uint16_t instruction;
                 const char* opname;
                 m_outstream->format("%08d ", offset);
-                if(offset > 0 && blob->instrucs[offset].fromsourceline == blob->instrucs[offset - 1].fromsourceline)
+                if(offset > 0 && blob->m_instrucs[offset].fromsourceline == blob->m_instrucs[offset - 1].fromsourceline)
                 {
                     m_outstream->format("       | ");
                 }
                 else
                 {
-                    m_outstream->format("%8d ", blob->instrucs[offset].fromsourceline);
+                    m_outstream->format("%8d ", blob->m_instrucs[offset].fromsourceline);
                 }
-                instruction = blob->instrucs[offset].code;
+                instruction = blob->m_instrucs[offset].code;
                 opname = Debug::opcodeToString(instruction);
                 switch(instruction)
                 {
@@ -15289,12 +15158,12 @@ namespace neon
                 frame = &m_vmstate.framevalues[i];
                 function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->instrucs - 1;
-                line = function->m_fnvals.fnscriptfunc.blob->instrucs[instruction].fromsourceline;
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+                line = function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline;
                 physfile = "(unknown)";
-                if(function->m_fnvals.fnscriptfunc.module->physicalpath != nullptr)
+                if(function->m_fnvals.fnscriptfunc.module->m_physicalpath != nullptr)
                 {
-                    physfile = function->m_fnvals.fnscriptfunc.module->physicalpath->data();
+                    physfile = function->m_fnvals.fnscriptfunc.module->m_physicalpath->data();
                 }
                 fnname = "<script>";
                 if(function->m_funcname != nullptr)
@@ -15352,14 +15221,14 @@ namespace neon
                 function = m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc;
                 if(handler->address != 0 /*&& Class::isInstanceOf(exception->m_instanceclass, handler->handlerklass)*/)
                 {
-                    m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->instrucs[handler->address];
+                    m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->m_instrucs[handler->address];
                     return true;
                 }
                 else if(handler->finallyaddress != 0)
                 {
                     /* continue propagating once the 'finally' block completes */
                     vmStackPush(Value::makeBool(true));
-                    m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->instrucs[handler->finallyaddress];
+                    m_vmstate.currentframe->inscode = &function->m_fnvals.fnscriptfunc.blob->m_instrucs[handler->finallyaddress];
                     return true;
                 }
             }
@@ -16504,7 +16373,7 @@ namespace neon
     {
         ArgCheck check("length", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeNumber(scfn.thisval.asDict()->htnames.count());
+        return Value::makeNumber(scfn.thisval.asDict()->m_htkeys.count());
     }
 
     static Value objfndict_add(const FuncContext& scfn)
@@ -16514,7 +16383,7 @@ namespace neon
         ArgCheck check("add", scfn);
         NEON_ARGS_CHECKCOUNT(check, 2);
         dict = scfn.thisval.asDict();
-        if(dict->htab.get(scfn.argv[0], &tempvalue))
+        if(dict->m_htvalues.get(scfn.argv[0], &tempvalue))
         {
             NEON_RETURNERROR(scfn, "duplicate key %s at add()", Value::toString(scfn.argv[0])->data());
         }
@@ -16529,7 +16398,7 @@ namespace neon
         ArgCheck check("set", scfn);
         NEON_ARGS_CHECKCOUNT(check, 2);
         dict = scfn.thisval.asDict();
-        if(!dict->htab.get(scfn.argv[0], &value))
+        if(!dict->m_htvalues.get(scfn.argv[0], &value))
         {
             dict->add(scfn.argv[0], scfn.argv[1]);
         }
@@ -16546,8 +16415,8 @@ namespace neon
         ArgCheck check("clear", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
-        dict->htnames.deInit();
-        dict->htab.deInit();
+        dict->m_htkeys.deInit();
+        dict->m_htvalues.deInit();
         return Value::makeNull();
     }
 
@@ -16561,14 +16430,14 @@ namespace neon
         NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         newdict = SharedState::gcProtect(Dict::make());
-        if(!dict->htab.copyTo(&newdict->htab, true))
+        if(!dict->m_htvalues.copyTo(&newdict->m_htvalues, true))
         {
             NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.argumenterror, "failed to copy table");
             return Value::makeNull();
         }
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            newdict->htnames.push(dict->htnames.get(i));
+            newdict->m_htkeys.push(dict->m_htkeys.get(i));
         }
         return Value::fromObject(newdict);
     }
@@ -16584,12 +16453,12 @@ namespace neon
         dict = scfn.thisval.asDict();
         newdict = (Dict*)SharedState::gcProtect(Dict::make());
         tmpvalue = Value::makeNull();
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            dict->htab.get(dict->htnames.get(i), &tmpvalue);
+            dict->m_htvalues.get(dict->m_htkeys.get(i), &tmpvalue);
             if(!Value::compareValues(tmpvalue, Value::makeNull()))
             {
-                newdict->add(dict->htnames.get(i), tmpvalue);
+                newdict->add(dict->m_htkeys.get(i), tmpvalue);
             }
         }
         return Value::fromObject(newdict);
@@ -16602,7 +16471,7 @@ namespace neon
         ArgCheck check("contains", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
-        return Value::makeBool(dict->htab.get(scfn.argv[0], &value));
+        return Value::makeBool(dict->m_htvalues.get(scfn.argv[0], &value));
     }
 
     static Value objfndict_extend(const FuncContext& scfn)
@@ -16616,14 +16485,14 @@ namespace neon
         NEON_ARGS_CHECKTYPE(check, 0, &Value::isDict);
         dict = scfn.thisval.asDict();
         dictcpy = scfn.argv[0].asDict();
-        for(i = 0; i < dictcpy->htnames.count(); i++)
+        for(i = 0; i < dictcpy->m_htkeys.count(); i++)
         {
-            if(!dict->htab.get(dictcpy->htnames.get(i), &tmp))
+            if(!dict->m_htvalues.get(dictcpy->m_htkeys.get(i), &tmp))
             {
-                dict->htnames.push(dictcpy->htnames.get(i));
+                dict->m_htkeys.push(dictcpy->m_htkeys.get(i));
             }
         }
-        dictcpy->htab.copyTo(&dict->htab, true);
+        dictcpy->m_htvalues.copyTo(&dict->m_htvalues, true);
         return Value::makeNull();
     }
 
@@ -16658,9 +16527,9 @@ namespace neon
         NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         list = SharedState::gcProtect(Array::make());
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            list->push(dict->htnames.get(i));
+            list->push(dict->m_htkeys.get(i));
         }
         return Value::fromObject(list);
     }
@@ -16675,9 +16544,9 @@ namespace neon
         NEON_ARGS_CHECKCOUNT(check, 0);
         dict = scfn.thisval.asDict();
         list =SharedState::gcProtect(Array::make());
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            field = dict->get(dict->htnames.get(i));
+            field = dict->get(dict->m_htkeys.get(i));
             list->push(field->value);
         }
         return Value::fromObject(list);
@@ -16692,23 +16561,23 @@ namespace neon
         ArgCheck check("remove", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
-        if(dict->htab.get(scfn.argv[0], &value))
+        if(dict->m_htvalues.get(scfn.argv[0], &value))
         {
-            dict->htab.remove(scfn.argv[0]);
+            dict->m_htvalues.remove(scfn.argv[0]);
             index = -1;
-            for(i = 0; i < dict->htnames.count(); i++)
+            for(i = 0; i < dict->m_htkeys.count(); i++)
             {
-                if(Value::compareValues(dict->htnames.get(i), scfn.argv[0]))
+                if(Value::compareValues(dict->m_htkeys.get(i), scfn.argv[0]))
                 {
                     index = i;
                     break;
                 }
             }
-            for(i = index; i < dict->htnames.count(); i++)
+            for(i = index; i < dict->m_htkeys.count(); i++)
             {
-                dict->htnames.set(i, dict->htnames.get(i + 1));
+                dict->m_htkeys.set(i, dict->m_htkeys.get(i + 1));
             }
-            dict->htnames.pop(nullptr);
+            dict->m_htkeys.pop(nullptr);
             return value;
         }
         return Value::makeNull();
@@ -16718,14 +16587,14 @@ namespace neon
     {
         ArgCheck check("isempty", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeBool(scfn.thisval.asDict()->htnames.count() == 0);
+        return Value::makeBool(scfn.thisval.asDict()->m_htkeys.count() == 0);
     }
 
     static Value objfndict_findkey(const FuncContext& scfn)
     {
         ArgCheck check("findkey", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
-        auto ht = scfn.thisval.asDict()->htab;
+        auto ht = scfn.thisval.asDict()->m_htvalues;
         return ht.findkey(scfn.argv[0], Value::makeNull());
     }
 
@@ -16741,11 +16610,11 @@ namespace neon
         dict = scfn.thisval.asDict();
         namelist = SharedState::gcProtect(Array::make());
         valuelist = SharedState::gcProtect(Array::make());
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            namelist->push(dict->htnames.get(i));
+            namelist->push(dict->m_htkeys.get(i));
             Value value;
-            if(dict->htab.get(dict->htnames.get(i), &value))
+            if(dict->m_htvalues.get(dict->m_htkeys.get(i), &value))
             {
                 valuelist->push(value);
             }
@@ -16768,7 +16637,7 @@ namespace neon
         ArgCheck check("iter", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
         dict = scfn.thisval.asDict();
-        if(dict->htab.get(scfn.argv[0], &result))
+        if(dict->m_htvalues.get(scfn.argv[0], &result))
         {
             return result;
         }
@@ -16784,17 +16653,17 @@ namespace neon
         dict = scfn.thisval.asDict();
         if(scfn.argv[0].isNull())
         {
-            if(dict->htnames.count() == 0)
+            if(dict->m_htkeys.count() == 0)
             {
                 return Value::makeBool(false);
             }
-            return dict->htnames.get(0);
+            return dict->m_htkeys.get(0);
         }
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
-            if(Value::compareValues(scfn.argv[0], dict->htnames.get(i)) && (i + 1) < dict->htnames.count())
+            if(Value::compareValues(scfn.argv[0], dict->m_htkeys.get(i)) && (i + 1) < dict->m_htkeys.count())
             {
-                return dict->htnames.get(i + 1);
+                return dict->m_htkeys.get(i + 1);
             }
         }
         return Value::makeNull();
@@ -16818,18 +16687,18 @@ namespace neon
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
         value = Value::makeNull();
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
             passi = 0;
             if(arity > 0)
             {
-                dict->htab.get(dict->htnames.get(i), &value);
+                dict->m_htvalues.get(dict->m_htkeys.get(i), &value);
                 passi++;
                 nestargs[0] = value;
                 if(arity > 1)
                 {
                     passi++;
-                    nestargs[1] = dict->htnames.get(i);
+                    nestargs[1] = dict->m_htkeys.get(i);
                 }
             }
             gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, passi, &unused, false);
@@ -16857,10 +16726,10 @@ namespace neon
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
         resultdict = SharedState::gcProtect(Dict::make());
         value = Value::makeNull();
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
             passi = 0;
-            dict->htab.get(dict->htnames.get(i), &value);
+            dict->m_htvalues.get(dict->m_htkeys.get(i), &value);
             if(arity > 0)
             {
                 passi++;
@@ -16868,13 +16737,13 @@ namespace neon
                 if(arity > 1)
                 {
                     passi++;
-                    nestargs[1] = dict->htnames.get(i);
+                    nestargs[1] = dict->m_htkeys.get(i);
                 }
             }
             gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, passi, &result, false);
             if(!result.isFalse())
             {
-                resultdict->add(dict->htnames.get(i), value);
+                resultdict->add(dict->m_htkeys.get(i), value);
             }
         }
         /* pop the call list */
@@ -16899,18 +16768,18 @@ namespace neon
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
         value = Value::makeNull();
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
             passi = 0;
             if(arity > 0)
             {
-                dict->htab.get(dict->htnames.get(i), &value);
+                dict->m_htvalues.get(dict->m_htkeys.get(i), &value);
                 passi++;
                 nestargs[0] = value;
                 if(arity > 1)
                 {
                     passi++;
-                    nestargs[1] = dict->htnames.get(i);
+                    nestargs[1] = dict->m_htkeys.get(i);
                 }
             }
             gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, passi, &result, false);
@@ -16942,18 +16811,18 @@ namespace neon
         callable = scfn.argv[0];
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 2);
         value = Value::makeNull();
-        for(i = 0; i < dict->htnames.count(); i++)
+        for(i = 0; i < dict->m_htkeys.count(); i++)
         {
             passi = 0;
             if(arity > 0)
             {
-                dict->htab.get(dict->htnames.get(i), &value);
+                dict->m_htvalues.get(dict->m_htkeys.get(i), &value);
                 passi++;
                 nestargs[0] = value;
                 if(arity > 1)
                 {
                     passi++;
-                    nestargs[1] = dict->htnames.get(i);
+                    nestargs[1] = dict->m_htkeys.get(i);
                 }
             }
             gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, passi, &result, false);
@@ -16989,18 +16858,18 @@ namespace neon
         {
             accumulator = scfn.argv[1];
         }
-        if(accumulator.isNull() && dict->htnames.count() > 0)
+        if(accumulator.isNull() && dict->m_htkeys.count() > 0)
         {
-            dict->htab.get(dict->htnames.get(0), &accumulator);
+            dict->m_htvalues.get(dict->m_htkeys.get(0), &accumulator);
             startindex = 1;
         }
         arity = gcs->vmNestCallPrepare(callable, scfn.thisval, nestargs, 4);
         value = Value::makeNull();
-        for(i = startindex; i < dict->htnames.count(); i++)
+        for(i = startindex; i < dict->m_htkeys.count(); i++)
         {
             passi = 0;
             /* only call map for non-empty values in a list. */
-            if(!dict->htnames.get(i).isNull() && !dict->htnames.get(i).isNull())
+            if(!dict->m_htkeys.get(i).isNull() && !dict->m_htkeys.get(i).isNull())
             {
                 if(arity > 0)
                 {
@@ -17008,13 +16877,13 @@ namespace neon
                     nestargs[0] = accumulator;
                     if(arity > 1)
                     {
-                        dict->htab.get(dict->htnames.get(i), &value);
+                        dict->m_htvalues.get(dict->m_htkeys.get(i), &value);
                         passi++;
                         nestargs[1] = value;
                         if(arity > 2)
                         {
                             passi++;
-                            nestargs[2] = dict->htnames.get(i);
+                            nestargs[2] = dict->m_htkeys.get(i);
                             if(arity > 4)
                             {
                                 passi++;
@@ -17182,14 +17051,14 @@ namespace neon
     {
         File* file;
         file = scfn.thisval.asFile();
-        return Value::makeBool(file->isstd || file->isopen);
+        return Value::makeBool(file->m_isstd || file->m_isopen);
     }
 
     static Value objfnfile_isclosed(const FuncContext& scfn)
     {
         File* file;
         file = scfn.thisval.asFile();
-        return Value::makeBool(!file->isstd && !file->isopen);
+        return Value::makeBool(!file->m_isstd && !file->m_isopen);
     }
 
     static Value objfnfile_readmethod(const FuncContext& scfn)
@@ -17206,7 +17075,7 @@ namespace neon
             readhowmuch = (size_t)scfn.argv[0].asNumber();
         }
         file = scfn.thisval.asFile();
-        //#define FILE_ERROR_(scfn, type, message) NEON_RETURNERROR(scfn, #type " -> %s", message, file->path->data());
+        //#define FILE_ERROR_(scfn, type, message) NEON_RETURNERROR(scfn, #type " -> %s", message, file->m_path->data());
 
         if(!file->readData(readhowmuch, &res))
         {
@@ -17227,7 +17096,7 @@ namespace neon
         file = scfn.thisval.asFile();
         linelen = 0;
         strline = nullptr;
-        rdline = File::readLineFromHandle(&strline, &linelen, file->handle);
+        rdline = File::readLineFromHandle(&strline, &linelen, file->m_handle);
         if(rdline == -1)
         {
             return Value::makeNull();
@@ -17243,7 +17112,7 @@ namespace neon
         ArgCheck check("get", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        ch = fgetc(file->handle);
+        ch = fgetc(file->m_handle);
         if(ch == EOF)
         {
             return Value::makeNull();
@@ -17268,36 +17137,36 @@ namespace neon
             length = (size_t)scfn.argv[0].asNumber();
         }
         file = scfn.thisval.asFile();
-        if(!file->isstd)
+        if(!file->m_isstd)
         {
-            if(!File::fileExists(file->path->data()))
+            if(!File::fileExists(file->m_path->data()))
             {
                 NEON_RETURNERROR(scfn, "NotFound -> %s" , "no such file or directory");
             }
-            else if(strstr(file->mode->data(), "w") != nullptr && strstr(file->mode->data(), "+") == nullptr)
+            else if(strstr(file->m_mode->data(), "w") != nullptr && strstr(file->m_mode->data(), "+") == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read file in write mode");
             }
-            if(!file->isopen)
+            if(!file->m_isopen)
             {
                 NEON_RETURNERROR(scfn, "Read -> %s" , "file not open");
             }
-            else if(file->handle == nullptr)
+            else if(file->m_handle == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Read -> %s" , "could not read file");
             }
             if(length == -1)
             {
-                currentpos = ftell(file->handle);
-                fseek(file->handle, 0L, SEEK_END);
-                end = ftell(file->handle);
-                fseek(file->handle, currentpos, SEEK_SET);
+                currentpos = ftell(file->m_handle);
+                fseek(file->m_handle, 0L, SEEK_END);
+                end = ftell(file->m_handle);
+                fseek(file->m_handle, currentpos, SEEK_SET);
                 length = end - currentpos;
             }
         }
         else
         {
-            if(fileno(stdout) == file->number || fileno(stderr) == file->number)
+            if(fileno(stdout) == file->m_number || fileno(stderr) == file->m_number)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot read from output file");
             }
@@ -17315,7 +17184,7 @@ namespace neon
         {
             NEON_RETURNERROR(scfn, "Buffer -> %s" , "not enough memory to read file");
         }
-        bytesread = fread(buffer, sizeof(char), length, file->handle);
+        bytesread = fread(buffer, sizeof(char), length, file->m_handle);
         if(bytesread == 0 && length != 0)
         {
             NEON_RETURNERROR(scfn, "Read -> %s" , "could not read file contents");
@@ -17341,9 +17210,9 @@ namespace neon
         string = scfn.argv[0].asString();
         data = (unsigned char*)string->data();
         length = string->length();
-        if(!file->isstd)
+        if(!file->m_isstd)
         {
-            if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
+            if(strstr(file->m_mode->data(), "r") != nullptr && strstr(file->m_mode->data(), "+") == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
@@ -17351,24 +17220,24 @@ namespace neon
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "cannot write empty buffer to file");
             }
-            else if(file->handle == nullptr || !file->isopen)
+            else if(file->m_handle == nullptr || !file->m_isopen)
             {
                 file->openWithoutParams();
             }
-            else if(file->handle == nullptr)
+            else if(file->m_handle == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
-            if(fileno(stdin) == file->number)
+            if(fileno(stdin) == file->m_number)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
         }
-        count = fwrite(data, sizeof(unsigned char), length, file->handle);
-        fflush(file->handle);
+        count = fwrite(data, sizeof(unsigned char), length, file->m_handle);
+        fflush(file->m_handle);
         if(count > (size_t)0)
         {
             return Value::makeBool(true);
@@ -17389,24 +17258,24 @@ namespace neon
         NEON_ARGS_CHECKCOUNT(check, 1);
         file = scfn.thisval.asFile();
 
-        if(!file->isstd)
+        if(!file->m_isstd)
         {
-            if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
+            if(strstr(file->m_mode->data(), "r") != nullptr && strstr(file->m_mode->data(), "+") == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
-            else if(!file->isopen)
+            else if(!file->m_isopen)
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "file not open");
             }
-            else if(file->handle == nullptr)
+            else if(file->m_handle == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
-            if(fileno(stdin) == file->number)
+            if(fileno(stdin) == file->m_number)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
@@ -17418,7 +17287,7 @@ namespace neon
             string = scfn.argv[i].asString();
             data = (unsigned char*)string->data();
             length = string->length();
-            count = fwrite(data, sizeof(unsigned char), length, file->handle);
+            count = fwrite(data, sizeof(unsigned char), length, file->m_handle);
             if(count > (size_t)0 || length == 0)
             {
                 return Value::makeNumber(0);
@@ -17436,24 +17305,24 @@ namespace neon
         ArgCheck check("puts", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
         file = scfn.thisval.asFile();
-        if(!file->isstd)
+        if(!file->m_isstd)
         {
-            if(strstr(file->mode->data(), "r") != nullptr && strstr(file->mode->data(), "+") == nullptr)
+            if(strstr(file->m_mode->data(), "r") != nullptr && strstr(file->m_mode->data(), "+") == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write into non-writable file");
             }
-            else if(!file->isopen)
+            else if(!file->m_isopen)
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "file not open");
             }
-            else if(file->handle == nullptr)
+            else if(file->m_handle == nullptr)
             {
                 NEON_RETURNERROR(scfn, "Write -> %s" , "could not write to file");
             }
         }
         else
         {
-            if(fileno(stdin) == file->number)
+            if(fileno(stdin) == file->m_number)
             {
                 NEON_RETURNERROR(scfn, "Unsupported -> %s" , "cannot write to input file");
             }
@@ -17463,7 +17332,7 @@ namespace neon
         {
             NEON_ARGS_CHECKTYPE(check, i, &Value::isNumber);
             int cv = scfn.argv[i].asNumber();
-            rc += fputc(cv, file->handle);
+            rc += fputc(cv, file->m_handle);
         }
         return Value::makeNumber(rc);
     }
@@ -17478,7 +17347,7 @@ namespace neon
         NEON_ARGS_CHECKMINARG(check, 1);
         NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
         ofmt = scfn.argv[0].asString();
-        IOStream::makeStackIO(&pr, file->handle, false);
+        IOStream::makeStackIO(&pr, file->m_handle, false);
         FormatInfo nfi(&pr, ofmt->data(), ofmt->length());
         if(!nfi.formatWithArgs(scfn.argc, 1, scfn.argv))
         {
@@ -17490,7 +17359,7 @@ namespace neon
     {
         ArgCheck check("number", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeNumber(scfn.thisval.asFile()->number);
+        return Value::makeNumber(scfn.thisval.asFile()->m_number);
     }
 
     static Value objfnfile_istty(const FuncContext& scfn)
@@ -17499,7 +17368,7 @@ namespace neon
         ArgCheck check("istty", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        return Value::makeBool(file->istty);
+        return Value::makeBool(file->m_istty);
     }
 
     static Value objfnfile_flush(const FuncContext& scfn)
@@ -17508,12 +17377,12 @@ namespace neon
         ArgCheck check("flush", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        if(!file->isopen)
+        if(!file->m_isopen)
         {
             NEON_RETURNERROR(scfn, "Unsupported -> %s" , "I/O operation on closed file");
         }
     #if defined(NEON_PLAT_ISLINUX)
-        if(fileno(stdin) == file->number)
+        if(fileno(stdin) == file->m_number)
         {
             while((getchar()) != '\n')
             {
@@ -17521,10 +17390,10 @@ namespace neon
         }
         else
         {
-            fflush(file->handle);
+            fflush(file->m_handle);
         }
     #else
-        fflush(file->handle);
+        fflush(file->m_handle);
     #endif
         return Value::makeNull();
     }
@@ -17535,11 +17404,11 @@ namespace neon
         ArgCheck check("path", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        if(file->isstd)
+        if(file->m_isstd)
         {
             NEON_RETURNERROR(scfn, "method not supported for std files");
         }
-        return Value::fromObject(file->path);
+        return Value::fromObject(file->m_path);
     }
 
     static Value objfnfile_mode(const FuncContext& scfn)
@@ -17548,7 +17417,7 @@ namespace neon
         ArgCheck check("mode", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        return Value::fromObject(file->mode);
+        return Value::fromObject(file->m_mode);
     }
 
     static Value objfnfile_name(const FuncContext& scfn)
@@ -17558,12 +17427,12 @@ namespace neon
         ArgCheck check("name", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        if(!file->isstd)
+        if(!file->m_isstd)
         {
-            name = File::getBasename(file->path->data());
+            name = File::getBasename(file->m_path->data());
             return Value::fromObject(String::copy(name));
         }
-        else if(file->istty)
+        else if(file->m_istty)
         {
             return Value::fromObject(String::copy("<tty>"));
         }
@@ -17580,13 +17449,13 @@ namespace neon
         NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
         file = scfn.thisval.asFile();
-        if(file->isstd)
+        if(file->m_isstd)
         {
             NEON_RETURNERROR(scfn, "method not supported for std files");
         }
         position = (long)scfn.argv[0].asNumber();
         seektype = scfn.argv[1].asNumber();
-        if(fseek(file->handle, position, seektype) == 0)
+        if(fseek(file->m_handle, position, seektype) == 0)
         {
             return Value::makeBool(true);
         }
@@ -17599,11 +17468,11 @@ namespace neon
         ArgCheck check("tell", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
         file = scfn.thisval.asFile();
-        if(file->isstd)
+        if(file->m_isstd)
         {
             NEON_RETURNERROR(scfn, "method not supported for std files");
         }
-        return Value::makeNumber(ftell(file->handle));
+        return Value::makeNumber(ftell(file->m_handle));
     }
 
 
@@ -18052,21 +17921,21 @@ namespace neon
     {
         ArgCheck check("lower", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeNumber(scfn.thisval.asRange()->lower);
+        return Value::makeNumber(scfn.thisval.asRange()->m_lower);
     }
 
     static Value objfnrange_upper(const FuncContext& scfn)
     {
         ArgCheck check("upper", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeNumber(scfn.thisval.asRange()->upper);
+        return Value::makeNumber(scfn.thisval.asRange()->m_upper);
     }
 
     static Value objfnrange_range(const FuncContext& scfn)
     {
         ArgCheck check("range", scfn);
         NEON_ARGS_CHECKCOUNT(check, 0);
-        return Value::makeNumber(scfn.thisval.asRange()->range);
+        return Value::makeNumber(scfn.thisval.asRange()->m_range);
     }
 
     static Value objfnrange_iter(const FuncContext& scfn)
@@ -18079,19 +17948,19 @@ namespace neon
         NEON_ARGS_CHECKTYPE(check, 0, &Value::isNumber);
         range = scfn.thisval.asRange();
         index = scfn.argv[0].asNumber();
-        if(index >= 0 && index < range->range)
+        if(index >= 0 && index < range->m_range)
         {
             if(index == 0)
             {
-                return Value::makeNumber(range->lower);
+                return Value::makeNumber(range->m_lower);
             }
-            if(range->lower > range->upper)
+            if(range->m_lower > range->m_upper)
             {
-                val = --range->lower;
+                val = --range->m_lower;
             }
             else
             {
-                val = ++range->lower;
+                val = ++range->m_lower;
             }
             return Value::makeNumber(val);
         }
@@ -18107,7 +17976,7 @@ namespace neon
         range = scfn.thisval.asRange();
         if(scfn.argv[0].isNull())
         {
-            if(range->range == 0)
+            if(range->m_range == 0)
             {
                 return Value::makeNull();
             }
@@ -18118,7 +17987,7 @@ namespace neon
             NEON_RETURNERROR(scfn, "ranges are numerically indexed");
         }
         index = (int)scfn.argv[0].asNumber() + 1;
-        if(index < range->range)
+        if(index < range->m_range)
         {
             return Value::makeNumber(index);
         }
@@ -18133,7 +18002,7 @@ namespace neon
         Array* oa;
         range = scfn.thisval.asRange();
         oa = Array::make();
-        for(i = 0; i < range->range; i++)
+        for(i = 0; i < range->m_range; i++)
         {
             val = Value::makeNumber(i);
             oa->push(val);
@@ -18223,7 +18092,7 @@ namespace neon
         counter = 0;
         while(iter.next())
         {
-            cp = iter.codepoint;
+            cp = iter.m_codepoint;
             cstr = iter.getChar();
             counter++;
             if(havemax)
@@ -18239,7 +18108,7 @@ namespace neon
             }
             else
             {
-                os = String::copy(cstr, iter.charsize);
+                os = String::copy(cstr, iter.m_charsize);
                 res->push(Value::fromObject(os));
             }
         }
@@ -19533,9 +19402,10 @@ namespace neon
         String* os;
         ArgCheck check("eval", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
+        auto gcs = SharedState::get();
         os = scfn.argv[0].asString();
         /*fprintf(stderr, "eval:src=%s\n", os->data());*/
-        result = evalSource(os->data());
+        result = gcs->evalSource(os->data());
         return result;
     }
 
@@ -19546,9 +19416,10 @@ namespace neon
         String* os;
         ArgCheck check("loadfile", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
+        auto gcs = SharedState::get();
         os = scfn.argv[0].asString();
         fprintf(stderr, "eval:src=%s\n", os->data());
-        result = evalSource(os->data());
+        result = gcs->evalSource(os->data());
         return result;
     }
     */
@@ -19630,7 +19501,7 @@ namespace neon
         String* os;
         v = scfn.argv[0];
         IOStream::makeStackString(&pr);
-        pr.jsonmode = true;
+        pr.m_jsonmode = true;
         ValPrinter::printValue(&pr, v, true, false);
         os = pr.takeString();
         IOStream::destroy(&pr);
@@ -20021,7 +19892,7 @@ namespace neon
         int startva;
         CallFrame* frame;
         Array* argslist;
-        // closure->clsthisval = thisval;
+        // closure->m_clsthisval = thisval;
         NEON_APIDEBUG("thisval.m_valtype=%s, argcount=%d", Value::typeName(thisval, true), argcount);
         /* fill empty parameters if not variadic */
         for(; !closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.isvariadic && (argcount < size_t(closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.arity)); argcount++)
@@ -20069,7 +19940,7 @@ namespace neon
         }
         frame = &m_vmstate.framevalues[m_vmstate.framecount++];
         frame->closure = closure;
-        frame->inscode = closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->instrucs;
+        frame->inscode = closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs;
         frame->stackslotpos = m_vmstate.stackidx + (-argcount - 1);
         return true;
     }
@@ -20151,7 +20022,7 @@ namespace neon
                     Module* module;
                     Property* field;
                     module = callable.asModule();
-                    field = module->deftable.getfieldbyostr(module->m_modname);
+                    field = module->m_deftable.getfieldbyostr(module->m_modname);
                     if(field != nullptr)
                     {
                         return vmCallValue(field->value, thisval, argcount, false);
@@ -20347,7 +20218,7 @@ namespace neon
                     Module* module;
                     NEON_APIDEBUG("receiver is a module");
                     module = receiver.asModule();
-                    field = module->deftable.getfieldbyostr(name);
+                    field = module->m_deftable.getfieldbyostr(name);
                     if(field != nullptr)
                     {
                         if(Class::methodNameIsPrivate(name))
@@ -20426,7 +20297,7 @@ namespace neon
                     /* NEW in v0.0.84, dictionaries can declare extra methods as part of their entries. */
                     else
                     {
-                        field = receiver.asDict()->htab.getfieldbyostr(name);
+                        field = receiver.asDict()->m_htvalues.getfieldbyostr(name);
                         if(field != nullptr)
                         {
                             if(field->value.isCallable())
@@ -20485,24 +20356,24 @@ namespace neon
         Upvalue* createdupvalue;
         prevupvalue = nullptr;
         upvalue = m_vmstate.openupvalues;
-        while(upvalue != nullptr && (&upvalue->location) > local)
+        while(upvalue != nullptr && (&upvalue->m_location) > local)
         {
             prevupvalue = upvalue;
-            upvalue = upvalue->next;
+            upvalue = upvalue->m_next;
         }
-        if(upvalue != nullptr && (&upvalue->location) == local)
+        if(upvalue != nullptr && (&upvalue->m_location) == local)
         {
             return upvalue;
         }
         createdupvalue = Upvalue::make(local, stackpos);
-        createdupvalue->next = upvalue;
+        createdupvalue->m_next = upvalue;
         if(prevupvalue == nullptr)
         {
             m_vmstate.openupvalues = createdupvalue;
         }
         else
         {
-            prevupvalue->next = createdupvalue;
+            prevupvalue->m_next = createdupvalue;
         }
         return createdupvalue;
     }
@@ -20510,12 +20381,12 @@ namespace neon
     NEON_INLINE void SharedState::vmUtilUpvaluesClose(const Value* last)
     {
         Upvalue* upvalue;
-        while(m_vmstate.openupvalues != nullptr && (&m_vmstate.openupvalues->location) >= last)
+        while(m_vmstate.openupvalues != nullptr && (&m_vmstate.openupvalues->m_location) >= last)
         {
             upvalue = m_vmstate.openupvalues;
-            upvalue->closed = upvalue->location;
-            upvalue->location = upvalue->closed;
-            m_vmstate.openupvalues = upvalue->next;
+            upvalue->m_closed = upvalue->m_location;
+            upvalue->m_location = upvalue->m_closed;
+            m_vmstate.openupvalues = upvalue->m_next;
         }
     }
 
@@ -20810,7 +20681,7 @@ namespace neon
         Value vindex;
         Value result;
         vindex = vmStackPeek(0);
-        if(module->deftable.get(vindex, &result))
+        if(module->m_deftable.get(vindex, &result))
         {
             if(!willassign)
             {
@@ -20843,8 +20714,8 @@ namespace neon
             {
                 rng = vindex.asRange();
                 vmStackPop();
-                vmStackPush(Value::makeNumber(rng->lower));
-                vmStackPush(Value::makeNumber(rng->upper));
+                vmStackPush(Value::makeNumber(rng->m_lower));
+                vmStackPush(Value::makeNumber(rng->m_upper));
                 return vmUtilDoGetRangedIndexOfString(string, willassign);
             }
             vmStackPop(1);
@@ -20903,8 +20774,8 @@ namespace neon
             {
                 rng = vindex.asRange();
                 vmStackPop();
-                vmStackPush(Value::makeNumber(rng->lower));
-                vmStackPush(Value::makeNumber(rng->upper));
+                vmStackPush(Value::makeNumber(rng->m_lower));
+                vmStackPush(Value::makeNumber(rng->m_upper));
                 return vmUtilDoGetRangedIndexOfArray(list, willassign);
             }
             vmStackPop();
@@ -21082,7 +20953,7 @@ namespace neon
 
     NEON_INLINE bool SharedState::vmUtilDoSetIndexModule(Module* module, Value index, Value value)
     {
-        module->deftable.set(index, value);
+        module->m_deftable.set(index, value);
         /* pop the value, index and dict out */
         vmStackPop(3);
         /*
@@ -21324,7 +21195,7 @@ namespace neon
             {
                 Module* module;
                 module = peeked.asModule();
-                field = module->deftable.getfieldbyostr(name);
+                field = module->m_deftable.getfieldbyostr(name);
                 if(field != nullptr)
                 {
                     if(Class::methodNameIsPrivate(name))
@@ -21424,7 +21295,7 @@ namespace neon
             break;
             case Object::OTYP_DICT:
             {
-                field = peeked.asDict()->htab.getfieldbyostr(name);
+                field = peeked.asDict()->m_htvalues.getfieldbyostr(name);
                 if(field == nullptr)
                 {
                     field = m_classprimdict->getPropertyField(name);
@@ -21578,7 +21449,7 @@ namespace neon
         else if(peeked.isModule())
         {
             module = peeked.asModule();
-            field = module->deftable.getfieldbyostr(name);
+            field = module->m_deftable.getfieldbyostr(name);
             if(field != nullptr)
             {
                 /* pop the module... */
@@ -21870,7 +21741,7 @@ namespace neon
         String* name;
         name = vmReadString();
         val = vmStackPeek(0);
-        auto tab = &m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable;
+        auto tab = &m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->m_deftable;
         tab->set(Value::fromObject(name), val);
         vmStackPop();
         return true;
@@ -21881,7 +21752,7 @@ namespace neon
         String* name;
         Property* field;
         name = vmReadString();
-        auto tab = &m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable;
+        auto tab = &m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->m_deftable;
         field = tab->getfieldbyostr(name);
         if(field == nullptr)
         {
@@ -21902,7 +21773,7 @@ namespace neon
         Module* module;
         name = vmReadString();
         module = m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module;
-        auto table = &module->deftable;
+        auto table = &module->m_deftable;
         if(table->set(Value::fromObject(name), vmStackPeek(0)))
         {
             if(m_conf.enablestrictmode)
@@ -22032,7 +21903,7 @@ namespace neon
     #endif
         closure = Function::makeFuncClosure(function, thisval);
         vmStackPush(Value::fromObject(closure));
-        for(i = 0; i < (size_t)closure->upvalcount; i++)
+        for(i = 0; i < (size_t)closure->m_upvalcount; i++)
         {
             islocal = vmReadByte();
             upvidx = vmReadShort();
@@ -22255,7 +22126,7 @@ namespace neon
             }
             if(NEON_UNLIKELY(m_conf.shoulddumpstack))
             {
-                ofs = (int)(m_vmstate.currentframe->inscode - m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->instrucs);
+                ofs = (int)(m_vmstate.currentframe->inscode - m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs);
                 vmdbg.printInstructionAt(m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
                 fprintf(stderr, "stack (before)=[\n");
                 iterpos = 0;
@@ -22733,13 +22604,13 @@ namespace neon
                     Function* closure;
                     upvidx = vmReadShort();
                     closure = m_vmstate.currentframe->closure;
-                    if(upvidx < closure->upvalcount)
+                    if(upvidx < closure->m_upvalcount)
                     {
-                        vmStackPush((closure->m_fnvals.fnclosure.m_upvalues[upvidx]->location));
+                        vmStackPush((closure->m_fnvals.fnclosure.m_upvalues[upvidx]->m_location));
                     }
                     else
                     {
-                        vmStackPush(closure->clsthisval);
+                        vmStackPush(closure->m_clsthisval);
                     }
                 }
                 VMMAC_DISPATCH();
@@ -22749,7 +22620,7 @@ namespace neon
                     Value val;
                     upvidx = vmReadShort();
                     val = vmStackPeek(0);
-                    m_vmstate.currentframe->closure->m_fnvals.fnclosure.m_upvalues[upvidx]->location = val;
+                    m_vmstate.currentframe->closure->m_fnvals.fnclosure.m_upvalues[upvidx]->m_location = val;
                 }
                 VMMAC_DISPATCH();
                 VM_CASE(OPC_CALLFUNCTION)
@@ -22762,7 +22633,7 @@ namespace neon
                     callee = vmStackPeek(argcount);
                     if(callee.isFuncclosure())
                     {
-                        thisval = (callee.asFunction()->clsthisval);
+                        thisval = (callee.asFunction()->m_clsthisval);
                     }
                     if(!vmCallValue(callee, thisval, argcount, false))
                     {
@@ -22816,7 +22687,7 @@ namespace neon
                     Property* field;
                     haveval = false;
                     name = vmReadString();
-                    field = m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable.getfieldbyostr(name);
+                    field = m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->m_deftable.getfieldbyostr(name);
                     if(field != nullptr)
                     {
                         if(field->value.isClass())
@@ -23086,7 +22957,7 @@ namespace neon
                         if(!haveclass)
                         {
                             /*
-                            if(!m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->deftable.get(Value::fromObject(type), &value) || !value.isClass())
+                            if(!m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->m_deftable.get(Value::fromObject(type), &value) || !value.isClass())
                             {
                                 VMMAC_TRYRAISE(NEON_STATUS_FAILRUNTIME, "object of type '%s' is not an exception", type->data());
                                 VMMAC_DISPATCH();
@@ -23125,17 +22996,17 @@ namespace neon
                     Switch* sw;
                     sw = vmReadConst().asSwitch();
                     expr = vmStackPeek(0);
-                    if(sw->table.get(expr, &value))
+                    if(sw->m_table.get(expr, &value))
                     {
                         m_vmstate.currentframe->inscode += (int)value.asNumber();
                     }
-                    else if(sw->defaultjump != -1)
+                    else if(sw->m_defaultjump != -1)
                     {
-                        m_vmstate.currentframe->inscode += sw->defaultjump;
+                        m_vmstate.currentframe->inscode += sw->m_defaultjump;
                     }
                     else
                     {
-                        m_vmstate.currentframe->inscode += sw->exitjump;
+                        m_vmstate.currentframe->inscode += sw->m_exitjump;
                     }
                     vmStackPop();
                 }
@@ -23253,11 +23124,11 @@ namespace neon
          */
         {
             gcs->m_stdoutprinter = IOStream::makeIO(stdout, false);
-            gcs->m_stdoutprinter->shouldflush = false;
+            gcs->m_stdoutprinter->m_shouldflush = false;
             gcs->m_stderrprinter = IOStream::makeIO(stderr, false);
             gcs->m_debugwriter = IOStream::makeIO(stderr, false);
-            gcs->m_debugwriter->shortenvalues = true;
-            gcs->m_debugwriter->maxvallength = 15;
+            gcs->m_debugwriter->m_shortenvalues = true;
+            gcs->m_debugwriter->m_maxvallength = 15;
         }
         /*
          * initialize runtime tables
@@ -23374,13 +23245,12 @@ namespace neon
         Memory::mempoolDestroy();
     }
 
-    Function* compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel)
+    Function* SharedState::compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel)
     {
         Blob blob;
         Function* function;
         Function* closure;
         (void)toplevel;
-        auto gcs = SharedState::get();
         function = compileSourceIntern(module, source, &blob, false, fromeval);
         if(function == nullptr)
         {
@@ -23389,7 +23259,7 @@ namespace neon
         }
         if(!fromeval)
         {
-            gcs->vmStackPush(Value::fromObject(function));
+            vmStackPush(Value::fromObject(function));
         }
         else
         {
@@ -23398,30 +23268,30 @@ namespace neon
         closure = Function::makeFuncClosure(function, Value::makeNull());
         if(!fromeval)
         {
-            gcs->vmStackPop();
-            gcs->vmStackPush(Value::fromObject(closure));
+            vmStackPop();
+            vmStackPush(Value::fromObject(closure));
         }
         Blob::destroy(&blob);
         return closure;
     }
 
-    Status execSource(Module* module, const char* source, const char* filename, Value* dest)
+
+    Status SharedState::execSource(Module* module, const char* source, const char* filename, Value* dest)
     {
         char* rp;
         Status status;
         Function* closure;
-        auto gcs = SharedState::get();
-        gcs->m_rootphysfile = filename;
+        m_rootphysfile = filename;
         updateProcessInfo();
         rp = (char*)filename;
-        gcs->m_topmodule->physicalpath = String::copy(rp);
+        m_topmodule->m_physicalpath = String::copy(rp);
         module->setInternFileField();
-        closure = neon::compileSourceToFunction(module, false, source, true);
+        closure = compileSourceToFunction(module, false, source, true);
         if(closure == nullptr)
         {
             return NEON_STATUS_FAILCOMPILE;
         }
-        if(gcs->m_conf.exitafterbytecode)
+        if(m_conf.exitafterbytecode)
         {
             return NEON_STATUS_OK;
         }
@@ -23429,12 +23299,12 @@ namespace neon
          * NB. it is a closure, since it's compiled code.
          * so no need to create a Value and call vmCallValue().
          */
-        gcs->vmDoCallClosure(closure, Value::makeNull(), 0, false);
-        status = gcs->runVM(0, dest);
+        vmDoCallClosure(closure, Value::makeNull(), 0, false);
+        status = runVM(0, dest);
         return status;
     }
 
-    Value evalSource(const char* source)
+    Value SharedState::evalSource(const char* source)
     {
         bool ok;
         size_t argc;
@@ -23442,11 +23312,10 @@ namespace neon
         Value retval;
         Function* closure;
         (void)argc;
-        auto gcs = SharedState::get();
-        closure = compileSourceToFunction(gcs->m_topmodule, true, source, false);
+        closure = compileSourceToFunction(m_topmodule, true, source, false);
         callme = Value::fromObject(closure);
-        argc = gcs->vmNestCallPrepare(callme, Value::makeNull(), nullptr, 0);
-        ok = gcs->vmNestCallFunction(callme, Value::makeNull(), nullptr, 0, &retval, false);
+        argc = vmNestCallPrepare(callme, Value::makeNull(), nullptr, 0);
+        ok = vmNestCallFunction(callme, Value::makeNull(), nullptr, 0, &retval, false);
         if(!ok)
         {
             NEON_THROWEXCEPTION("eval() failed");
@@ -23623,7 +23492,7 @@ struct ConsoleProg
                     {
                         memset(varnamebuf, 0, kMaxVarName);
                         sprintf(varnamebuf, "_%zd", (long)rescnt);
-                        neon::execSource(gcs->m_topmodule, source->data(), "<repl>", &dest);
+                        gcs->execSource(gcs->m_topmodule, source->data(), "<repl>", &dest);
                         dest = gcs->m_lastreplvalue;
                         if(!dest.isNull())
                         {
@@ -23660,7 +23529,7 @@ struct ConsoleProg
                 return false;
             }
         }
-        result = neon::execSource(gcs->m_topmodule, source, file, nullptr);
+        result = gcs->execSource(gcs->m_topmodule, source, file, nullptr);
         neon::Memory::sysFree(source);
         fflush(stdout);
         if(result == neon::NEON_STATUS_FAILCOMPILE)
@@ -23678,7 +23547,7 @@ struct ConsoleProg
     {
         auto gcs = neon::SharedState::get();
         gcs->m_rootphysfile = nullptr;
-        auto result = neon::execSource(gcs->m_topmodule, source, "<-e>", nullptr);
+        auto result = gcs->execSource(gcs->m_topmodule, source, "<-e>", nullptr);
         fflush(stdout);
         if(result == neon::NEON_STATUS_FAILCOMPILE)
         {
