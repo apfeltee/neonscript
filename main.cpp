@@ -34,12 +34,14 @@
     #include <libgen.h>
 #endif
 
-#if 1
+#if 0
     #if defined(__GNUC__) || defined(__TINYC__)
         #define NEON_INLINE __attribute__((always_inline)) inline
     #else
         #define NEON_INLINE inline
     #endif
+#else
+    #define NEON_INLINE
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -199,7 +201,6 @@ namespace neon
     class /**/ Object;
     class /**/ AstParser;
     class /**/ AstToken;
-    class /**/ DefExport;
     class /**/ String;
     class /**/ Array;
     class /**/ Property;
@@ -223,20 +224,20 @@ namespace neon
     class /**/ Dict;
     class /**/ Range;
     class /**/ FuncContext;
-    class /**/ StrBuffer;
-
     class ArgCheck;
-    template <typename StoredType> class ValArray;
 
-    template <typename HTKeyT, typename HTValT> class HashTable;
+    template<typename CharT>
+    class StrBufBasic;
+    
+    template<typename StoredType>
+    class ValList;
+    
+    template<typename HTKeyT, typename HTValT>
+    class HashTable;
 
-    typedef Value (*NativeFN)(const FuncContext&);
-    typedef void (*PtrFreeFN)(void*);
-    typedef bool (*AstParsePrefixFN)(AstParser*, bool);
-    typedef bool (*AstParseInfixFN)(AstParser*, AstToken, bool);
-    typedef void (*ModLoaderFN)();
-    typedef DefExport* (*ModInitFN)();
-    typedef Value (*BinOpFuncFN)(double, double);
+    using StrBuffer = StrBufBasic<char>;
+    using NativeFN = Value(*)(const FuncContext&);
+    using BinOpFuncFN = Value(*)(double, double);
 
     void initBuiltinObjects();
     Instance* makeExceptionInstance(Class* exklass, const char* srcfile, int srcline, String* message);
@@ -246,6 +247,7 @@ namespace neon
     void installObjArray();
     void installObjDict();
     void installObjFile();
+    void installObjDirectory();
     void loadBuiltinMethods();
     void setupModulePaths();
     void installObjNumber();
@@ -254,12 +256,7 @@ namespace neon
     void installObjProcess();
     void installObjRange();
     void installObjString();
-    DefExport* natmodule_load_astscan();
-    DefExport* natmodule_load_complex();
     void initBuiltinFunctions();
-    DefExport* natmodule_load_null();
-    void modfn_os_preloader();
-    DefExport* natmodule_load_os();
 
     Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast);
 
@@ -275,7 +272,6 @@ namespace neon
     class Memory
     {
         public:
-            
             static size_t getNextCapacity(size_t capacity)
             {
                 if(capacity < 4)
@@ -491,9 +487,11 @@ namespace neon
             public:
                 struct Item
                 {
-                    char name[NEON_CONF_OSPATHSIZE + 1];
                     bool isdir;
                     bool isfile;
+                    size_t namelength;
+                    char namedata[NEON_CONF_OSPATHSIZE + 1];
+
                 };
 
             public:
@@ -525,14 +523,14 @@ namespace neon
                         */
                         plen = strlen(path);
                         msz = (sizeof(char) * (plen + 5));
-                        itempattern = (char*)mc_memory_malloc(msz);
+                        itempattern = (char*)Memory::sysMalloc(msz);
                         memset(itempattern, 0, msz);
                         strncat(itempattern, path, plen);
                         {
                             strncat(itempattern, "/*", 2);
                         }
                         m_findhnd = FindFirstFile(itempattern, &m_finddata);
-                        mc_memory_free(itempattern);
+                        Memory::sysFree(itempattern);
                         if(INVALID_HANDLE_VALUE == m_findhnd)
                         {
                            return false;
@@ -551,7 +549,8 @@ namespace neon
                     #endif
                     itm->isdir = false;
                     itm->isfile = false;
-                    memset(itm->name, 0, NEON_CONF_OSPATHSIZE);
+                    itm->namelength = 0;
+                    memset(itm->namedata, 0, NEON_CONF_OSPATHSIZE);
                     #if defined(NEON_PLAT_ISLINUX)
                         if((ent = readdir((DIR*)(m_handle))) == NULL)
                         {
@@ -565,7 +564,8 @@ namespace neon
                         {
                             itm->isfile = true;
                         }
-                        strcpy(itm->name, ent->d_name);
+                        strcpy(itm->namedata, ent->d_name);
+                        itm->namelength = ent->d_reclen;
                         return true;
                     #else
                         ok = FindNextFile(m_findhnd, &m_finddata);
@@ -585,7 +585,8 @@ namespace neon
                                 itm->isfile = true;
                                 itm->isdir = false;
                             }
-                            strcpy(itm->name, m_finddata.cFileName);
+                            itm->namelength = strlen(m_finddata.cFileName);
+                            strcpy(itm->namedata, m_finddata.cFileName);
                             return true;
                         }
                     #endif
@@ -1025,22 +1026,7 @@ namespace neon
             return str;
         }
 
-        static FILE* osfn_popen(const char* cmd, const char* type)
-        {
-            #if defined(NEON_PLAT_ISLINUX)
-                return popen(cmd, type);
-            #endif
-            return NULL;
-        }
-
-        static void osfn_pclose(FILE* fh)
-        {
-            #if defined(NEON_PLAT_ISLINUX)
-                pclose(fh);
-            #endif
-        }
-
-        static int osfn_chmod(const char* path, int mode)
+        int osfn_chmod(const char* path, int mode)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return chmod(path, mode);
@@ -1049,7 +1035,7 @@ namespace neon
             #endif
         }
 
-        static char* osfn_realpath(const char* path, char* respath)
+        char* osfn_realpath(const char* path, char* respath)
         {
             char* copy;
             #if defined(NEON_PLAT_ISLINUX)
@@ -1069,7 +1055,7 @@ namespace neon
 
         }
 
-        static char* osfn_dirname(const char *fname)
+        char* osfn_dirname(const char *fname)
         {
             size_t dirlen;
             char * dirpart;
@@ -1127,7 +1113,7 @@ namespace neon
             return NULL;
         }
 
-        static char* osfn_fallbackbasename(const char* opath)
+        char* osfn_fallbackbasename(const char* opath)
         {
             char* strbeg;
             char* strend;
@@ -1152,7 +1138,7 @@ namespace neon
             return strbeg;
         }
 
-        static char* osfn_basename(const char* path)
+        char* osfn_basename(const char* path)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 char* rt;
@@ -1166,7 +1152,7 @@ namespace neon
             return osfn_fallbackbasename(path);
         }
 
-        static int osfn_isatty(int fd)
+        int osfn_isatty(int fd)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return isatty(fd);
@@ -1175,7 +1161,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_symlink(const char* path1, const char* path2)
+        int osfn_symlink(const char* path1, const char* path2)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return symlink(path1, path2);
@@ -1184,7 +1170,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_symlinkat(const char* path1, int fd, const char* path2)
+        int osfn_symlinkat(const char* path1, int fd, const char* path2)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return symlinkat(path1, fd, path2);
@@ -1193,7 +1179,7 @@ namespace neon
             #endif
         }
 
-        static char* osfn_getcwd(char* buf, size_t size)
+        char* osfn_getcwd(char* buf, size_t size)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return getcwd(buf, size);
@@ -1207,7 +1193,7 @@ namespace neon
 
         }
 
-        static int osfn_lstat(const char* path, struct stat* buf)
+        int osfn_lstat(const char* path, struct stat* buf)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return lstat(path, buf);
@@ -1216,25 +1202,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_truncate(const char* path, size_t length)
-        {
-            #if defined(NEON_PLAT_ISLINUX)
-                return truncate(path, length);
-            #else
-                return -1;
-            #endif
-        }
-
-        static unsigned int osfn_sleep(unsigned int seconds)
-        {
-            #if defined(NEON_PLAT_ISLINUX)
-                return sleep(seconds);
-            #else
-                return 0;
-            #endif
-        }
-
-        static int osfn_gettimeofday(struct timeval* tp, void* tzp)
+        int osfn_gettimeofday(struct timeval* tp, void* tzp)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return gettimeofday(tp, tzp);
@@ -1243,7 +1211,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_mkdir(const char* path, size_t mode)
+        int osfn_mkdir(const char* path, size_t mode)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return mkdir(path, mode);
@@ -1252,7 +1220,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_rmdir(const char* path)
+        int osfn_rmdir(const char* path)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return rmdir(path);
@@ -1261,7 +1229,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_unlink(const char* path)
+        int osfn_unlink(const char* path)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return unlink(path);
@@ -1270,12 +1238,12 @@ namespace neon
             #endif
         }
 
-        static const char* osfn_getenv(const char* key)
+        const char* osfn_getenv(const char* key)
         {
             return getenv(key);
         }
 
-        static bool osfn_setenv(const char* key, const char* value, bool replace)
+        bool osfn_setenv(const char* key, const char* value, bool replace)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return (setenv(key, value, replace) == 0);
@@ -1297,7 +1265,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_chdir(const char* path)
+        int osfn_chdir(const char* path)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return chdir(path);
@@ -1306,7 +1274,7 @@ namespace neon
             #endif
         }
 
-        static int osfn_getpid()
+        int osfn_getpid()
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return getpid();
@@ -1314,7 +1282,7 @@ namespace neon
             return -1;
         }
 
-        static int osfn_kill(int pid, int code)
+        int osfn_kill(int pid, int code)
         {
             #if defined(NEON_PLAT_ISLINUX)
                 return kill(pid, code);
@@ -1323,7 +1291,7 @@ namespace neon
             #endif
         }
 
-        static bool nn_util_fsfileexists(const char* filepath)
+        bool nn_util_fsfileexists(const char* filepath)
         {
             #if !defined(NEON_PLAT_ISWINDOWS)
                 return access(filepath, F_OK) == 0;
@@ -1337,7 +1305,7 @@ namespace neon
             #endif
         }
 
-        static bool nn_util_fsfileistype(const char* filepath, int typ)
+        bool nn_util_fsfileistype(const char* filepath, int typ)
         {
             struct stat st;
             (void)filepath;
@@ -1356,22 +1324,22 @@ namespace neon
             return false;
         }
 
-        static bool nn_util_fsfileisfile(const char* filepath)
+        bool nn_util_fsfileisfile(const char* filepath)
         {
             return nn_util_fsfileistype(filepath, 'f');
         }
 
-        static bool nn_util_fsfileisdirectory(const char* filepath)
+        bool nn_util_fsfileisdirectory(const char* filepath)
         {
             return nn_util_fsfileistype(filepath, 'd');
         }
 
-        static char* nn_util_fsgetbasename(const char* path)
+        char* nn_util_fsgetbasename(const char* path)
         {
             return osfn_basename(path);
         }
 
-        static const char* filestat_ctimetostring(const time_t *timep)
+        const char* filestat_ctimetostring(const time_t *timep)
         {
             size_t len;
             char* r;
@@ -1607,10 +1575,11 @@ namespace neon
             }
     };
 
-    class StrBuffer
+    template<typename CharT>
+    class StrBufBasic
     {
         public:
-            static StrBuffer* fromPtr(StrBuffer* sbuf, size_t len)
+            static StrBufBasic* fromPtr(StrBufBasic* sbuf, size_t len)
             {
                 sbuf->m_length = 0;
                 sbuf->m_capacity = 0;
@@ -1619,7 +1588,7 @@ namespace neon
                 if(len > 0)
                 {
                     sbuf->m_capacity = Util::roundUpToPowe64(len + 1);
-                    sbuf->m_data = (char*)Memory::sysMalloc(sbuf->m_capacity);
+                    sbuf->m_data = (CharT*)Memory::sysMalloc(sbuf->m_capacity);
                     if(!sbuf->m_data)
                     {
                         return NULL;
@@ -1629,7 +1598,7 @@ namespace neon
                 return sbuf;
             }
 
-            static bool destroy(StrBuffer* sb)
+            static bool destroy(StrBufBasic* sb)
             {
                 destroyFromPtr(sb);
                 if(!sb->m_isintern)
@@ -1639,7 +1608,7 @@ namespace neon
                 return true;
             }
 
-            static bool destroyFromPtr(StrBuffer* sb)
+            static bool destroyFromPtr(StrBufBasic* sb)
             {
                 if((sb->m_data != nullptr) && (sb->m_isintern == false))
                 {
@@ -1649,13 +1618,14 @@ namespace neon
             }
 
         public:
-            char* m_data = nullptr;
+            CharT* m_data = nullptr;
             /* total length of this buffer */
             size_t m_length = 0;
 
             /* capacity should be >= length+1 to allow for \0 */
             size_t m_capacity = 0;
 
+            /* if this instance is allocated or not, i.e., whether m_data points to const data */
             bool m_isintern = false;
 
         public:
@@ -1666,19 +1636,13 @@ namespace neon
                 return ((x < y) ? x : y);
             }
 
-            template<typename InputFirstT, typename InputSecondT>
-            static inline auto utilMax(InputFirstT x, InputSecondT y)
-            {
-                return ((x > y) ? (x) : (y));
-            }
-
             static void exitOnError()
             {
                 abort();
                 exit(EXIT_FAILURE);
             }
 
-            static inline void checkBufCapacity(char** buf, size_t* sizeptr, size_t len)
+            static inline void checkBufCapacity(CharT** buf, size_t* sizeptr, size_t len)
             {
                 /* for nul byte */
                 len++;
@@ -1686,7 +1650,7 @@ namespace neon
                 {
                     *sizeptr = Util::roundUpToPowe64(len);
                     /* fprintf(stderr, "sizeptr=%ld\n", *sizeptr); */
-                    if((*buf = (char*)Memory::sysRealloc(*buf, *sizeptr)) == NULL)
+                    if((*buf = (CharT*)Memory::sysRealloc(*buf, ((*sizeptr) * sizeof(CharT)))) == NULL)
                     {
                         fprintf(stderr, "[%s:%i] Out of memory\n", __FILE__, __LINE__);
                         abort();
@@ -1698,7 +1662,7 @@ namespace neon
             {
                 if(pos > m_length)
                 {
-                    fprintf(stderr, "StrBuffer: out of bounds error [index: %ld, num_of_bits: %ld]\n", pos, m_length);
+                    fprintf(stderr, "StrBufBasic: out of bounds error [index: %zd, num_of_bits: %zd]\n", pos, m_length);
                     errno = EDOM;
                     exitOnError();
                 }
@@ -1707,17 +1671,17 @@ namespace neon
             /* Bounds check when reading a range (start+len < strlen is valid) */
             inline void checkBoundsReadRange(size_t start, size_t len) const
             {
-                const char* endstr;
+                const CharT* endstr;
                 if(start + len > m_length)
                 {
                     endstr = (m_length > 5 ? "..." : "");
-                    fprintf(stderr,"StrBuffer: out of bounds error [start: %ld; length: %ld; strlen: %ld; buf:%.*s%s]\n", start, len, m_length, (int)utilMin(size_t(5), m_length), m_data, endstr);
+                    fprintf(stderr,"StrBufBasic: out of bounds error [start: %zd; length: %zd; strlen: %zd; buf:%.*s%s]\n", start, len, m_length, (int)utilMin(size_t(5), m_length), m_data, endstr);
                     errno = EDOM;
                     exitOnError();
                 }
             }
 
-            static bool inPlaceReplaceHelper(char *dest, const char *src, size_t srclen, int findme, const char* newsubstr, size_t sublen, size_t maxlen, size_t* dlen)
+            static bool inPlaceReplaceHelper(CharT *dest, const CharT *src, size_t srclen, int findme, const CharT* newsubstr, size_t sublen, size_t maxlen, size_t* dlen)
             {
                 /* ch(ar) at pos(ition) */
                 int chatpos;
@@ -1757,7 +1721,7 @@ namespace neon
             * right now, this is only good for replacing a single character with any-length string.
             * kind of lazy, but it works.
             */
-            static size_t inPlaceReplaceUtil(char* target, size_t tgtlen, int findme, const char* newsubstr, size_t sublen, size_t maxlen)
+            static size_t inPlaceReplaceUtil(CharT* target, size_t tgtlen, int findme, const CharT* newsubstr, size_t sublen, size_t maxlen)
             {
                 size_t nlen;
                 if(findme == 0)
@@ -1778,28 +1742,63 @@ namespace neon
                 return nlen;
             }
 
-        public:
-            StrBuffer()
+        private:
+            /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
+            NEON_INLINE void ensureCapacity(size_t len)
             {
-                m_length = 0;
-                m_capacity = 0;
-                m_data = NULL;
+                checkBufCapacity(&m_data, &m_capacity, len);
             }
 
-            StrBuffer(size_t len)
+            /* Same as above, but update pointer if it pointed to resized array */
+            NEON_INLINE void ensureCapacityUpdatePtr(size_t size, const CharT** ptr)
+            {
+                size_t oldcap;
+                CharT* oldbuf;
+                if(m_capacity <= size + 1)
+                {
+                    oldcap = m_capacity;
+                    oldbuf = m_data;
+                    if(!resize(size))
+                    {
+                        fprintf(stderr, "StrBufBasic:Error: failed to resize [requested %zd bytes; capacity: %zd bytes]\n", size, m_capacity);
+                        exitOnError();
+                        return;
+                    }
+                    /* ptr may have pointed to this, which has now moved */
+                    if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
+                    {
+                        *ptr = m_data + (*ptr - oldbuf);
+                    }
+                }
+            }
+
+            NEON_INLINE void initBlank()
             {
                 m_length = 0;
                 m_capacity = 0;
+                m_isintern = false;
                 m_data = NULL;
+
+            }
+
+        public:
+            NEON_INLINE StrBufBasic()
+            {
+                initBlank();
+            }
+
+            NEON_INLINE StrBufBasic(size_t len)
+            {
+                initBlank();
                 assert(fromPtr(this, len));
             }
 
-            ~StrBuffer()
+            NEON_INLINE ~StrBufBasic()
             {
             }
 
-            /* Clear the content of an existing StrBuffer (sets size to 0) */
-            void reset()
+            /* Clear the content of an existing StrBufBasic (sets size to 0) */
+            NEON_INLINE void reset()
             {
                 if(m_data)
                 {
@@ -1808,7 +1807,7 @@ namespace neon
                 m_length = 0;
             }
 
-            bool contains(char ch)
+            NEON_INLINE bool contains(CharT ch)
             {
                 size_t i;
                 for(i=0; i<m_length; i++)
@@ -1821,7 +1820,7 @@ namespace neon
                 return false;
             }
 
-            bool replaceChar(int findme, const char* newsubstr, size_t sublen)
+            NEON_INLINE bool replace(int findme, const CharT* newsubstr, size_t sublen)
             {
                 size_t i;
                 size_t nlen;
@@ -1843,7 +1842,7 @@ namespace neon
                 return true;
             }
 
-            bool replace(StrBuffer* targetbuf, const char* findmestr, size_t findmelen, const char* repwithstr, size_t repwithlen)
+            NEON_INLINE bool replace(StrBufBasic* targetbuf, const CharT* findmestr, size_t findmelen, const CharT* repwithstr, size_t repwithlen)
             {
                 size_t i;
                 if((length() == 0 && findmelen == 0) || length() == 0 || findmelen == 0)
@@ -1868,12 +1867,12 @@ namespace neon
                 return true;
             }
 
-            void set(size_t idx, int b)
+            NEON_INLINE void set(size_t idx, int b)
             {
                 m_data[idx] = b;
             }
 
-            int get(size_t idx)
+            NEON_INLINE int get(size_t idx)
             {
                 return m_data[idx];
             }
@@ -1883,12 +1882,12 @@ namespace neon
             // (+ a null terminating character).  Can also be used to downsize the buffer's
             // memory usage.  Returns 1 on success, 0 on failure.
             */
-            bool resize(size_t newlen)
+            NEON_INLINE bool resize(size_t newlen)
             {
                 size_t cap;
-                char* newbuf;
+                CharT* newbuf;
                 cap = Util::roundUpToPowe64(newlen + 1);
-                newbuf = (char*)Memory::sysRealloc(m_data, cap * sizeof(char));
+                newbuf = (CharT*)Memory::sysRealloc(m_data, cap * sizeof(CharT));
                 if(newbuf == NULL)
                 {
                     return false;
@@ -1904,51 +1903,19 @@ namespace neon
                 return true;
             }
 
-            /* Ensure capacity for len characters plus '\0' character - exits on FAILURE */
-            void ensureCapacity(size_t len)
-            {
-                checkBufCapacity(&m_data, &m_capacity, len);
-            }
-
-            /* Same as above, but update pointer if it pointed to resized array */
-            void ensureCapacityUpdatePtr(size_t size, const char** ptr)
-            {
-                size_t oldcap;
-                char* oldbuf;
-                if(m_capacity <= size + 1)
-                {
-                    oldcap = m_capacity;
-                    oldbuf = m_data;
-                    if(!resize(size))
-                    {
-                        fprintf(stderr,
-                                "%s:%i:Error: _ensure_capacity_update_ptr couldn't resize "
-                                "buffer. [requested %ld bytes; capacity: %ld bytes]\n",
-                                __FILE__, __LINE__, size, m_capacity);
-                        exitOnError();
-                    }
-                    /* ptr may have pointed to this, which has now moved */
-                    if(*ptr >= oldbuf && *ptr < oldbuf + oldcap)
-                    {
-                        *ptr = m_data + (*ptr - oldbuf);
-                    }
-                }
-            }
-
-        public:
             size_t length() const
             {
                 return m_length;
             }
 
-            char* data() const
+            CharT* data() const
             {
                 return m_data;
             }
 
-            void setData(const char* str)
+            void setData(const CharT* str)
             {
-                m_data = (char*)str;
+                m_data = (CharT*)str;
             }
 
             void setLength(size_t sz)
@@ -1957,14 +1924,14 @@ namespace neon
             }
 
             /*
-            // Get a substring as a new null terminated char array
-            // (remember to free the returned char* after you're done with it!)
+            // Get a substring as a new null terminated CharT array
+            // (remember to free the returned CharT* after you're done with it!)
             */
-            char* substr(size_t start, size_t len)
+            CharT* substr(size_t start, size_t len)
             {
-                char* newstr;
+                CharT* newstr;
                 checkBoundsReadRange(start, len);
-                newstr = (char*)Memory::sysMalloc((len + 1) * sizeof(char));
+                newstr = (CharT*)Memory::sysMalloc((len + 1) * sizeof(CharT));
                 strncpy(newstr, m_data + start, len);
                 newstr[len] = '\0';
                 return newstr;
@@ -1972,31 +1939,31 @@ namespace neon
 
             void toUppercase()
             {
-                char* pos;
-                char* end;
+                CharT* pos;
+                CharT* end;
                 end = m_data + m_length;
                 for(pos = m_data; pos < end; pos++)
                 {
-                    *pos = (char)toupper(*pos);
+                    *pos = (CharT)toupper(*pos);
                 }
             }
 
             void toLowercase()
             {
-                char* pos;
-                char* end;
+                CharT* pos;
+                CharT* end;
                 end = m_data + m_length;
                 for(pos = m_data; pos < end; pos++)
                 {
-                    *pos = (char)tolower(*pos);
+                    *pos = (CharT)tolower(*pos);
                 }
             }
 
             /*
-            // Copy N characters from a character array to the end of this StrBuffer
+            // Copy N characters from a character array to the end of this StrBufBasic
             // strlen(str) must be >= len
             */
-            bool append(const char* str, size_t len)
+            bool append(const CharT* str, size_t len)
             {
                 ensureCapacityUpdatePtr(m_length + len, &str);
                 memcpy(m_data + m_length, str, len);
@@ -2004,19 +1971,19 @@ namespace neon
                 return true;
             }
 
-            bool append(const char* str)
+            bool append(const CharT* str)
             {
                 return append(str, strlen(str));
             }
 
             bool append(int b)
             {
-                char ch = b;
+                CharT ch = b;
                 return append(&ch, 1);
             }
 
             template<typename... ArgsT>
-            int appendFormatAtPos(size_t pos, const char* fmt, ArgsT&&... args)
+            int appendFormatAtPos(size_t pos, const CharT* fmt, ArgsT&&... args)
             {
                 static auto wrapsnprintf = snprintf;
                 static auto wrapsprintf = sprintf;
@@ -2064,15 +2031,16 @@ namespace neon
                 return numchars;
             }
 
-            /* sprintf to the end of a StrBuffer (adds string terminator after sprint) */
+            /* sprintf to the end of a StrBufBasic (adds string terminator after sprint) */
             template<typename... ArgsT>
-            int appendFormat(const char* fmt, ArgsT&&... args)
+            int appendFormat(const CharT* fmt, ArgsT&&... args)
             {
                 int numchars;
                 numchars = appendFormatAtPos(m_length, fmt, args...);
                 return numchars;
             }
     };
+
 
     /************
 
@@ -2242,34 +2210,25 @@ namespace neon
             };
 
         public:
-            static void initStack(RegexContext* ctx, Token* tokens, size_t maxtokens)
+            RegexContext()
             {
-                ctx->m_isallocated = false;
-                ctx->m_haderror = false;
-                ctx->m_tokens = tokens;
-                ctx->m_maxtokens = maxtokens;
+                m_isallocated = false;
+                m_haderror = false;
+                m_tokens = nullptr;
+                m_maxtokens = 0;
             }
 
-            static RegexContext* initAlloc(Token* tokens, size_t maxtokens)
+            RegexContext(Token* tokens, size_t maxtokens)
             {
-                RegexContext* ctx;
-                ctx = (RegexContext*)Memory::sysMalloc(sizeof(RegexContext));
-                if(ctx == NULL)
-                {
-                    return NULL;
-                }
-                initStack(ctx, tokens, maxtokens);
-                ctx->m_isallocated = true;
-                return ctx;
+                m_isallocated = false;
+                m_haderror = false;
+                m_tokens = tokens;
+                m_maxtokens = maxtokens;
             }
 
             static void destroy(RegexContext* ctx)
             {
-                if(!ctx->m_isallocated)
-                {
-                    return;
-                }
-                Memory::sysFree(ctx);
+                (void)ctx;
             }
 
             static NEON_INLINE bool checkIsW(uint64_t* wmask, int byte)
@@ -4093,6 +4052,7 @@ namespace neon
         public:
             enum Type
             {
+                OTYP_INVALID,
                 /* containers */
                 OTYP_STRING,
                 OTYP_RANGE,
@@ -4124,8 +4084,8 @@ namespace neon
             static void destroyObject(Object* object);
 
         public:
-            Type m_objtype;
-            bool m_objmark;
+            Type m_objtype = OTYP_INVALID;
+            bool m_objmark = false;
             /*
             // when an object is marked as stale, it means that the
             // GC will never collect this object. This can be useful
@@ -4133,8 +4093,8 @@ namespace neon
             // objects in their types/pointers. The GC cannot reach
             // them yet, so it's best for them to be kept stale.
             */
-            bool m_objstale;
-            Object* m_objnext;
+            bool m_objstale = false;
+            Object* m_objnext = nullptr;
 
         public:
             Object()
@@ -4243,7 +4203,7 @@ namespace neon
             static void sortValues(Value* values, int count);
             static Value copyValue(Value value);
             static void valtabRemoveWhites(HashTable<Value, Value>* table);
-            static void markValArray(ValArray<Value>* list);
+            static void markValArray(ValList<Value>* list);
             static void markValTable(HashTable<Value, Value>* table);
             static void markDict(Dict* dict);
 
@@ -4664,26 +4624,16 @@ namespace neon
     };
 
     template<typename StoredTyp>
-    class ValArray
+    class ValList
     {
         public:
-            static void destroy(ValArray* list)
+            static void destroy(ValList* list)
             {
                 if(list != nullptr)
                 {
                     list->deInit();
                     Memory::sysFree(list);
                 }
-            }
-
-            static void destroyAndClear(ValArray* list)
-            {
-                size_t i;
-                for(i = 0; i < list->count(); i++)
-                {
-                    auto& item = list->get(i);
-                }
-                list->clear();
             }
 
             static size_t nextCapacity(size_t oldcap)
@@ -4733,7 +4683,28 @@ namespace neon
                 return true;
             }
 
-            NEON_INLINE void ensureCapacityActual(size_t needsize)
+        public:
+            NEON_INLINE ValList(): ValList(32)
+            {
+            }
+
+            NEON_INLINE ValList(size_t initialsize)
+            {
+                m_listcount = 0;
+                m_listcapacity = 0;
+                m_listitems = nullptr;
+                if(initialsize > 0)
+                {
+                    ensureCapacity(initialsize);
+                }
+            }
+
+            NEON_INLINE ~ValList()
+            {
+                //deInit();
+            }
+
+            NEON_INLINE void ensureCapacity(size_t needsize)
             {
                 size_t ncap;
                 size_t oldcap;
@@ -4754,37 +4725,6 @@ namespace neon
                     }
 
                 }
-            }
-
-            NEON_INLINE void ensureCapacity(size_t need)
-            {
-                ensureCapacityActual(need);
-            }
-
-        public:
-            NEON_INLINE ValArray(): ValArray(32)
-            {
-            }
-
-            NEON_INLINE ValArray(size_t initialsize)
-            {
-                m_listcount = 0;
-                m_listcapacity = 0;
-                m_listitems = nullptr;
-                if(initialsize > 0)
-                {
-                    ensureCapacity(initialsize);
-                }
-            }
-
-            NEON_INLINE ~ValArray()
-            {
-                //deInit();
-            }
-
-            void reserve(size_t sz)
-            {
-                ensureCapacityActual(sz);
             }
 
             NEON_INLINE void deInit()
@@ -5474,8 +5414,8 @@ namespace neon
             int m_count;
             int m_capacity;
             Instruction* m_instrucs;
-            ValArray<Value> m_constants;
-            ValArray<Value> m_argdefvals;
+            ValList<Value> m_constants;
+            ValList<Value> m_argdefvals;
 
         public:
             Blob()
@@ -5509,7 +5449,7 @@ namespace neon
             enum
             {
                 /* how many catch() clauses per try statement */
-                CONF_MAXEXCEPTHANDLERS = (2),
+                CONF_MAXEXCEPTHANDLERS = (4),
             };
 
             struct ExceptionInfo
@@ -5717,6 +5657,7 @@ namespace neon
             Class* m_classprimdict;
             /* class for I/O file objects */
             Class* m_classprimfile;
+            Class* m_classprimdirectory;
             /* class for range constructs */
             Class* m_classprimrange;
             /* class for anything callable: functions, lambdas, constructors ... */
@@ -5732,7 +5673,7 @@ namespace neon
             IOStream* m_debugwriter;
             const char* m_rootphysfile;
             Dict* m_envdict;
-            ValArray<Value> m_importpath;
+            ValList<Value> m_importpath;
 
             Value m_lastreplvalue;
             void* m_memuserptr;
@@ -5799,10 +5740,11 @@ namespace neon
             {
                 size_t oldsize;
                 void* result;
+                auto gcs = SharedState::get();
                 oldsize = 0;
                 if(!retain)
                 {
-                    gcMaybeCollect(newsize - oldsize, newsize > oldsize);
+                    gcs->gcMaybeCollect(newsize - oldsize, newsize > oldsize);
                 }
                 result = Memory::sysMalloc(newsize * amount);
                 /*
@@ -5840,146 +5782,6 @@ namespace neon
                 return object;
             }
 
-            static void markValue(Value value)
-            {
-                if(value.isObject())
-                {
-                    Object::markObject(value.asObject());
-                }
-            }
-
-            static void gcMarkRoots();
-
-            static void gcTraceRefs()
-            {
-                Object* object;
-                auto gcs = SharedState::get();
-                while(gcs->m_gcstate.graycount > 0)
-                {
-                    gcs->m_gcstate.graycount--;
-                    object = gcs->m_gcstate.graystack[gcs->m_gcstate.graycount];
-                    Object::blackenObject(object);
-                }
-            }
-
-            static void gcSweep()
-            {
-                Object* object;
-                Object* previous;
-                Object* unreached;
-                previous = nullptr;
-                auto gcs = SharedState::get();
-                object = gcs->linkedobjects;
-                while(object != nullptr)
-                {
-                    if(object->m_objmark == gcs->markvalue)
-                    {
-                        previous = object;
-                        object = object->m_objnext;
-                    }
-                    else
-                    {
-                        unreached = object;
-                        object = object->m_objnext;
-                        if(previous != nullptr)
-                        {
-                            previous->m_objnext = object;
-                        }
-                        else
-                        {
-                            gcs->linkedobjects = object;
-                        }
-                        Object::destroyObject(unreached);
-                    }
-                }
-            }
-
-            static void gcLinkedObjectsDestroy()
-            {
-                Object* next;
-                Object* object;
-                auto gcs = SharedState::get();
-                object = gcs->linkedobjects;
-                while(object != nullptr)
-                {
-                    next = object->m_objnext;
-                    Object::destroyObject(object);
-                    object = next;
-                }
-                Memory::sysFree(gcs->m_gcstate.graystack);
-                gcs->m_gcstate.graystack = nullptr;
-            }
-
-            static void gcMarkCompilerRoots()
-            {
-                /*
-                FuncCompiler* fnc;
-                fnc = ->fnc;
-                while(fnc != nullptr)
-                {
-                    Object::markObject((Object*)fnc->m_targetfunc);
-                    fnc = fnc->m_enclosing;
-                }
-                */
-            }
-
-            static void gcCollectGarbage()
-            {
-                size_t before;
-                (void)before;
-                /*
-                //  REMOVE THE NEXT LINE TO DISABLE NESTED gcCollectGarbage() POSSIBILITY!
-                */
-                auto gcs = SharedState::get();
-                gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated;
-
-                gcMarkRoots();
-                gcTraceRefs();
-                Value::valtabRemoveWhites(&gcs->m_allocatedstrings.m_htab);
-                Value::valtabRemoveWhites(&gcs->m_openedmodules);
-                gcSweep();
-                gcs->m_gcstate.nextgc = gcs->m_gcstate.bytesallocated * CONF_GCHEAPGROWTHFACTOR;
-                gcs->markvalue = !gcs->markvalue;
-            }
-
-            static void gcMaybeCollect(int addsize, bool wasnew)
-            {
-                auto gcs = SharedState::get();
-                gcs->m_gcstate.bytesallocated += addsize;
-                if(gcs->m_gcstate.nextgc > 0)
-                {
-                    if(wasnew && gcs->m_gcstate.bytesallocated > gcs->m_gcstate.nextgc)
-                    {
-                        if(gcs->m_vmstate.currentframe && gcs->m_vmstate.currentframe->gcprotcount == 0)
-                        {
-                            gcCollectGarbage();
-                        }
-                    }
-                }
-            }
-
-            template<typename InputT>
-            static void gcRelease(InputT* pointer, size_t oldsize)
-            {
-                gcMaybeCollect(-oldsize, false);
-                if(oldsize > 0)
-                {
-                    #if 0
-                    memset(pointer, 0, oldsize);
-                    #endif
-                }
-                // N.B.: Memory::destroy() MIGHT call InputT::destroy() if InputT defines such a function,
-                // which would lead to illegal double-frees!
-                Memory::sysFree(pointer);
-                pointer = nullptr;
-            }
-
-            template<typename InputT>
-            static void gcRelease(InputT* pointer)
-            {
-                gcRelease(pointer, sizeof(InputT));
-            }
-
             static NEON_INLINE void clearGCProtect()
             {
                 size_t frpos;
@@ -5999,6 +5801,140 @@ namespace neon
                     }
                     frame->gcprotcount = 0;
                 }
+            }
+
+            static void markValue(Value value)
+            {
+                if(value.isObject())
+                {
+                    Object::markObject(value.asObject());
+                }
+            }
+
+            void gcMarkRoots();
+
+            void gcTraceRefs()
+            {
+                Object* object;
+                while(m_gcstate.graycount > 0)
+                {
+                    m_gcstate.graycount--;
+                    object = m_gcstate.graystack[m_gcstate.graycount];
+                    Object::blackenObject(object);
+                }
+            }
+
+            void gcSweep()
+            {
+                Object* object;
+                Object* previous;
+                Object* unreached;
+                previous = nullptr;
+                object = linkedobjects;
+                while(object != nullptr)
+                {
+                    if(object->m_objmark == markvalue)
+                    {
+                        previous = object;
+                        object = object->m_objnext;
+                    }
+                    else
+                    {
+                        unreached = object;
+                        object = object->m_objnext;
+                        if(previous != nullptr)
+                        {
+                            previous->m_objnext = object;
+                        }
+                        else
+                        {
+                            linkedobjects = object;
+                        }
+                        Object::destroyObject(unreached);
+                    }
+                }
+            }
+
+            void gcLinkedObjectsDestroy()
+            {
+                Object* next;
+                Object* object;
+                object = linkedobjects;
+                while(object != nullptr)
+                {
+                    next = object->m_objnext;
+                    Object::destroyObject(object);
+                    object = next;
+                }
+                Memory::sysFree(m_gcstate.graystack);
+                m_gcstate.graystack = nullptr;
+            }
+
+            void gcMarkCompilerRoots()
+            {
+                /*
+                FuncCompiler* fnc;
+                fnc = ->fnc;
+                while(fnc != nullptr)
+                {
+                    Object::markObject((Object*)fnc->m_targetfunc);
+                    fnc = fnc->m_enclosing;
+                }
+                */
+            }
+
+            void gcCollectGarbage()
+            {
+                size_t before;
+                (void)before;
+                /*
+                //  REMOVE THE NEXT LINE TO DISABLE NESTED gcCollectGarbage() POSSIBILITY!
+                */
+                m_gcstate.nextgc = m_gcstate.bytesallocated;
+                gcMarkRoots();
+                gcTraceRefs();
+                Value::valtabRemoveWhites(&m_allocatedstrings.m_htab);
+                Value::valtabRemoveWhites(&m_openedmodules);
+                gcSweep();
+                m_gcstate.nextgc = m_gcstate.bytesallocated * CONF_GCHEAPGROWTHFACTOR;
+                markvalue = !markvalue;
+            }
+
+            void gcMaybeCollect(int addsize, bool wasnew)
+            {
+                m_gcstate.bytesallocated += addsize;
+                if(m_gcstate.nextgc > 0)
+                {
+                    if(wasnew && m_gcstate.bytesallocated > m_gcstate.nextgc)
+                    {
+                        if(m_vmstate.currentframe && m_vmstate.currentframe->gcprotcount == 0)
+                        {
+                            gcCollectGarbage();
+                        }
+                    }
+                }
+            }
+
+            template<typename InputT>
+            void gcRelease(InputT* pointer, size_t oldsize)
+            {
+                gcMaybeCollect(-oldsize, false);
+                if(oldsize > 0)
+                {
+                    #if 0
+                    memset(pointer, 0, oldsize);
+                    #endif
+                }
+                // N.B.: Memory::destroy() MIGHT call InputT::destroy() if InputT defines such a function,
+                // which would lead to illegal double-frees!
+                Memory::sysFree(pointer);
+                pointer = nullptr;
+            }
+
+            template<typename InputT>
+            void gcRelease(InputT* pointer)
+            {
+                gcRelease(pointer, sizeof(InputT));
             }
 
             Function* compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel);
@@ -6039,7 +5975,7 @@ namespace neon
                     fprintf(stderr, "internal error: failed to resize stackvalues!\n");
                     abort();
                 }
-                ValArray<Value>::initItems(newbuf, oldsz, newsz);
+                ValList<Value>::initItems(newbuf, oldsz, newsz);
                 m_vmstate.stackvalues = (Value*)newbuf;
                 m_vmstate.stackcapacity = newsz;
                 return true;
@@ -6071,7 +6007,7 @@ namespace neon
                     fprintf(stderr, "internal error: failed to resize framevalues!\n");
                     abort();
                 }
-                ValArray<CallFrame>::initItems(newbuf, oldsz, newsz);
+                ValList<CallFrame>::initItems(newbuf, oldsz, newsz);
                 m_vmstate.framevalues = (CallFrame*)newbuf;
                 m_vmstate.framecapacity = newsz;
                 /*
@@ -6143,7 +6079,7 @@ namespace neon
                         fprintf(stderr, "error: failed to allocate stackvalues!\n");
                         abort();
                     }
-                    ValArray<Value>::initItems(newbufvals, 0, NEON_CONFIG_INITSTACKCOUNT);
+                    ValList<Value>::initItems(newbufvals, 0, NEON_CONFIG_INITSTACKCOUNT);
                     m_vmstate.stackvalues = newbufvals;
                 }
                 {
@@ -6155,7 +6091,7 @@ namespace neon
                         fprintf(stderr, "error: failed to allocate framevalues!\n");
                         abort();
                     }
-                    ValArray<CallFrame>::initItems(newbufframes, 0, NEON_CONFIG_INITFRAMECOUNT);
+                    ValList<CallFrame>::initItems(newbufframes, 0, NEON_CONFIG_INITFRAMECOUNT);
                     m_vmstate.framevalues = newbufframes;
                 }
             }
@@ -6383,7 +6319,7 @@ namespace neon
     class Array : public Object
     {
         public:
-            ValArray<Value> m_objvarray;
+            ValList<Value> m_objvarray;
 
         public:
             static Array* makeFilled(size_t cnt, Value filler)
@@ -6481,7 +6417,7 @@ namespace neon
     class Dict : public Object
     {
         public:
-            ValArray<Value> m_htkeys;
+            ValList<Value> m_htkeys;
             HashTable<Value, Value> m_htvalues;
 
         public:
@@ -6654,7 +6590,6 @@ namespace neon
                 int64_t capstarts[matchMaxCaptures + 1];
                 int64_t caplengths[matchMaxCaptures + 1];
                 RegexContext::Token tokens[matchMaxTokens + 1];
-                RegexContext pctx;
                 auto gcs = SharedState::get();
                 memset(tokens, 0, (matchMaxTokens + 1) * sizeof(RegexContext::Token));
                 memset(caplengths, 0, (matchMaxCaptures + 1) * sizeof(int64_t));
@@ -6665,7 +6600,7 @@ namespace neon
                 Dict* dm;
                 restokens = matchMaxTokens;
                 actualmaxcaptures = 0;
-                RegexContext::initStack(&pctx, tokens, restokens);
+                RegexContext pctx(tokens, restokens);
                 if(capture)
                 {
                     actualmaxcaptures = matchMaxCaptures;
@@ -7098,63 +7033,6 @@ namespace neon
 
     };
 
-    class DefExport
-    {
-        public:
-            struct Function
-            {
-                const char* m_deffuncname;
-                bool isstatic;
-                NativeFN function;
-            };
-
-            struct Field
-            {
-                const char* m_deffieldname;
-                bool isstatic;
-                NativeFN fieldvalfn;
-            };
-
-            struct Class
-            {
-                const char* m_defclassname;
-                Field* defpubfields;
-                Function* defpubfunctions;
-            };
-
-        public:
-            /*
-             * the name of this module.
-             * note: if the name must be preserved, copy it; it is only a pointer to a
-             * string that gets freed past loading.
-             */
-            const char* m_defmodname;
-
-            /* exported fields, if any. */
-            Field* definedfields;
-
-            /* regular functions, if any. */
-            Function* definedfunctions;
-
-            /* exported classes, if any.
-             * i.e.:
-             * {"Stuff",
-             *   (Field[]){
-             *       {"enabled", true},
-             *       ...
-             *   },
-             *   (Function[]){
-             *       {"isStuff", myclass_fn_isstuff},
-             *       ...
-             * }})*/
-            Class* definedclasses;
-
-            /* function that is called directly upon loading the module. can be nullptr. */
-            ModLoaderFN fnpreloaderfunc;
-
-            /* function that is called before unloading the module. can be nullptr. */
-            ModLoaderFN fnunloaderfunc;
-    };
 
     /**
      * TODO: use a different table implementation to avoid allocating so many strings...
@@ -7338,11 +7216,12 @@ namespace neon
 
             static void destroy(Class* klass)
             {
+                auto gcs = SharedState::get();
                 klass->m_instmethods.deInit();
                 klass->m_staticmethods.deInit();
                 klass->m_instproperties.deInit();
                 klass->m_staticproperties.deInit();
-                SharedState::gcRelease(klass);
+                gcs->gcRelease(klass);
             }
 
             static Class* makeScriptClass(const char* name, Class* parent)
@@ -7567,6 +7446,7 @@ namespace neon
 
             static void destroy(Instance* instance)
             {
+                auto gcs = SharedState::get();
                 if(!instance->m_instanceclass->m_destructor.isNull())
                 {
                     // if(!vmCallWithObject(instance->klass->m_destructor, Value::fromObject(instance), 0, false))
@@ -7575,7 +7455,7 @@ namespace neon
                 }
                 instance->m_instanceprops.deInit();
                 instance->m_instactive = false;
-                SharedState::gcRelease(instance);
+                gcs->gcRelease(instance);
             }
 
         public:
@@ -7834,8 +7714,9 @@ namespace neon
 
             static void destroy(File* file)
             {
+                auto gcs = SharedState::get();
                 file->closeFile();
-                SharedState::gcRelease(file);
+                gcs->gcRelease(file);
             }
 
             static void mark(File* file)
@@ -7977,6 +7858,72 @@ namespace neon
     class Module : public Object
     {
         public:
+            class DefExport;
+            using ModLoaderFN = void(*)();
+            using ModInitFN = Module::DefExport*(*)();
+
+            class DefExport
+            {
+                public:
+
+                    struct Function
+                    {
+                        const char* m_deffuncname;
+                        bool isstatic;
+                        NativeFN function;
+                    };
+
+                    struct Field
+                    {
+                        const char* m_deffieldname;
+                        bool isstatic;
+                        NativeFN fieldvalfn;
+                    };
+
+                    struct Class
+                    {
+                        const char* m_defclassname;
+                        Field* defpubfields;
+                        Function* defpubfunctions;
+                    };
+
+                public:
+                    /*
+                     * the name of this module.
+                     * note: if the name must be preserved, copy it; it is only a pointer to a
+                     * string that gets freed past loading.
+                     */
+                    const char* m_defmodname;
+
+                    /* exported fields, if any. */
+                    Field* definedfields;
+
+                    /* regular functions, if any. */
+                    Function* definedfunctions;
+
+                    /* exported classes, if any.
+                     * i.e.:
+                     * {"Stuff",
+                     *   (Field[]){
+                     *       {"enabled", true},
+                     *       ...
+                     *   },
+                     *   (Function[]){
+                     *       {"isStuff", myclass_fn_isstuff},
+                     *       ...
+                     * }})*/
+                    Class* definedclasses;
+
+                    /* function that is called directly upon loading the module. can be nullptr. */
+                    Module::ModLoaderFN fnpreloaderfunc;
+
+                    /* function that is called before unloading the module. can be nullptr. */
+                    Module::ModLoaderFN fnunloaderfunc;
+            };
+
+
+
+        public:
             static Module* make(const char* name, const char* file, bool imported, bool retain)
             {
                 Module* module;
@@ -8010,7 +7957,6 @@ namespace neon
 
             static void destroy(Module* module)
             {
-                ModLoaderFN asfn;
                 module->m_deftable.deInit();
                 /*
                 Memory::sysFree(module->m_modname);
@@ -8018,7 +7964,7 @@ namespace neon
                 */
                 if(module->m_fnunloaderptr != nullptr && module->m_imported)
                 {
-                    asfn = *(ModLoaderFN*)module->m_fnunloaderptr;
+                    auto asfn = module->m_fnunloaderptr;
                     asfn();
                 }
                 if(module->m_handle != nullptr)
@@ -8047,15 +7993,15 @@ namespace neon
                 auto gcs = SharedState::get();
                 mlen = strlen(modulename);
                 splen = gcs->m_importpath.count();
-                pathbuf = Memory::make<StrBuffer>();
                 for(i = 0; i < splen; i++)
                 {
-                    pitem = gcs->m_importpath.get(i).asString();
-                    pathbuf->reset();
+                    auto pobj = gcs->m_importpath.get(i);
+                    pitem = pobj.asString();
+                    pathbuf = Memory::make<StrBuffer>();
                     pathbuf->append(pitem->data(), pitem->length());
                     if(pathbuf->contains('@'))
                     {
-                        pathbuf->replaceChar('@', modulename, mlen);
+                        pathbuf->replace('@', modulename, mlen);
                     }
                     else
                     {
@@ -8068,8 +8014,7 @@ namespace neon
                     if(File::fileExists(cstrpath))
                     {
                         fprintf(stderr, "found!\n");
-            /* stop a core library from importing itself */
-            #if 1
+                        /* stop a core library from importing itself */
                         if(stat(currentfile, &stroot) == -1)
                         {
                             fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
@@ -8085,14 +8030,9 @@ namespace neon
                             fprintf(stderr, "resolvepath: refusing to import itself\n");
                             return nullptr;
                         }
-            #endif
-            #if 1
+
                         path1 = Util::osfn_realpath(cstrpath, nullptr);
                         path2 = Util::osfn_realpath(currentfile, nullptr);
-            #else
-                        path1 = strdup(cstrpath);
-                        path2 = strdup(currentfile);
-            #endif
                         if(path1 != nullptr && path2 != nullptr)
                         {
                             if(memcmp(path1, path2, (int)strlen(path2)) == 0)
@@ -8122,8 +8062,8 @@ namespace neon
                     {
                         fprintf(stderr, "does not exist\n");
                     }
+                    Memory::destroy(pathbuf);
                 }
-                Memory::destroy(pathbuf);
                 return nullptr;
             }
 
@@ -8218,8 +8158,8 @@ namespace neon
                 if(defmod != nullptr)
                 {
                     targetmod = SharedState::gcProtect(Module::make((char*)defmod->m_defmodname, source, false, true));
-                    targetmod->m_fnpreloaderptr = (void*)defmod->fnpreloaderfunc;
-                    targetmod->m_fnunloaderptr = (void*)defmod->fnunloaderfunc;
+                    targetmod->m_fnpreloaderptr = defmod->fnpreloaderfunc;
+                    targetmod->m_fnunloaderptr = defmod->fnunloaderfunc;
                     if(defmod->definedfields != nullptr)
                     {
                         for(j = 0; defmod->definedfields[j].m_deffieldname != nullptr; j++)
@@ -8322,9 +8262,9 @@ namespace neon
             /* physsical location of this module, or nullptr if some other non-physical location */
             String* m_physicalpath;
             /* callback to call BEFORE this module is loaded */
-            void* m_fnpreloaderptr;
+            ModLoaderFN m_fnpreloaderptr;
             /* callbac to call AFTER this module is unloaded */
-            void* m_fnunloaderptr;
+            ModLoaderFN m_fnunloaderptr;
             /* pointer that is based to preloader/unloader */
             void* m_handle;
 
@@ -8384,6 +8324,9 @@ namespace neon
     class Userdata : public Object
     {
         public:
+            using PtrFreeFN = void(*)(void*);
+
+        public:
             static Userdata* make(void* pointer, const char* name)
             {
                 Userdata* ptr;
@@ -8431,6 +8374,10 @@ namespace neon
                 obj = value.asObject();
                 switch(obj->m_objtype)
                 {
+                    case Object::OTYP_INVALID:
+                        {
+                        }
+                        break;
                     case Object::OTYP_SWITCH:
                         {
                             pr->writeString("<switch>");
@@ -8674,42 +8621,6 @@ namespace neon
             static void printInstance(IOStream* pr, Instance* instance, bool invmethod)
             {
                 (void)invmethod;
-            #if 0
-                /*
-                int arity;
-                IOStream subw;
-                Value resv;
-                Value thisval;
-                Property* field;
-                String* os;
-                Array* args;
-                auto gcs = SharedState::get();
-                if(invmethod)
-                {
-                    field = instance->m_instanceclass->m_instmethods.getfieldbycstr("toString");
-                    if(field != nullptr)
-                    {
-                        args = Array::make();
-                        thisval = Value::fromObject(instance);
-                        arity = gcs->vmNestCallPrepare(field->value, thisval, nullptr, 0);
-                        fprintf(stderr, "arity = %d\n", arity);
-                        gcs->vmStackPop();
-                        gcs->vmStackPush(thisval);
-                        if(gcs->vmNestCallFunction(field->value, thisval, nullptr, 0, &resv, false))
-                        {
-                            IOStream::makeStackString(&subw);
-                            printValue(pr, &subw, resv, false, false);
-                            os = subw.takeString();
-                            pr->writeString(os->data(), os->length());
-                            #if 0
-                                gcs->vmStackPop();
-                            #endif
-                            return;
-                        }
-                    }
-                }
-                */
-            #endif
                 pr->format("<instance of %s at %p>", instance->m_instanceclass->m_classname->data(), (void*)instance);
             }
 
@@ -10099,9 +10010,12 @@ namespace neon
                         PREC_PRIMARY
                     };
 
+                    using ParsePrefixFN = bool(*)(AstParser*, bool);
+                    using ParseInfixFN = bool(*)(AstParser*, AstToken, bool);
+
                 public:
-                    AstParsePrefixFN prefix;
-                    AstParseInfixFN infix;
+                    ParsePrefixFN prefix;
+                    ParseInfixFN infix;
                     Precedence precedence;
             };
 
@@ -11043,7 +10957,7 @@ namespace neon
                 return true;
             }
 
-            static Rule* putrule(Rule* dest, AstParsePrefixFN prefix, AstParseInfixFN infix, Rule::Precedence precedence)
+            static Rule* putrule(Rule* dest, Rule::ParsePrefixFN prefix, Rule::ParseInfixFN infix, Rule::Precedence precedence)
             {
                 dest->prefix = prefix;
                 dest->infix = infix;
@@ -12439,8 +12353,8 @@ namespace neon
                 bool canassign;
                 Rule* rule;
                 AstToken previous;
-                AstParseInfixFN infixrule;
-                AstParsePrefixFN prefixrule;
+                Rule::ParseInfixFN infixrule;
+                Rule::ParsePrefixFN prefixrule;
                 rule = getRule(m_prevtoken.m_toktype);
                 if(rule == nullptr)
                 {
@@ -13656,7 +13570,7 @@ namespace neon
         Value::markValTable(&dict->m_htvalues);
     }
 
-    void Value::markValArray(ValArray<Value>* list)
+    void Value::markValArray(ValList<Value>* list)
     {
         size_t i;
         NN_NULLPTRCHECK_RETURN(list);
@@ -14154,99 +14068,103 @@ namespace neon
     #endif
         switch(object->m_objtype)
         {
+            case Object::OTYP_INVALID:
+                {
+                }
+                break;
             case Object::OTYP_MODULE:
-            {
-                Module* module;
-                module = (Module*)object;
-                Value::markValTable(&module->m_deftable);
-            }
-            break;
+                {
+                    Module* module;
+                    module = (Module*)object;
+                    Value::markValTable(&module->m_deftable);
+                }
+                break;
             case Object::OTYP_SWITCH:
-            {
-                Switch* sw;
-                sw = (Switch*)object;
-                Value::markValTable(&sw->m_table);
-            }
-            break;
+                {
+                    Switch* sw;
+                    sw = (Switch*)object;
+                    Value::markValTable(&sw->m_table);
+                }
+                break;
             case Object::OTYP_FILE:
-            {
-                File* file;
-                file = (File*)object;
-                File::mark(file);
-            }
-            break;
+                {
+                    File* file;
+                    file = (File*)object;
+                    File::mark(file);
+                }
+                break;
             case Object::OTYP_DICT:
-            {
-                Dict* dict;
-                dict = (Dict*)object;
-                Value::markDict(dict);
-            }
-            break;
+                {
+                    Dict* dict;
+                    dict = (Dict*)object;
+                    Value::markDict(dict);
+                }
+                break;
             case Object::OTYP_ARRAY:
-            {
-                Array* list;
-                list = (Array*)object;
-                Value::markValArray(&list->m_objvarray);
-            }
-            break;
+                {
+                    Array* list;
+                    list = (Array*)object;
+                    Value::markValArray(&list->m_objvarray);
+                }
+                break;
             case Object::OTYP_FUNCBOUND:
-            {
-                Function* bound;
-                bound = (Function*)object;
-                SharedState::markValue(bound->m_fnvals.fnmethod.receiver);
-                Object::markObject((Object*)bound->m_fnvals.fnmethod.method);
-            }
-            break;
+                {
+                    Function* bound;
+                    bound = (Function*)object;
+                    SharedState::markValue(bound->m_fnvals.fnmethod.receiver);
+                    Object::markObject((Object*)bound->m_fnvals.fnmethod.method);
+                }
+                break;
             case Object::OTYP_CLASS:
-            {
-                Class* klass;
-                klass = (Class*)object;
-                Object::markObject((Object*)klass->m_classname);
-                Value::markValTable(&klass->m_instmethods);
-                Value::markValTable(&klass->m_staticmethods);
-                Value::markValTable(&klass->m_staticproperties);
-                SharedState::markValue(klass->m_constructor);
-                SharedState::markValue(klass->m_destructor);
-                if(klass->m_superclass != nullptr)
                 {
-                    Object::markObject((Object*)klass->m_superclass);
+                    Class* klass;
+                    klass = (Class*)object;
+                    Object::markObject((Object*)klass->m_classname);
+                    Value::markValTable(&klass->m_instmethods);
+                    Value::markValTable(&klass->m_staticmethods);
+                    Value::markValTable(&klass->m_staticproperties);
+                    SharedState::markValue(klass->m_constructor);
+                    SharedState::markValue(klass->m_destructor);
+                    if(klass->m_superclass != nullptr)
+                    {
+                        Object::markObject((Object*)klass->m_superclass);
+                    }
                 }
-            }
-            break;
+                break;
             case Object::OTYP_FUNCCLOSURE:
-            {
-                int i;
-                Function* closure;
-                closure = (Function*)object;
-                Object::markObject((Object*)closure->m_fnvals.fnclosure.scriptfunc);
-                for(i = 0; i < closure->m_upvalcount; i++)
                 {
-                    Object::markObject((Object*)closure->m_fnvals.fnclosure.m_upvalues[i]);
+                    int i;
+                    Function* closure;
+                    closure = (Function*)object;
+                    Object::markObject((Object*)closure->m_fnvals.fnclosure.scriptfunc);
+                    for(i = 0; i < closure->m_upvalcount; i++)
+                    {
+                        Object::markObject((Object*)closure->m_fnvals.fnclosure.m_upvalues[i]);
+                    }
                 }
-            }
-            break;
+                break;
             case Object::OTYP_FUNCSCRIPT:
-            {
-                Function* function;
-                function = (Function*)object;
-                Object::markObject((Object*)function->m_funcname);
-                Object::markObject((Object*)function->m_fnvals.fnscriptfunc.module);
-                Value::markValArray(&function->m_fnvals.fnscriptfunc.blob->m_constants);
-            }
-            break;
+                {
+                    Function* function;
+                    function = (Function*)object;
+                    Object::markObject((Object*)function->m_funcname);
+                    Object::markObject((Object*)function->m_fnvals.fnscriptfunc.module);
+                    Value::markValArray(&function->m_fnvals.fnscriptfunc.blob->m_constants);
+                }
+                break;
             case Object::OTYP_INSTANCE:
-            {
-                Instance* instance;
-                instance = (Instance*)object;
-                Instance::mark(instance);
-            }
-            break;
+                {
+                    Instance* instance;
+                    instance = (Instance*)object;
+                    Instance::mark(instance);
+                }
+                break;
             case Object::OTYP_UPVALUE:
-            {
-                auto upv = (Upvalue*)object;
-                SharedState::markValue(upv->m_closed);
-            }
-            break;
+                {
+                    auto upv = (Upvalue*)object;
+                    SharedState::markValue(upv->m_closed);
+                }
+                break;
             case Object::OTYP_RANGE:
             case Object::OTYP_FUNCNATIVE:
             case Object::OTYP_USERDATA:
@@ -14257,6 +14175,7 @@ namespace neon
 
     void Object::destroyObject(Object* object)
     {
+        auto gcs = SharedState::get();
         if(object->m_objstale)
         {
             return;
@@ -14268,7 +14187,7 @@ namespace neon
                 Module* module;
                 module = (Module*)object;
                 Module::destroy(module);
-                SharedState::gcRelease(module);
+                gcs->gcRelease(module);
             }
             break;
             case Object::OTYP_FILE:
@@ -14281,9 +14200,10 @@ namespace neon
             case Object::OTYP_DICT:
             {
                 Dict* dict;
+                
                 dict = (Dict*)object;
                 Dict::destroy(dict);
-                SharedState::gcRelease(dict);
+                gcs->gcRelease(dict);
             }
             break;
             case Object::OTYP_ARRAY:
@@ -14291,7 +14211,7 @@ namespace neon
                 Array* list;
                 list = (Array*)object;
                 list->m_objvarray.deInit();
-                SharedState::gcRelease(list);
+                gcs->gcRelease(list);
             }
             break;
             case Object::OTYP_FUNCBOUND:
@@ -14301,7 +14221,7 @@ namespace neon
                 // for this reason, we do not free closures when freeing bound methods
                 */
                 auto fn = (Function*)object;
-                SharedState::gcRelease(fn);
+                gcs->gcRelease(fn);
             }
             break;
             case Object::OTYP_CLASS:
@@ -14315,12 +14235,12 @@ namespace neon
             {
                 Function* closure;
                 closure = (Function*)object;
-                SharedState::gcRelease(closure->m_fnvals.fnclosure.m_upvalues, (sizeof(Upvalue*) * closure->m_upvalcount));
+                gcs->gcRelease(closure->m_fnvals.fnclosure.m_upvalues, (sizeof(Upvalue*) * closure->m_upvalcount));
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
                 */
-                SharedState::gcRelease(closure);
+                gcs->gcRelease(closure);
             }
             break;
             case Object::OTYP_FUNCSCRIPT:
@@ -14328,7 +14248,7 @@ namespace neon
                 Function* function;
                 function = (Function*)object;
                 Function::destroy(function);
-                SharedState::gcRelease(function);
+                gcs->gcRelease(function);
             }
             break;
             case Object::OTYP_INSTANCE:
@@ -14341,19 +14261,19 @@ namespace neon
             case Object::OTYP_FUNCNATIVE:
             {
                 auto fn = (Function*)object;
-                SharedState::gcRelease(fn);
+                gcs->gcRelease(fn);
             }
             break;
             case Object::OTYP_UPVALUE:
             {
                 auto upv = (Upvalue*)object;
-                SharedState::gcRelease(upv);
+                gcs->gcRelease(upv);
             }
             break;
             case Object::OTYP_RANGE:
             {
                 auto rn = (Range*)object;
-                SharedState::gcRelease(rn);
+                gcs->gcRelease(rn);
             }
             break;
             case Object::OTYP_STRING:
@@ -14361,7 +14281,7 @@ namespace neon
                 String* string;
                 string = (String*)object;
                 String::destroy(string);
-                SharedState::gcRelease(string);
+                gcs->gcRelease(string);
             }
             break;
             case Object::OTYP_SWITCH:
@@ -14369,7 +14289,7 @@ namespace neon
                 Switch* sw;
                 sw = (Switch*)object;
                 sw->m_table.deInit();
-                SharedState::gcRelease(sw);
+                gcs->gcRelease(sw);
             }
             break;
             case Object::OTYP_USERDATA:
@@ -14380,7 +14300,7 @@ namespace neon
                 {
                     ptr->m_ondestroyfn(ptr->m_pointer);
                 }
-                SharedState::gcRelease(ptr);
+                gcs->gcRelease(ptr);
             }
             break;
             default:
@@ -14396,26 +14316,25 @@ namespace neon
         Upvalue* upvalue;
         CallFrame::ExceptionInfo* handler;
         (void)handler;
-        auto gcs = SharedState::get();
-        for(slot = gcs->m_vmstate.stackvalues; slot < &gcs->m_vmstate.stackvalues[gcs->m_vmstate.stackidx]; slot++)
+        for(slot = m_vmstate.stackvalues; slot < &m_vmstate.stackvalues[m_vmstate.stackidx]; slot++)
         {
             SharedState::markValue(*slot);
         }
-        for(i = 0; i < (int)gcs->m_vmstate.framecount; i++)
+        for(i = 0; i < (int)m_vmstate.framecount; i++)
         {
-            Object::markObject((Object*)gcs->m_vmstate.framevalues[i].closure);
-            for(j = 0; j < (int)gcs->m_vmstate.framevalues[i].m_handlercount; j++)
+            Object::markObject((Object*)m_vmstate.framevalues[i].closure);
+            for(j = 0; j < (int)m_vmstate.framevalues[i].m_handlercount; j++)
             {
-                handler = &gcs->m_vmstate.framevalues[i].handlers[j];
+                handler = &m_vmstate.framevalues[i].handlers[j];
             }
         }
-        for(upvalue = gcs->m_vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->m_next)
+        for(upvalue = m_vmstate.openupvalues; upvalue != nullptr; upvalue = upvalue->m_next)
         {
             Object::markObject((Object*)upvalue);
         }
-        Value::markValTable(&gcs->m_declaredglobals);
-        Value::markValTable(&gcs->m_openedmodules);
-        // Object::markObject((Object*)gcs->m_exceptions.stdexception);
+        Value::markValTable(&m_declaredglobals);
+        Value::markValTable(&m_openedmodules);
+        // Object::markObject((Object*)m_exceptions.stdexception);
         gcMarkCompilerRoots();
     }
 
@@ -15049,6 +14968,7 @@ namespace neon
         installObjArray();
         installObjDict();
         installObjFile();
+        installObjDirectory();
         installObjRange();
         installModMath();
     }
@@ -16275,8 +16195,48 @@ namespace neon
 
     void installObjArray()
     {
-        static Class::ConstItem arraymethods[] = { { "size", objfnarray_length }, { "join", objfnarray_join },       { "append", objfnarray_append }, { "push", objfnarray_append }, { "clear", objfnarray_clear },     { "clone", objfnarray_clone },   { "count", objfnarray_count }, { "extend", objfnarray_extend },   { "indexOf", objfnarray_indexof }, { "insert", objfnarray_insert }, { "pop", objfnarray_pop }, { "shift", objfnarray_shift },   { "removeAt", objfnarray_removeat }, { "remove", objfnarray_remove }, { "reverse", objfnarray_reverse }, { "sort", objfnarray_sort },   { "contains", objfnarray_contains }, { "delete", objfnarray_delete }, { "first", objfnarray_first },
-                                                         { "last", objfnarray_last },   { "isEmpty", objfnarray_isempty }, { "take", objfnarray_take },     { "get", objfnarray_get },     { "compact", objfnarray_compact }, { "unique", objfnarray_unique }, { "zip", objfnarray_zip },     { "zipFrom", objfnarray_zipfrom }, { "toDict", objfnarray_todict },   { "each", objfnarray_each },     { "map", objfnarray_map }, { "filter", objfnarray_filter }, { "some", objfnarray_some },         { "every", objfnarray_every },   { "reduce", objfnarray_reduce },   { "slice", objfnarray_slice }, { "@iter", objfnarray_iter },        { "@itern", objfnarray_itern },  { nullptr, nullptr } };
+        /* clang-format off */
+        static Class::ConstItem arraymethods[] =
+        {
+            { "size", objfnarray_length },
+            { "join", objfnarray_join },
+            { "append", objfnarray_append },
+            { "push", objfnarray_append },
+            { "clear", objfnarray_clear },
+            { "clone", objfnarray_clone },
+            { "count", objfnarray_count },
+            { "extend", objfnarray_extend },
+            { "indexOf", objfnarray_indexof },
+            { "insert", objfnarray_insert },
+            { "pop", objfnarray_pop },
+            { "shift", objfnarray_shift },
+            { "removeAt", objfnarray_removeat },
+            { "remove", objfnarray_remove },
+            { "reverse", objfnarray_reverse },
+            { "sort", objfnarray_sort },
+            { "contains", objfnarray_contains },
+            { "delete", objfnarray_delete },
+            { "first", objfnarray_first },
+            { "last", objfnarray_last },
+            { "isEmpty", objfnarray_isempty },
+            { "take", objfnarray_take },
+            { "get", objfnarray_get },
+            { "compact", objfnarray_compact },
+            { "unique", objfnarray_unique },
+            { "zip", objfnarray_zip },
+            { "zipFrom", objfnarray_zipfrom },
+            { "toDict", objfnarray_todict },
+            { "each", objfnarray_each },
+            { "map", objfnarray_map },
+            { "filter", objfnarray_filter },
+            { "some", objfnarray_some },
+            { "every", objfnarray_every },
+            { "reduce", objfnarray_reduce },
+            { "slice", objfnarray_slice },
+            { "@iter", objfnarray_iter },
+            { "@itern", objfnarray_itern },
+            { nullptr, nullptr } };
+        /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimarray->defNativeConstructor(objfnarray_constructor);
         gcs->m_classprimarray->defCallableField(String::intern("length"), objfnarray_length);
@@ -16814,9 +16774,33 @@ namespace neon
 
     void installObjDict()
     {
+        /* clang-format off */
         static Class::ConstItem dictmethods[] = {
-            { "keys", objfndict_keys }, { "size", objfndict_length }, { "add", objfndict_add }, { "set", objfndict_set }, { "clear", objfndict_clear }, { "clone", objfndict_clone }, { "compact", objfndict_compact }, { "contains", objfndict_contains }, { "extend", objfndict_extend }, { "get", objfndict_get }, { "values", objfndict_values }, { "remove", objfndict_remove }, { "isEmpty", objfndict_isempty }, { "findKey", objfndict_findkey }, { "toList", objfndict_tolist }, { "each", objfndict_each }, { "filter", objfndict_filter }, { "some", objfndict_some }, { "every", objfndict_every }, { "reduce", objfndict_reduce }, { "@iter", objfndict_iter }, { "@itern", objfndict_itern }, { nullptr, nullptr },
+            { "keys", objfndict_keys },
+            { "size", objfndict_length },
+            { "add", objfndict_add },
+            { "set", objfndict_set },
+            { "clear", objfndict_clear },
+            { "clone", objfndict_clone },
+            { "compact", objfndict_compact },
+            { "contains", objfndict_contains },
+            { "extend", objfndict_extend },
+            { "get", objfndict_get },
+            { "values", objfndict_values },
+            { "remove", objfndict_remove },
+            { "isEmpty", objfndict_isempty },
+            { "findKey", objfndict_findkey },
+            { "toList", objfndict_tolist },
+            { "each", objfndict_each },
+            { "filter", objfndict_filter },
+            { "some", objfndict_some },
+            { "every", objfndict_every },
+            { "reduce", objfndict_reduce },
+            { "@iter", objfndict_iter },
+            { "@itern", objfndict_itern },
+            { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
     #if 0
         gcs->m_classprimdict->defNativeConstructor(objfndict_constructor);
@@ -16851,6 +16835,128 @@ namespace neon
         file = SharedState::gcProtect(File::make(nullptr, false, path, mode));
         file->openWithoutParams();
         return Value::fromObject(file);
+    }
+
+
+
+    #define putorgetkey(md, name, value)                            \
+        {                                                           \
+            if(havekey && (keywanted != nullptr))                   \
+            {                                                       \
+                if(strcmp(name, keywanted->data()) == 0) \
+                {                                                   \
+                    return value;                                   \
+                }                                                   \
+            }                                                       \
+            else                                                    \
+            {                                                       \
+                md->addCstr(name, value);              \
+            }                                                       \
+        }
+
+    Value objfnfile_stat(const FuncContext& scfn)
+    {
+        bool havekey;
+        String* keywanted;
+        String* path;
+        Dict* md;
+        Util::FSStat nfs;
+        const char* strp;
+        ArgCheck check("stat", scfn);
+        auto gcs = SharedState::get();
+        havekey = false;
+        keywanted = nullptr;
+        md = nullptr;
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        path = scfn.argv[0].asString();
+        if(scfn.argc > 1)
+        {
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
+            keywanted = scfn.argv[1].asString();
+            havekey = true;
+        }
+        strp = path->data();
+        if(!nfs.fromPath(strp))
+        {
+            NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.ioerror, "%s: %s", strp, strerror(errno));
+            return Value::makeNull();
+        }
+        md = nullptr;
+        if(!havekey)
+        {
+            md = Dict::make();
+        }
+        putorgetkey(md, "path", Value::fromObject(path));
+        putorgetkey(md, "mode", Value::makeNumber(nfs.m_mode));
+        putorgetkey(md, "modename", Value::fromObject(String::copy(nfs.m_modename)));
+        putorgetkey(md, "inode", Value::makeNumber(nfs.m_inode));
+        putorgetkey(md, "links", Value::makeNumber(nfs.m_numlinks));
+        putorgetkey(md, "uid", Value::makeNumber(nfs.m_owneruid));
+        putorgetkey(md, "gid", Value::makeNumber(nfs.m_ownergid));
+        putorgetkey(md, "blocksize", Value::makeNumber(nfs.m_blocksize));
+        putorgetkey(md, "blocks", Value::makeNumber(nfs.m_blockcount));
+        putorgetkey(md, "filesize", Value::makeNumber(nfs.m_filesize));
+        putorgetkey(md, "lastchanged", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastchanged))));
+        putorgetkey(md, "lastaccess", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastaccessed))));
+        putorgetkey(md, "lastmodified", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastmodified))));
+        return Value::fromObject(md);
+    }
+
+
+
+    static Value objfnfile_basename(const FuncContext& scfn)
+    {
+        const char* r;
+        String* path;
+        ArgCheck check("basename", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        path = scfn.argv[0].asString();
+        r = Util::osfn_basename(path->data());
+        if(r == nullptr)
+        {
+            return Value::makeNull();
+        }
+        return Value::fromObject(String::copy(r));
+    }
+
+    static Value objfnfile_dirname(const FuncContext& scfn)
+    {
+        const char* r;
+        String* path;
+        ArgCheck check("dirname", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        path = scfn.argv[0].asString();
+        r = Util::osfn_dirname(path->data());
+        if(r == nullptr)
+        {
+            return Value::makeNull();
+        }
+        return Value::fromObject(String::copy(r));
+    }
+
+    static Value objfnfile_chmod(const FuncContext& scfn)
+    {
+        int64_t r;
+        int64_t mod;
+        String* path;
+        ArgCheck check("chmod", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
+        path = scfn.argv[0].asString();
+        mod = scfn.argv[1].asNumber();
+        r = Util::osfn_chmod(path->data(), mod);
+        return Value::makeNumber(r);
+    }
+
+    static Value objfnfile_unlink(const FuncContext& scfn)
+    {
+        int64_t r;
+        String* path;
+        ArgCheck check("unlink", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        path = scfn.argv[0].asString();
+        r = Util::osfn_unlink(path->data());
+        return Value::makeNumber(r);
     }
 
     static Value objfnfile_exists(const FuncContext& scfn)
@@ -17388,24 +17494,197 @@ namespace neon
         return Value::makeNumber(ftell(file->m_handle));
     }
 
-    Value modfn_os_stat(const FuncContext& scfn);
 
     void installObjFile()
     {
+        /* clang-format off */
         static Class::ConstItem filemethods[] = {
-            { "close", objfnfile_close }, { "open", objfnfile_open }, { "read", objfnfile_readmethod }, { "get", objfnfile_get }, { "gets", objfnfile_gets }, { "write", objfnfile_write }, { "puts", objfnfile_puts }, { "putc", objfnfile_putc }, { "printf", objfnfile_printf }, { "number", objfnfile_number }, { "isTTY", objfnfile_istty }, { "isOpen", objfnfile_isopen }, { "isClosed", objfnfile_isclosed }, { "flush", objfnfile_flush }, { "path", objfnfile_path }, { "seek", objfnfile_seek }, { "tell", objfnfile_tell }, { "mode", objfnfile_mode }, { "name", objfnfile_name }, { "readLine", objfnfile_readline }, { nullptr, nullptr },
+            { "close", objfnfile_close },
+            { "open", objfnfile_open },
+            { "read", objfnfile_readmethod },
+            { "get", objfnfile_get },
+            { "gets", objfnfile_gets },
+            { "write", objfnfile_write },
+            { "puts", objfnfile_puts },
+            { "putc", objfnfile_putc },
+            { "printf", objfnfile_printf },
+            { "number", objfnfile_number },
+            { "isTTY", objfnfile_istty },
+            { "isOpen", objfnfile_isopen },
+            { "isClosed", objfnfile_isclosed },
+            { "flush", objfnfile_flush },
+            { "path", objfnfile_path },
+            { "seek", objfnfile_seek },
+            { "tell", objfnfile_tell },
+            { "mode", objfnfile_mode },
+            { "name", objfnfile_name },
+            { "readLine", objfnfile_readline },
+            { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimfile->defNativeConstructor(objfnfile_constructor);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("read"), objfnfile_readstatic);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("write"), objfnfile_writestatic);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("put"), objfnfile_writestatic);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("exists"), objfnfile_exists);
+        gcs->m_classprimfile->defStaticNativeMethod(String::copy("chmod"), objfnfile_chmod);
+        gcs->m_classprimfile->defStaticNativeMethod(String::copy("basename"), objfnfile_basename);
+        gcs->m_classprimfile->defStaticNativeMethod(String::copy("dirname"), objfnfile_dirname);
+
+
+        gcs->m_classprimfile->defStaticNativeMethod(String::copy("stat"), objfnfile_stat);
+        gcs->m_classprimfile->defStaticNativeMethod(String::copy("unlink"), objfnfile_unlink);
+
+
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("isFile"), objfnfile_isfile);
         gcs->m_classprimfile->defStaticNativeMethod(String::copy("isDirectory"), objfnfile_isdirectory);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("stat"), modfn_os_stat);
         gcs->m_classprimfile->installMethods(filemethods);
     }
+
+    static Value objfndir_readdir(const FuncContext& scfn)
+    {
+        bool havecallable;
+        Util::FSDirReader rd;
+        Util::FSDirReader::Item itm;
+        Value res;
+        Value temp;
+        Value callable;
+        ArgCheck check("readdir", scfn);
+        Value nestargs[2];
+        havecallable = false;
+        callable = Value::makeNull();
+        auto gcs = SharedState::get();
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        if(scfn.argc > 1)
+        {
+            NEON_ARGS_CHECKTYPE(check, 1, &Value::isCallable);
+            callable = scfn.argv[1];
+            havecallable = true;
+            res = Value::makeNull();
+        }
+        else
+        {
+            res = Value::fromObject(Array::make());
+        }
+        auto os = scfn.argv[0].asString();
+        auto dirn = os->data();
+        if(rd.openDir(dirn))
+        {
+            while(rd.readItem(&itm))
+            {
+                auto isdotsingle = ((itm.namelength == 1) && (itm.namedata[0] == '.'));
+                auto isdotdouble = ((itm.namelength == 2) && (itm.namedata[0] == '.' && itm.namedata[1] == '.'));
+                auto canignore = (isdotsingle || isdotdouble);
+                if(!canignore)
+                {
+                    auto itemstr = String::copy(itm.namedata);
+                    auto itemval = Value::fromObject(itemstr);
+                    if(havecallable)
+                    {
+                        nestargs[0] = itemval;
+                        gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, 1, &temp, false);
+                    }
+                    else
+                    {
+                        res.asArray()->push(itemval);
+                    }
+                }
+            }
+            rd.closeDir();
+            return res;
+        }
+        else
+        {
+            NEON_THROWEXCEPTION("cannot open directory '%s'", dirn);
+        }
+        return Value::makeNull();
+    }
+
+    static Value objfndir_mkdir(const FuncContext& scfn)
+    {
+        int64_t r;
+        int64_t mod;
+        String* path;
+        ArgCheck check("mkdir", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
+        path = scfn.argv[0].asString();
+        mod = scfn.argv[1].asNumber();
+        r = Util::osfn_mkdir(path->data(), mod);
+        return Value::makeNumber(r);
+    }
+
+    static Value objfndir_chdir(const FuncContext& scfn)
+    {
+        int64_t r;
+        String* path;
+        ArgCheck check("chdir", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        path = scfn.argv[0].asString();
+        r = Util::osfn_chdir(path->data());
+        return Value::makeNumber(r);
+    }
+
+    static Value objfndir_rmdir(const FuncContext& scfn)
+    {
+        int64_t r;
+        String* path;
+        ArgCheck check("rmdir", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
+        path = scfn.argv[0].asString();
+        r = Util::osfn_rmdir(path->data());
+        return Value::makeNumber(r);
+    }
+
+    static Value objfndir_cwdhelper(const FuncContext& scfn, const char* name)
+    {
+        enum
+        {
+            kMaxBufSz = 1024
+        };
+        char* r;
+        char buf[kMaxBufSz];
+        ArgCheck check(name, scfn);
+        r = Util::osfn_getcwd(buf, kMaxBufSz);
+        if(r == nullptr)
+        {
+            return Value::makeNull();
+        }
+        return Value::fromObject(String::copy(r));
+    }
+
+    static Value objfndir_cwd(const FuncContext& scfn)
+    {
+        return objfndir_cwdhelper(scfn, "cwd");
+    }
+
+    static Value objfndir_pwd(const FuncContext& scfn)
+    {
+        return objfndir_cwdhelper(scfn, "pwd");
+    }
+
+    void installObjDirectory()
+    {
+        /* clang-format off */
+        static Class::ConstItem dirmethods[] =
+        {
+            { nullptr, nullptr },
+        };
+        /* clang-format on */
+        auto gcs = SharedState::get();
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("readdir"), objfndir_readdir);
+
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("mkdir"), objfndir_mkdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("chdir"), objfndir_chdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("rmdir"), objfndir_rmdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("cwd"), objfndir_cwd);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("pwd"), objfndir_pwd);
+
+        gcs->m_classprimdirectory->installMethods(dirmethods);
+    }
+    
 
     /*
      * TODO: when executable is run outside of current dev environment, it should correctly
@@ -17417,12 +17696,15 @@ namespace neon
      *
      * there's definitely some easy workaround by using Process.scriptdirectory() et al, but it's less than ideal.
      */
+    Module::DefExport* natmodule_load_null();
+    Module::DefExport* natmodule_load_astscan();
+    Module::DefExport* natmodule_load_complex();
 
     void loadBuiltinMethods()
     {
         int i;
-        static ModInitFN g_builtinmodules[] = {
-            natmodule_load_null, natmodule_load_os, natmodule_load_astscan, natmodule_load_complex, nullptr,
+        static Module::ModInitFN g_builtinmodules[] = {
+            natmodule_load_null, natmodule_load_astscan, natmodule_load_complex, nullptr,
         };
         for(i = 0; g_builtinmodules[i] != nullptr; i++)
         {
@@ -17433,7 +17715,15 @@ namespace neon
     void setupModulePaths()
     {
         int i;
-        static const char* defaultsearchpaths[] = { "mods", "mods/@/index" NEON_CONFIG_FILEEXT, ".", nullptr };
+        /* clang-format off */
+        static const char* defaultsearchpaths[] =
+        {
+            "mods",
+            "mods/@/index" NEON_CONFIG_FILEEXT,
+            ".",
+            nullptr
+        };
+        /* clang-format on */
         auto gcs = SharedState::get();
         Module::addSearchPathObj(gcs->m_processinfo->cliexedirectory);
         for(i = 0; defaultsearchpaths[i] != nullptr; i++)
@@ -17488,6 +17778,17 @@ namespace neon
         return Value::makeNumber(b);
     }
 
+    static Value objfnmath_pow(const FuncContext& scfn)
+    {
+        double a;
+        double b;
+        double res;
+        a = scfn.argv[0].asNumber();
+        b = scfn.argv[1].asNumber();
+        res = pow(a, b);
+        return Value::makeNumber(res);
+    }
+
     static Value objfnnumber_tobinstring(const FuncContext& scfn)
     {
         return Value::fromObject(String::utilNumberToBinString(scfn.thisval.asNumber()));
@@ -17531,12 +17832,14 @@ namespace neon
 
     void installObjNumber()
     {
+        /* clang-format off */
         static Class::ConstItem numbermethods[] = {
             { "toHexString", objfnnumber_tohexstring },
             { "toOctString", objfnnumber_tooctstring },
             { "toBinString", objfnnumber_tobinstring },
             { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimnumber->defNativeConstructor(objfnnumber_constructor);
         gcs->m_classprimnumber->installMethods(numbermethods);
@@ -17554,6 +17857,7 @@ namespace neon
         klass->defStaticNativeMethod(String::intern("ceil"), objfnmath_ceil);
         klass->defStaticNativeMethod(String::intern("floor"), objfnmath_floor);
         klass->defStaticNativeMethod(String::intern("min"), objfnmath_min);
+        klass->defStaticNativeMethod(String::intern("pow"), objfnmath_pow);
     }
 
     static Value objfnobject_dumpself(const FuncContext& scfn)
@@ -17740,11 +18044,29 @@ namespace neon
 
     void installObjObject()
     {
+        /* clang-format off */
         static Class::ConstItem objectmethods[] = {
-            { "dump", objfnobject_dumpself }, { "isa", objfnobject_isa }, { "toString", objfnobject_tostring }, { "isArray", objfnobject_isarray }, { "isString", objfnobject_isstring }, { "isCallable", objfnobject_iscallable }, { "isBool", objfnobject_isbool }, { "isNumber", objfnobject_isnumber }, { "isInt", objfnobject_isint }, { "isDict", objfnobject_isdict }, { "isObject", objfnobject_isobject }, { "isFunction", objfnobject_isfunction }, { "isIterable", objfnobject_isiterable }, { "isClass", objfnobject_isclass }, { "isFile", objfnobject_isfile }, { "isInstance", objfnobject_isinstance }, { nullptr, nullptr },
+            { "dump", objfnobject_dumpself },
+            { "isa", objfnobject_isa },
+            { "toString", objfnobject_tostring },
+            { "isArray", objfnobject_isarray },
+            { "isString", objfnobject_isstring },
+            { "isCallable", objfnobject_iscallable },
+            { "isBool", objfnobject_isbool },
+            { "isNumber", objfnobject_isnumber },
+            { "isInt", objfnobject_isint },
+            { "isDict", objfnobject_isdict },
+            { "isObject", objfnobject_isobject },
+            { "isFunction", objfnobject_isfunction },
+            { "isIterable", objfnobject_isiterable },
+            { "isClass", objfnobject_isclass },
+            { "isFile", objfnobject_isfile },
+            { "isInstance", objfnobject_isinstance },
+            { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
-        // gcs->m_classprimobject->defCallableField(String::intern("class"), objfnobject_getselfclass);
+        gcs->m_classprimobject->defCallableField(String::intern("class"), objfnobject_getselfclass);
         gcs->m_classprimobject->defStaticNativeMethod(String::intern("typename"), objfnobject_typename);
         gcs->m_classprimobject->defStaticCallableField(String::intern("prototype"), objfnobject_getselfinstance);
         gcs->m_classprimobject->installMethods(objectmethods);
@@ -17808,6 +18130,34 @@ namespace neon
         return Value::makeNull();
     }
 
+    static Value objfnprocess_getenv(const FuncContext& scfn)
+    {
+        const char* r;
+        String* key;
+        ArgCheck check("getenv", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        key = scfn.argv[0].asString();
+        r = Util::osfn_getenv(key->data());
+        if(r == nullptr)
+        {
+            return Value::makeNull();
+        }
+        return Value::fromObject(String::copy(r));
+    }
+
+    static Value objfnprocess_setenv(const FuncContext& scfn)
+    {
+        String* key;
+        String* value;
+        ArgCheck check("setenv", scfn);
+        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
+        NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
+        key = scfn.argv[0].asString();
+        value = scfn.argv[1].asString();
+        return Value::makeBool(Util::osfn_setenv(key->data(), value->data(), true));
+    }
+
+
     void installObjProcess()
     {
         Class* klass;
@@ -17824,6 +18174,11 @@ namespace neon
         klass->defStaticNativeMethod(String::copy("exedirectory"), objfnprocess_exedirectory);
         klass->defStaticNativeMethod(String::copy("scriptdirectory"), objfnprocess_scriptdirectory);
         klass->defStaticNativeMethod(String::copy("script"), objfnprocess_scriptfile);
+
+        klass->defStaticNativeMethod(String::copy("getenv"), objfnprocess_getenv);
+        klass->defStaticNativeMethod(String::copy("setenv"), objfnprocess_setenv);
+
+
     }
 
     static Value objfnrange_lower(const FuncContext& scfn)
@@ -17932,9 +18287,18 @@ namespace neon
 
     void installObjRange()
     {
+        /* clang-format off */
         static Class::ConstItem rangemethods[] = {
-            { "lower", objfnrange_lower }, { "upper", objfnrange_upper }, { "range", objfnrange_range }, { "expand", objfnrange_expand }, { "toArray", objfnrange_expand }, { "@iter", objfnrange_iter }, { "@itern", objfnrange_itern }, { nullptr, nullptr },
+            { "lower", objfnrange_lower },
+            { "upper", objfnrange_upper },
+            { "range", objfnrange_range },
+            { "expand", objfnrange_expand },
+            { "toArray", objfnrange_expand },
+            { "@iter", objfnrange_iter },
+            { "@itern", objfnrange_itern },
+            { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimrange->defNativeConstructor(objfnrange_constructor);
         gcs->m_classprimrange->installMethods(rangemethods);
@@ -18926,6 +19290,7 @@ namespace neon
 
     void installObjString()
     {
+        /* clang-format off */
         static Class::ConstItem stringmethods[] = {
             { "@iter", objfnstring_iter },
             { "@itern", objfnstring_itern },
@@ -18970,6 +19335,7 @@ namespace neon
             { "appendbyte", objfnstring_appendbytes },
             { nullptr, nullptr },
         };
+        /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimstring->defNativeConstructor(objfnstring_constructor);
         gcs->m_classprimstring->defStaticNativeMethod(String::intern("fromCharCode"), objfnstring_fromcharcode);
@@ -19013,17 +19379,17 @@ namespace neon
         return Value::fromObject(arr);
     }
 
-    DefExport* natmodule_load_astscan()
+    Module::DefExport* natmodule_load_astscan()
     {
-        DefExport* ret;
-        static DefExport::Function modfuncs[] = {
+        Module::DefExport* ret;
+        static Module::DefExport::Function modfuncs[] = {
             { "scan", true, modfn_astscan_scan },
             { nullptr, false, nullptr },
         };
-        static DefExport::Field modfields[] = {
+        static Module::DefExport::Field modfields[] = {
             { nullptr, false, nullptr },
         };
-        static DefExport module;
+        static Module::DefExport module;
         module.m_defmodname = "astscan";
         module.definedfields = modfields;
         module.definedfunctions = modfuncs;
@@ -19153,28 +19519,32 @@ namespace neon
         return Value::makeNumber(pv->im);
     }
 
-    DefExport* natmodule_load_complex()
+    Module::DefExport* natmodule_load_complex()
     {
-        static DefExport::Function modfuncs[] = {
+        static Module::DefExport::Function modfuncs[] = {
             { nullptr, false, nullptr },
         };
 
-        static DefExport::Field modfields[] = {
+        static Module::DefExport::Field modfields[] = {
             { nullptr, false, nullptr },
         };
-        static DefExport module;
+        static Module::DefExport module;
         module.m_defmodname = "complex";
         module.definedfields = modfields;
         module.definedfunctions = modfuncs;
-        static DefExport::Function complexfuncs[] = {
-            { "constructor", false, complexclass_constructor }, { "__add__", false, complexclass_opadd }, { "__sub__", false, complexclass_opsub }, { "__mul__", false, complexclass_opmul }, { "__div__", false, complexclass_opdiv }, { nullptr, 0, nullptr },
+        static Module::DefExport::Function complexfuncs[] = {
+            { "constructor", false, complexclass_constructor },
+            { "__add__", false, complexclass_opadd },
+            { "__sub__", false, complexclass_opsub },
+            { "__mul__", false, complexclass_opmul },
+            { "__div__", false, complexclass_opdiv }, { nullptr, 0, nullptr },
         };
-        static DefExport::Field complexfields[] = {
+        static Module::DefExport::Field complexfields[] = {
             { "re", false, complexclass_getre },
             { "im", false, complexclass_getim },
             { nullptr, 0, nullptr },
         };
-        static DefExport::Class classes[] = { { "Complex", complexfields, complexfuncs }, { nullptr, nullptr, nullptr } };
+        static Module::DefExport::Class classes[] = { { "Complex", complexfields, complexfuncs }, { nullptr, nullptr, nullptr } };
         module.definedclasses = classes;
         module.fnpreloaderfunc = nullptr;
         module.fnunloaderfunc = nullptr;
@@ -19255,6 +19625,15 @@ namespace neon
         return Value::makeNumber(ord);
     }
 
+    static Value nativefn_srand(const FuncContext& scfn)
+    {
+        ArgCheck check("srand", scfn);
+        NEON_ARGS_CHECKCOUNTRANGE(check, 0, 2);
+        auto val = scfn.argv[0].asNumber();
+        srand(val);
+        return Value::makeNull();
+    }
+
     static Value nativefn_rand(const FuncContext& scfn)
     {
         int tmp;
@@ -19296,20 +19675,23 @@ namespace neon
         return result;
     }
 
-    /*
     static Value nativefn_loadfile(const FuncContext& scfn)
     {
+        size_t dlen;
         Value result;
-        String* os;
+        String* path;
+        char* source;
         ArgCheck check("loadfile", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
         auto gcs = SharedState::get();
-        os = scfn.argv[0].asString();
-        fprintf(stderr, "eval:src=%s\n", os->data());
-        result = gcs->evalSource(os->data());
+        path = scfn.argv[0].asString();
+        source = neon::File::readFile(path->data(), &dlen, false, 0);
+        #if 0
+        fprintf(stderr, "eval:src=%s\n", source);
+        #endif
+        result = gcs->evalSource(source);
         return result;
     }
-    */
 
     static Value nativefn_instanceof(const FuncContext& scfn)
     {
@@ -19411,8 +19793,11 @@ namespace neon
         defineGlobalNativeFunction("printf", nativefn_printf);
         defineGlobalNativeFunction("print", nativefn_print);
         defineGlobalNativeFunction("println", nativefn_println);
+        defineGlobalNativeFunction("srand", nativefn_srand);
         defineGlobalNativeFunction("rand", nativefn_rand);
         defineGlobalNativeFunction("eval", nativefn_eval);
+        defineGlobalNativeFunction("loadfile", nativefn_loadfile);
+
         defineGlobalNativeFunction("isNaN", nativefn_isnan);
         defineGlobalNativeFunction("microtime", nativefn_microtime);
         defineGlobalNativeFunction("time", nativefn_time);
@@ -19429,343 +19814,23 @@ namespace neon
      * then, add said function in libmodule.c's loadBuiltinMethods, and you're good to go!
      */
 
-    DefExport* natmodule_load_null()
+    Module::DefExport* natmodule_load_null()
     {
-        static DefExport::Function modfuncs[] = {
+        static Module::DefExport::Function modfuncs[] = {
             /* {"somefunc",   true,  myfancymodulefunction},*/
             { nullptr, false, nullptr },
         };
 
-        static DefExport::Field modfields[] = {
+        static Module::DefExport::Field modfields[] = {
             /*{"somefield", true, the_function_that_gets_called},*/
             { nullptr, false, nullptr },
         };
-        static DefExport module;
+        static Module::DefExport module;
         module.m_defmodname = "null";
         module.definedfields = modfields;
         module.definedfunctions = modfuncs;
         module.definedclasses = nullptr;
         module.fnpreloaderfunc = nullptr;
-        module.fnunloaderfunc = nullptr;
-        return &module;
-    }
-
-    void modfn_os_preloader()
-    {
-    }
-
-    static Value modfn_os_readdir(const FuncContext& scfn)
-    {
-        const char* dirn;
-        Util::FSDirReader rd;
-        Util::FSDirReader::Item itm;
-        Value res;
-        Value itemval;
-        Value callable;
-        String* os;
-        String* itemstr;
-        ArgCheck check("readdir", scfn);
-        Value nestargs[2];
-        auto gcs = SharedState::get();
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isCallable);
-        os = scfn.argv[0].asString();
-        callable = scfn.argv[1];
-        dirn = os->data();
-        if(rd.openDir(dirn))
-        {
-            while(rd.readItem(&itm))
-            {
-                itemstr = String::copy(itm.name);
-                itemval = Value::fromObject(itemstr);
-                nestargs[0] = itemval;
-                gcs->vmNestCallFunction(callable, scfn.thisval, nestargs, 1, &res, false);
-            }
-            rd.closeDir();
-            return Value::makeNull();
-        }
-        else
-        {
-            NEON_THROWEXCEPTION("cannot open directory '%s'", dirn);
-        }
-        return Value::makeNull();
-    }
-
-    /*
-    static Value modfn_os_$template(const FuncContext& scfn)
-    {
-        int64_t r;
-        int64_t mod;
-        String* path;
-        ArgCheck check("chmod", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
-        path = scfn.argv[0].asString();
-        mod = scfn.argv[1].asNumber();
-        r = Util::osfn_chmod(path->data(), mod);
-        return Value::makeNumber(r);
-    }
-    */
-
-    static Value modfn_os_chmod(const FuncContext& scfn)
-    {
-        int64_t r;
-        int64_t mod;
-        String* path;
-        ArgCheck check("chmod", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
-        path = scfn.argv[0].asString();
-        mod = scfn.argv[1].asNumber();
-        r = Util::osfn_chmod(path->data(), mod);
-        return Value::makeNumber(r);
-    }
-
-    static Value modfn_os_mkdir(const FuncContext& scfn)
-    {
-        int64_t r;
-        int64_t mod;
-        String* path;
-        ArgCheck check("mkdir", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
-        path = scfn.argv[0].asString();
-        mod = scfn.argv[1].asNumber();
-        r = Util::osfn_mkdir(path->data(), mod);
-        return Value::makeNumber(r);
-    }
-
-    static Value modfn_os_chdir(const FuncContext& scfn)
-    {
-        int64_t r;
-        String* path;
-        ArgCheck check("chdir", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        r = Util::osfn_chdir(path->data());
-        return Value::makeNumber(r);
-    }
-
-    static Value modfn_os_rmdir(const FuncContext& scfn)
-    {
-        int64_t r;
-        String* path;
-        ArgCheck check("rmdir", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isNumber);
-        path = scfn.argv[0].asString();
-        r = Util::osfn_rmdir(path->data());
-        return Value::makeNumber(r);
-    }
-
-    static Value modfn_os_unlink(const FuncContext& scfn)
-    {
-        int64_t r;
-        String* path;
-        ArgCheck check("unlink", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        r = Util::osfn_unlink(path->data());
-        return Value::makeNumber(r);
-    }
-
-    static Value modfn_os_getenv(const FuncContext& scfn)
-    {
-        const char* r;
-        String* key;
-        ArgCheck check("getenv", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        key = scfn.argv[0].asString();
-        r = Util::osfn_getenv(key->data());
-        if(r == nullptr)
-        {
-            return Value::makeNull();
-        }
-        return Value::fromObject(String::copy(r));
-    }
-
-    static Value modfn_os_setenv(const FuncContext& scfn)
-    {
-        String* key;
-        String* value;
-        ArgCheck check("setenv", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
-        key = scfn.argv[0].asString();
-        value = scfn.argv[1].asString();
-        return Value::makeBool(Util::osfn_setenv(key->data(), value->data(), true));
-    }
-
-    static Value modfn_os_cwdhelper(const FuncContext& scfn, const char* name)
-    {
-        enum
-        {
-            kMaxBufSz = 1024
-        };
-        char* r;
-        char buf[kMaxBufSz];
-        ArgCheck check(name, scfn);
-        r = Util::osfn_getcwd(buf, kMaxBufSz);
-        if(r == nullptr)
-        {
-            return Value::makeNull();
-        }
-        return Value::fromObject(String::copy(r));
-    }
-
-    static Value modfn_os_cwd(const FuncContext& scfn)
-    {
-        return modfn_os_cwdhelper(scfn, "cwd");
-    }
-
-    static Value modfn_os_pwd(const FuncContext& scfn)
-    {
-        return modfn_os_cwdhelper(scfn, "pwd");
-    }
-
-    static Value modfn_os_basename(const FuncContext& scfn)
-    {
-        const char* r;
-        String* path;
-        ArgCheck check("basename", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        r = Util::osfn_basename(path->data());
-        if(r == nullptr)
-        {
-            return Value::makeNull();
-        }
-        return Value::fromObject(String::copy(r));
-    }
-
-    static Value modfn_os_dirname(const FuncContext& scfn)
-    {
-        const char* r;
-        String* path;
-        ArgCheck check("dirname", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        r = Util::osfn_dirname(path->data());
-        if(r == nullptr)
-        {
-            return Value::makeNull();
-        }
-        return Value::fromObject(String::copy(r));
-    }
-
-    static Value modfn_os_touch(const FuncContext& scfn)
-    {
-        FILE* fh;
-        String* path;
-        ArgCheck check("touch", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        fh = fopen(path->data(), "rb");
-        if(fh == nullptr)
-        {
-            return Value::makeBool(false);
-        }
-        fclose(fh);
-        return Value::makeBool(true);
-    }
-
-    #define putorgetkey(md, name, value)                            \
-        {                                                           \
-            if(havekey && (keywanted != nullptr))                   \
-            {                                                       \
-                if(strcmp(name, keywanted->data()) == 0) \
-                {                                                   \
-                    return value;                                   \
-                }                                                   \
-            }                                                       \
-            else                                                    \
-            {                                                       \
-                md->addCstr(name, value);              \
-            }                                                       \
-        }
-
-    Value modfn_os_stat(const FuncContext& scfn)
-    {
-        bool havekey;
-        String* keywanted;
-        String* path;
-        Dict* md;
-        Util::FSStat nfs;
-        const char* strp;
-        ArgCheck check("stat", scfn);
-        auto gcs = SharedState::get();
-        havekey = false;
-        keywanted = nullptr;
-        md = nullptr;
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        path = scfn.argv[0].asString();
-        if(scfn.argc > 1)
-        {
-            NEON_ARGS_CHECKTYPE(check, 1, &Value::isString);
-            keywanted = scfn.argv[1].asString();
-            havekey = true;
-        }
-        strp = path->data();
-        if(!nfs.fromPath(strp))
-        {
-            NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.ioerror, "%s: %s", strp, strerror(errno));
-            return Value::makeNull();
-        }
-        md = nullptr;
-        if(!havekey)
-        {
-            md = Dict::make();
-        }
-        putorgetkey(md, "path", Value::fromObject(path));
-        putorgetkey(md, "mode", Value::makeNumber(nfs.m_mode));
-        putorgetkey(md, "modename", Value::fromObject(String::copy(nfs.m_modename)));
-        putorgetkey(md, "inode", Value::makeNumber(nfs.m_inode));
-        putorgetkey(md, "links", Value::makeNumber(nfs.m_numlinks));
-        putorgetkey(md, "uid", Value::makeNumber(nfs.m_owneruid));
-        putorgetkey(md, "gid", Value::makeNumber(nfs.m_ownergid));
-        putorgetkey(md, "blocksize", Value::makeNumber(nfs.m_blocksize));
-        putorgetkey(md, "blocks", Value::makeNumber(nfs.m_blockcount));
-        putorgetkey(md, "filesize", Value::makeNumber(nfs.m_filesize));
-        putorgetkey(md, "lastchanged", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastchanged))));
-        putorgetkey(md, "lastaccess", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastaccessed))));
-        putorgetkey(md, "lastmodified", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastmodified))));
-        return Value::fromObject(md);
-    }
-
-    DefExport* natmodule_load_os()
-    {
-        static DefExport::Function modfuncs[] = {
-            { "readdir", true, modfn_os_readdir },
-            { "chmod", true, modfn_os_chmod },
-            { "chdir", true, modfn_os_chdir },
-            { "mkdir", true, modfn_os_mkdir },
-            { "unlink", true, modfn_os_unlink },
-            { "getenv", true, modfn_os_getenv },
-            { "setenv", true, modfn_os_setenv },
-            { "rmdir", true, modfn_os_rmdir },
-            { "pwd", true, modfn_os_pwd },
-            { "pwd", true, modfn_os_cwd },
-            { "basename", true, modfn_os_basename },
-            { "dirname", true, modfn_os_dirname },
-            { "touch", true, modfn_os_touch },
-            { "stat", true, modfn_os_stat },
-
-    /* todo: implement these! */
-    #if 0
-            /* shell-like directory - might be trickier */
-    #endif
-            { nullptr, false, nullptr },
-        };
-        static DefExport::Field modfields[] = {
-            /*{"platform", true, get_os_platform},*/
-            { nullptr, false, nullptr },
-        };
-        static DefExport module;
-        module.m_defmodname = "os";
-        module.definedfields = modfields;
-        module.definedfunctions = modfuncs;
-        module.definedclasses = nullptr;
-        module.fnpreloaderfunc = &modfn_os_preloader;
         module.fnunloaderfunc = nullptr;
         return &module;
     }
@@ -19976,7 +20041,8 @@ namespace neon
         }
         if(receiver.isObject())
         {
-            switch(receiver.asObject()->m_objtype)
+            auto ot = receiver.asObject()->m_objtype;
+            switch(ot)
             {
                 case Object::OTYP_STRING:
                     return m_classprimstring;
@@ -19992,10 +20058,16 @@ namespace neon
                 case Object::OTYP_FUNCCLOSURE:
                 case Object::OTYP_FUNCSCRIPT:
                     return m_classprimcallable;
-
+                case Object::OTYP_INSTANCE:
+                    {
+                        auto inst = receiver.asInstance();
+                        //fprintf(stderr, "instanceclass=%p\n", inst->m_instanceclass);
+                        return inst->m_instanceclass;
+                    }
+                    break;
                 default:
                 {
-                    fprintf(stderr, "getclassfor: unhandled type!\n");
+                    fprintf(stderr, "getclassfor: unhandled type '%s' (%d)\n", Value::typeName(receiver, false), ot);
                 }
                 break;
             }
@@ -20657,18 +20729,21 @@ namespace neon
             return NEON_THROWEXCEPTION("list are numerically indexed");
         }
         index = vindex.asNumber();
+        /*
         if(NEON_UNLIKELY(index < 0))
         {
             index = list->count() + index;
         }
         if((index < (long)list->count()) && (index >= 0))
         {
+        */
             finalval = list->get(index);
-        }
+        /*}
         else
         {
             finalval = Value::makeNull();
         }
+        */
         if(!willassign)
         {
             /*
@@ -20711,6 +20786,10 @@ namespace neon
         Value scrargv[3];
         nargc = 1;
         field = vmUtilCheckOverloadRequirements("tryoverloadgeneric", target, name);
+        if(field == nullptr)
+        {
+            return NEON_THROWEXCEPTION("failed to get operator overload");
+        }
         scrargv[0] = firstargvval;
         if(willassign)
         {
@@ -23036,6 +23115,7 @@ namespace neon
             gcs->m_classprimarray = Class::makeScriptClass("Array", gcs->m_classprimobject);
             gcs->m_classprimdict = Class::makeScriptClass("Dict", gcs->m_classprimobject);
             gcs->m_classprimfile = Class::makeScriptClass("File", gcs->m_classprimobject);
+            gcs->m_classprimdirectory = Class::makeScriptClass("Dir", gcs->m_classprimobject);
             gcs->m_classprimrange = Class::makeScriptClass("Range", gcs->m_classprimobject);
             gcs->m_classprimcallable = Class::makeScriptClass("Function", gcs->m_classprimobject);
             gcs->m_classprimprocess = Class::makeScriptClass("Process", gcs->m_classprimobject);
@@ -23090,7 +23170,7 @@ namespace neon
         destrdebug("destroying m_importpath...");
         gcs->m_importpath.deInit();
         destrdebug("destroying linked objects...");
-        SharedState::gcLinkedObjectsDestroy();
+        gcs->gcLinkedObjectsDestroy();
         /* since object in module can exist in m_declaredglobals, it must come before */
         destrdebug("destroying module table...");
         gcs->m_openedmodules.deInit();
@@ -23359,7 +23439,7 @@ struct ConsoleProg
                     if(bracketcount == 0 && parencount == 0 && bracecount == 0 && singlequotecount == 0 && doublequotecount == 0)
                     {
                         memset(varnamebuf, 0, kMaxVarName);
-                        sprintf(varnamebuf, "_%zd", (long)rescnt);
+                        sprintf(varnamebuf, "_%ld", (long)rescnt);
                         gcs->execSource(gcs->m_topmodule, source->data(), "<repl>", &dest);
                         dest = gcs->m_lastreplvalue;
                         if(!dest.isNull())

@@ -1,0 +1,35 @@
+
+
+
+var scriptsdir = "eg";
+var allscripts = []
+
+Dir.readdir(scriptsdir, function(item)
+{
+    var full = scriptsdir+"/"+item
+    if(File.isFile(full) && full.endsWith(".nn"))
+    {
+        allscripts.push(full)
+    }
+})
+
+println(allscripts)
+var i=0
+var alen = allscripts.length
+ 
+foreach(_, fpath in allscripts)
+{
+    println("\n")
+    println("\n------------------------\n")
+    println("found script #" + i + " of " + alen + ":" + fpath + " ... now running: ");
+    try
+    {
+        loadfile(fpath);
+    }
+    catch(err)
+    {
+        println("*** ERROR: ", err)
+    }
+    i++
+}
+

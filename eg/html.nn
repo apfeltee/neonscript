@@ -3,7 +3,6 @@
 * this is stupid, and only really for testing.
 */
 
-var os = import "os"
 
 class CGI
 {
@@ -11,7 +10,7 @@ class CGI
     {
         this.m_params = {}
         this.m_pinfo = []
-        //pinf = os.getenv("PATH_INFO");
+        //pinf = Process.getenv("PATH_INFO");
         pinf = "";
         if(pinf != null)
         {
@@ -132,7 +131,7 @@ class App
                 gh.tag("h1", {}, "files: ")
                 gh.tag("ul", {}, function()
                 {
-                    //var items = os.readdir(".").filter(function(itm){ return (itm[0] != "."); });
+                    //var items = Dir.readdir(".").filter(function(itm){ return (itm[0] != "."); });
                     var items = ["foo.exe", "stuff.mov", "source.f90", "runme.vbs", "twitter.php", "facebook.java"]
                     var len = items.length;
                     for(var i=0; i<items.length; i++)

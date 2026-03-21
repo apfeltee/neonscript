@@ -190,7 +190,11 @@ enum
     ((MCHUNK_SIZE + CHUNK_ALIGN_MASK) & ~CHUNK_ALIGN_MASK)
 
 /* conversion from malloc headers to user pointers, and back */
-#define chunk2mem(p) ((void*)((char*)(p) + NNALLOC_CONST_TWOSIZETSIZES))
+static void* chunk2mem(void* p)
+{
+    return ((void*)((char*)(p) + NNALLOC_CONST_TWOSIZETSIZES));
+}
+
 #define mem2chunk(mem) ((nnallocatorplainchunk_t*)((char*)(mem) - NNALLOC_CONST_TWOSIZETSIZES))
 /* chunk associated with aligned address A */
 #define align_as_chunk(A) (nnallocatorplainchunk_t*)((A) + align_offset(chunk2mem(A)))

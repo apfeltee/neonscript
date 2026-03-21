@@ -1,10 +1,8 @@
 
-const os = import "os";
-
 
 function scan(dir)
 {
-    os.readdir(dir, def(item)
+    Dir.readdir(dir, def(item)
     {
         if((item == ".") || (item == ".."))
         {
