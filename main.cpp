@@ -4721,7 +4721,7 @@ namespace neon
                     else
                     {
                         m_listitems = (StoredTyp*)Memory::sysRealloc(m_listitems, sizeof(StoredTyp) * ncap);
-                        initItems(m_listitems, m_listcount, ncap);
+                        initItems(m_listitems, oldcap, ncap);
                     }
 
                 }
@@ -4763,6 +4763,11 @@ namespace neon
                 return m_listitems[idx];
             }
 
+            NEON_INLINE StoredTyp& operator[](size_t idx) const
+            {
+                return m_listitems[idx];
+            }
+
             NEON_INLINE StoredTyp* getp(size_t idx) const
             {
                 return &m_listitems[idx];
@@ -4776,9 +4781,9 @@ namespace neon
                 {
                     ensureCapacity(need);
                 }
-                if(idx > m_listcount)
+                if(idx >= m_listcount)
                 {
-                    m_listcount = idx;
+                    m_listcount = idx + 1;
                 }
                 m_listitems[idx] = val;
                 return &m_listitems[idx];
@@ -5592,7 +5597,7 @@ namespace neon
                 Instruction currentinstr;
                 CallFrame* currentframe;
                 Upvalue* openupvalues;
-                CallFrame* framevalues;
+                ValList<CallFrame> framevalues;
                 Value* stackvalues;
             } m_vmstate;
 
@@ -5983,33 +5988,20 @@ namespace neon
 
             NEON_INLINE bool resizeFrames(size_t needed)
             {
-                /* return false; */
-                size_t i;
                 size_t oldsz;
                 size_t newsz;
-                size_t allocsz;
                 int oldhandlercnt;
                 Instruction* oldip;
                 Function* oldclosure;
-                CallFrame* oldbuf;
-                CallFrame* newbuf;
-                (void)i;
                 oldclosure = m_vmstate.currentframe->closure;
                 oldip = m_vmstate.currentframe->inscode;
                 oldhandlercnt = m_vmstate.currentframe->m_handlercount;
                 oldsz = m_vmstate.framecapacity;
                 newsz = oldsz + needed;
-                allocsz = ((newsz + 1) * sizeof(CallFrame));
-                oldbuf = m_vmstate.framevalues;
-                newbuf = (CallFrame*)Memory::sysRealloc(oldbuf, allocsz);
-                if(newbuf == nullptr)
-                {
-                    fprintf(stderr, "internal error: failed to resize framevalues!\n");
-                    abort();
-                }
-                ValList<CallFrame>::initItems(newbuf, oldsz, newsz);
-                m_vmstate.framevalues = (CallFrame*)newbuf;
-                m_vmstate.framecapacity = newsz;
+
+                m_vmstate.framevalues.ensureCapacity(newsz);
+                m_vmstate.framecapacity = m_vmstate.framevalues.capacity();
+
                 /*
                  * this bit is crucial: realloc changes pointer addresses, and to keep the
                  * current frame, re-read it from the new address.
@@ -6084,15 +6076,7 @@ namespace neon
                 }
                 {
                     m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
-                    finalsz = NEON_CONFIG_INITFRAMECOUNT * sizeof(CallFrame);
-                    newbufframes = (CallFrame*)Memory::sysMalloc(finalsz);
-                    if(newbufframes == nullptr)
-                    {
-                        fprintf(stderr, "error: failed to allocate framevalues!\n");
-                        abort();
-                    }
-                    ValList<CallFrame>::initItems(newbufframes, 0, NEON_CONFIG_INITFRAMECOUNT);
-                    m_vmstate.framevalues = newbufframes;
+                    m_vmstate.framevalues.ensureCapacity(NEON_CONFIG_INITFRAMECOUNT);
                 }
             }
 
@@ -23185,7 +23169,7 @@ namespace neon
         destrdebug("destroying m_debugwriter...");
         IOStream::destroy(gcs->m_debugwriter);
         destrdebug("destroying framevalues...");
-        Memory::sysFree(gcs->m_vmstate.framevalues);
+        gcs->m_vmstate.framevalues.deInit();
         destrdebug("destroying stackvalues...");
         Memory::sysFree(gcs->m_vmstate.stackvalues);
         Memory::sysFree(gcs->m_processinfo);
