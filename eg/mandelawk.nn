@@ -1,5 +1,5 @@
 
-xsize = 59;
+xsize = 59/2;
 ysize = 21;
 minim = -1.0;
 maxim = 1.0;

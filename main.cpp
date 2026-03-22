@@ -54,6 +54,7 @@
 
 #include "optparse.h"
 #include "lino.h"
+#include "allocator.h"
 
 /*
 * set to 1 to use allocator (default).
@@ -61,7 +62,7 @@
 * might not be portable beyond linux/windows, and a couple unix derivatives.
 * strives to use the least amount of memory (and does so very successfully).
 */
-#define NEON_CONF_MEMUSEALLOCATOR 0
+#define NEON_CONF_MEMUSEALLOCATOR 1
 
 #define NEON_CONF_OSPATHSIZE 1024
 
@@ -289,14 +290,14 @@ namespace neon
             static inline void mempoolInit()
             {
                 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-                    g_mspcontext = nn_allocator_create();
+                    g_mspcontext = mempool_createpool();
                 #endif
             }
 
             static inline void mempoolDestroy()
             {
                 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-                    nn_allocator_destroy(g_mspcontext);
+                    mempool_destroypool(g_mspcontext);
                 #endif
             }
 
@@ -304,7 +305,7 @@ namespace neon
             {
                 void* p;
                 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-                    p = (void*)nn_allocuser_malloc(g_mspcontext, sz);
+                    p = (void*)mempool_usermalloc(g_mspcontext, sz);
                 #else
                     p = (void*)malloc(sz);
                 #endif
@@ -319,7 +320,7 @@ namespace neon
                     {
                         return sysMalloc(nsz);
                     }
-                    retp = (void*)nn_allocuser_realloc(g_mspcontext, p, nsz);
+                    retp = (void*)mempool_userrealloc(g_mspcontext, p, nsz);
                 #else
                     retp = (void*)realloc(p, nsz);
                 #endif
@@ -330,7 +331,7 @@ namespace neon
             {
                 void* p;
                 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-                    p = (void*)nn_allocuser_malloc(g_mspcontext, (count * typsize));
+                    p = (void*)mempool_usermalloc(g_mspcontext, (count * typsize));
                     memset(p, 0, (count * typsize));
                 #else
                     p = (void*)calloc(count, typsize);
@@ -341,7 +342,7 @@ namespace neon
             static inline void sysFree(void* ptr)
             {
                 #if defined(NEON_CONF_MEMUSEALLOCATOR) && (NEON_CONF_MEMUSEALLOCATOR == 1)
-                    nn_allocuser_free(g_mspcontext, ptr);
+                    mempool_userfree(g_mspcontext, ptr);
                 #else
                     free(ptr);
                 #endif
@@ -5402,15 +5403,11 @@ namespace neon
             {
                 blob->m_count = 0;
                 blob->m_capacity = 0;
-                blob->m_instrucs = nullptr;
             }
 
             static void destroy(Blob* blob)
             {
-                if(blob->m_instrucs != nullptr)
-                {
-                    Memory::sysFree(blob->m_instrucs);
-                }
+                blob->m_instrucs.deInit();
                 blob->m_constants.deInit();
                 blob->m_argdefvals.deInit();
             }
@@ -5418,7 +5415,7 @@ namespace neon
         public:
             int m_count;
             int m_capacity;
-            Instruction* m_instrucs;
+            ValList<Instruction> m_instrucs;
             ValList<Value> m_constants;
             ValList<Value> m_argdefvals;
 
@@ -5430,14 +5427,7 @@ namespace neon
 
             void push(Instruction ins)
             {
-                int oldcapacity;
-                if(m_capacity < m_count + 1)
-                {
-                    oldcapacity = m_capacity;
-                    m_capacity = Memory::getNextCapacity(oldcapacity);
-                    m_instrucs = (Instruction*)Memory::sysRealloc(m_instrucs, m_capacity * sizeof(Instruction));
-                }
-                m_instrucs[m_count] = ins;
+                m_instrucs.push(ins);
                 m_count++;
             }
 
@@ -5969,7 +5959,6 @@ namespace neon
                 nforvals = (needed * 2);
                 oldsz = m_vmstate.stackcapacity;
                 newsz = oldsz + nforvals;
-
                 m_vmstate.stackvalues.ensureCapacity(newsz);
                 m_vmstate.stackcapacity = m_vmstate.stackvalues.capacity();
                 return true;
@@ -6006,7 +5995,7 @@ namespace neon
             {
                 if((m_vmstate.stackidx + 1) >= m_vmstate.stackcapacity)
                 {
-                    if(!resizeStack(Util::roundUpToPowe64(m_vmstate.stackidx + 1)))
+                    if(!resizeStack((m_vmstate.stackidx + 1)))
                     {
                         fprintf(stderr, "failed to resize stack due to overflow");
                         return false;
@@ -6021,7 +6010,7 @@ namespace neon
                 //fprintf(stderr, "checking if frames need resizing...\n");
                 if(m_vmstate.framecount >= m_vmstate.framecapacity)
                 {
-                    if(!resizeFrames(Util::roundUpToPowe64(m_vmstate.framecapacity + 1)))
+                    if(!resizeFrames((m_vmstate.framecapacity + 1)))
                     {
                         fprintf(stderr, "failed to resize frames due to overflow");
                         return false;
@@ -6046,9 +6035,6 @@ namespace neon
 
             void initVMState()
             {
-                size_t finalsz;
-                Value* newbufvals;
-                CallFrame* newbufframes;
                 linkedobjects = nullptr;
                 m_vmstate.currentframe = nullptr;
                 {
@@ -11834,7 +11820,7 @@ namespace neon
                     }
                     else
                     {
-                        bcode = m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_instrucs;
+                        bcode = m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_instrucs.data();
                         cvals = (Value*)m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_constants.data();
                         i += 1 + getcodeargscount(bcode, cvals, i);
                     }
@@ -14407,7 +14393,7 @@ namespace neon
         auto gcs = SharedState::get();
         frame = &gcs->m_vmstate.framevalues[gcs->m_vmstate.framecount - 1];
         function = frame->closure->m_fnvals.fnclosure.scriptfunc;
-        instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+        instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs.data() - 1;
         line = function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline;
         fprintf(stderr, "RuntimeError: ");
         tmpfprintf(stderr, format, args...);
@@ -14421,7 +14407,7 @@ namespace neon
                 frame = &gcs->m_vmstate.framevalues[i];
                 function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs.data() - 1;
                 fprintf(stderr, "    %s:%d -> ", function->m_fnvals.fnscriptfunc.module->m_physicalpath->data(), function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline);
                 if(function->m_funcname == nullptr)
                 {
@@ -14962,7 +14948,7 @@ namespace neon
                 frame = &m_vmstate.framevalues[i];
                 function = frame->closure->m_fnvals.fnclosure.scriptfunc;
                 /* -1 because the IP is sitting on the next instruction to be executed */
-                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs - 1;
+                instruction = frame->inscode - function->m_fnvals.fnscriptfunc.blob->m_instrucs.data() - 1;
                 line = function->m_fnvals.fnscriptfunc.blob->m_instrucs[instruction].fromsourceline;
                 physfile = "(unknown)";
                 if(function->m_fnvals.fnscriptfunc.module->m_physicalpath != nullptr)
@@ -19854,7 +19840,7 @@ namespace neon
         }
         frame = &m_vmstate.framevalues[m_vmstate.framecount++];
         frame->closure = closure;
-        frame->inscode = closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs;
+        frame->inscode = closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs.data();
         frame->stackslotpos = m_vmstate.stackidx + (-argcount - 1);
         return true;
     }
@@ -22041,7 +22027,7 @@ namespace neon
             }
             if(NEON_UNLIKELY(m_conf.shoulddumpstack))
             {
-                ofs = (int)(m_vmstate.currentframe->inscode - m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs);
+                ofs = (int)(m_vmstate.currentframe->inscode - m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob->m_instrucs.data());
                 vmdbg.printInstructionAt(m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
                 fprintf(stderr, "stack (before)=[\n");
                 iterpos = 0;
