@@ -1,6 +1,7 @@
 
 /*
 ** Bundled memory allocator.
+** based on LuaJITs allocator, HEAVILY modified to be mostly standalone.
 **
 ** Beware: this is a HEAVILY CUSTOMIZED version of dlmalloc.
 ** The original bears the following remark:
@@ -20,10 +21,6 @@
 ** - ptmalloc: http://www.malloc.de/
 ** - nedmalloc: http://www.nedprod.com/programs/portable/nedmalloc/
 */
-
-/* To get the mremap prototype. Must be defined before any system includes. */
-
-
 
 #ifndef _LJ_ALLOC_H
 #define _LJ_ALLOC_H

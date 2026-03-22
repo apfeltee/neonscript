@@ -3,7 +3,7 @@
     colors = try{ import colors }
 */
 
-const colors = import "colors"
+const colors = require("colors")
 
 println("colors=", colors);
 

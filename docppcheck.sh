@@ -10,6 +10,8 @@ incdirs=(
  /usr/include
 )
 
+incdirs=()
+
 defflags=(
   -D__CHAR_BIT__=1
   -D__CPPCHECK__

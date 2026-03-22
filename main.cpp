@@ -62,7 +62,7 @@
 * might not be portable beyond linux/windows, and a couple unix derivatives.
 * strives to use the least amount of memory (and does so very successfully).
 */
-#define NEON_CONF_MEMUSEALLOCATOR 1
+#define NEON_CONF_MEMUSEALLOCATOR 0
 
 #define NEON_CONF_OSPATHSIZE 1024
 
@@ -249,7 +249,6 @@ namespace neon
     void installObjDict();
     void installObjFile();
     void installObjDirectory();
-    void loadBuiltinMethods();
     void setupModulePaths();
     void installObjNumber();
     void installModMath();
@@ -259,7 +258,7 @@ namespace neon
     void installObjString();
     void initBuiltinFunctions();
 
-    Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast);
+    Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool keeplast);
 
     template<typename... ArgsT>
     bool throwScriptException(Class* exklass, const char* srcfile, int srcline, const char* format, ArgsT&&... args);
@@ -5362,7 +5361,6 @@ namespace neon
                 OPC_INDEXGET,
                 OPC_INDEXGETRANGED,
                 OPC_INDEXSET,
-                OPC_IMPORTIMPORT,
                 OPC_EXTRY,
                 OPC_EXPOPTRY,
                 OPC_EXPUBLISHTRY,
@@ -5479,8 +5477,12 @@ namespace neon
     class SharedState
     {
         public:
-            /* how much memory can be allocated before the garbage collector kicks in */
-            static constexpr auto CONF_DEFAULTGCSTART = (1024 * 1024);
+            /*
+            * (1024*1024) * 1 = 1mb
+            *             * 2 = 2mb
+            * et cetera
+            */
+            static constexpr auto CONF_DEFAULTGCSTART = ((1024 * 1024) * 1);
 
             /* growth factor for GC heap objects */
             static constexpr auto CONF_GCHEAPGROWTHFACTOR = 1.25;
@@ -5580,6 +5582,7 @@ namespace neon
 
             struct
             {
+                bool m_unhandledexceptionstate;
                 int64_t stackidx;
                 int64_t stackcapacity;
                 int64_t framecapacity;
@@ -6036,6 +6039,7 @@ namespace neon
             void initVMState()
             {
                 linkedobjects = nullptr;
+                m_vmstate.m_unhandledexceptionstate = false;
                 m_vmstate.currentframe = nullptr;
                 {
                     m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
@@ -7438,13 +7442,6 @@ namespace neon
                 return field;
             }
 
-            Property* getPropertycstr(const char* name)
-            {
-                String* os;
-                os = String::intern(name);
-                return getProperty(os);
-            }
-
             Property* getMethod(String* name)
             {
                 Property* field;
@@ -7457,13 +7454,6 @@ namespace neon
                     }
                 }
                 return field;
-            }
-
-            Property* getMethodcstr(const char* name)
-            {
-                String* os;
-                os = String::intern(name);
-                return getMethod(os);
             }
     };
 
@@ -7809,70 +7799,7 @@ namespace neon
     class Module : public Object
     {
         public:
-            class DefExport;
             using ModLoaderFN = void(*)();
-            using ModInitFN = Module::DefExport*(*)();
-
-            class DefExport
-            {
-                public:
-
-                    struct Function
-                    {
-                        const char* m_deffuncname;
-                        bool isstatic;
-                        NativeFN function;
-                    };
-
-                    struct Field
-                    {
-                        const char* m_deffieldname;
-                        bool isstatic;
-                        NativeFN fieldvalfn;
-                    };
-
-                    struct Class
-                    {
-                        const char* m_defclassname;
-                        Field* defpubfields;
-                        Function* defpubfunctions;
-                    };
-
-                public:
-                    /*
-                     * the name of this module.
-                     * note: if the name must be preserved, copy it; it is only a pointer to a
-                     * string that gets freed past loading.
-                     */
-                    const char* m_defmodname;
-
-                    /* exported fields, if any. */
-                    Field* definedfields;
-
-                    /* regular functions, if any. */
-                    Function* definedfunctions;
-
-                    /* exported classes, if any.
-                     * i.e.:
-                     * {"Stuff",
-                     *   (Field[]){
-                     *       {"enabled", true},
-                     *       ...
-                     *   },
-                     *   (Function[]){
-                     *       {"isStuff", myclass_fn_isstuff},
-                     *       ...
-                     * }})*/
-                    Class* definedclasses;
-
-                    /* function that is called directly upon loading the module. can be nullptr. */
-                    Module::ModLoaderFN fnpreloaderfunc;
-
-                    /* function that is called before unloading the module. can be nullptr. */
-                    Module::ModLoaderFN fnunloaderfunc;
-            };
-
-
 
         public:
             static Module* make(const char* name, const char* file, bool imported, bool retain)
@@ -7924,7 +7851,7 @@ namespace neon
                 }
             }
 
-            static char* resolvePath(const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+            static StrBuffer* resolvePath(const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
             {
                 size_t i;
                 size_t mlen;
@@ -7941,6 +7868,8 @@ namespace neon
                 (void)isrelative;
                 (void)stroot;
                 (void)stmod;
+                path1 = nullptr;
+                path2 = nullptr;
                 auto gcs = SharedState::get();
                 mlen = strlen(modulename);
                 splen = gcs->m_importpath.count();
@@ -7964,50 +7893,49 @@ namespace neon
                     fprintf(stderr, "import: trying '%s' ... ", cstrpath);
                     if(File::fileExists(cstrpath))
                     {
+                        path1 = Util::osfn_realpath(cstrpath, nullptr);
                         fprintf(stderr, "found!\n");
                         /* stop a core library from importing itself */
-                        if(stat(currentfile, &stroot) == -1)
+                        if(currentfile != nullptr)
                         {
-                            fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
-                            return nullptr;
-                        }
-                        if(stat(cstrpath, &stmod) == -1)
-                        {
-                            fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
-                            return nullptr;
-                        }
-                        if(stroot.st_ino == stmod.st_ino)
-                        {
-                            fprintf(stderr, "resolvepath: refusing to import itself\n");
-                            return nullptr;
-                        }
-
-                        path1 = Util::osfn_realpath(cstrpath, nullptr);
-                        path2 = Util::osfn_realpath(currentfile, nullptr);
-                        if(path1 != nullptr && path2 != nullptr)
-                        {
-                            if(memcmp(path1, path2, (int)strlen(path2)) == 0)
+                            if(stat(currentfile, &stroot) == -1)
                             {
-                                Memory::sysFree(path1);
-                                Memory::sysFree(path2);
-                                path1 = nullptr;
-                                path2 = nullptr;
+                                fprintf(stderr, "resolvepath: failed to stat current file '%s'\n", currentfile);
+                                return nullptr;
+                            }
+                            if(stat(cstrpath, &stmod) == -1)
+                            {
+                                fprintf(stderr, "resolvepath: failed to stat module file '%s'\n", cstrpath);
+                                return nullptr;
+                            }
+                            if(stroot.st_ino == stmod.st_ino)
+                            {
                                 fprintf(stderr, "resolvepath: refusing to import itself\n");
                                 return nullptr;
                             }
-                            if(path2 != nullptr)
+                            path2 = Util::osfn_realpath(currentfile, nullptr);
+                            if(path1 != nullptr && path2 != nullptr)
                             {
-                                Memory::sysFree(path2);
+                                if(memcmp(path1, path2, (int)strlen(path2)) == 0)
+                                {
+                                    Memory::sysFree(path1);
+                                    Memory::sysFree(path2);
+                                    path1 = nullptr;
+                                    path2 = nullptr;
+                                    fprintf(stderr, "resolvepath: refusing to import itself\n");
+                                    return nullptr;
+                                }
                             }
-                            Memory::destroy(pathbuf);
-                            pathbuf = nullptr;
-                            retme = Util::stringDup(path1);
-                            if(path1 != nullptr)
-                            {
-                                Memory::sysFree(path1);
-                            }
-                            return retme;
                         }
+                        if(path2 != nullptr)
+                        {
+                            Memory::sysFree(path2);
+                        }
+                        if(path1 != nullptr)
+                        {
+                            Memory::sysFree(path1);
+                        }
+                        return pathbuf;
                     }
                     else
                     {
@@ -8018,11 +7946,11 @@ namespace neon
                 return nullptr;
             }
 
-            static Module* loadScriptModule(Module* intomodule, String* modulename)
+            static Module* loadScriptModule(String* modulename)
             {
                 size_t fsz;
                 char* source;
-                char* physpath;
+                StrBuffer* physpath;
                 Blob blob;
                 Value retv;
                 Value callable;
@@ -8032,7 +7960,6 @@ namespace neon
                 Function* closure;
                 Function* function;
                 (void)os;
-                (void)intomodule;
                 auto gcs = SharedState::get();
                 field = gcs->m_openedmodules.getfieldbyostr(modulename);
                 if(field != nullptr)
@@ -8040,24 +7967,25 @@ namespace neon
                     Blob::destroy(&blob);
                     return field->value.asModule();
                 }
-                physpath = resolvePath(modulename->data(), intomodule->m_physicalpath->data(), nullptr, false);
+                physpath = resolvePath(modulename->data(), nullptr, nullptr, false);
                 if(physpath == nullptr)
                 {
                     Blob::destroy(&blob);
                     NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.importerror, "module not found: '%s'", modulename->data());
                     return nullptr;
                 }
-                fprintf(stderr, "loading module from '%s'\n", physpath);
-                source = neon::File::readFile(physpath, &fsz, false, 0);
+                fprintf(stderr, "loading module from '%s'\n", physpath->data());
+                source = neon::File::readFile(physpath->data(), &fsz, false, 0);
                 if(source == nullptr)
                 {
+                    Memory::destroy(physpath);
                     NEON_THROWCLASSWITHSOURCEINFO(gcs->m_exceptions.importerror, "could not read import file %s", physpath);
                     Blob::destroy(&blob);
                     return nullptr;
                 }
-                module = Module::make(modulename->data(), physpath, true, true);
-                Memory::sysFree(physpath);
-                function = compileSourceIntern(module, source, &blob, true, false);
+                module = Module::make(modulename->data(), physpath->data(), true, true);
+                Memory::destroy(physpath);
+                function = compileSourceIntern(module, source, &blob, false);
                 Memory::sysFree(source);
                 closure = Function::makeFuncClosure(function, Value::makeNull());
                 callable = Value::fromObject(closure);
@@ -8070,137 +7998,6 @@ namespace neon
                 }
                 Blob::destroy(&blob);
                 return module;
-            }
-
-            static void addNativeModule(Module* module, const char* as)
-            {
-                Value name;
-                auto gcs = SharedState::get();
-                if(as != nullptr)
-                {
-                    module->m_modname = String::copy(as);
-                }
-                name = Value::fromObject(String::copyObject(module->m_modname));
-                gcs->vmStackPush(name);
-                gcs->vmStackPush(Value::fromObject(module));
-                gcs->m_openedmodules.set(name, Value::fromObject(module));
-                gcs->vmStackPop(2);
-            }
-
-            static bool loadBuiltinModule(ModInitFN init_fn, char* importname, const char* source, void* dlw)
-            {
-                size_t j;
-                size_t k;
-                size_t slen;
-                Value v;
-                Value fieldname;
-                Value funcname;
-                Value funcrealvalue;
-                DefExport::Function func;
-                DefExport::Field field;
-                DefExport* defmod;
-                Module* targetmod;
-                DefExport::Class klassreg;
-                String* classname;
-                Function* native;
-                Class* klass;
-                auto gcs = SharedState::get();
-                defmod = init_fn();
-                if(defmod != nullptr)
-                {
-                    targetmod = SharedState::gcProtect(Module::make((char*)defmod->m_defmodname, source, false, true));
-                    targetmod->m_fnpreloaderptr = defmod->fnpreloaderfunc;
-                    targetmod->m_fnunloaderptr = defmod->fnunloaderfunc;
-                    if(defmod->definedfields != nullptr)
-                    {
-                        for(j = 0; defmod->definedfields[j].m_deffieldname != nullptr; j++)
-                        {
-                            field = defmod->definedfields[j];
-                            fieldname = Value::fromObject(SharedState::gcProtect(String::copy(field.m_deffieldname)));
-                            v = field.fieldvalfn(FuncContext{Value::makeNull(), nullptr, 0});
-                            gcs->vmStackPush(v);
-                            targetmod->m_deftable.set(fieldname, v);
-                            gcs->vmStackPop();
-                        }
-                    }
-                    if(defmod->definedfunctions != nullptr)
-                    {
-                        for(j = 0; defmod->definedfunctions[j].m_deffuncname != nullptr; j++)
-                        {
-                            func = defmod->definedfunctions[j];
-                            funcname = Value::fromObject(SharedState::gcProtect(String::copy(func.m_deffuncname)));
-                            funcrealvalue = Value::fromObject(SharedState::gcProtect(Function::makeFuncNative(func.function, func.m_deffuncname, nullptr)));
-                            gcs->vmStackPush(funcrealvalue);
-                            targetmod->m_deftable.set(funcname, funcrealvalue);
-                            gcs->vmStackPop();
-                        }
-                    }
-                    if(defmod->definedclasses != nullptr)
-                    {
-                        for(j = 0; ((defmod->definedclasses[j].m_defclassname != nullptr) && (defmod->definedclasses[j].defpubfunctions != nullptr)); j++)
-                        {
-                            klassreg = defmod->definedclasses[j];
-                            classname = (String*)SharedState::gcProtect(String::copy(klassreg.m_defclassname));
-                            klass = (Class*)SharedState::gcProtect(Class::make(classname, gcs->m_classprimobject));
-                            if(klassreg.defpubfunctions != nullptr)
-                            {
-                                for(k = 0; klassreg.defpubfunctions[k].m_deffuncname != nullptr; k++)
-                                {
-                                    func = klassreg.defpubfunctions[k];
-                                    slen = strlen(func.m_deffuncname);
-                                    funcname = Value::fromObject(SharedState::gcProtect(String::copy(func.m_deffuncname)));
-                                    native = SharedState::gcProtect(Function::makeFuncNative(func.function, func.m_deffuncname, nullptr));
-                                    if(func.isstatic)
-                                    {
-                                        native->m_contexttype = Function::CTXTYPE_STATIC;
-                                    }
-                                    else if(slen > 0 && func.m_deffuncname[0] == '_')
-                                    {
-                                        native->m_contexttype = Function::CTXTYPE_PRIVATE;
-                                    }
-                                    if(strncmp(func.m_deffuncname, "constructor", slen) == 0)
-                                    {
-                                        klass->m_constructor = Value::fromObject(native);
-                                    }
-                                    else
-                                    {
-                                        klass->m_instmethods.set(funcname, Value::fromObject(native));
-                                    }
-                                }
-                            }
-                            if(klassreg.defpubfields != nullptr)
-                            {
-                                k = 0;
-                                while(true)
-                                {
-                                    if(klassreg.defpubfields[k].m_deffieldname == nullptr)
-                                    {
-                                        break;
-                                    }
-                                    field = klassreg.defpubfields[k];
-                                    if(field.m_deffieldname != nullptr)
-                                    {
-                                        klass->defCallableField(String::copy(field.m_deffieldname), field.fieldvalfn);
-                                    }
-                                    k++;
-                                }
-                            }
-                            targetmod->m_deftable.set(Value::fromObject(classname), Value::fromObject(klass));
-                        }
-                    }
-                    if(dlw != nullptr)
-                    {
-                        targetmod->m_handle = dlw;
-                    }
-                    Module::addNativeModule(targetmod, targetmod->m_modname->data());
-                    SharedState::clearGCProtect();
-                    return true;
-                }
-                else
-                {
-                    SharedState::raiseWarning("Error loading module: %s\n", importname);
-                }
-                return false;
             }
 
         public:
@@ -8575,29 +8372,6 @@ namespace neon
                 pr->format("<instance of %s at %p>", instance->m_instanceclass->m_classname->data(), (void*)instance);
             }
 
-            static void printValTable(IOStream* pr, HashTable<Value, Value>* table, const char* name)
-            {
-                size_t i;
-                size_t hcap;
-                hcap = table->capacity();
-                pr->format("<HashTable of %s : {\n", name);
-                for(i = 0; i < hcap; i++)
-                {
-                    auto entry = table->entryatindex(i);
-                    if(!entry->key.isNull())
-                    {
-                        printValue(pr, entry->key, true, true);
-                        pr->format(": ");
-                        printValue(pr, entry->value.value, true, true);
-                        if(i != (hcap - 1))
-                        {
-                            pr->format(",\n");
-                        }
-                    }
-                }
-                pr->format("}>\n");
-            }
-
             static void printTable(IOStream* pr, HashTable<Value, Value>* table)
             {
                 size_t i;
@@ -8855,7 +8629,6 @@ namespace neon
                 T_KWFINALLY,
                 T_KWFOREACH,
                 T_KWIF,
-                T_KWIMPORT,
                 T_KWIN,
                 T_KWINSTANCEOF,
                 T_KWFOR,
@@ -9072,8 +8845,6 @@ namespace neon
                         return "AstToken::T_KWFOREACH";
                     case AstToken::T_KWIF:
                         return "AstToken::T_KWIF";
-                    case AstToken::T_KWIMPORT:
-                        return "AstToken::T_KWIMPORT";
                     case AstToken::T_KWIN:
                         return "AstToken::T_KWIN";
                     case AstToken::T_KWFOR:
@@ -9487,7 +9258,6 @@ namespace neon
                     { "finally", AstToken::T_KWFINALLY },
                     { "foreach", AstToken::T_KWFOREACH },
                     { "if", AstToken::T_KWIF },
-                    { "import", AstToken::T_KWIMPORT },                
                     { "in", AstToken::T_KWIN },
                     { "instanceof", AstToken::T_KWINSTANCEOF },
                     { "for", AstToken::T_KWFOR },
@@ -9989,7 +9759,6 @@ namespace neon
                     int m_localcount;
                     int m_scopedepth;
                     int m_handlercount;
-                    bool m_fromimport;
                     FuncCompiler* m_enclosing;
                     AstParser* m_sharedprs;
                     /* current function */
@@ -10014,7 +9783,6 @@ namespace neon
                         m_localcount = 0;
                         m_scopedepth = 0;
                         m_handlercount = 0;
-                        m_fromimport = false;
                         m_targetfunc = Function::makeFuncScript(m_sharedprs->m_currentmodule, type);
                         m_sharedprs->m_currentfunccompiler = this;
                         if(type != Function::CTXTYPE_SCRIPT)
@@ -10869,13 +10637,6 @@ namespace neon
                 return true;
             }
 
-            static bool astruleimport(AstParser* prs, bool canassign)
-            {
-                (void)canassign;
-                prs->parseexpression();
-                prs->emitinstruc(Instruction::OPC_IMPORTIMPORT);
-                return true;
-            }
 
             static bool astrulenew(AstParser* prs, bool canassign)
             {
@@ -10989,7 +10750,6 @@ namespace neon
                     dorule(AstToken::T_KWFALSE, astruleliteral, nullptr, Rule::PREC_NONE);
                     dorule(AstToken::T_KWFOREACH, nullptr, nullptr, Rule::PREC_NONE);
                     dorule(AstToken::T_KWIF, nullptr, nullptr, Rule::PREC_NONE);
-                    dorule(AstToken::T_KWIMPORT, astruleimport, nullptr, Rule::PREC_NONE);
                     dorule(AstToken::T_KWIN, nullptr, nullptr, Rule::PREC_NONE);
                     dorule(AstToken::T_KWINSTANCEOF, nullptr, astruleinstanceof, Rule::PREC_OR);
                     dorule(AstToken::T_KWFOR, nullptr, nullptr, Rule::PREC_NONE);
@@ -11424,7 +11184,6 @@ namespace neon
                     case Instruction::OPC_PROPERTYSET:
                     case Instruction::OPC_MAKEARRAY:
                     case Instruction::OPC_MAKEDICT:
-                    case Instruction::OPC_IMPORTIMPORT:
                     case Instruction::OPC_SWITCH:
                     case Instruction::OPC_MAKEMETHOD:
             #if 0
@@ -11522,14 +11281,7 @@ namespace neon
                 {
                     if(!m_keeplastvalue || m_lastwasstatement)
                     {
-                        if(m_currentfunccompiler->m_fromimport)
-                        {
-                            emitinstruc(Instruction::OPC_PUSHNULL);
-                        }
-                        else
-                        {
-                            emitinstruc(Instruction::OPC_PUSHEMPTY);
-                        }
+                        emitinstruc(Instruction::OPC_PUSHEMPTY);
                     }
                 }
                 emitinstruc(Instruction::OPC_RETURN);
@@ -13396,7 +13148,6 @@ namespace neon
                         case AstToken::T_KWSUPER:
                         case AstToken::T_KWFINALLY:
                         case AstToken::T_KWIN:
-                        case AstToken::T_KWIMPORT:
                         case AstToken::T_KWAS:
                             return;
                         default:
@@ -13433,14 +13184,6 @@ namespace neon
                 }
                 return Value::makeBool(false);
             }
-    };
-
-    class UClassComplex: public Object
-    {
-        public:
-            Instance selfinstance;
-            double re;
-            double im;
     };
 
     /* bottom */
@@ -14560,8 +14303,6 @@ namespace neon
                         return "OPC_INDEXGETRANGED";
                     case Instruction::OPC_INDEXSET:
                         return "OPC_INDEXSET";
-                    case Instruction::OPC_IMPORTIMPORT:
-                        return "OPC_IMPORTIMPORT";
                     case Instruction::OPC_EXTRY:
                         return "OPC_EXTRY";
                     case Instruction::OPC_EXPOPTRY:
@@ -14834,8 +14575,6 @@ namespace neon
                         return printSimpleInstruction(opname, offset);
                     case Instruction::OPC_PUSHONE:
                         return printSimpleInstruction(opname, offset);
-                    case Instruction::OPC_IMPORTIMPORT:
-                        return printSimpleInstruction(opname, offset);
                     case Instruction::OPC_TYPEOF:
                         return printSimpleInstruction(opname, offset);
                     case Instruction::OPC_ECHO:
@@ -15024,6 +14763,7 @@ namespace neon
             }
             m_vmstate.framecount--;
         }
+        m_vmstate.m_unhandledexceptionstate = true;
         /* at this point, the exception is unhandled; so, print it out. */
         colred = Util::termColor(NEON_COLOR_RED);
         colblue = Util::termColor(NEON_COLOR_BLUE);
@@ -15160,7 +14900,7 @@ namespace neon
      * $keeplast: whether to emit code that retains or discards the value of the last statement/expression.
      * SHOULD NOT BE USED FOR ORDINARY SCRIPTS as it will almost definitely result in the stack containing invalid values.
      */
-    Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool fromimport, bool keeplast)
+    Function* compileSourceIntern(Module* module, const char* source, Blob* blob, bool keeplast)
     {
         AstLexer* lexer;
         AstParser* parser;
@@ -15170,7 +14910,6 @@ namespace neon
         lexer = AstLexer::make(source);
         parser = AstParser::make(lexer, module, keeplast);
         AstParser::FuncCompiler fnc(parser, Function::CTXTYPE_SCRIPT, true);
-        fnc.m_fromimport = fromimport;
         parser->runparser();
         function = parser->endcompiler(true);
         if(!parser->m_haderror)
@@ -17635,33 +17374,6 @@ namespace neon
 
         gcs->m_classprimdirectory->installMethods(dirmethods);
     }
-    
-
-    /*
-     * TODO: when executable is run outside of current dev environment, it should correctly
-     *       find the 'mods' folder. trickier than it sounds:
-     *   src/<cfiles>
-     *   src/vsbuild/run.exe
-     *   src/eg/<scriptfiles>
-     *   src/mods/<scriptmodules>
-     *
-     * there's definitely some easy workaround by using Process.scriptdirectory() et al, but it's less than ideal.
-     */
-    Module::DefExport* natmodule_load_null();
-    Module::DefExport* natmodule_load_astscan();
-    Module::DefExport* natmodule_load_complex();
-
-    void loadBuiltinMethods()
-    {
-        int i;
-        static Module::ModInitFN g_builtinmodules[] = {
-            natmodule_load_null, natmodule_load_astscan, natmodule_load_complex, nullptr,
-        };
-        for(i = 0; g_builtinmodules[i] != nullptr; i++)
-        {
-            Module::loadBuiltinModule(g_builtinmodules[i], nullptr, "<__native__>", nullptr);
-        }
-    }
 
     void setupModulePaths()
     {
@@ -17855,7 +17567,7 @@ namespace neon
     {
         #if 0
             vmDebugPrintVal(scfn.thisval, "<object>.class:scfn.thisval=");
-    #endif
+        #endif
         if(scfn.thisval.isInstance())
         {
             return Value::fromObject(scfn.thisval.asInstance()->m_instanceclass);
@@ -19297,210 +19009,6 @@ namespace neon
         gcs->m_classprimstring->installMethods(stringmethods);
     }
 
-    static Value modfn_astscan_scan(const FuncContext& scfn)
-    {
-        enum
-        {
-            /* 12 == "AstToken::T_".length */
-            kTokPrefixLength = 12
-        };
-
-        const char* cstr;
-        String* insrc;
-        AstLexer* scn;
-        Array* arr;
-        Dict* itm;
-        AstToken token;
-        ArgCheck check("scan", scfn);
-        NEON_ARGS_CHECKTYPE(check, 0, &Value::isString);
-        insrc = scfn.argv[0].asString();
-        scn = AstLexer::make(insrc->data());
-        arr = Array::make();
-        while(!scn->isatend())
-        {
-            itm = Dict::make();
-            token = scn->scantoken();
-            itm->addCstr("line", Value::makeNumber(token.m_line));
-            cstr = AstLexer::tokTypeToString(token.m_toktype);
-            itm->addCstr("type", Value::fromObject(String::copy(cstr + kTokPrefixLength)));
-            itm->addCstr("source", Value::fromObject(String::copy(token.m_start, token.length)));
-            arr->push(Value::fromObject(itm));
-        }
-        AstLexer::destroy(scn);
-        return Value::fromObject(arr);
-    }
-
-    Module::DefExport* natmodule_load_astscan()
-    {
-        Module::DefExport* ret;
-        static Module::DefExport::Function modfuncs[] = {
-            { "scan", true, modfn_astscan_scan },
-            { nullptr, false, nullptr },
-        };
-        static Module::DefExport::Field modfields[] = {
-            { nullptr, false, nullptr },
-        };
-        static Module::DefExport module;
-        module.m_defmodname = "astscan";
-        module.definedfields = modfields;
-        module.definedfunctions = modfuncs;
-        module.definedclasses = nullptr;
-        module.fnpreloaderfunc = nullptr;
-        module.fnunloaderfunc = nullptr;
-        ret = &module;
-        return ret;
-    }
-
-    static Value pcomplex_makeinstance(Class* klass, double re, double im)
-    {
-        UClassComplex* inst;
-        inst = (UClassComplex*)Instance::makeInstanceOfSize<UClassComplex>(klass);
-        inst->re = re;
-        inst->im = im;
-        return Value::fromObject((Instance*)inst);
-    }
-
-    static Value complexclass_constructor(const FuncContext& scfn)
-    {
-        UClassComplex* inst;
-        assert(scfn.thisval.isInstance());
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, scfn.argv[0].asNumber(), scfn.argv[1].asNumber());
-    }
-
-    static Value complexclass_opadd(const FuncContext& scfn)
-    {
-        Value vother;
-        UClassComplex* inst;
-        UClassComplex* pv;
-        UClassComplex* other;
-        vother = scfn.argv[0];
-        assert(scfn.thisval.isInstance());
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        other = (UClassComplex*)vother.asInstance();
-        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re + other->re, pv->im + other->im);
-    }
-
-    static Value complexclass_opsub(const FuncContext& scfn)
-    {
-        Value vother;
-        UClassComplex* inst;
-        UClassComplex* pv;
-        UClassComplex* other;
-        assert(scfn.thisval.isInstance());
-        vother = scfn.argv[0];
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        other = (UClassComplex*)vother.asInstance();
-        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, pv->re - other->re, pv->im - other->im);
-    }
-
-    static Value complexclass_opmul(const FuncContext& scfn)
-    {
-        double vre;
-        double vim;
-        Value vother;
-        UClassComplex* inst;
-        UClassComplex* pv;
-        UClassComplex* other;
-        assert(scfn.thisval.isInstance());
-        vother = scfn.argv[0];
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        other = (UClassComplex*)vother.asInstance();
-        vre = (pv->re * other->re - pv->im * other->im);
-        vim = (pv->re * other->im + pv->im * other->re);
-        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, vre, vim);
-    }
-
-    static Value complexclass_opdiv(const FuncContext& scfn)
-    {
-        double r;
-        double i;
-        double ti;
-        double tr;
-        Value vother;
-        UClassComplex* inst;
-        UClassComplex* pv;
-        UClassComplex* other;
-        assert(scfn.thisval.isInstance());
-        vother = scfn.argv[0];
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        other = (UClassComplex*)vother.asInstance();
-        r = other->re;
-        i = other->im;
-        tr = fabs(r);
-        ti = fabs(i);
-        if(tr <= ti)
-        {
-            ti = r / i;
-            tr = i * (1 + ti * ti);
-            r = pv->re;
-            i = pv->im;
-        }
-        else
-        {
-            ti = -i / r;
-            tr = r * (1 + ti * ti);
-            r = -pv->im;
-            i = pv->re;
-        }
-        return pcomplex_makeinstance(((Instance*)inst)->m_instanceclass, (r * ti + i) / tr, (i * ti - r) / tr);
-    }
-
-    static Value complexclass_getre(const FuncContext& scfn)
-    {
-        UClassComplex* inst;
-        UClassComplex* pv;
-        assert(scfn.thisval.isInstance());
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        return Value::makeNumber(pv->re);
-    }
-
-    static Value complexclass_getim(const FuncContext& scfn)
-    {
-        UClassComplex* inst;
-        UClassComplex* pv;
-        assert(scfn.thisval.isInstance());
-        inst = (UClassComplex*)scfn.thisval.asInstance();
-        pv = (UClassComplex*)inst;
-        return Value::makeNumber(pv->im);
-    }
-
-    Module::DefExport* natmodule_load_complex()
-    {
-        static Module::DefExport::Function modfuncs[] = {
-            { nullptr, false, nullptr },
-        };
-
-        static Module::DefExport::Field modfields[] = {
-            { nullptr, false, nullptr },
-        };
-        static Module::DefExport module;
-        module.m_defmodname = "complex";
-        module.definedfields = modfields;
-        module.definedfunctions = modfuncs;
-        static Module::DefExport::Function complexfuncs[] = {
-            { "constructor", false, complexclass_constructor },
-            { "__add__", false, complexclass_opadd },
-            { "__sub__", false, complexclass_opsub },
-            { "__mul__", false, complexclass_opmul },
-            { "__div__", false, complexclass_opdiv }, { nullptr, 0, nullptr },
-        };
-        static Module::DefExport::Field complexfields[] = {
-            { "re", false, complexclass_getre },
-            { "im", false, complexclass_getim },
-            { nullptr, 0, nullptr },
-        };
-        static Module::DefExport::Class classes[] = { { "Complex", complexfields, complexfuncs }, { nullptr, nullptr, nullptr } };
-        module.definedclasses = classes;
-        module.fnpreloaderfunc = nullptr;
-        module.fnunloaderfunc = nullptr;
-        return &module;
-    }
 
     static Value nativefn_time(const FuncContext& scfn)
     {
@@ -19626,22 +19134,18 @@ namespace neon
         return result;
     }
 
-    static Value nativefn_loadfile(const FuncContext& scfn)
+    static Value nativefn_require(const FuncContext& scfn)
     {
-        size_t dlen;
-        Value result;
-        String* path;
-        char* source;
-        ArgCheck check("loadfile", scfn);
+        ArgCheck check("require", scfn);
         NEON_ARGS_CHECKCOUNT(check, 1);
-        auto gcs = SharedState::get();
-        path = scfn.argv[0].asString();
-        source = neon::File::readFile(path->data(), &dlen, false, 0);
-        #if 0
-        fprintf(stderr, "eval:src=%s\n", source);
-        #endif
-        result = gcs->evalSource(source);
-        return result;
+        auto modname = scfn.argv[0].asString();
+        auto mod = Module::loadScriptModule(modname);
+        if(mod == nullptr)
+        {
+            //NEON_THROWEXCEPTION("cannot find module '%s'", modname->data());
+            return Value::makeNull();
+        }
+        return Value::fromObject(mod);
     }
 
     static Value nativefn_instanceof(const FuncContext& scfn)
@@ -19747,8 +19251,7 @@ namespace neon
         defineGlobalNativeFunction("srand", nativefn_srand);
         defineGlobalNativeFunction("rand", nativefn_rand);
         defineGlobalNativeFunction("eval", nativefn_eval);
-        defineGlobalNativeFunction("loadfile", nativefn_loadfile);
-
+        defineGlobalNativeFunction("require", nativefn_require);
         defineGlobalNativeFunction("isNaN", nativefn_isnan);
         defineGlobalNativeFunction("microtime", nativefn_microtime);
         defineGlobalNativeFunction("time", nativefn_time);
@@ -19756,34 +19259,6 @@ namespace neon
             klass = Class::makeScriptClass("JSON", gcs->m_classprimobject);
             klass->defStaticNativeMethod(String::copy("stringify"), objfnjson_stringify);
         }
-    }
-
-    /*
-     * you can use this file as a template for new native modules.
-     * just fill out the fields, give the load function a meaningful name (i.e., natmodule_load_foobar if your module is "foobar"),
-     * et cetera.
-     * then, add said function in libmodule.c's loadBuiltinMethods, and you're good to go!
-     */
-
-    Module::DefExport* natmodule_load_null()
-    {
-        static Module::DefExport::Function modfuncs[] = {
-            /* {"somefunc",   true,  myfancymodulefunction},*/
-            { nullptr, false, nullptr },
-        };
-
-        static Module::DefExport::Field modfields[] = {
-            /*{"somefield", true, the_function_that_gets_called},*/
-            { nullptr, false, nullptr },
-        };
-        static Module::DefExport module;
-        module.m_defmodname = "null";
-        module.definedfields = modfields;
-        module.definedfunctions = modfuncs;
-        module.definedclasses = nullptr;
-        module.fnpreloaderfunc = nullptr;
-        module.fnunloaderfunc = nullptr;
-        return &module;
     }
 
     bool SharedState::vmDoCallClosure(Function* closure, Value thisval, size_t argcount, bool fromoperator)
@@ -21929,6 +21404,7 @@ namespace neon
         bool you_are_calling_exit_vm_outside_of_runvm;
         Value* dbgslot;
         Instruction currinstr;
+        Status exitstatus = Status::Ok;
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
         static void* dispatchtable[] = {
             NEON_SETDISPATCHIDX(OPC_GLOBALDEFINE, &&VM_MAKELABEL(OPC_GLOBALDEFINE)),
@@ -21996,7 +21472,6 @@ namespace neon
             NEON_SETDISPATCHIDX(OPC_INDEXGET, &&VM_MAKELABEL(OPC_INDEXGET)),
             NEON_SETDISPATCHIDX(OPC_INDEXGETRANGED, &&VM_MAKELABEL(OPC_INDEXGETRANGED)),
             NEON_SETDISPATCHIDX(OPC_INDEXSET, &&VM_MAKELABEL(OPC_INDEXSET)),
-            NEON_SETDISPATCHIDX(OPC_IMPORTIMPORT, &&VM_MAKELABEL(OPC_IMPORTIMPORT)),
             NEON_SETDISPATCHIDX(OPC_EXTRY, &&VM_MAKELABEL(OPC_EXTRY)),
             NEON_SETDISPATCHIDX(OPC_EXPOPTRY, &&VM_MAKELABEL(OPC_EXPOPTRY)),
             NEON_SETDISPATCHIDX(OPC_EXPUBLISHTRY, &&VM_MAKELABEL(OPC_EXPUBLISHTRY)),
@@ -22385,10 +21860,10 @@ namespace neon
                     rt = false;
                     first = vmStackPop();
                     second = vmStackPop();
-    #if 0
+                    #if 0
                         vmDebugPrintVal(first, "first value");
                         vmDebugPrintVal(second, "second value");
-    #endif
+                    #endif
                     if(!first.isClass())
                     {
                         VMMAC_TRYRAISE(Status::RuntimeFail, "invalid use of 'is' on non-class");
@@ -22754,28 +22229,6 @@ namespace neon
                     {
                         VMMAC_EXITVM();
                     }
-                }
-                VMMAC_DISPATCH();
-                VM_CASE(OPC_IMPORTIMPORT)
-                {
-                    Value res;
-                    Value vname;
-                    String* name;
-                    Module* mod;
-                    vname = vmStackPeek(0);
-                    name = vname.asString();
-                    fprintf(stderr, "IMPORTIMPORT: name='%s'\n", name->data());
-                    mod = Module::loadScriptModule(m_topmodule, name);
-                    fprintf(stderr, "IMPORTIMPORT: mod='%p'\n", (void*)mod);
-                    if(mod == nullptr)
-                    {
-                        res = Value::makeNull();
-                    }
-                    else
-                    {
-                        res = Value::fromObject(mod);
-                    }
-                    vmStackPush(res);
                 }
                 VMMAC_DISPATCH();
                 VM_CASE(OPC_TYPEOF)
@@ -23152,7 +22605,7 @@ namespace neon
         Function* function;
         Function* closure;
         (void)toplevel;
-        function = compileSourceIntern(module, source, &blob, false, fromeval);
+        function = compileSourceIntern(module, source, &blob, fromeval);
         if(function == nullptr)
         {
             Blob::destroy(&blob);
@@ -23199,8 +22652,16 @@ namespace neon
          * NB. it is a closure, since it's compiled code.
          * so no need to create a Value and call vmCallValue().
          */
-        vmDoCallClosure(closure, Value::makeNull(), 0, false);
+        if(!vmDoCallClosure(closure, Value::makeNull(), 0, false))
+        {
+            return Status::RuntimeFail;
+        }
         status = runVM(0, dest);
+        fprintf(stderr, "m_vmstate.m_unhandledexceptionstate=%d\n", m_vmstate.m_unhandledexceptionstate);
+        if(m_vmstate.m_unhandledexceptionstate)
+        {
+            return Status::RuntimeFail;
+        }
         return status;
     }
 
@@ -23229,7 +22690,10 @@ struct ConsoleProg
 {
     class InteractiveRepl
     {
+        using CallbackFN = bool(*)();
+
         public:
+            neon::HashTable<const char*, CallbackFN> m_callbacks;
             linocontext_t m_replctx;
 
         public:
@@ -23431,15 +22895,7 @@ struct ConsoleProg
         result = gcs->execSource(gcs->m_topmodule, source, file, nullptr);
         neon::Memory::sysFree(source);
         fflush(stdout);
-        if(result == neon::Status::CompileFailed)
-        {
-            return false;
-        }
-        if(result == neon::Status::RuntimeFail)
-        {
-            return false;
-        }
-        return true;
+        return (result == neon::Status::Ok);
     }
 
     static bool runCode(char* source)
@@ -23448,15 +22904,7 @@ struct ConsoleProg
         gcs->m_rootphysfile = nullptr;
         auto result = gcs->execSource(gcs->m_topmodule, source, "<-e>", nullptr);
         fflush(stdout);
-        if(result == neon::Status::CompileFailed)
-        {
-            return false;
-        }
-        if(result == neon::Status::RuntimeFail)
-        {
-            return false;
-        }
-        return true;
+        return (result == neon::Status::Ok);
     }
 
     static int utilFindFirstPos(const char* str, size_t len, int ch)
@@ -23696,7 +23144,6 @@ struct ConsoleProg
             gcs->m_declaredglobals.set(neon::Value::fromObject(neon::String::copy("ARGV")), neon::Value::fromObject(gcs->m_processinfo->cliargv));
         }
         gcs->m_gcstate.nextgc = nextgcstart;
-        neon::loadBuiltinMethods();
         if(evalmesrc != nullptr)
         {
             ok = runCode(evalmesrc);
@@ -23724,7 +23171,7 @@ struct ConsoleProg
 
 int main(int argc, char** argv, char** envp)
 {
-    ConsoleProg::actualMain(argc, argv, envp);
+    return ConsoleProg::actualMain(argc, argv, envp);
 }
 
 /**
