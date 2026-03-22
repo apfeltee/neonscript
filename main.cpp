@@ -5598,7 +5598,7 @@ namespace neon
                 CallFrame* currentframe;
                 Upvalue* openupvalues;
                 ValList<CallFrame> framevalues;
-                Value* stackvalues;
+                ValList<Value> stackvalues;
             } m_vmstate;
 
             struct
@@ -5965,24 +5965,13 @@ namespace neon
             {
                 size_t oldsz;
                 size_t newsz;
-                size_t allocsz;
                 size_t nforvals;
-                Value* oldbuf;
-                Value* newbuf;
                 nforvals = (needed * 2);
                 oldsz = m_vmstate.stackcapacity;
                 newsz = oldsz + nforvals;
-                allocsz = ((newsz + 1) * sizeof(Value));
-                oldbuf = m_vmstate.stackvalues;
-                newbuf = (Value*)Memory::sysRealloc(oldbuf, allocsz);
-                if(newbuf == nullptr)
-                {
-                    fprintf(stderr, "internal error: failed to resize stackvalues!\n");
-                    abort();
-                }
-                ValList<Value>::initItems(newbuf, oldsz, newsz);
-                m_vmstate.stackvalues = (Value*)newbuf;
-                m_vmstate.stackcapacity = newsz;
+
+                m_vmstate.stackvalues.ensureCapacity(newsz);
+                m_vmstate.stackcapacity = m_vmstate.stackvalues.capacity();
                 return true;
             }
 
@@ -6064,15 +6053,7 @@ namespace neon
                 m_vmstate.currentframe = nullptr;
                 {
                     m_vmstate.stackcapacity = NEON_CONFIG_INITSTACKCOUNT;
-                    finalsz = NEON_CONFIG_INITSTACKCOUNT * sizeof(Value);
-                    newbufvals = (Value*)Memory::sysMalloc(finalsz);
-                    if(newbufvals == nullptr)
-                    {
-                        fprintf(stderr, "error: failed to allocate stackvalues!\n");
-                        abort();
-                    }
-                    ValList<Value>::initItems(newbufvals, 0, NEON_CONFIG_INITSTACKCOUNT);
-                    m_vmstate.stackvalues = newbufvals;
+                    m_vmstate.stackvalues.ensureCapacity(NEON_CONFIG_INITSTACKCOUNT);
                 }
                 {
                     m_vmstate.framecapacity = NEON_CONFIG_INITFRAMECOUNT;
@@ -14300,7 +14281,7 @@ namespace neon
         Upvalue* upvalue;
         CallFrame::ExceptionInfo* handler;
         (void)handler;
-        for(slot = m_vmstate.stackvalues; slot < &m_vmstate.stackvalues[m_vmstate.stackidx]; slot++)
+        for(slot = m_vmstate.stackvalues.data(); slot < m_vmstate.stackvalues.getp(m_vmstate.stackidx); slot++)
         {
             SharedState::markValue(*slot);
         }
@@ -19885,7 +19866,7 @@ namespace neon
         Value* vargs;
         NEON_APIDEBUG("thisval.m_valtype=%s, argcount=%d", Value::typeName(thisval, true), argcount);
         spos = m_vmstate.stackidx + (-argcount);
-        vargs = &m_vmstate.stackvalues[spos];
+        vargs = m_vmstate.stackvalues.getp(spos);
         r = native->m_fnvals.fnnativefunc.natfunc(FuncContext{thisval, vargs, argcount});
         {
             m_vmstate.stackvalues[spos - 1] = r;
@@ -21845,7 +21826,7 @@ namespace neon
             if(islocal)
             {
                 ssp = m_vmstate.currentframe->stackslotpos;
-                upvals = &m_vmstate.stackvalues[ssp + upvidx];
+                upvals = m_vmstate.stackvalues.getp(ssp + upvidx);
                 closure->m_fnvals.fnclosure.m_upvalues[i] = vmUtilUpvaluesCapture(upvals, upvidx);
             }
             else
@@ -22064,8 +22045,8 @@ namespace neon
                 vmdbg.printInstructionAt(m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob, ofs);
                 fprintf(stderr, "stack (before)=[\n");
                 iterpos = 0;
-                dbgslot = m_vmstate.stackvalues;
-                while(dbgslot < &m_vmstate.stackvalues[m_vmstate.stackidx])
+                dbgslot = m_vmstate.stackvalues.data();
+                while(dbgslot < m_vmstate.stackvalues.getp(m_vmstate.stackidx))
                 {
                     printpos = iterpos + 1;
                     iterpos++;
@@ -22103,7 +22084,7 @@ namespace neon
                         *rv = result;
                     }
                     ssp = m_vmstate.currentframe->stackslotpos;
-                    vmUtilUpvaluesClose(&m_vmstate.stackvalues[ssp]);
+                    vmUtilUpvaluesClose(m_vmstate.stackvalues.getp(ssp));
                     m_vmstate.framecount--;
                     if(m_vmstate.framecount == 0)
                     {
@@ -22404,7 +22385,7 @@ namespace neon
                 VMMAC_DISPATCH();
                 VM_CASE(OPC_UPVALUECLOSE)
                 {
-                    vmUtilUpvaluesClose(&m_vmstate.stackvalues[m_vmstate.stackidx - 1]);
+                    vmUtilUpvaluesClose(m_vmstate.stackvalues.getp(m_vmstate.stackidx - 1));
                     vmStackPop();
                 }
                 VMMAC_DISPATCH();
@@ -23171,7 +23152,7 @@ namespace neon
         destrdebug("destroying framevalues...");
         gcs->m_vmstate.framevalues.deInit();
         destrdebug("destroying stackvalues...");
-        Memory::sysFree(gcs->m_vmstate.stackvalues);
+        gcs->m_vmstate.stackvalues.deInit();
         Memory::sysFree(gcs->m_processinfo);
         destrdebug("destroying state...");
         SharedState::destroy();
