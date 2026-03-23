@@ -242,9 +242,9 @@ namespace neon
 
     void initBuiltinObjects();
     Instance* makeExceptionInstance(Class* exklass, const char* srcfile, int srcline, String* message);
-    bool defineGlobalValue(const char* name, Value val);
-    bool defineGlobalNativeFuncPtr(const char* name, NativeFN fptr, void* uptr);
-    bool defineGlobalNativeFunction(const char* name, NativeFN fptr);
+    bool defineGlobalValue(String* name, Value val);
+    bool defineGlobalNativeFuncPtr(String* name, NativeFN fptr, void* uptr);
+    bool defineGlobalNativeFunction(String* name, NativeFN fptr);
     void installObjArray();
     void installObjDict();
     void installObjFile();
@@ -1402,6 +1402,9 @@ namespace neon
             static String* wrapMakeFromStrBuf(const StrBuffer& buf, uint32_t hsv, size_t length);
             static String* wrapStringCopy(const char* data, size_t len);
             static String* wrapStringCopy(const char* str);
+            static String* wrapStringIntern(const char* data, size_t len);
+            static String* wrapStringIntern(const char* str);
+
             static Blob* wrapGetBlobOfClosure(Function* fn);
             static size_t wrapGetArityOfClosure(Function* ofn);
             static size_t wrapGetArityOfFuncScript(Function* ofn);
@@ -1610,11 +1613,7 @@ namespace neon
 
             static bool destroyFromPtr(StrBufBasic* sb)
             {
-                if((sb->m_data != nullptr) && (sb->m_isintern == false))
-                {
-                    Memory::sysFree(sb->m_data);
-                }
-                return true;
+                return sb->destroyFromPtr();
             }
 
         public:
@@ -1772,19 +1771,55 @@ namespace neon
                 }
             }
 
+            bool destroyFromPtr()
+            {
+                if((m_data != nullptr) && (m_isintern == false))
+                {
+                    Memory::sysFree(m_data);
+                }
+                return true;
+            }
+
             NEON_INLINE void initBlank()
             {
                 m_length = 0;
                 m_capacity = 0;
                 m_isintern = false;
                 m_data = NULL;
+            }
 
+            template<typename ArgT>
+            NEON_INLINE void copyFrom(ArgT* other, bool actuallycopydata)
+            {
+                m_length = other->m_length;
+                m_capacity = other->m_capacity;
+                m_isintern = other->m_isintern;
+                if(actuallycopydata && !other->m_isintern)
+                {
+                    m_data = Util::stringDup(other->m_data, other->m_length);
+                }
+                else
+                {
+                    m_data = other->m_data;
+                }
             }
 
         public:
             NEON_INLINE StrBufBasic()
             {
                 initBlank();
+            }
+
+            NEON_INLINE StrBufBasic(const StrBufBasic& other)
+            {
+                initBlank();
+                copyFrom(&other, true);
+            }
+
+            NEON_INLINE StrBufBasic(StrBufBasic&& other)
+            {
+                initBlank();
+                copyFrom(&other, false);
             }
 
             NEON_INLINE StrBufBasic(size_t len)
@@ -1795,6 +1830,19 @@ namespace neon
 
             NEON_INLINE ~StrBufBasic()
             {
+                destroyFromPtr();
+            }
+
+            NEON_INLINE StrBufBasic operator=(const StrBufBasic& other)
+            {
+                copyFrom(&other, true);
+                return *this;
+            }
+
+            NEON_INLINE StrBufBasic operator=(StrBufBasic&& other)
+            {
+                copyFrom(&other, false);
+                return *this;
             }
 
             /* Clear the content of an existing StrBufBasic (sets size to 0) */
@@ -5420,7 +5468,7 @@ namespace neon
             enum
             {
                 /* how many catch() clauses per try statement */
-                CONF_MAXEXCEPTHANDLERS = (4),
+                CONF_MAXEXCEPTHANDLERS = (8),
             };
 
             struct ExceptionInfo
@@ -5468,13 +5516,13 @@ namespace neon
             /* maximum number of syntax errors to show before bailing out */
             static constexpr auto CONF_MAXSYNTAXERRORS = 10;
 
-            class InternedStringTab
+            class ISTabOld
             {
                 public:
                     HashTable<Value, Value> m_htab;
 
                 public:
-                    InternedStringTab()
+                    ISTabOld()
                     {
                         m_htab.initTable();
                     }
@@ -5610,7 +5658,11 @@ namespace neon
 
             Object* linkedobjects;
             bool markvalue;
-            InternedStringTab m_allocatedstrings;
+            #if 1
+                ISTabOld m_allocatedstrings;
+            #else
+                ISTabNew m_allocatedstrings;
+            #endif
             HashTable<Value, Value> m_openedmodules;
             HashTable<Value, Value> m_declaredglobals;
 
@@ -6384,11 +6436,9 @@ namespace neon
                 set(key, value);
             }
 
-            void addCstr(const char* ckey, Value value)
+            void addStr(String* key, Value value)
             {
-                String* os;
-                os = Wrappers::wrapStringCopy(ckey);
-                add(Value::fromObject(os), value);
+                add(Value::fromObject(key), value);
             }
 
             Property* get(Value key)
@@ -6556,9 +6606,9 @@ namespace neon
                                     strstart = &string->data()[mtstart];
                                     rstr = String::copy(strstart, mtlength);
                                     dm = Dict::make();
-                                    dm->addCstr("string", Value::fromObject(rstr));
-                                    dm->addCstr("start", Value::makeNumber(mtstart));
-                                    dm->addCstr("length", Value::makeNumber(mtlength));
+                                    dm->addStr(String::intern("string"), Value::fromObject(rstr));
+                                    dm->addStr(String::intern("start"), Value::makeNumber(mtstart));
+                                    dm->addStr(String::intern("length"), Value::makeNumber(mtlength));
                                     oa->push(Value::fromObject(dm));
                                 }
                             }
@@ -6617,7 +6667,6 @@ namespace neon
             static String* intern(const char* strdata, int length)
             {
                 uint32_t hsv;
-                StrBuffer buf;
                 String* rs;
                 hsv = Util::hashString(strdata, length);
                 rs = strTabFind(strdata, length, hsv);
@@ -6625,7 +6674,7 @@ namespace neon
                 {
                     return rs;
                 }
-                StrBuffer::fromPtr(&buf, 0);
+                StrBuffer buf(0);
                 buf.m_isintern = true;
                 buf.setData(strdata);
                 buf.setLength(length);
@@ -6641,7 +6690,6 @@ namespace neon
             {
                 uint32_t hsv;
                 String* rs;
-                StrBuffer buf;
                 hsv = Util::hashString(strdata, length);
                 rs = strTabFind(strdata, length, hsv);
                 if(rs != nullptr)
@@ -6649,7 +6697,7 @@ namespace neon
                     Memory::sysFree(strdata);
                     return rs;
                 }
-                StrBuffer::fromPtr(&buf, 0);
+                StrBuffer buf(0);
                 buf.setData(strdata);
                 buf.setLength(length);
                 return makeFromStrbuf(buf, hsv, length);
@@ -6663,7 +6711,6 @@ namespace neon
             static String* copy(const char* strdata, int length)
             {
                 uint32_t hsv;
-                StrBuffer sb;
                 String* rs;
                 hsv = Util::hashString(strdata, length);
                 if(length == 0)
@@ -6677,7 +6724,7 @@ namespace neon
                         return rs;
                     }
                 }
-                StrBuffer::fromPtr(&sb, length);
+                StrBuffer sb(length);
                 sb.append(strdata, length);
                 rs = makeFromStrbuf(sb, hsv, length);
                 return rs;
@@ -6925,10 +6972,10 @@ namespace neon
                 return ofn;
             }
 
-            static Function* makeFuncNative(NativeFN natfn, const char* name, void* uptr)
+            static Function* makeFuncNative(NativeFN natfn, String* name, void* uptr)
             {
                 Function* ofn;
-                ofn = makeFuncGeneric(String::copy(name), Object::OTYP_FUNCNATIVE, Value::makeNull());
+                ofn = makeFuncGeneric(name, Object::OTYP_FUNCNATIVE, Value::makeNull());
                 ofn->m_fnvals.fnnativefunc.natfunc = natfn;
                 ofn->m_contexttype = Function::CTXTYPE_FUNCTION;
                 ofn->m_fnvals.fnnativefunc.userptr = uptr;
@@ -7017,21 +7064,12 @@ namespace neon
              * generate bytecode for a nativee exception class.
              * script-side it is enough to just derive from Exception, of course.
              */
-            static Class* makeExceptionClass(Class* baseclass, Module* module, const char* cstrname, bool iscs)
+            static Class* makeExceptionClass(Class* baseclass, Module* module, String* classname)
             {
                 int messageconst;
                 Class* klass;
-                String* classname;
                 Function* function;
                 Function* closure;
-                if(iscs)
-                {
-                    classname = String::copy(cstrname);
-                }
-                else
-                {
-                    classname = String::copy(cstrname);
-                }
                 auto gcs = SharedState::get();
                 gcs->vmStackPush(Value::fromObject(classname));
                 klass = Class::make(classname, baseclass);
@@ -7157,14 +7195,12 @@ namespace neon
                 gcs->gcRelease(klass);
             }
 
-            static Class* makeScriptClass(const char* name, Class* parent)
+            static Class* makeScriptClass(String* name, Class* parent)
             {
                 Class* cl;
-                String* os;
                 auto gcs = SharedState::get();
-                os = String::copy(name);
-                cl = Class::make(os, parent);
-                gcs->m_declaredglobals.set(Value::fromObject(os), Value::fromObject(cl));
+                cl = Class::make(name, parent);
+                gcs->m_declaredglobals.set(Value::fromObject(name), Value::fromObject(cl));
                 return cl;
             }
 
@@ -7196,7 +7232,7 @@ namespace neon
             bool defCallableFieldPtr(String* name, NativeFN function, void* uptr)
             {
                 Function* ofn;
-                ofn = Function::makeFuncNative(function, name->data(), uptr);
+                ofn = Function::makeFuncNative(function, name, uptr);
                 return m_instproperties.setwithtype(Value::fromObject(name), Value::fromObject(ofn), Property::FTYP_FUNCTION, true);
             }
 
@@ -7208,7 +7244,7 @@ namespace neon
             bool defStaticCallableFieldPtr(String* name, NativeFN function, void* uptr)
             {
                 Function* ofn;
-                ofn = Function::makeFuncNative(function, name->data(), uptr);
+                ofn = Function::makeFuncNative(function, name, uptr);
                 return m_staticproperties.setwithtype(Value::fromObject(name), Value::fromObject(ofn), Property::FTYP_FUNCTION, true);
             }
 
@@ -7224,9 +7260,8 @@ namespace neon
 
             bool defNativeConstructorPtr(NativeFN function, void* uptr)
             {
-                const char* cname;
                 Function* ofn;
-                cname = "constructor";
+                auto cname = String::intern("constructor");
                 ofn = Function::makeFuncNative(function, cname, uptr);
                 m_constructor = Value::fromObject(ofn);
                 return true;
@@ -7245,7 +7280,7 @@ namespace neon
             bool defNativeMethodPtr(String* name, NativeFN function, void* ptr)
             {
                 Function* ofn;
-                ofn = Function::makeFuncNative(function, name->data(), ptr);
+                ofn = Function::makeFuncNative(function, name, ptr);
                 return defMethod(name, Value::fromObject(ofn));
             }
 
@@ -7257,7 +7292,7 @@ namespace neon
             bool defStaticNativeMethodPtr(String* name, NativeFN function, void* uptr)
             {
                 Function* ofn;
-                ofn = Function::makeFuncNative(function, name->data(), uptr);
+                ofn = Function::makeFuncNative(function, name, uptr);
                 return m_staticmethods.set(Value::fromObject(name), Value::fromObject(ofn));
             }
 
@@ -7780,12 +7815,12 @@ namespace neon
             using ModLoaderFN = void(*)();
 
         public:
-            static Module* make(const char* name, const char* file, bool imported, bool retain)
+            static Module* make(String* name, const char* file, bool imported, bool retain)
             {
                 Module* module;
                 module = SharedState::gcMakeObject<Module>(Object::OTYP_MODULE, retain);
                 module->m_deftable.initTable();
-                module->m_modname = String::copy(name);
+                module->m_modname = name;
                 module->m_physicalpath = String::copy(file);
                 module->m_fnunloaderptr = nullptr;
                 module->m_fnpreloaderptr = nullptr;
@@ -7829,7 +7864,7 @@ namespace neon
                 }
             }
 
-            static StrBuffer* resolvePath(const char* modulename, const char* currentfile, char* rootfile, bool isrelative)
+            static StrBuffer* resolvePath(String* modulename, const char* currentfile, char* rootfile, bool isrelative)
             {
                 size_t i;
                 size_t mlen;
@@ -7848,7 +7883,7 @@ namespace neon
                 path1 = nullptr;
                 path2 = nullptr;
                 auto gcs = SharedState::get();
-                mlen = strlen(modulename);
+                mlen = modulename->length();
                 splen = gcs->m_importpath.count();
                 for(i = 0; i < splen; i++)
                 {
@@ -7858,12 +7893,12 @@ namespace neon
                     pathbuf->append(pitem->data(), pitem->length());
                     if(pathbuf->contains('@'))
                     {
-                        pathbuf->replace('@', modulename, mlen);
+                        pathbuf->replace('@', modulename->data(), mlen);
                     }
                     else
                     {
                         pathbuf->append("/");
-                        pathbuf->append(modulename);
+                        pathbuf->append(modulename->data(), modulename->length());
                         pathbuf->append(NEON_CONFIG_FILEEXT);
                     }
                     cstrpath = pathbuf->data();
@@ -7925,6 +7960,7 @@ namespace neon
 
             static Module* loadScriptModule(String* modulename)
             {
+                fprintf(stderr, "in loadScriptModule(): modulename=%.*s\n", (int)modulename->length(), modulename->data());
                 size_t fsz;
                 char* source;
                 StrBuffer* physpath;
@@ -7944,7 +7980,7 @@ namespace neon
                     Blob::destroy(&blob);
                     return field->value.asModule();
                 }
-                physpath = resolvePath(modulename->data(), nullptr, nullptr, false);
+                physpath = resolvePath(modulename, nullptr, nullptr, false);
                 if(physpath == nullptr)
                 {
                     Blob::destroy(&blob);
@@ -7960,7 +7996,7 @@ namespace neon
                     Blob::destroy(&blob);
                     return nullptr;
                 }
-                module = Module::make(modulename->data(), physpath->data(), true, true);
+                module = Module::make(modulename, physpath->data(), true, true);
                 Memory::destroy(physpath);
                 function = compileSourceIntern(module, source, &blob, false);
                 Memory::sysFree(source);
@@ -8146,7 +8182,7 @@ namespace neon
                         {
                             Module* mod;
                             mod = value.asModule();
-                            pr->format("<module '%s' at '%s'>", mod->m_modname->data(), mod->m_physicalpath->data());
+                            pr->format("<module '%.*s' at '%s'>", (int)mod->m_modname->length(), mod->m_modname->data(), mod->m_physicalpath->data());
                         }
                         break;
                     case Object::OTYP_CLASS:
@@ -13200,6 +13236,18 @@ namespace neon
         return String::copy(str);
     }
 
+    String* wrapStringIntern(const char* data, size_t len)
+    {
+        return String::intern(data, len);
+    }
+
+    String* Wrappers::wrapStringIntern(const char* str)
+    {
+        return String::intern(str);
+    }
+
+
+
     Blob* Wrappers::wrapGetBlobOfClosure(Function* fn)
     {
         return fn->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.blob;
@@ -14848,27 +14896,25 @@ namespace neon
         return instance;
     }
 
-    bool defineGlobalValue(const char* name, Value val)
+    bool defineGlobalValue(String* name, Value val)
     {
         bool r;
-        String* oname;
-        oname = String::intern(name);
         auto gcs = SharedState::get();
-        gcs->vmStackPush(Value::fromObject(oname));
+        gcs->vmStackPush(Value::fromObject(name));
         gcs->vmStackPush(val);
         r = gcs->m_declaredglobals.set(gcs->m_vmstate.stackvalues[0], gcs->m_vmstate.stackvalues[1]);
         gcs->vmStackPop(2);
         return r;
     }
 
-    bool defineGlobalNativeFuncPtr(const char* name, NativeFN fptr, void* uptr)
+    bool defineGlobalNativeFuncPtr(String* name, NativeFN fptr, void* uptr)
     {
         Function* func;
         func = Function::makeFuncNative(fptr, name, uptr);
         return defineGlobalValue(name, Value::fromObject(func));
     }
 
-    bool defineGlobalNativeFunction(const char* name, NativeFN fptr)
+    bool defineGlobalNativeFunction(String* name, NativeFN fptr)
     {
         return defineGlobalNativeFuncPtr(name, fptr, nullptr);
     }
@@ -16471,7 +16517,7 @@ namespace neon
         auto gcs = SharedState::get();
     #if 0
         gcs->m_classprimdict->defNativeConstructor(objfndict_constructor);
-        gcs->m_classprimdict->defStaticNativeMethod(String::copy("keys"), objfndict_keys);
+        gcs->m_classprimdict->defStaticNativeMethod(String::intern("keys"), objfndict_keys);
     #endif
         gcs->m_classprimdict->installMethods(dictmethods);
     }
@@ -16517,7 +16563,7 @@ namespace neon
             } \
             else \
             { \
-                md->addCstr(name, value); \
+                md->addStr(String::intern(name), value); \
             } \
         }
 
@@ -17119,7 +17165,7 @@ namespace neon
         }
         else if(file->m_istty)
         {
-            return Value::fromObject(String::copy("<tty>"));
+            return Value::fromObject(String::intern("<tty>"));
         }
         return Value::makeNull();
     }
@@ -17190,21 +17236,21 @@ namespace neon
         /* clang-format on */
         auto gcs = SharedState::get();
         gcs->m_classprimfile->defNativeConstructor(objfnfile_constructor);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("read"), objfnfile_readstatic);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("write"), objfnfile_writestatic);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("put"), objfnfile_writestatic);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("exists"), objfnfile_exists);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("chmod"), objfnfile_chmod);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("basename"), objfnfile_basename);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("dirname"), objfnfile_dirname);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("read"), objfnfile_readstatic);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("write"), objfnfile_writestatic);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("put"), objfnfile_writestatic);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("exists"), objfnfile_exists);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("chmod"), objfnfile_chmod);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("basename"), objfnfile_basename);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("dirname"), objfnfile_dirname);
 
 
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("stat"), objfnfile_stat);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("unlink"), objfnfile_unlink);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("stat"), objfnfile_stat);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("unlink"), objfnfile_unlink);
 
 
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("isFile"), objfnfile_isfile);
-        gcs->m_classprimfile->defStaticNativeMethod(String::copy("isDirectory"), objfnfile_isdirectory);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("isFile"), objfnfile_isfile);
+        gcs->m_classprimfile->defStaticNativeMethod(String::intern("isDirectory"), objfnfile_isdirectory);
         gcs->m_classprimfile->installMethods(filemethods);
     }
 
@@ -17340,13 +17386,13 @@ namespace neon
         };
         /* clang-format on */
         auto gcs = SharedState::get();
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("readdir"), objfndir_readdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("readdir"), objfndir_readdir);
 
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("mkdir"), objfndir_mkdir);
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("chdir"), objfndir_chdir);
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("rmdir"), objfndir_rmdir);
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("cwd"), objfndir_cwd);
-        gcs->m_classprimdirectory->defStaticNativeMethod(String::copy("pwd"), objfndir_pwd);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("mkdir"), objfndir_mkdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("chdir"), objfndir_chdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("rmdir"), objfndir_rmdir);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("cwd"), objfndir_cwd);
+        gcs->m_classprimdirectory->defStaticNativeMethod(String::intern("pwd"), objfndir_pwd);
 
         gcs->m_classprimdirectory->installMethods(dirmethods);
     }
@@ -17488,7 +17534,7 @@ namespace neon
     {
         Class* klass;
         auto gcs = SharedState::get();
-        klass = Class::makeScriptClass("Math", gcs->m_classprimobject);
+        klass = Class::makeScriptClass(String::intern("Math"), gcs->m_classprimobject);
         klass->defStaticNativeMethod(String::intern("hypot"), objfnmath_hypot);
         klass->defStaticNativeMethod(String::intern("abs"), objfnmath_abs);
         klass->defStaticNativeMethod(String::intern("round"), objfnmath_round);
@@ -17802,20 +17848,20 @@ namespace neon
         Class* klass;
         auto gcs = SharedState::get();
         klass = gcs->m_classprimprocess;
-        klass->setStaticProperty(String::copy("directory"), Value::fromObject(gcs->m_processinfo->cliexedirectory));
-        klass->setStaticProperty(String::copy("env"), Value::fromObject(gcs->m_envdict));
-        klass->setStaticProperty(String::copy("stdin"), Value::fromObject(gcs->m_processinfo->filestdin));
-        klass->setStaticProperty(String::copy("stdout"), Value::fromObject(gcs->m_processinfo->filestdout));
-        klass->setStaticProperty(String::copy("stderr"), Value::fromObject(gcs->m_processinfo->filestderr));
-        klass->setStaticProperty(String::copy("pid"), Value::makeNumber(gcs->m_processinfo->cliprocessid));
-        klass->defStaticNativeMethod(String::copy("kill"), objfnprocess_kill);
-        klass->defStaticNativeMethod(String::copy("exit"), objfnprocess_exit);
-        klass->defStaticNativeMethod(String::copy("exedirectory"), objfnprocess_exedirectory);
-        klass->defStaticNativeMethod(String::copy("scriptdirectory"), objfnprocess_scriptdirectory);
-        klass->defStaticNativeMethod(String::copy("script"), objfnprocess_scriptfile);
+        klass->setStaticProperty(String::intern("directory"), Value::fromObject(gcs->m_processinfo->cliexedirectory));
+        klass->setStaticProperty(String::intern("env"), Value::fromObject(gcs->m_envdict));
+        klass->setStaticProperty(String::intern("stdin"), Value::fromObject(gcs->m_processinfo->filestdin));
+        klass->setStaticProperty(String::intern("stdout"), Value::fromObject(gcs->m_processinfo->filestdout));
+        klass->setStaticProperty(String::intern("stderr"), Value::fromObject(gcs->m_processinfo->filestderr));
+        klass->setStaticProperty(String::intern("pid"), Value::makeNumber(gcs->m_processinfo->cliprocessid));
+        klass->defStaticNativeMethod(String::intern("kill"), objfnprocess_kill);
+        klass->defStaticNativeMethod(String::intern("exit"), objfnprocess_exit);
+        klass->defStaticNativeMethod(String::intern("exedirectory"), objfnprocess_exedirectory);
+        klass->defStaticNativeMethod(String::intern("scriptdirectory"), objfnprocess_scriptdirectory);
+        klass->defStaticNativeMethod(String::intern("script"), objfnprocess_scriptfile);
 
-        klass->defStaticNativeMethod(String::copy("getenv"), objfnprocess_getenv);
-        klass->defStaticNativeMethod(String::copy("setenv"), objfnprocess_setenv);
+        klass->defStaticNativeMethod(String::intern("getenv"), objfnprocess_getenv);
+        klass->defStaticNativeMethod(String::intern("setenv"), objfnprocess_setenv);
 
 
     }
@@ -19215,25 +19261,25 @@ namespace neon
     {
         Class* klass;
         auto gcs = SharedState::get();
-        defineGlobalNativeFunction("chr", nativefn_chr);
-        defineGlobalNativeFunction("id", nativefn_id);
-        defineGlobalNativeFunction("int", nativefn_int);
-        defineGlobalNativeFunction("instanceof", nativefn_instanceof);
-        defineGlobalNativeFunction("ord", nativefn_ord);
-        defineGlobalNativeFunction("sprintf", nativefn_sprintf);
-        defineGlobalNativeFunction("printf", nativefn_printf);
-        defineGlobalNativeFunction("print", nativefn_print);
-        defineGlobalNativeFunction("println", nativefn_println);
-        defineGlobalNativeFunction("srand", nativefn_srand);
-        defineGlobalNativeFunction("rand", nativefn_rand);
-        defineGlobalNativeFunction("eval", nativefn_eval);
-        defineGlobalNativeFunction("require", nativefn_require);
-        defineGlobalNativeFunction("isNaN", nativefn_isnan);
-        defineGlobalNativeFunction("microtime", nativefn_microtime);
-        defineGlobalNativeFunction("time", nativefn_time);
+        defineGlobalNativeFunction(String::intern("chr"), nativefn_chr);
+        defineGlobalNativeFunction(String::intern("id"), nativefn_id);
+        defineGlobalNativeFunction(String::intern("int"), nativefn_int);
+        defineGlobalNativeFunction(String::intern("instanceof"), nativefn_instanceof);
+        defineGlobalNativeFunction(String::intern("ord"), nativefn_ord);
+        defineGlobalNativeFunction(String::intern("sprintf"), nativefn_sprintf);
+        defineGlobalNativeFunction(String::intern("printf"), nativefn_printf);
+        defineGlobalNativeFunction(String::intern("print"), nativefn_print);
+        defineGlobalNativeFunction(String::intern("println"), nativefn_println);
+        defineGlobalNativeFunction(String::intern("srand"), nativefn_srand);
+        defineGlobalNativeFunction(String::intern("rand"), nativefn_rand);
+        defineGlobalNativeFunction(String::intern("eval"), nativefn_eval);
+        defineGlobalNativeFunction(String::intern("require"), nativefn_require);
+        defineGlobalNativeFunction(String::intern("isNaN"), nativefn_isnan);
+        defineGlobalNativeFunction(String::intern("microtime"), nativefn_microtime);
+        defineGlobalNativeFunction(String::intern("time"), nativefn_time);
         {
-            klass = Class::makeScriptClass("JSON", gcs->m_classprimobject);
-            klass->defStaticNativeMethod(String::copy("stringify"), objfnjson_stringify);
+            klass = Class::makeScriptClass(String::intern("JSON"), gcs->m_classprimobject);
+            klass->defStaticNativeMethod(String::intern("stringify"), objfnjson_stringify);
         }
     }
 
@@ -22380,15 +22426,15 @@ namespace neon
         {
             {
                 gcs->m_processinfo->filestdout = File::make(stdout, true, "<stdout>", "wb");
-                defineGlobalValue("STDOUT", Value::fromObject(gcs->m_processinfo->filestdout));
+                defineGlobalValue(String::intern("STDOUT"), Value::fromObject(gcs->m_processinfo->filestdout));
             }
             {
                 gcs->m_processinfo->filestderr = File::make(stderr, true, "<stderr>", "wb");
-                defineGlobalValue("STDERR", Value::fromObject(gcs->m_processinfo->filestderr));
+                defineGlobalValue(String::intern("STDERR"), Value::fromObject(gcs->m_processinfo->filestderr));
             }
             {
                 gcs->m_processinfo->filestdin = File::make(stdin, true, "<stdin>", "rb");
-                defineGlobalValue("STDIN", Value::fromObject(gcs->m_processinfo->filestdin));
+                defineGlobalValue(String::intern("STDIN"), Value::fromObject(gcs->m_processinfo->filestdin));
             }
         }
     }
@@ -22469,35 +22515,35 @@ namespace neon
          * initialize the toplevel module
          */
         {
-            gcs->m_topmodule = Module::make("", "<state>", false, true);
+            gcs->m_topmodule = Module::make(String::intern(""), "<state>", false, true);
         }
         {
             gcs->m_defaultstrings.nmconstructor = String::intern("constructor");
-            gcs->m_defaultstrings.nmindexget = String::copy("__indexget__");
-            gcs->m_defaultstrings.nmindexset = String::copy("__indexset__");
-            gcs->m_defaultstrings.nmadd = String::copy("__add__");
-            gcs->m_defaultstrings.nmsub = String::copy("__sub__");
-            gcs->m_defaultstrings.nmdiv = String::copy("__div__");
-            gcs->m_defaultstrings.nmmul = String::copy("__mul__");
-            gcs->m_defaultstrings.nmband = String::copy("__band__");
-            gcs->m_defaultstrings.nmbor = String::copy("__bor__");
-            gcs->m_defaultstrings.nmbxor = String::copy("__bxor__");
+            gcs->m_defaultstrings.nmindexget = String::intern("__indexget__");
+            gcs->m_defaultstrings.nmindexset = String::intern("__indexset__");
+            gcs->m_defaultstrings.nmadd = String::intern("__add__");
+            gcs->m_defaultstrings.nmsub = String::intern("__sub__");
+            gcs->m_defaultstrings.nmdiv = String::intern("__div__");
+            gcs->m_defaultstrings.nmmul = String::intern("__mul__");
+            gcs->m_defaultstrings.nmband = String::intern("__band__");
+            gcs->m_defaultstrings.nmbor = String::intern("__bor__");
+            gcs->m_defaultstrings.nmbxor = String::intern("__bxor__");
         }
         /*
          * declare default classes
          */
         {
-            gcs->m_classprimclass = Class::makeScriptClass("Class", nullptr);
-            gcs->m_classprimobject = Class::makeScriptClass("Object", gcs->m_classprimclass);
-            gcs->m_classprimnumber = Class::makeScriptClass("Number", gcs->m_classprimobject);
-            gcs->m_classprimstring = Class::makeScriptClass("String", gcs->m_classprimobject);
-            gcs->m_classprimarray = Class::makeScriptClass("Array", gcs->m_classprimobject);
-            gcs->m_classprimdict = Class::makeScriptClass("Dict", gcs->m_classprimobject);
-            gcs->m_classprimfile = Class::makeScriptClass("File", gcs->m_classprimobject);
-            gcs->m_classprimdirectory = Class::makeScriptClass("Dir", gcs->m_classprimobject);
-            gcs->m_classprimrange = Class::makeScriptClass("Range", gcs->m_classprimobject);
-            gcs->m_classprimcallable = Class::makeScriptClass("Function", gcs->m_classprimobject);
-            gcs->m_classprimprocess = Class::makeScriptClass("Process", gcs->m_classprimobject);
+            gcs->m_classprimclass = Class::makeScriptClass(String::intern("Class"), nullptr);
+            gcs->m_classprimobject = Class::makeScriptClass(String::intern("Object"), gcs->m_classprimclass);
+            gcs->m_classprimnumber = Class::makeScriptClass(String::intern("Number"), gcs->m_classprimobject);
+            gcs->m_classprimstring = Class::makeScriptClass(String::intern("String"), gcs->m_classprimobject);
+            gcs->m_classprimarray = Class::makeScriptClass(String::intern("Array"), gcs->m_classprimobject);
+            gcs->m_classprimdict = Class::makeScriptClass(String::intern("Dict"), gcs->m_classprimobject);
+            gcs->m_classprimfile = Class::makeScriptClass(String::intern("File"), gcs->m_classprimobject);
+            gcs->m_classprimdirectory = Class::makeScriptClass(String::intern("Dir"), gcs->m_classprimobject);
+            gcs->m_classprimrange = Class::makeScriptClass(String::intern("Range"), gcs->m_classprimobject);
+            gcs->m_classprimcallable = Class::makeScriptClass(String::intern("Function"), gcs->m_classprimobject);
+            gcs->m_classprimprocess = Class::makeScriptClass(String::intern("Process"), gcs->m_classprimobject);
         }
         /*
          * declare environment variables dictionary
@@ -22511,15 +22557,15 @@ namespace neon
         {
             if(gcs->m_exceptions.stdexception == nullptr)
             {
-                gcs->m_exceptions.stdexception = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "Exception", true);
+                gcs->m_exceptions.stdexception = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("Exception"));
             }
-            gcs->m_exceptions.asserterror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "AssertError", true);
-            gcs->m_exceptions.syntaxerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "SyntaxError", true);
-            gcs->m_exceptions.ioerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "IOError", true);
-            gcs->m_exceptions.oserror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "OSError", true);
-            gcs->m_exceptions.argumenterror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "ArgumentError", true);
-            gcs->m_exceptions.regexerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "RegexError", true);
-            gcs->m_exceptions.importerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, "ImportError", true);
+            gcs->m_exceptions.asserterror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("AssertError"));
+            gcs->m_exceptions.syntaxerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("SyntaxError"));
+            gcs->m_exceptions.ioerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("IOError"));
+            gcs->m_exceptions.oserror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("OSError"));
+            gcs->m_exceptions.argumenterror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("ArgumentError"));
+            gcs->m_exceptions.regexerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("RegexError"));
+            gcs->m_exceptions.importerror = Class::makeExceptionClass(gcs->m_classprimobject, nullptr, String::intern("ImportError"));
         }
         /* all the other bits .... */
         buildProcessInfo();
@@ -22835,7 +22881,7 @@ struct ConsoleProg
                         {
                             pr->format("%s = ", varnamebuf);
                             neon::ValPrinter::printValue(pr, dest, true, true);
-                            defineGlobalValue(varnamebuf, dest);
+                            neon::defineGlobalValue(neon::String::intern(varnamebuf), dest);
                             pr->format("\n");
                             rescnt++;
                         }
@@ -23115,7 +23161,7 @@ struct ConsoleProg
                 auto os = neon::String::copy(nargv[i]);
                 gcs->m_processinfo->cliargv->push(neon::Value::fromObject(os));
             }
-            gcs->m_declaredglobals.set(neon::Value::fromObject(neon::String::copy("ARGV")), neon::Value::fromObject(gcs->m_processinfo->cliargv));
+            gcs->m_declaredglobals.set(neon::Value::fromObject(neon::String::intern("ARGV")), neon::Value::fromObject(gcs->m_processinfo->cliargv));
         }
         gcs->m_gcstate.nextgc = nextgcstart;
         if(evalmesrc != nullptr)

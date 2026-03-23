@@ -1,10 +1,18 @@
-
-
-function foo(first, last="doe", age=56)
-{
-    println(`hello ${first} ${last}! your age is ${age}`)
-}
-
-foo("john");
-foo("jake", "simmons", 45);
-
+    var res;
+    res = "failed";
+    try
+    {
+        try
+        {
+            throw Exception("ok")
+        }
+        catch(e)
+        {
+            throw e;
+        }
+    }
+    catch(e)
+    {
+        res = e.message;
+    }
+    println(`ok=${res}`);
