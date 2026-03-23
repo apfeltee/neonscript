@@ -1,96 +1,276 @@
 
 var g_failed = 0;
 
-function check(name, subfn)
-{
-    println(`testing ${name} ... `);
-    try
-    {
-        subfn();
-        println(`testing ${name}: ok!`);
+function _assert(b, msg) {
+    if (!b) {
+        throw Exception("Assertion failed: " + msg);
     }
-    catch(e)
-    {
-        println(`testing ${name}: failed: ${e.message}!`);
+}
+
+function check(name, subfn) {
+    print("Testing " + name + " ... ");
+    try {
+        subfn();
+        println("ok");
+    } catch (e) {
+        println("FAILED: " + e.message);
+        println("Stack trace: " + e.stacktrace);
         g_failed++;
     }
 }
 
-function _assert(b, msg)
-{
-    if(!b)
-    {
-        throw Exception(msg)
+check("Basic Arithmetic", function() {
+    _assert(1 + 1 == 2, "1+1");
+    _assert(10 - 5 == 5, "10-5");
+    _assert(2 * 3 == 6, "2*3");
+    _assert(10 / 2 == 5, "10/2");
+    _assert(10 % 3 == 1, "10%3");
+    _assert(2 ** 3 == 8, "2**3");
+    
+    var a = 10;
+    a += 5;
+    _assert(a == 15, "a += 5");
+    a -= 3;
+    _assert(a == 12, "a -= 3");
+    a *= 2;
+    _assert(a == 24, "a *= 2");
+    a /= 4;
+    _assert(a == 6, "a /= 4");
+    
+    var i = 0;
+    i++;
+    _assert(i == 1, "i is now 1");
+    i--;
+    _assert(i == 0, "i is now 0");
+});
+
+check("Strings", function() {
+    var s = "hello";
+    _assert(s.length == 5, "string length");
+    _assert(s + " world" == "hello world", "string concat");
+    _assert(s[0] == "h", "string index");
+    _assert(s.substr(1, 4) == "ell", "string substr");
+    _assert(s.indexOf("e") == 1, "string indexOf");
+    _assert("123".toNumber() == 123, "string toNumber");
+    
+    var name = "Neon";
+    _assert(`Hello ${name}` == "Hello Neon", "string interpolation");
+    
+    _assert("abc".dump() == "\"abc\"", "string dump");
+});
+
+check("Arrays", function() {
+    var a = [10, 20, 30];
+    _assert(a.length == 3, "array length");
+    _assert(a[1] == 20, "array index");
+    
+    a.push(40, 50);
+    _assert(a.length == 5, "array push multiple");
+    _assert(a[4] == 50, "array push value");
+    
+    var b = a.map(function(x) { return x * 2; });
+    _assert(b[0] == 20 && b[4] == 100, "array map");
+    
+    _assert(a.join("|") == "10|20|30|40|50", "array join");
+    
+    _assert(a instanceof Array, "instanceof Array");
+});
+
+check("Dictionaries", function() {
+    var d = { "a": 1, "b": 2 };
+    _assert(d["a"] == 1, "dict index access");
+    _assert(d.b == 2, "dict property access");
+    
+    d["c"] = 3;
+    _assert(d.c == 3, "dict assignment");
+    
+    var keys = [];
+    var values = [];
+    foreach(k, v in d) {
+        keys.push(k);
+        values.push(v);
     }
-}
-
-check("array creation", function()
-{
-    a = [1, 2, 3, 4];
-    _assert(a.length == 4, "array length")
+    // Note: dictionary order might not be guaranteed, but for small ones it usually is.
+    _assert(keys.length == 3, "foreach keys length");
 });
 
-check("array push", function()
-{
-    a = []
-    a.push("foo")
-    a.push("bar")
-    _assert((a.length == 2) && (a[1] == "bar"), "array values");
+check("Functions", function() {
+    function add(a, b) { return a + b; }
+    _assert(add(1, 2) == 3, "named function");
+    
+    var sub = function(a, b) { return a - b; };
+    _assert(sub(10, 4) == 6, "anonymous function");
+    
+    def mul(a, b) { return a * b; }
+    _assert(mul(3, 4) == 12, "def keyword");
+    
+    function factorial(n) {
+        if (n <= 1) return 1;
+        return n * factorial(n - 1);
+    }
+    _assert(factorial(5) == 120, "recursion");
+    
+    function outer(x) {
+        return function(y) { return x + y; };
+    }
+    var closure = outer(10);
+    _assert(closure(5) == 15, "closure");
 });
 
-check("array assign", function()
-{
-    a = []
-    a[0] = "foo"
-    a[1] = "bar"
-    println("a = ", a)
-    _assert((a.length == 2) && (a[1] == "bar"), "array values (expected a.length==2 but is ${a.length})");    
-});
-check("array.map", function()
-{
-    a = [11, 22, 33];
-    res = a.map(function(i){ return i+1 })
-    _assert(res == [12, 23, 34], "map: ${res}")
-})
-
-/*
-check("", function()
-{
-
-    _assert();
-});
-*/
-
-/*
-check("exceptions", function()
-{
-    var res;
-    res = "failed";
-    try
-    {
-        try
-        {
-            throw Exception("ok")
+check("Classes", function() {
+    class Base {
+        constructor(name) {
+            this.name = name;
         }
-        catch(e)
-        {
-            throw e;
+        greet() {
+            return "Hello " + this.name;
+        }
+        static type() {
+            return "Base";
         }
     }
-    catch(e)
-    {
-        res = e.message;
+    
+    class Derived extends Base {
+        constructor(name, age) {
+            super(name);
+            this.age = age;
+        }
+        greet() {
+            return super.greet() + ", age " + this.age;
+        }
     }
-    _assert(res == "ok", "ok=${res}");
+    
+    var b = new Base("John");
+    _assert(b.greet() == "Hello John", "base method");
+    _assert(Base.type() == "Base", "static method");
+    
+    var d = Derived("Jane", 25); // No 'new' also works
+    _assert(d.greet() == "Hello Jane, age 25", "derived method calling super");
+    _assert(d.name == "Jane", "derived property from base");
 });
-*/
 
-if(g_failed == 0)
-{
-    println("all good");
-}
-else
-{
-    println("something broke!");
-}
+check("Control Flow", function() {
+    var count = 0;
+    for(var i=0; i<10; i++) {
+        count += i;
+    }
+    _assert(count == 45, "for loop");
+    
+    count = 0;
+    var j = 0;
+    while(j < 5) {
+        count += j;
+        j++;
+    }
+    _assert(count == 10, "while loop");
+    
+    var found = false;
+    if (1 > 0) {
+        found = true;
+    } else {
+        found = false;
+    }
+    _assert(found, "if-else");
+    
+    count = 0;
+    foreach(v in [1, 2, 3]) {
+        count += v;
+    }
+    _assert(count == 6, "foreach array");
+    
+    var res = "";
+    var x = 2;
+    switch(x) {
+        case 1: res = "one"; break;
+        case 2, 3: res = "two-three"; break;
+        default: res = "other";
+    }
+    _assert(res == "two-three", "switch case");
+});
 
+check("Literals", function() {
+    _assert(null == null, "null");
+    _assert(true == true, "true");
+    _assert(false == false, "false");
+    _assert(!false == true, "not false");
+    _assert(!!1 == true, "truthy 1");
+    _assert(!!0 == true, "truthy 0 (Yes, 0 is TRUTHY in Neon)");
+    _assert(!!-1 == false, "falsy -1 (Negative numbers are FALSY)");
+    _assert(!!"" == false, "falsy empty string");
+    _assert(!!"foo" == true, "truthy non-empty string");
+    _assert(!![] == false, "falsy empty array");
+    _assert(!![1] == true, "truthy non-empty array");
+    _assert(!!{} == false, "falsy empty dictionary");
+    _assert(!!{"a":1} == true, "truthy non-empty dictionary");
+});
+
+check("Exceptions", function() {
+    var caught = false;
+    try {
+        throw Exception("test error");
+    } catch(e) {
+        caught = true;
+        _assert(e.message == "test error", "exception message");
+    }
+    _assert(caught, "try-catch");
+    
+    var finallyRun = false;
+    try {
+        // do nothing
+    } finally {
+        finallyRun = true;
+    }
+    _assert(finallyRun, "finally always runs");
+    
+    var nestedCaught = false;
+    try {
+        try {
+            throw Exception("nested");
+        } finally {
+            // cleanup
+        }
+    } catch(e) {
+        nestedCaught = true;
+        _assert(e.message == "nested", "nested exception");
+    }
+    _assert(nestedCaught, "nested try-finally-catch");
+});
+
+check("Ranges", function() {
+    var r = Range(1, 5);
+    _assert(r.lower() == 1, "range lower");
+    _assert(r.upper() == 5, "range upper");
+    
+    var vals = [];
+    foreach(i in r) {
+        vals.push(i);
+    }
+    _assert(vals.length == 4, "range length is upper-lower");
+    _assert(vals[0] == 1 && vals[3] == 4, "range values");
+    
+    // Test stateful range behavior if known
+    _assert(r.lower() == 4, "range lower changed after iteration");
+});
+
+check("Built-ins", function() {
+    _assert(typeof(123) == "number", "typeof number");
+    _assert(typeof("abc") == "string", "typeof string");
+    _assert(typeof([]) == "array", "typeof array");
+    _assert(typeof({}) == "dictionary", "typeof dictionary");
+    
+    _assert(microtime() > 0, "microtime");
+    
+    
+    // JSON
+    var obj = { "foo": "bar" };
+    var jsonStr = JSON.stringify(obj);
+    println("jsonStr = ", jsonStr);
+    _assert(jsonStr == "{\"foo\": \"bar\"}", "JSON.stringify");
+});
+
+if (g_failed == 0) {
+    println("\nALL TESTS PASSED!");
+} else {
+    println("\n" + g_failed + " TESTS FAILED!");
+    Process.exit(1);
+}

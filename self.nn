@@ -24,7 +24,7 @@ foreach(_, fpath in allscripts)
     println("found script #" + i + " of " + alen + ":" + fpath + " ... now running: ");
     try
     {
-        loadfile(fpath);
+        require(fpath);
     }
     catch(err)
     {

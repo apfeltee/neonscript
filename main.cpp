@@ -34,14 +34,14 @@
     #include <libgen.h>
 #endif
 
-#if 0
+
+
+#if !defined(NEON_INLINE)
     #if defined(__GNUC__) || defined(__TINYC__)
         #define NEON_INLINE __attribute__((always_inline)) inline
     #else
         #define NEON_INLINE inline
     #endif
-#else
-    #define NEON_INLINE
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -5749,22 +5749,7 @@ namespace neon
                 }
             }
 
-            template<typename InputT>
-            static InputT* gcMakeObject(Object::Type type, bool retain)
-            {
-                size_t size = sizeof(InputT);
-                auto gcs = SharedState::get();
-                auto temp = (InputT*)SharedState::gcAllocate(size, 1, retain);
-                auto object = new(temp) InputT();
-                object->m_objtype = type;
-                object->m_objmark = !gcs->markvalue;
-                object->m_objstale = false;
-                object->m_objnext = gcs->linkedobjects;
-                gcs->linkedobjects = object;
-                return object;
-            }
-
-            static void* gcAllocate(size_t newsize, size_t amount, bool retain)
+            static void* gcAllocObj(size_t newsize, size_t amount, bool retain)
             {
                 size_t oldsize;
                 void* result;
@@ -5785,6 +5770,46 @@ namespace neon
                 }
                 return result;
             }
+
+            template<typename InputT>
+            static InputT* gcMakeObject(Object::Type type, bool retain)
+            {
+                static_assert((std::is_base_of<Object, InputT>::value));
+                size_t size = sizeof(InputT);
+                auto gcs = SharedState::get();
+                auto temp = (InputT*)SharedState::gcAllocObj(size, 1, retain);
+                auto object = new(temp) InputT();
+                object->m_objtype = type;
+                object->m_objmark = !gcs->markvalue;
+                object->m_objstale = false;
+                object->m_objnext = gcs->linkedobjects;
+                gcs->linkedobjects = object;
+                return object;
+            }
+
+            template<typename InputT>
+            void gcReleaseObj(InputT* pointer, size_t oldsize)
+            {
+                static_assert((std::is_base_of<Object, InputT>::value));
+                gcMaybeCollect(-oldsize, false);
+                if(oldsize > 0)
+                {
+                    #if 0
+                    memset(pointer, 0, oldsize);
+                    #endif
+                }
+                // N.B.: Memory::destroy() MIGHT call InputT::destroy() if InputT defines such a function,
+                // which would lead to illegal double-frees!
+                Memory::sysFree(pointer);
+                pointer = nullptr;
+            }
+
+            template<typename InputT>
+            void gcReleaseObj(InputT* pointer)
+            {
+                gcReleaseObj(pointer, sizeof(InputT));
+            }
+
 
             /*
             // NOTE:
@@ -5941,28 +5966,6 @@ namespace neon
                         }
                     }
                 }
-            }
-
-            template<typename InputT>
-            void gcRelease(InputT* pointer, size_t oldsize)
-            {
-                gcMaybeCollect(-oldsize, false);
-                if(oldsize > 0)
-                {
-                    #if 0
-                    memset(pointer, 0, oldsize);
-                    #endif
-                }
-                // N.B.: Memory::destroy() MIGHT call InputT::destroy() if InputT defines such a function,
-                // which would lead to illegal double-frees!
-                Memory::sysFree(pointer);
-                pointer = nullptr;
-            }
-
-            template<typename InputT>
-            void gcRelease(InputT* pointer)
-            {
-                gcRelease(pointer, sizeof(InputT));
             }
 
             Function* compileSourceToFunction(Module* module, bool fromeval, const char* source, bool toplevel);
@@ -6990,7 +6993,7 @@ namespace neon
                 upvals = nullptr;
                 if(innerfn->m_upvalcount > 0)
                 {
-                    upvals = (Upvalue**)SharedState::gcAllocate(sizeof(Upvalue*), innerfn->m_upvalcount + 1, false);
+                    upvals = (Upvalue**)Memory::sysMalloc(sizeof(Upvalue*) * (innerfn->m_upvalcount + 1));
                     for(i = 0; i < innerfn->m_upvalcount; i++)
                     {
                         upvals[i] = nullptr;
@@ -7192,7 +7195,7 @@ namespace neon
                 klass->m_staticmethods.deInit();
                 klass->m_instproperties.deInit();
                 klass->m_staticproperties.deInit();
-                gcs->gcRelease(klass);
+                gcs->gcReleaseObj(klass);
             }
 
             static Class* makeScriptClass(String* name, Class* parent)
@@ -7423,7 +7426,7 @@ namespace neon
                 }
                 instance->m_instanceprops.deInit();
                 instance->m_instactive = false;
-                gcs->gcRelease(instance);
+                gcs->gcReleaseObj(instance);
             }
 
         public:
@@ -7670,7 +7673,7 @@ namespace neon
             {
                 auto gcs = SharedState::get();
                 file->closeFile();
-                gcs->gcRelease(file);
+                gcs->gcReleaseObj(file);
             }
 
             static void mark(File* file)
@@ -7883,6 +7886,13 @@ namespace neon
                 path1 = nullptr;
                 path2 = nullptr;
                 auto gcs = SharedState::get();
+                // a full path was supplied, i.e., require("some/path.nn")
+                if(File::fileExists(modulename->data()))
+                {
+                    pathbuf = Memory::make<StrBuffer>();
+                    pathbuf->append(modulename->data(), modulename->length());
+                    return pathbuf;
+                }
                 mlen = modulename->length();
                 splen = gcs->m_importpath.count();
                 for(i = 0; i < splen; i++)
@@ -13906,7 +13916,7 @@ namespace neon
                 Module* module;
                 module = (Module*)object;
                 Module::destroy(module);
-                gcs->gcRelease(module);
+                gcs->gcReleaseObj(module);
             }
             break;
             case Object::OTYP_FILE:
@@ -13922,7 +13932,7 @@ namespace neon
                 
                 dict = (Dict*)object;
                 Dict::destroy(dict);
-                gcs->gcRelease(dict);
+                gcs->gcReleaseObj(dict);
             }
             break;
             case Object::OTYP_ARRAY:
@@ -13930,7 +13940,7 @@ namespace neon
                 Array* list;
                 list = (Array*)object;
                 list->m_objvarray.deInit();
-                gcs->gcRelease(list);
+                gcs->gcReleaseObj(list);
             }
             break;
             case Object::OTYP_FUNCBOUND:
@@ -13940,7 +13950,7 @@ namespace neon
                 // for this reason, we do not free closures when freeing bound methods
                 */
                 auto fn = (Function*)object;
-                gcs->gcRelease(fn);
+                gcs->gcReleaseObj(fn);
             }
             break;
             case Object::OTYP_CLASS:
@@ -13954,12 +13964,12 @@ namespace neon
             {
                 Function* closure;
                 closure = (Function*)object;
-                gcs->gcRelease(closure->m_fnvals.fnclosure.m_upvalues, (sizeof(Upvalue*) * closure->m_upvalcount));
+                Memory::sysFree(closure->m_fnvals.fnclosure.m_upvalues);
                 /*
                 // there may be multiple closures that all reference the same function
                 // for this reason, we do not free functions when freeing closures
                 */
-                gcs->gcRelease(closure);
+                gcs->gcReleaseObj(closure);
             }
             break;
             case Object::OTYP_FUNCSCRIPT:
@@ -13967,7 +13977,7 @@ namespace neon
                 Function* function;
                 function = (Function*)object;
                 Function::destroy(function);
-                gcs->gcRelease(function);
+                gcs->gcReleaseObj(function);
             }
             break;
             case Object::OTYP_INSTANCE:
@@ -13980,19 +13990,19 @@ namespace neon
             case Object::OTYP_FUNCNATIVE:
             {
                 auto fn = (Function*)object;
-                gcs->gcRelease(fn);
+                gcs->gcReleaseObj(fn);
             }
             break;
             case Object::OTYP_UPVALUE:
             {
                 auto upv = (Upvalue*)object;
-                gcs->gcRelease(upv);
+                gcs->gcReleaseObj(upv);
             }
             break;
             case Object::OTYP_RANGE:
             {
                 auto rn = (Range*)object;
-                gcs->gcRelease(rn);
+                gcs->gcReleaseObj(rn);
             }
             break;
             case Object::OTYP_STRING:
@@ -14000,7 +14010,7 @@ namespace neon
                 String* string;
                 string = (String*)object;
                 String::destroy(string);
-                gcs->gcRelease(string);
+                gcs->gcReleaseObj(string);
             }
             break;
             case Object::OTYP_SWITCH:
@@ -14008,7 +14018,7 @@ namespace neon
                 Switch* sw;
                 sw = (Switch*)object;
                 sw->m_table.deInit();
-                gcs->gcRelease(sw);
+                gcs->gcReleaseObj(sw);
             }
             break;
             case Object::OTYP_USERDATA:
@@ -14019,7 +14029,7 @@ namespace neon
                 {
                     ptr->m_ondestroyfn(ptr->m_pointer);
                 }
-                gcs->gcRelease(ptr);
+                gcs->gcReleaseObj(ptr);
             }
             break;
             default:
@@ -15467,7 +15477,7 @@ namespace neon
         ArgCheck check("zip", scfn);
         list = scfn.thisval.asArray();
         newlist = SharedState::gcProtect(Array::make());
-        arglist = (Array**)SharedState::gcAllocate(sizeof(Array*), scfn.argc, false);
+        arglist = (Array**)Memory::sysMalloc(sizeof(Array*) * scfn.argc);
         for(i = 0; i < scfn.argc; i++)
         {
             NEON_ARGS_CHECKTYPE(check, i, &Value::isArray);

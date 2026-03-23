@@ -1913,7 +1913,6 @@ class LineReader
         {
             free(ptr);
         }
-
 };
 
 /* At exit we'll try to fix the terminal to the initial conditions. */
@@ -1923,10 +1922,4 @@ static void linereader_callback_handleimplicitexit()
     g_linereadercurrentcontext->freeHistory();
 }
 
-
-
-
-
-
 #endif
-
