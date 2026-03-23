@@ -153,19 +153,19 @@ main.cpp:1053:13: warning: Assignment of function parameter has no effect outsid
 main.cpp:3840:21: warning: Assignment of function parameter has no effect outside the function. Did you forget dereferencing it? [uselessAssignmentPtrArg]
                     pr = nullptr;
                     ^
-main.cpp:5928:17: warning: Assignment of function parameter has no effect outside the function. Did you forget dereferencing it? [uselessAssignmentPtrArg]
+main.cpp:5929:17: warning: Assignment of function parameter has no effect outside the function. Did you forget dereferencing it? [uselessAssignmentPtrArg]
                 pointer = nullptr;
                 ^
-main.cpp:9258:50: warning: Either the condition 'm_tplstringcount-1<MaxStrTplDepth' is redundant or the array 'm_tplstringbuffer[8]' is accessed at index 9, which is out of bounds. [arrayIndexOutOfBoundsCond]
+main.cpp:9146:50: warning: Either the condition 'm_tplstringcount-1<MaxStrTplDepth' is redundant or the array 'm_tplstringbuffer[8]' is accessed at index 9, which is out of bounds. [arrayIndexOutOfBoundsCond]
                                 m_tplstringbuffer[m_tplstringcount] = (int)quote;
                                                  ^
-main.cpp:9255:53: note: Assuming that condition 'm_tplstringcount-1<MaxStrTplDepth' is not redundant
+main.cpp:9143:53: note: Assuming that condition 'm_tplstringcount-1<MaxStrTplDepth' is not redundant
                             if(m_tplstringcount - 1 < MaxStrTplDepth)
                                                     ^
-main.cpp:9257:33: note: m_tplstringcount is incremented', new value is 9
+main.cpp:9145:33: note: m_tplstringcount is incremented', new value is 9
                                 m_tplstringcount++;
                                 ^
-main.cpp:9258:50: note: Array index out of bounds
+main.cpp:9146:50: note: Array index out of bounds
                                 m_tplstringbuffer[m_tplstringcount] = (int)quote;
                                                  ^
 main.cpp:4878:17: portability: Using memset() on union which contains a floating point number. [memsetClassFloat]
@@ -186,19 +186,19 @@ main.cpp:2221:13: warning: Member variable 'RegexContext::m_tokencount' is not i
 main.cpp:2221:13: warning: Member variable 'RegexContext::m_errorbuf' is not initialized in the constructor. [uninitMemberVar]
             RegexContext(Token* tokens, size_t maxtokens)
             ^
-main.cpp:9884:21: warning: Member variable 'FuncCompiler::m_locals' is not initialized in the constructor. [uninitMemberVar]
+main.cpp:9772:21: warning: Member variable 'FuncCompiler::m_locals' is not initialized in the constructor. [uninitMemberVar]
                     FuncCompiler(AstParser* prs, Function::ContextType type, bool isanon)
                     ^
-main.cpp:9884:21: warning: Member variable 'FuncCompiler::m_upvalues' is not initialized in the constructor. [uninitMemberVar]
+main.cpp:9772:21: warning: Member variable 'FuncCompiler::m_upvalues' is not initialized in the constructor. [uninitMemberVar]
                     FuncCompiler(AstParser* prs, Function::ContextType type, bool isanon)
                     ^
-main.cpp:22818:13: warning: Member variable 'InteractiveRepl::m_callbacks' is not initialized in the constructor. [uninitMemberVar]
+main.cpp:22700:13: warning: Member variable 'InteractiveRepl::m_callbacks' is not initialized in the constructor. [uninitMemberVar]
             InteractiveRepl()
             ^
-main.cpp:13283:17: performance: Variable 'm_scriptfnctx' is assigned in constructor body. Consider performing initialization in initialization list. [useInitializationList]
+main.cpp:13171:17: performance: Variable 'm_scriptfnctx' is assigned in constructor body. Consider performing initialization in initialization list. [useInitializationList]
                 m_scriptfnctx = scfn;
                 ^
-main.cpp:14452:13: style: Class 'Debug' has a constructor with 1 argument that is not explicit. [noExplicitConstructor]
+main.cpp:14332:13: style: Class 'Debug' has a constructor with 1 argument that is not explicit. [noExplicitConstructor]
             Debug(IOStream* pr)
             ^
 main.cpp:4691:25: style: Class 'ValList < Value >' has a constructor with 1 argument that is not explicit. [noExplicitConstructor]
@@ -225,13 +225,13 @@ main.cpp:4254:25: note: If condition 'func==&Value::isString' is true, the funct
 main.cpp:4270:30: note: Testing identical condition 'func==&Value::isString'
                 else if(func == &Value::isString)
                              ^
-main.cpp:5795:43: warning: Identical inner 'if' condition is always true. [identicalInnerCondition]
+main.cpp:5796:43: warning: Identical inner 'if' condition is always true. [identicalInnerCondition]
                     if(frame->gcprotcount > 0)
                                           ^
-main.cpp:5793:39: note: outer condition: frame->gcprotcount>0
+main.cpp:5794:39: note: outer condition: frame->gcprotcount>0
                 if(frame->gcprotcount > 0)
                                       ^
-main.cpp:5795:43: note: identical inner condition: frame->gcprotcount>0
+main.cpp:5796:43: note: identical inner condition: frame->gcprotcount>0
                     if(frame->gcprotcount > 0)
                                           ^
 lino.h:1632:55: style: Condition 'lino_context_enablerawmode(ctx,fileno(stdin))==-1' is always true [knownConditionTrueFalse]
@@ -243,205 +243,199 @@ lino.h:1632:34: note: Calling function 'lino_context_enablerawmode' returns -1
 lino.h:1632:55: note: Condition 'lino_context_enablerawmode(ctx,fileno(stdin))==-1' is always true
     if(lino_context_enablerawmode(ctx, fileno(stdin)) == -1)
                                                       ^
-main.cpp:6000:24: style: Condition '!resizeStack(m_vmstate.stackidx+1)' is always false [knownConditionTrueFalse]
+main.cpp:6001:24: style: Condition '!resizeStack(m_vmstate.stackidx+1)' is always false [knownConditionTrueFalse]
                     if(!resizeStack((m_vmstate.stackidx + 1)))
                        ^
-main.cpp:6000:36: note: Calling function 'resizeStack' returns 1
+main.cpp:6001:36: note: Calling function 'resizeStack' returns 1
                     if(!resizeStack((m_vmstate.stackidx + 1)))
                                    ^
-main.cpp:6000:24: note: Condition '!resizeStack(m_vmstate.stackidx+1)' is always false
+main.cpp:6001:24: note: Condition '!resizeStack(m_vmstate.stackidx+1)' is always false
                     if(!resizeStack((m_vmstate.stackidx + 1)))
                        ^
-main.cpp:6015:24: style: Condition '!resizeFrames(m_vmstate.framecapacity+1)' is always false [knownConditionTrueFalse]
+main.cpp:6016:24: style: Condition '!resizeFrames(m_vmstate.framecapacity+1)' is always false [knownConditionTrueFalse]
                     if(!resizeFrames((m_vmstate.framecapacity + 1)))
                        ^
-main.cpp:6015:37: note: Calling function 'resizeFrames' returns 1
+main.cpp:6016:37: note: Calling function 'resizeFrames' returns 1
                     if(!resizeFrames((m_vmstate.framecapacity + 1)))
                                     ^
-main.cpp:6015:24: note: Condition '!resizeFrames(m_vmstate.framecapacity+1)' is always false
+main.cpp:6016:24: note: Condition '!resizeFrames(m_vmstate.framecapacity+1)' is always false
                     if(!resizeFrames((m_vmstate.framecapacity + 1)))
                        ^
-main.cpp:6755:37: style: Return value 'm_sbuf.append(str,len)' is always true [knownConditionTrueFalse]
+main.cpp:6757:37: style: Return value 'm_sbuf.append(str,len)' is always true [knownConditionTrueFalse]
                 return m_sbuf.append(str, len);
                                     ^
-main.cpp:6755:37: note: Calling function 'append' returns 1
+main.cpp:6757:37: note: Calling function 'append' returns 1
                 return m_sbuf.append(str, len);
                                     ^
-main.cpp:6755:37: note: Return value 'm_sbuf.append(str,len)' is always true
+main.cpp:6757:37: note: Return value 'm_sbuf.append(str,len)' is always true
                 return m_sbuf.append(str, len);
                                     ^
-main.cpp:6771:37: style: Return value 'm_sbuf.append(&cch,1)' is always true [knownConditionTrueFalse]
+main.cpp:6773:37: style: Return value 'm_sbuf.append(&cch,1)' is always true [knownConditionTrueFalse]
                 return m_sbuf.append(&cch, 1);
                                     ^
-main.cpp:6771:37: note: Calling function 'append' returns 1
+main.cpp:6773:37: note: Calling function 'append' returns 1
                 return m_sbuf.append(&cch, 1);
                                     ^
-main.cpp:6771:37: note: Return value 'm_sbuf.append(&cch,1)' is always true
+main.cpp:6773:37: note: Return value 'm_sbuf.append(&cch,1)' is always true
                 return m_sbuf.append(&cch, 1);
                                     ^
-main.cpp:7789:29: style: Condition 'm_handle==nullptr' is always true [knownConditionTrueFalse]
+main.cpp:7777:29: style: Condition 'm_handle==nullptr' is always true [knownConditionTrueFalse]
                 if(m_handle == nullptr && !m_isstd)
                             ^
-main.cpp:7785:29: note: Assuming that condition 'm_handle!=nullptr' is not redundant
+main.cpp:7773:29: note: Assuming that condition 'm_handle!=nullptr' is not redundant
                 if(m_handle != nullptr)
                             ^
-main.cpp:7789:29: note: Condition 'm_handle==nullptr' is always true
+main.cpp:7777:29: note: Condition 'm_handle==nullptr' is always true
                 if(m_handle == nullptr && !m_isstd)
                             ^
-main.cpp:8000:38: style: Condition 'path2!=nullptr' is always true [knownConditionTrueFalse]
-                            if(path2 != nullptr)
-                                     ^
-main.cpp:8007:38: style: Condition 'path1!=nullptr' is always true [knownConditionTrueFalse]
-                            if(path1 != nullptr)
-                                     ^
-main.cpp:8067:20: style: Condition '!gcs->vmNestCallFunction(callable,Value::makeNull(),nullptr,0,&retv,false)' is always false [knownConditionTrueFalse]
+main.cpp:7993:20: style: Condition '!gcs->vmNestCallFunction(callable,Value::makeNull(),nullptr,0,&retv,false)' is always false [knownConditionTrueFalse]
                 if(!gcs->vmNestCallFunction(callable, Value::makeNull(), nullptr, 0, &retv, false))
                    ^
-main.cpp:8067:44: note: Calling function 'vmNestCallFunction' returns 1
+main.cpp:7993:44: note: Calling function 'vmNestCallFunction' returns 1
                 if(!gcs->vmNestCallFunction(callable, Value::makeNull(), nullptr, 0, &retv, false))
                                            ^
-main.cpp:8067:20: note: Condition '!gcs->vmNestCallFunction(callable,Value::makeNull(),nullptr,0,&retv,false)' is always false
+main.cpp:7993:20: note: Condition '!gcs->vmNestCallFunction(callable,Value::makeNull(),nullptr,0,&retv,false)' is always false
                 if(!gcs->vmNestCallFunction(callable, Value::makeNull(), nullptr, 0, &retv, false))
                    ^
-main.cpp:13427:22: style: Condition 'entry!=nullptr' is always true [knownConditionTrueFalse]
+main.cpp:13307:22: style: Condition 'entry!=nullptr' is always true [knownConditionTrueFalse]
             if(entry != nullptr)
                      ^
-main.cpp:13549:28: style: Condition 'fielda!=nullptr' is always true [knownConditionTrueFalse]
+main.cpp:13429:28: style: Condition 'fielda!=nullptr' is always true [knownConditionTrueFalse]
                 if((fielda != nullptr) && (fieldb != nullptr))
                            ^
-main.cpp:17055:36: style: Condition 'file->m_handle==nullptr' is always false [knownConditionTrueFalse]
+main.cpp:16936:36: style: Condition 'file->m_handle==nullptr' is always false [knownConditionTrueFalse]
             else if(file->m_handle == nullptr)
                                    ^
-main.cpp:20350:30: style: Condition 'vmNestCallFunction(field->value,target,scrargv,nargc,&finalval,true)' is always true [knownConditionTrueFalse]
+main.cpp:20226:30: style: Condition 'vmNestCallFunction(field->value,target,scrargv,nargc,&finalval,true)' is always true [knownConditionTrueFalse]
         if(vmNestCallFunction(field->value, target, scrargv, nargc, &finalval, true))
                              ^
-main.cpp:20350:30: note: Calling function 'vmNestCallFunction' returns 1
+main.cpp:20226:30: note: Calling function 'vmNestCallFunction' returns 1
         if(vmNestCallFunction(field->value, target, scrargv, nargc, &finalval, true))
                              ^
-main.cpp:20350:30: note: Condition 'vmNestCallFunction(field->value,target,scrargv,nargc,&finalval,true)' is always true
+main.cpp:20226:30: note: Condition 'vmNestCallFunction(field->value,target,scrargv,nargc,&finalval,true)' is always true
         if(vmNestCallFunction(field->value, target, scrargv, nargc, &finalval, true))
                              ^
-main.cpp:20413:24: style: Condition '!vmUtilDoIndexGetDict(thisval.asDict(),willassign)' is always false [knownConditionTrueFalse]
+main.cpp:20289:24: style: Condition '!vmUtilDoIndexGetDict(thisval.asDict(),willassign)' is always false [knownConditionTrueFalse]
                     if(!vmUtilDoIndexGetDict(thisval.asDict(), willassign))
                        ^
-main.cpp:20413:45: note: Calling function 'vmUtilDoIndexGetDict' returns 1
+main.cpp:20289:45: note: Calling function 'vmUtilDoIndexGetDict' returns 1
                     if(!vmUtilDoIndexGetDict(thisval.asDict(), willassign))
                                             ^
-main.cpp:20413:24: note: Condition '!vmUtilDoIndexGetDict(thisval.asDict(),willassign)' is always false
+main.cpp:20289:24: note: Condition '!vmUtilDoIndexGetDict(thisval.asDict(),willassign)' is always false
                     if(!vmUtilDoIndexGetDict(thisval.asDict(), willassign))
                        ^
-main.cpp:21008:39: style: Condition 'vtarget.isInstance()' is always false [knownConditionTrueFalse]
+main.cpp:20884:39: style: Condition 'vtarget.isInstance()' is always false [knownConditionTrueFalse]
             else if(vtarget.isInstance())
                                       ^
-main.cpp:20982:30: note: Assuming that condition 'vtarget.isInstance()' is not redundant
+main.cpp:20858:30: note: Assuming that condition 'vtarget.isInstance()' is not redundant
         if(vtarget.isInstance())
                              ^
-main.cpp:21008:39: note: Condition 'vtarget.isInstance()' is always false
+main.cpp:20884:39: note: Condition 'vtarget.isInstance()' is always false
             else if(vtarget.isInstance())
                                       ^
-main.cpp:21709:28: style: Condition '!vmUtilConcatenate()' is always false [knownConditionTrueFalse]
+main.cpp:21586:28: style: Condition '!vmUtilConcatenate()' is always false [knownConditionTrueFalse]
                         if(NEON_UNLIKELY(!vmUtilConcatenate()))
                            ^
-main.cpp:21709:28: note: Calling function 'vmUtilConcatenate' returns 1
+main.cpp:21586:28: note: Calling function 'vmUtilConcatenate' returns 1
                         if(NEON_UNLIKELY(!vmUtilConcatenate()))
                            ^
-main.cpp:21709:28: note: Condition '!vmUtilConcatenate()' is always false
+main.cpp:21586:28: note: Condition '!vmUtilConcatenate()' is always false
                         if(NEON_UNLIKELY(!vmUtilConcatenate()))
                            ^
-main.cpp:22005:24: style: Condition '!vmDoGlobalDefine()' is always false [knownConditionTrueFalse]
+main.cpp:21882:24: style: Condition '!vmDoGlobalDefine()' is always false [knownConditionTrueFalse]
                     if(!vmDoGlobalDefine())
                        ^
-main.cpp:22005:41: note: Calling function 'vmDoGlobalDefine' returns 1
+main.cpp:21882:41: note: Calling function 'vmDoGlobalDefine' returns 1
                     if(!vmDoGlobalDefine())
                                         ^
-main.cpp:22005:24: note: Condition '!vmDoGlobalDefine()' is always false
+main.cpp:21882:24: note: Condition '!vmDoGlobalDefine()' is always false
                     if(!vmDoGlobalDefine())
                        ^
-main.cpp:22029:24: style: Condition '!vmDoLocalGet()' is always false [knownConditionTrueFalse]
+main.cpp:21906:24: style: Condition '!vmDoLocalGet()' is always false [knownConditionTrueFalse]
                     if(!vmDoLocalGet())
                        ^
-main.cpp:22029:37: note: Calling function 'vmDoLocalGet' returns 1
+main.cpp:21906:37: note: Calling function 'vmDoLocalGet' returns 1
                     if(!vmDoLocalGet())
                                     ^
-main.cpp:22029:24: note: Condition '!vmDoLocalGet()' is always false
+main.cpp:21906:24: note: Condition '!vmDoLocalGet()' is always false
                     if(!vmDoLocalGet())
                        ^
-main.cpp:22037:24: style: Condition '!vmDoLocalSet()' is always false [knownConditionTrueFalse]
+main.cpp:21914:24: style: Condition '!vmDoLocalSet()' is always false [knownConditionTrueFalse]
                     if(!vmDoLocalSet())
                        ^
-main.cpp:22037:37: note: Calling function 'vmDoLocalSet' returns 1
+main.cpp:21914:37: note: Calling function 'vmDoLocalSet' returns 1
                     if(!vmDoLocalSet())
                                     ^
-main.cpp:22037:24: note: Condition '!vmDoLocalSet()' is always false
+main.cpp:21914:24: note: Condition '!vmDoLocalSet()' is always false
                     if(!vmDoLocalSet())
                        ^
-main.cpp:22045:24: style: Condition '!vmDoFuncArgGet()' is always false [knownConditionTrueFalse]
+main.cpp:21922:24: style: Condition '!vmDoFuncArgGet()' is always false [knownConditionTrueFalse]
                     if(!vmDoFuncArgGet())
                        ^
-main.cpp:22045:39: note: Calling function 'vmDoFuncArgGet' returns 1
+main.cpp:21922:39: note: Calling function 'vmDoFuncArgGet' returns 1
                     if(!vmDoFuncArgGet())
                                       ^
-main.cpp:22045:24: note: Condition '!vmDoFuncArgGet()' is always false
+main.cpp:21922:24: note: Condition '!vmDoFuncArgGet()' is always false
                     if(!vmDoFuncArgGet())
                        ^
-main.cpp:22053:24: style: Condition '!vmDoFuncArgOptional()' is always false [knownConditionTrueFalse]
+main.cpp:21930:24: style: Condition '!vmDoFuncArgOptional()' is always false [knownConditionTrueFalse]
                     if(!vmDoFuncArgOptional())
                        ^
-main.cpp:22053:44: note: Calling function 'vmDoFuncArgOptional' returns 1
+main.cpp:21930:44: note: Calling function 'vmDoFuncArgOptional' returns 1
                     if(!vmDoFuncArgOptional())
                                            ^
-main.cpp:22053:24: note: Condition '!vmDoFuncArgOptional()' is always false
+main.cpp:21930:24: note: Condition '!vmDoFuncArgOptional()' is always false
                     if(!vmDoFuncArgOptional())
                        ^
-main.cpp:22061:24: style: Condition '!vmDoFuncArgSet()' is always false [knownConditionTrueFalse]
+main.cpp:21938:24: style: Condition '!vmDoFuncArgSet()' is always false [knownConditionTrueFalse]
                     if(!vmDoFuncArgSet())
                        ^
-main.cpp:22061:39: note: Calling function 'vmDoFuncArgSet' returns 1
+main.cpp:21938:39: note: Calling function 'vmDoFuncArgSet' returns 1
                     if(!vmDoFuncArgSet())
                                       ^
-main.cpp:22061:24: note: Condition '!vmDoFuncArgSet()' is always false
+main.cpp:21938:24: note: Condition '!vmDoFuncArgSet()' is always false
                     if(!vmDoFuncArgSet())
                        ^
-main.cpp:22094:24: style: Condition '!vmDoMakeClosure()' is always false [knownConditionTrueFalse]
+main.cpp:21971:24: style: Condition '!vmDoMakeClosure()' is always false [knownConditionTrueFalse]
                     if(!vmDoMakeClosure())
                        ^
-main.cpp:22094:40: note: Calling function 'vmDoMakeClosure' returns 1
+main.cpp:21971:40: note: Calling function 'vmDoMakeClosure' returns 1
                     if(!vmDoMakeClosure())
                                        ^
-main.cpp:22094:24: note: Condition '!vmDoMakeClosure()' is always false
+main.cpp:21971:24: note: Condition '!vmDoMakeClosure()' is always false
                     if(!vmDoMakeClosure())
                        ^
-main.cpp:22299:24: style: Condition '!vmDoMakeArray()' is always false [knownConditionTrueFalse]
+main.cpp:22176:24: style: Condition '!vmDoMakeArray()' is always false [knownConditionTrueFalse]
                     if(!vmDoMakeArray())
                        ^
-main.cpp:22299:38: note: Calling function 'vmDoMakeArray' returns 1
+main.cpp:22176:38: note: Calling function 'vmDoMakeArray' returns 1
                     if(!vmDoMakeArray())
                                      ^
-main.cpp:22299:24: note: Condition '!vmDoMakeArray()' is always false
+main.cpp:22176:24: note: Condition '!vmDoMakeArray()' is always false
                     if(!vmDoMakeArray())
                        ^
-main.cpp:22567:12: style: Condition '!SharedState::init()' is always false [knownConditionTrueFalse]
+main.cpp:22444:12: style: Condition '!SharedState::init()' is always false [knownConditionTrueFalse]
         if(!SharedState::init())
            ^
-main.cpp:5696:34: note: Calling function 'defVarsFor' returns 1
+main.cpp:5697:34: note: Calling function 'defVarsFor' returns 1
                 return defVarsFor(SharedState::m_myself);
                                  ^
-main.cpp:22567:30: note: Calling function 'init' returns 1
+main.cpp:22444:30: note: Calling function 'init' returns 1
         if(!SharedState::init())
                              ^
-main.cpp:22567:12: note: Condition '!SharedState::init()' is always false
+main.cpp:22444:12: note: Condition '!SharedState::init()' is always false
         if(!SharedState::init())
            ^
-main.cpp:22798:12: style: Condition '!ok' is always false [knownConditionTrueFalse]
+main.cpp:22680:12: style: Condition '!ok' is always false [knownConditionTrueFalse]
         if(!ok)
            ^
-main.cpp:22797:32: note: Calling function 'vmNestCallFunction' returns 1
+main.cpp:22679:32: note: Calling function 'vmNestCallFunction' returns 1
         ok = vmNestCallFunction(callme, Value::makeNull(), nullptr, 0, &retval, false);
                                ^
-main.cpp:22797:32: note: Assignment 'ok=vmNestCallFunction(callme,Value::makeNull(),nullptr,0,&retval,false)', assigned value is 1
+main.cpp:22679:32: note: Assignment 'ok=vmNestCallFunction(callme,Value::makeNull(),nullptr,0,&retval,false)', assigned value is 1
         ok = vmNestCallFunction(callme, Value::makeNull(), nullptr, 0, &retval, false);
                                ^
-main.cpp:22798:12: note: Condition '!ok' is always false
+main.cpp:22680:12: note: Condition '!ok' is always false
         if(!ok)
            ^
 main.cpp:1856:38: style: Condition 'findmelen>0' is always true [knownConditionTrueFalse]
@@ -453,7 +447,7 @@ main.cpp:1848:84: note: Assuming that condition 'findmelen==0' is not redundant
 main.cpp:1856:38: note: Condition 'findmelen>0' is always true
                         if(findmelen > 0)
                                      ^
-main.cpp:5752:21: portability: %zd in format string (no. 1) requires 'ssize_t' but the argument type is 'size_t {aka unsigned long}'. [invalidPrintfArgType_sint]
+main.cpp:5753:21: portability: %zd in format string (no. 1) requires 'ssize_t' but the argument type is 'size_t {aka unsigned long}'. [invalidPrintfArgType_sint]
                     fprintf(stderr, "fatal error: failed to allocate %zd bytes\n", newsize);
                     ^
 main.cpp:5144:21: portability: %zd in format string (no. 1) requires 'ssize_t' but the argument type is 'size_t {aka unsigned long}'. [invalidPrintfArgType_sint]
@@ -480,22 +474,22 @@ main.cpp:1763:25: portability: %zd in format string (no. 1) requires 'ssize_t' b
 main.cpp:1763:25: portability: %zd in format string (no. 2) requires 'ssize_t' but the argument type is 'size_t {aka unsigned long}'. [invalidPrintfArgType_sint]
                         fprintf(stderr, "StrBufBasic:Error: failed to resize [requested %zd bytes; capacity: %zd bytes]\n", size, m_capacity);
                         ^
-main.cpp:7528:24: warning: Either the condition 'buf!=nullptr' is redundant or there is possible null pointer dereference: buf. [nullPointerRedundantCheck]
+main.cpp:7516:24: warning: Either the condition 'buf!=nullptr' is redundant or there is possible null pointer dereference: buf. [nullPointerRedundantCheck]
                 memset(buf, 0, toldlen + 1);
                        ^
-main.cpp:7529:24: note: Assuming that condition 'buf!=nullptr' is not redundant
+main.cpp:7517:24: note: Assuming that condition 'buf!=nullptr' is not redundant
                 if(buf != nullptr)
                        ^
-main.cpp:7528:24: note: Null pointer dereference
+main.cpp:7516:24: note: Null pointer dereference
                 memset(buf, 0, toldlen + 1);
                        ^
-main.cpp:17015:27: warning: Either the condition 'buffer!=nullptr' is redundant or there is possible null pointer dereference: buffer. [nullPointerRedundantCheck]
+main.cpp:16896:27: warning: Either the condition 'buffer!=nullptr' is redundant or there is possible null pointer dereference: buffer. [nullPointerRedundantCheck]
         bytesread = fread(buffer, sizeof(char), length, file->m_handle);
                           ^
-main.cpp:17020:19: note: Assuming that condition 'buffer!=nullptr' is not redundant
+main.cpp:16901:19: note: Assuming that condition 'buffer!=nullptr' is not redundant
         if(buffer != nullptr)
                   ^
-main.cpp:17015:27: note: Null pointer dereference
+main.cpp:16896:27: note: Null pointer dereference
         bytesread = fread(buffer, sizeof(char), length, file->m_handle);
                           ^
 allocator.h:342:32: error: Pointer addition with NULL pointer. [nullPointerArithmetic]
@@ -786,250 +780,250 @@ main.cpp:4607:25: style: C-style pointer casting [cstyleCast]
 main.cpp:4612:25: style: C-style pointer casting [cstyleCast]
                 return ((Dict*)asObject());
                         ^
-main.cpp:6819:23: style: C-style pointer casting [cstyleCast]
+main.cpp:6821:23: style: C-style pointer casting [cstyleCast]
                 raw = (char*)Memory::sysMalloc(sizeof(char) * asz);
                       ^
-main.cpp:6966:30: style: C-style pointer casting [cstyleCast]
+main.cpp:6968:30: style: C-style pointer casting [cstyleCast]
                     upvals = (Upvalue**)SharedState::gcAllocate(sizeof(Upvalue*), innerfn->m_upvalcount + 1, false);
                              ^
-main.cpp:7397:36: style: C-style pointer casting [cstyleCast]
+main.cpp:7399:36: style: C-style pointer casting [cstyleCast]
                 Object::markObject((Object*)instance->m_instanceclass);
                                    ^
-main.cpp:7527:23: style: C-style pointer casting [cstyleCast]
+main.cpp:7515:23: style: C-style pointer casting [cstyleCast]
                 buf = (char*)Memory::sysMalloc(sizeof(char) * (toldlen + 1));
                       ^
-main.cpp:7636:31: style: C-style pointer casting [cstyleCast]
+main.cpp:7624:31: style: C-style pointer casting [cstyleCast]
                     heapbuf = (char*)Memory::sysRealloc(*lineptr, kInitialStrBufSize);
                               ^
-main.cpp:7677:36: style: C-style pointer casting [cstyleCast]
+main.cpp:7665:36: style: C-style pointer casting [cstyleCast]
                 Object::markObject((Object*)file->m_mode);
                                    ^
-main.cpp:7678:36: style: C-style pointer casting [cstyleCast]
+main.cpp:7666:36: style: C-style pointer casting [cstyleCast]
                 Object::markObject((Object*)file->m_path);
                                    ^
-main.cpp:7749:30: style: C-style pointer casting [cstyleCast]
+main.cpp:7737:30: style: C-style pointer casting [cstyleCast]
                 dest->data = (char*)Memory::sysMalloc(sizeof(char) * (readhowmuch + 1));
                              ^
-main.cpp:8295:99: style: C-style pointer casting [cstyleCast]
+main.cpp:8206:99: style: C-style pointer casting [cstyleCast]
                             pr->format("<function %s(native) at %p>", native->m_funcname->data(), (void*)native);
                                                                                                   ^
-main.cpp:8331:50: style: C-style pointer casting [cstyleCast]
+main.cpp:8242:50: style: C-style pointer casting [cstyleCast]
                     pr->format("<script at %p>", (void*)func);
                                                  ^
-main.cpp:8337:127: style: C-style pointer casting [cstyleCast]
+main.cpp:8248:127: style: C-style pointer casting [cstyleCast]
                         pr->format("<function %s(%d...) at %p>", func->m_funcname->data(), func->m_fnvals.fnscriptfunc.arity, (void*)func);
                                                                                                                               ^
-main.cpp:8341:124: style: C-style pointer casting [cstyleCast]
+main.cpp:8252:124: style: C-style pointer casting [cstyleCast]
                         pr->format("<function %s(%d) at %p>", func->m_funcname->data(), func->m_fnvals.fnscriptfunc.arity, (void*)func);
                                                                                                                            ^
-main.cpp:8461:102: style: C-style pointer casting [cstyleCast]
+main.cpp:8372:102: style: C-style pointer casting [cstyleCast]
                 pr->format("<instance of %s at %p>", instance->m_instanceclass->m_classname->data(), (void*)instance);
                                                                                                      ^
-main.cpp:8568:80: style: C-style pointer casting [cstyleCast]
+main.cpp:8456:80: style: C-style pointer casting [cstyleCast]
                     pr->format("<class %s at %p>", klass->m_classname->data(), (void*)klass);
                                                                                ^
-main.cpp:9090:23: style: C-style pointer casting [cstyleCast]
+main.cpp:8978:23: style: C-style pointer casting [cstyleCast]
                 buf = (char*)Memory::sysMalloc(sizeof(char) * 1024);
                       ^
-main.cpp:11688:33: style: C-style pointer casting [cstyleCast]
+main.cpp:11576:33: style: C-style pointer casting [cstyleCast]
                         cvals = (Value*)m_currentfunccompiler->m_targetfunc->m_fnvals.fnscriptfunc.blob->m_constants.data();
                                 ^
-main.cpp:12006:27: style: C-style pointer casting [cstyleCast]
+main.cpp:11894:27: style: C-style pointer casting [cstyleCast]
                 deststr = (char*)Memory::sysMalloc(sizeof(char) * rawlen);
                           ^
-main.cpp:12008:27: style: C-style pointer casting [cstyleCast]
+main.cpp:11896:27: style: C-style pointer casting [cstyleCast]
                 realstr = (char*)m_prevtoken.m_start + 1;
                           ^
-main.cpp:13483:16: style: C-style pointer casting [cstyleCast]
+main.cpp:13363:16: style: C-style pointer casting [cstyleCast]
         arra = (Array*)oa;
                ^
-main.cpp:13484:16: style: C-style pointer casting [cstyleCast]
+main.cpp:13364:16: style: C-style pointer casting [cstyleCast]
         arrb = (Array*)ob;
                ^
-main.cpp:13508:16: style: C-style pointer casting [cstyleCast]
+main.cpp:13388:16: style: C-style pointer casting [cstyleCast]
         stra = (String*)oa;
                ^
-main.cpp:13509:16: style: C-style pointer casting [cstyleCast]
+main.cpp:13389:16: style: C-style pointer casting [cstyleCast]
         strb = (String*)ob;
                ^
-main.cpp:13531:17: style: C-style pointer casting [cstyleCast]
+main.cpp:13411:17: style: C-style pointer casting [cstyleCast]
         dicta = (Dict*)oa;
                 ^
-main.cpp:13532:17: style: C-style pointer casting [cstyleCast]
+main.cpp:13412:17: style: C-style pointer casting [cstyleCast]
         dictb = (Dict*)ob;
                 ^
-main.cpp:13791:36: style: C-style pointer casting [cstyleCast]
+main.cpp:13671:36: style: C-style pointer casting [cstyleCast]
                         sortValues((Value*)values[i].asArray()->data(), values[i].asArray()->count());
                                    ^
-main.cpp:13796:36: style: C-style pointer casting [cstyleCast]
+main.cpp:13676:36: style: C-style pointer casting [cstyleCast]
                         sortValues((Value*)values[j].asArray()->data(), values[j].asArray()->count());
                                    ^
-main.cpp:13864:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13744:40: style: C-style pointer casting [cstyleCast]
             gcs->m_gcstate.graystack = (Object**)Memory::sysRealloc(gcs->m_gcstate.graystack, sizeof(Object*) * gcs->m_gcstate.graycapacity);
                                        ^
-main.cpp:13892:30: style: C-style pointer casting [cstyleCast]
+main.cpp:13772:30: style: C-style pointer casting [cstyleCast]
                     module = (Module*)object;
                              ^
-main.cpp:13899:26: style: C-style pointer casting [cstyleCast]
+main.cpp:13779:26: style: C-style pointer casting [cstyleCast]
                     sw = (Switch*)object;
                          ^
-main.cpp:13906:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13786:28: style: C-style pointer casting [cstyleCast]
                     file = (File*)object;
                            ^
-main.cpp:13913:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13793:28: style: C-style pointer casting [cstyleCast]
                     dict = (Dict*)object;
                            ^
-main.cpp:13920:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13800:28: style: C-style pointer casting [cstyleCast]
                     list = (Array*)object;
                            ^
-main.cpp:13927:29: style: C-style pointer casting [cstyleCast]
+main.cpp:13807:29: style: C-style pointer casting [cstyleCast]
                     bound = (Function*)object;
                             ^
-main.cpp:13929:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13809:40: style: C-style pointer casting [cstyleCast]
                     Object::markObject((Object*)bound->m_fnvals.fnmethod.method);
                                        ^
-main.cpp:13935:29: style: C-style pointer casting [cstyleCast]
+main.cpp:13815:29: style: C-style pointer casting [cstyleCast]
                     klass = (Class*)object;
                             ^
-main.cpp:13936:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13816:40: style: C-style pointer casting [cstyleCast]
                     Object::markObject((Object*)klass->m_classname);
                                        ^
-main.cpp:13944:44: style: C-style pointer casting [cstyleCast]
+main.cpp:13824:44: style: C-style pointer casting [cstyleCast]
                         Object::markObject((Object*)klass->m_superclass);
                                            ^
-main.cpp:13952:31: style: C-style pointer casting [cstyleCast]
+main.cpp:13832:31: style: C-style pointer casting [cstyleCast]
                     closure = (Function*)object;
                               ^
-main.cpp:13953:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13833:40: style: C-style pointer casting [cstyleCast]
                     Object::markObject((Object*)closure->m_fnvals.fnclosure.scriptfunc);
                                        ^
-main.cpp:13956:44: style: C-style pointer casting [cstyleCast]
+main.cpp:13836:44: style: C-style pointer casting [cstyleCast]
                         Object::markObject((Object*)closure->m_fnvals.fnclosure.m_upvalues[i]);
                                            ^
-main.cpp:13963:32: style: C-style pointer casting [cstyleCast]
+main.cpp:13843:32: style: C-style pointer casting [cstyleCast]
                     function = (Function*)object;
                                ^
-main.cpp:13964:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13844:40: style: C-style pointer casting [cstyleCast]
                     Object::markObject((Object*)function->m_funcname);
                                        ^
-main.cpp:13965:40: style: C-style pointer casting [cstyleCast]
+main.cpp:13845:40: style: C-style pointer casting [cstyleCast]
                     Object::markObject((Object*)function->m_fnvals.fnscriptfunc.module);
                                        ^
-main.cpp:13972:32: style: C-style pointer casting [cstyleCast]
+main.cpp:13852:32: style: C-style pointer casting [cstyleCast]
                     instance = (Instance*)object;
                                ^
-main.cpp:13978:32: style: C-style pointer casting [cstyleCast]
+main.cpp:13858:32: style: C-style pointer casting [cstyleCast]
                     auto upv = (Upvalue*)object;
                                ^
-main.cpp:14002:26: style: C-style pointer casting [cstyleCast]
+main.cpp:13882:26: style: C-style pointer casting [cstyleCast]
                 module = (Module*)object;
                          ^
-main.cpp:14010:24: style: C-style pointer casting [cstyleCast]
+main.cpp:13890:24: style: C-style pointer casting [cstyleCast]
                 file = (File*)object;
                        ^
-main.cpp:14018:24: style: C-style pointer casting [cstyleCast]
+main.cpp:13898:24: style: C-style pointer casting [cstyleCast]
                 dict = (Dict*)object;
                        ^
-main.cpp:14026:24: style: C-style pointer casting [cstyleCast]
+main.cpp:13906:24: style: C-style pointer casting [cstyleCast]
                 list = (Array*)object;
                        ^
-main.cpp:14037:27: style: C-style pointer casting [cstyleCast]
+main.cpp:13917:27: style: C-style pointer casting [cstyleCast]
                 auto fn = (Function*)object;
                           ^
-main.cpp:14044:25: style: C-style pointer casting [cstyleCast]
+main.cpp:13924:25: style: C-style pointer casting [cstyleCast]
                 klass = (Class*)object;
                         ^
-main.cpp:14051:27: style: C-style pointer casting [cstyleCast]
+main.cpp:13931:27: style: C-style pointer casting [cstyleCast]
                 closure = (Function*)object;
                           ^
-main.cpp:14063:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13943:28: style: C-style pointer casting [cstyleCast]
                 function = (Function*)object;
                            ^
-main.cpp:14071:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13951:28: style: C-style pointer casting [cstyleCast]
                 instance = (Instance*)object;
                            ^
-main.cpp:14077:27: style: C-style pointer casting [cstyleCast]
+main.cpp:13957:27: style: C-style pointer casting [cstyleCast]
                 auto fn = (Function*)object;
                           ^
-main.cpp:14083:28: style: C-style pointer casting [cstyleCast]
+main.cpp:13963:28: style: C-style pointer casting [cstyleCast]
                 auto upv = (Upvalue*)object;
                            ^
-main.cpp:14089:27: style: C-style pointer casting [cstyleCast]
+main.cpp:13969:27: style: C-style pointer casting [cstyleCast]
                 auto rn = (Range*)object;
                           ^
-main.cpp:14096:26: style: C-style pointer casting [cstyleCast]
+main.cpp:13976:26: style: C-style pointer casting [cstyleCast]
                 string = (String*)object;
                          ^
-main.cpp:14104:22: style: C-style pointer casting [cstyleCast]
+main.cpp:13984:22: style: C-style pointer casting [cstyleCast]
                 sw = (Switch*)object;
                      ^
-main.cpp:14112:23: style: C-style pointer casting [cstyleCast]
+main.cpp:13992:23: style: C-style pointer casting [cstyleCast]
                 ptr = (Userdata*)object;
                       ^
-main.cpp:14139:32: style: C-style pointer casting [cstyleCast]
+main.cpp:14019:32: style: C-style pointer casting [cstyleCast]
             Object::markObject((Object*)m_vmstate.framevalues[i].closure);
                                ^
-main.cpp:14147:32: style: C-style pointer casting [cstyleCast]
+main.cpp:14027:32: style: C-style pointer casting [cstyleCast]
             Object::markObject((Object*)upvalue);
                                ^
-main.cpp:14230:19: style: C-style pointer casting [cstyleCast]
+main.cpp:14110:19: style: C-style pointer casting [cstyleCast]
         message = (char*)Memory::sysMalloc(kMaxBufSize + 1);
                   ^
-main.cpp:15097:16: style: C-style pointer casting [cstyleCast]
+main.cpp:14978:16: style: C-style pointer casting [cstyleCast]
         list = (Value*)selfarr->data();
                ^
-main.cpp:15378:27: style: C-style pointer casting [cstyleCast]
+main.cpp:15259:27: style: C-style pointer casting [cstyleCast]
         Value::sortValues((Value*)list->data(), list->count());
                           ^
-main.cpp:15566:19: style: C-style pointer casting [cstyleCast]
+main.cpp:15447:19: style: C-style pointer casting [cstyleCast]
         arglist = (Array**)SharedState::gcAllocate(sizeof(Array*), scfn.argc, false);
                   ^
-main.cpp:16137:19: style: C-style pointer casting [cstyleCast]
+main.cpp:16018:19: style: C-style pointer casting [cstyleCast]
         newdict = (Dict*)SharedState::gcProtect(Dict::make());
                   ^
-main.cpp:17010:18: style: C-style pointer casting [cstyleCast]
+main.cpp:16891:18: style: C-style pointer casting [cstyleCast]
         buffer = (char*)Memory::sysMalloc(sizeof(char) * (length + 1));
                  ^
-main.cpp:17039:16: style: C-style pointer casting [cstyleCast]
+main.cpp:16920:16: style: C-style pointer casting [cstyleCast]
         data = (unsigned char*)string->data();
                ^
-main.cpp:17116:20: style: C-style pointer casting [cstyleCast]
+main.cpp:16997:20: style: C-style pointer casting [cstyleCast]
             data = (unsigned char*)string->data();
                    ^
-main.cpp:18109:33: style: C-style pointer casting [cstyleCast]
+main.cpp:17990:33: style: C-style pointer casting [cstyleCast]
         res = Util::utf8Decode((const uint8_t*)instr->data(), instr->length());
                                 ^
-main.cpp:18622:22: style: C-style pointer casting [cstyleCast]
+main.cpp:18503:22: style: C-style pointer casting [cstyleCast]
             result = (char*)strstr(haystack + startindex, needle->data());
                      ^
-main.cpp:18810:16: style: C-style pointer casting [cstyleCast]
+main.cpp:18691:16: style: C-style pointer casting [cstyleCast]
         fill = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)fillsize + 1));
                ^
-main.cpp:18816:15: style: C-style pointer casting [cstyleCast]
+main.cpp:18697:15: style: C-style pointer casting [cstyleCast]
         str = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)finalsize + 1));
               ^
-main.cpp:18854:16: style: C-style pointer casting [cstyleCast]
+main.cpp:18735:16: style: C-style pointer casting [cstyleCast]
         fill = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)fillsize + 1));
                ^
-main.cpp:18860:15: style: C-style pointer casting [cstyleCast]
+main.cpp:18741:15: style: C-style pointer casting [cstyleCast]
         str = (char*)Memory::sysMalloc(sizeof(char) * ((size_t)finalsize + 1));
               ^
-main.cpp:19156:35: style: C-style pointer casting [cstyleCast]
+main.cpp:19037:35: style: C-style pointer casting [cstyleCast]
         return Value::makeNumber(*(long*)&val);
                                   ^
-main.cpp:22521:25: style: C-style pointer casting [cstyleCast]
+main.cpp:22398:25: style: C-style pointer casting [cstyleCast]
                 pathp = (char*)".";
                         ^
-main.cpp:22762:14: style: C-style pointer casting [cstyleCast]
+main.cpp:22639:14: style: C-style pointer casting [cstyleCast]
         rp = (char*)filename;
              ^
-main.cpp:23318:30: style: C-style pointer casting [cstyleCast]
+main.cpp:23188:30: style: C-style pointer casting [cstyleCast]
     char* realargv[1024] = { (char*)"a.out", (char*)deffile, nullptr };
                              ^
-main.cpp:7367:28: style: C-style pointer casting [cstyleCast]
+main.cpp:7369:28: style: C-style pointer casting [cstyleCast]
                 instance = (Instance*)SharedState::gcMakeObject<InputT>(Object::OTYP_INSTANCE, false);
                            ^
-main.cpp:5726:29: style: C-style pointer casting [cstyleCast]
+main.cpp:5727:29: style: C-style pointer casting [cstyleCast]
                 auto temp = (InputT*)SharedState::gcAllocate(size, 1, retain);
                             ^
 main.cpp:5141:27: style: C-style pointer casting [cstyleCast]
@@ -1086,67 +1080,67 @@ main.cpp:3847:30: note: pr->m_wrmode is assigned
 main.cpp:3855:30: note: pr->m_wrmode is overwritten
                 pr->m_wrmode = mode;
                              ^
-main.cpp:6813:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:6815:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
                 len = (end - start);
                     ^
-main.cpp:6798:21: note: len is assigned
+main.cpp:6800:21: note: len is assigned
                 len = maxlen;
                     ^
-main.cpp:6813:21: note: len is overwritten
+main.cpp:6815:21: note: len is overwritten
                 len = (end - start);
                     ^
-main.cpp:6813:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:6815:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
                 len = (end - start);
                     ^
-main.cpp:6804:25: note: len is assigned
+main.cpp:6806:25: note: len is assigned
                     len = maxlen;
                         ^
-main.cpp:6813:21: note: len is overwritten
+main.cpp:6815:21: note: len is overwritten
                 len = (end - start);
                     ^
-main.cpp:6813:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:6815:21: style: Variable 'len' is reassigned a value before the old one has been used. [redundantAssignment]
                 len = (end - start);
                     ^
-main.cpp:6811:25: note: len is assigned
+main.cpp:6813:25: note: len is assigned
                     len = end;
                         ^
-main.cpp:6813:21: note: len is overwritten
+main.cpp:6815:21: note: len is overwritten
                 len = (end - start);
                     ^
-main.cpp:9061:29: style: Variable 'm_sourceptr' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:8949:29: style: Variable 'm_sourceptr' is reassigned a value before the old one has been used. [redundantAssignment]
                 m_sourceptr = m_start;
                             ^
-main.cpp:9059:29: note: m_sourceptr is assigned
+main.cpp:8947:29: note: m_sourceptr is assigned
                 m_sourceptr = source;
                             ^
-main.cpp:9061:29: note: m_sourceptr is overwritten
+main.cpp:8949:29: note: m_sourceptr is overwritten
                 m_sourceptr = m_start;
                             ^
-main.cpp:13058:26: style: Variable 'type' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:12946:26: style: Variable 'type' is reassigned a value before the old one has been used. [redundantAssignment]
                     type = makeidentconst(&m_prevtoken);
                          ^
-main.cpp:13045:22: note: type is assigned
+main.cpp:12933:22: note: type is assigned
                 type = -1;
                      ^
-main.cpp:13058:26: note: type is overwritten
+main.cpp:12946:26: note: type is overwritten
                     type = makeidentconst(&m_prevtoken);
                          ^
-main.cpp:15998:15: style: Variable 'i' is reassigned a value before the old one has been used. [redundantAssignment]
+main.cpp:15879:15: style: Variable 'i' is reassigned a value before the old one has been used. [redundantAssignment]
         for(i = ibegin; i != iend; i++)
               ^
-main.cpp:15987:15: note: i is assigned
+main.cpp:15868:15: note: i is assigned
             i = (end - start);
               ^
-main.cpp:15998:15: note: i is overwritten
+main.cpp:15879:15: note: i is overwritten
         for(i = ibegin; i != iend; i++)
               ^
 allocator.h:693:7: style: Opposite expression on both sides of '&='. [oppositeExpression]
     x &= -x;
       ^
-main.cpp:15927:39: style: Same expression on both sides of '&&'. [duplicateExpression]
+main.cpp:15808:39: style: Same expression on both sides of '&&'. [duplicateExpression]
             if(!list->get(i).isNull() && !list->get(i).isNull())
                                       ^
-main.cpp:8112:17: style: Statements following 'return' will never be executed. [unreachableCode]
+main.cpp:8023:17: style: Statements following 'return' will never be executed. [unreachableCode]
                 m_deftable.set(Value::fromObject(String::intern("__file__")), Value::fromObject(String::copyObject(m_physicalpath)));
                 ^
 main.cpp:1642:17: style: Statements following noreturn function 'abort()' will never be executed. [unreachableCode]
@@ -1278,355 +1272,355 @@ main.cpp:4312:29: style: The scope of the variable 'buf' can be reduced. [variab
 main.cpp:5516:32: style: The scope of the variable 'slen' can be reduced. [variableScope]
                         size_t slen;
                                ^
-main.cpp:5815:25: style: The scope of the variable 'object' can be reduced. [variableScope]
+main.cpp:5816:25: style: The scope of the variable 'object' can be reduced. [variableScope]
                 Object* object;
                         ^
-main.cpp:6228:24: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:6230:24: style: The scope of the variable 'i' can be reduced. [variableScope]
                 size_t i;
                        ^
-main.cpp:6230:24: style: The scope of the variable 'status' can be reduced. [variableScope]
+main.cpp:6232:24: style: The scope of the variable 'status' can be reduced. [variableScope]
                 Status status;
                        ^
-main.cpp:6280:24: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:6282:24: style: The scope of the variable 'i' can be reduced. [variableScope]
                 size_t i;
                        ^
-main.cpp:6424:27: style: The scope of the variable 'field' can be reduced. [variableScope]
+main.cpp:6426:27: style: The scope of the variable 'field' can be reduced. [variableScope]
                 Property* field;
                           ^
-main.cpp:6449:21: style: The scope of the variable 'rem' can be reduced. [variableScope]
+main.cpp:6451:21: style: The scope of the variable 'rem' can be reduced. [variableScope]
                 int rem;
                     ^
-main.cpp:6537:25: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:6539:25: style: The scope of the variable 'i' can be reduced. [variableScope]
                 int64_t i;
                         ^
-main.cpp:6538:25: style: The scope of the variable 'mtstart' can be reduced. [variableScope]
+main.cpp:6540:25: style: The scope of the variable 'mtstart' can be reduced. [variableScope]
                 int64_t mtstart;
                         ^
-main.cpp:6539:25: style: The scope of the variable 'mtlength' can be reduced. [variableScope]
+main.cpp:6541:25: style: The scope of the variable 'mtlength' can be reduced. [variableScope]
                 int64_t mtlength;
                         ^
-main.cpp:6541:25: style: The scope of the variable 'cpres' can be reduced. [variableScope]
+main.cpp:6543:25: style: The scope of the variable 'cpres' can be reduced. [variableScope]
                 int64_t cpres;
                         ^
-main.cpp:6551:25: style: The scope of the variable 'rstr' can be reduced. [variableScope]
+main.cpp:6553:25: style: The scope of the variable 'rstr' can be reduced. [variableScope]
                 String* rstr;
                         ^
-main.cpp:6552:24: style: The scope of the variable 'oa' can be reduced. [variableScope]
+main.cpp:6554:24: style: The scope of the variable 'oa' can be reduced. [variableScope]
                 Array* oa;
                        ^
-main.cpp:6553:23: style: The scope of the variable 'dm' can be reduced. [variableScope]
+main.cpp:6555:23: style: The scope of the variable 'dm' can be reduced. [variableScope]
                 Dict* dm;
                       ^
-main.cpp:6960:21: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:6962:21: style: The scope of the variable 'i' can be reduced. [variableScope]
                 int i;
                     ^
-main.cpp:7017:24: style: The scope of the variable 'klen' can be reduced. [variableScope]
+main.cpp:7019:24: style: The scope of the variable 'klen' can be reduced. [variableScope]
                 size_t klen;
                        ^
-main.cpp:7018:24: style: The scope of the variable 'elen' can be reduced. [variableScope]
+main.cpp:7020:24: style: The scope of the variable 'elen' can be reduced. [variableScope]
                 size_t elen;
                        ^
-main.cpp:7019:29: style: The scope of the variable 'kname' can be reduced. [variableScope]
+main.cpp:7021:29: style: The scope of the variable 'kname' can be reduced. [variableScope]
                 const char* kname;
                             ^
-main.cpp:7020:29: style: The scope of the variable 'ename' can be reduced. [variableScope]
+main.cpp:7022:29: style: The scope of the variable 'ename' can be reduced. [variableScope]
                 const char* ename;
                             ^
-main.cpp:7042:21: style: The scope of the variable 'messageconst' can be reduced. [variableScope]
+main.cpp:7044:21: style: The scope of the variable 'messageconst' can be reduced. [variableScope]
                 int messageconst;
                     ^
-main.cpp:7346:26: style: The scope of the variable 'rawfn' can be reduced. [variableScope]
+main.cpp:7348:26: style: The scope of the variable 'rawfn' can be reduced. [variableScope]
                 NativeFN rawfn;
                          ^
-main.cpp:7347:25: style: The scope of the variable 'osname' can be reduced. [variableScope]
+main.cpp:7349:25: style: The scope of the variable 'osname' can be reduced. [variableScope]
                 String* osname;
                         ^
-main.cpp:7505:24: style: The scope of the variable 'actuallen' can be reduced. [variableScope]
+main.cpp:7493:24: style: The scope of the variable 'actuallen' can be reduced. [variableScope]
                 size_t actuallen;
                        ^
-main.cpp:7571:21: style: The scope of the variable 'c' can be reduced. [variableScope]
+main.cpp:7559:21: style: The scope of the variable 'c' can be reduced. [variableScope]
                 int c;
                     ^
-main.cpp:7769:21: style: The scope of the variable 'result' can be reduced. [variableScope]
+main.cpp:7757:21: style: The scope of the variable 'result' can be reduced. [variableScope]
                 int result;
                     ^
-main.cpp:7940:25: style: The scope of the variable 'pitem' can be reduced. [variableScope]
+main.cpp:7865:25: style: The scope of the variable 'pitem' can be reduced. [variableScope]
                 String* pitem;
                         ^
-main.cpp:8350:22: style: The scope of the variable 'isrecur' can be reduced. [variableScope]
+main.cpp:8261:22: style: The scope of the variable 'isrecur' can be reduced. [variableScope]
                 bool isrecur;
                      ^
-main.cpp:8392:22: style: The scope of the variable 'keyisrecur' can be reduced. [variableScope]
+main.cpp:8303:22: style: The scope of the variable 'keyisrecur' can be reduced. [variableScope]
                 bool keyisrecur;
                      ^
-main.cpp:8393:22: style: The scope of the variable 'valisrecur' can be reduced. [variableScope]
+main.cpp:8304:22: style: The scope of the variable 'valisrecur' can be reduced. [variableScope]
                 bool valisrecur;
                      ^
-main.cpp:8517:22: style: The scope of the variable 'oldexp' can be reduced. [variableScope]
+main.cpp:8405:22: style: The scope of the variable 'oldexp' can be reduced. [variableScope]
                 bool oldexp;
                      ^
-main.cpp:8592:21: style: The scope of the variable 'ch' can be reduced. [variableScope]
+main.cpp:8480:21: style: The scope of the variable 'ch' can be reduced. [variableScope]
                 int ch;
                     ^
-main.cpp:8594:21: style: The scope of the variable 'nextch' can be reduced. [variableScope]
+main.cpp:8482:21: style: The scope of the variable 'nextch' can be reduced. [variableScope]
                 int nextch;
                     ^
-main.cpp:9396:24: style: The scope of the variable 'kwlen' can be reduced. [variableScope]
+main.cpp:9284:24: style: The scope of the variable 'kwlen' can be reduced. [variableScope]
                 size_t kwlen;
                        ^
-main.cpp:9397:24: style: The scope of the variable 'ofs' can be reduced. [variableScope]
+main.cpp:9285:24: style: The scope of the variable 'ofs' can be reduced. [variableScope]
                 size_t ofs;
                        ^
-main.cpp:9398:29: style: The scope of the variable 'kwtext' can be reduced. [variableScope]
+main.cpp:9286:29: style: The scope of the variable 'kwtext' can be reduced. [variableScope]
                 const char* kwtext;
                             ^
-main.cpp:9960:36: style: The scope of the variable 'upvalue' can be reduced. [variableScope]
+main.cpp:9848:36: style: The scope of the variable 'upvalue' can be reduced. [variableScope]
                         UpvalInfo* upvalue;
                                    ^
-main.cpp:10157:25: style: The scope of the variable 'llval' can be reduced. [variableScope]
+main.cpp:10045:25: style: The scope of the variable 'llval' can be reduced. [variableScope]
                 int64_t llval;
                         ^
-main.cpp:10337:22: style: The scope of the variable 'caninvoke' can be reduced. [variableScope]
+main.cpp:10225:22: style: The scope of the variable 'caninvoke' can be reduced. [variableScope]
                 bool caninvoke;
                      ^
-main.cpp:10338:26: style: The scope of the variable 'argcount' can be reduced. [variableScope]
+main.cpp:10226:26: style: The scope of the variable 'argcount' can be reduced. [variableScope]
                 uint16_t argcount;
                          ^
-main.cpp:10405:22: style: The scope of the variable 'usedexpression' can be reduced. [variableScope]
+main.cpp:10293:22: style: The scope of the variable 'usedexpression' can be reduced. [variableScope]
                 bool usedexpression;
                      ^
-main.cpp:10545:26: style: The scope of the variable 'argcount' can be reduced. [variableScope]
+main.cpp:10433:26: style: The scope of the variable 'argcount' can be reduced. [variableScope]
                 uint16_t argcount;
                          ^
-main.cpp:10629:22: style: The scope of the variable 'doadd' can be reduced. [variableScope]
+main.cpp:10517:22: style: The scope of the variable 'doadd' can be reduced. [variableScope]
                 bool doadd;
                      ^
-main.cpp:10630:22: style: The scope of the variable 'stringmatched' can be reduced. [variableScope]
+main.cpp:10518:22: style: The scope of the variable 'stringmatched' can be reduced. [variableScope]
                 bool stringmatched;
                      ^
-main.cpp:11884:21: style: The scope of the variable 'local' can be reduced. [variableScope]
+main.cpp:11772:21: style: The scope of the variable 'local' can be reduced. [variableScope]
                 int local;
                     ^
-main.cpp:11928:24: style: The scope of the variable 'pos' can be reduced. [variableScope]
+main.cpp:11816:24: style: The scope of the variable 'pos' can be reduced. [variableScope]
                 size_t pos;
                        ^
-main.cpp:11930:21: style: The scope of the variable 'cval' can be reduced. [variableScope]
+main.cpp:11818:21: style: The scope of the variable 'cval' can be reduced. [variableScope]
                 int cval;
                     ^
-main.cpp:11959:23: style: The scope of the variable 'chr' can be reduced. [variableScope]
+main.cpp:11847:23: style: The scope of the variable 'chr' can be reduced. [variableScope]
                 char* chr;
                       ^
-main.cpp:12391:21: style: The scope of the variable 'fieldconstant' can be reduced. [variableScope]
+main.cpp:12279:21: style: The scope of the variable 'fieldconstant' can be reduced. [variableScope]
                 int fieldconstant;
                     ^
-main.cpp:12425:22: style: The scope of the variable 'isstatic' can be reduced. [variableScope]
+main.cpp:12313:22: style: The scope of the variable 'isstatic' can be reduced. [variableScope]
                 bool isstatic;
                      ^
-main.cpp:12530:21: style: The scope of the variable 'global' can be reduced. [variableScope]
+main.cpp:12418:21: style: The scope of the variable 'global' can be reduced. [variableScope]
                 int global;
                     ^
-main.cpp:12625:21: style: The scope of the variable 'bodyjump' can be reduced. [variableScope]
+main.cpp:12513:21: style: The scope of the variable 'bodyjump' can be reduced. [variableScope]
                 int bodyjump;
                     ^
-main.cpp:12626:21: style: The scope of the variable 'incrstart' can be reduced. [variableScope]
+main.cpp:12514:21: style: The scope of the variable 'incrstart' can be reduced. [variableScope]
                 int incrstart;
                     ^
-main.cpp:13525:19: style: The scope of the variable 'fielda' can be reduced. [variableScope]
+main.cpp:13405:19: style: The scope of the variable 'fielda' can be reduced. [variableScope]
         Property* fielda;
                   ^
-main.cpp:14249:13: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:14129:13: style: The scope of the variable 'i' can be reduced. [variableScope]
         int i;
             ^
-main.cpp:14570:21: style: The scope of the variable 'islocal' can be reduced. [variableScope]
+main.cpp:14450:21: style: The scope of the variable 'islocal' can be reduced. [variableScope]
                 int islocal;
                     ^
-main.cpp:14571:26: style: The scope of the variable 'index' can be reduced. [variableScope]
+main.cpp:14451:26: style: The scope of the variable 'index' can be reduced. [variableScope]
                 uint16_t index;
                          ^
-main.cpp:14573:29: style: The scope of the variable 'locn' can be reduced. [variableScope]
+main.cpp:14453:29: style: The scope of the variable 'locn' can be reduced. [variableScope]
                 const char* locn;
                             ^
-main.cpp:14792:13: style: The scope of the variable 'line' can be reduced. [variableScope]
+main.cpp:14672:13: style: The scope of the variable 'line' can be reduced. [variableScope]
         int line;
             ^
-main.cpp:14793:17: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:14673:17: style: The scope of the variable 'i' can be reduced. [variableScope]
         int64_t i;
                 ^
-main.cpp:14794:16: style: The scope of the variable 'instruction' can be reduced. [variableScope]
+main.cpp:14674:16: style: The scope of the variable 'instruction' can be reduced. [variableScope]
         size_t instruction;
                ^
-main.cpp:14795:21: style: The scope of the variable 'fnname' can be reduced. [variableScope]
+main.cpp:14675:21: style: The scope of the variable 'fnname' can be reduced. [variableScope]
         const char* fnname;
                     ^
-main.cpp:14796:21: style: The scope of the variable 'physfile' can be reduced. [variableScope]
+main.cpp:14676:21: style: The scope of the variable 'physfile' can be reduced. [variableScope]
         const char* physfile;
                     ^
-main.cpp:14799:17: style: The scope of the variable 'os' can be reduced. [variableScope]
+main.cpp:14679:17: style: The scope of the variable 'os' can be reduced. [variableScope]
         String* os;
                 ^
-main.cpp:14847:13: style: The scope of the variable 'cnt' can be reduced. [variableScope]
+main.cpp:14727:13: style: The scope of the variable 'cnt' can be reduced. [variableScope]
         int cnt;
             ^
-main.cpp:14858:17: style: The scope of the variable 'emsg' can be reduced. [variableScope]
+main.cpp:14738:17: style: The scope of the variable 'emsg' can be reduced. [variableScope]
         String* emsg;
                 ^
-main.cpp:15529:14: style: The scope of the variable 'found' can be reduced. [variableScope]
+main.cpp:15410:14: style: The scope of the variable 'found' can be reduced. [variableScope]
         bool found;
              ^
-main.cpp:15561:16: style: The scope of the variable 'alist' can be reduced. [variableScope]
+main.cpp:15442:16: style: The scope of the variable 'alist' can be reduced. [variableScope]
         Array* alist;
                ^
-main.cpp:15599:16: style: The scope of the variable 'alist' can be reduced. [variableScope]
+main.cpp:15480:16: style: The scope of the variable 'alist' can be reduced. [variableScope]
         Array* alist;
                ^
-main.cpp:15696:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15577:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:15730:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15611:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:15774:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15655:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:15817:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15698:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:15858:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15739:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:15899:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:15780:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16225:19: style: The scope of the variable 'field' can be reduced. [variableScope]
+main.cpp:16106:19: style: The scope of the variable 'field' can be reduced. [variableScope]
         Property* field;
                   ^
-main.cpp:16240:16: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:16121:16: style: The scope of the variable 'i' can be reduced. [variableScope]
         size_t i;
                ^
-main.cpp:16241:13: style: The scope of the variable 'index' can be reduced. [variableScope]
+main.cpp:16122:13: style: The scope of the variable 'index' can be reduced. [variableScope]
         int index;
             ^
-main.cpp:16358:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:16239:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16395:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:16276:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16439:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:16320:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16482:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:16363:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16524:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:16405:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:16953:14: style: The scope of the variable 'end' can be reduced. [variableScope]
+main.cpp:16834:14: style: The scope of the variable 'end' can be reduced. [variableScope]
         long end;
              ^
-main.cpp:16955:14: style: The scope of the variable 'currentpos' can be reduced. [variableScope]
+main.cpp:16836:14: style: The scope of the variable 'currentpos' can be reduced. [variableScope]
         long currentpos;
              ^
-main.cpp:17079:16: style: The scope of the variable 'count' can be reduced. [variableScope]
+main.cpp:16960:16: style: The scope of the variable 'count' can be reduced. [variableScope]
         size_t count;
                ^
-main.cpp:17081:13: style: The scope of the variable 'length' can be reduced. [variableScope]
+main.cpp:16962:13: style: The scope of the variable 'length' can be reduced. [variableScope]
         int length;
             ^
-main.cpp:17082:24: style: The scope of the variable 'data' can be reduced. [variableScope]
+main.cpp:16963:24: style: The scope of the variable 'data' can be reduced. [variableScope]
         unsigned char* data;
                        ^
-main.cpp:17715:16: style: The scope of the variable 'oclass' can be reduced. [variableScope]
+main.cpp:17596:16: style: The scope of the variable 'oclass' can be reduced. [variableScope]
         Class* oclass;
                ^
-main.cpp:17716:16: style: The scope of the variable 'selfclass' can be reduced. [variableScope]
+main.cpp:17597:16: style: The scope of the variable 'selfclass' can be reduced. [variableScope]
         Class* selfclass;
                ^
-main.cpp:17989:13: style: The scope of the variable 'val' can be reduced. [variableScope]
+main.cpp:17870:13: style: The scope of the variable 'val' can be reduced. [variableScope]
         int val;
             ^
-main.cpp:18604:15: style: The scope of the variable 'result' can be reduced. [variableScope]
+main.cpp:18485:15: style: The scope of the variable 'result' can be reduced. [variableScope]
         char* result;
               ^
-main.cpp:18738:16: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:18619:16: style: The scope of the variable 'i' can be reduced. [variableScope]
         size_t i;
                ^
-main.cpp:18739:16: style: The scope of the variable 'end' can be reduced. [variableScope]
+main.cpp:18620:16: style: The scope of the variable 'end' can be reduced. [variableScope]
         size_t end;
                ^
-main.cpp:18740:16: style: The scope of the variable 'start' can be reduced. [variableScope]
+main.cpp:18621:16: style: The scope of the variable 'start' can be reduced. [variableScope]
         size_t start;
                ^
-main.cpp:18763:16: style: The scope of the variable 'i' can be reduced. [variableScope]
+main.cpp:18644:16: style: The scope of the variable 'i' can be reduced. [variableScope]
         size_t i;
                ^
-main.cpp:18873:16: style: The scope of the variable 'end' can be reduced. [variableScope]
+main.cpp:18754:16: style: The scope of the variable 'end' can be reduced. [variableScope]
         size_t end;
                ^
-main.cpp:18875:16: style: The scope of the variable 'length' can be reduced. [variableScope]
+main.cpp:18756:16: style: The scope of the variable 'length' can be reduced. [variableScope]
         size_t length;
                ^
-main.cpp:18920:16: style: The scope of the variable 'xlen' can be reduced. [variableScope]
+main.cpp:18801:16: style: The scope of the variable 'xlen' can be reduced. [variableScope]
         size_t xlen;
                ^
-main.cpp:18948:17: style: The scope of the variable 'result' can be reduced. [variableScope]
+main.cpp:18829:17: style: The scope of the variable 'result' can be reduced. [variableScope]
         String* result;
                 ^
-main.cpp:18995:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
+main.cpp:18876:16: style: The scope of the variable 'passi' can be reduced. [variableScope]
         size_t passi;
                ^
-main.cpp:19217:13: style: The scope of the variable 'tmp' can be reduced. [variableScope]
+main.cpp:19098:13: style: The scope of the variable 'tmp' can be reduced. [variableScope]
         int tmp;
             ^
-main.cpp:19363:16: style: The scope of the variable 'klass' can be reduced. [variableScope]
+main.cpp:19240:16: style: The scope of the variable 'klass' can be reduced. [variableScope]
         Class* klass;
                ^
-main.cpp:19663:17: style: The scope of the variable 'spos' can be reduced. [variableScope]
+main.cpp:19539:17: style: The scope of the variable 'spos' can be reduced. [variableScope]
         int64_t spos;
                 ^
-main.cpp:19833:19: style: The scope of the variable 'bound' can be reduced. [variableScope]
+main.cpp:19709:19: style: The scope of the variable 'bound' can be reduced. [variableScope]
         Function* bound;
                   ^
-main.cpp:20266:16: style: The scope of the variable 'rng' can be reduced. [variableScope]
+main.cpp:20142:16: style: The scope of the variable 'rng' can be reduced. [variableScope]
         Range* rng;
                ^
-main.cpp:20864:19: style: The scope of the variable 'field' can be reduced. [variableScope]
+main.cpp:20740:19: style: The scope of the variable 'field' can be reduced. [variableScope]
         Property* field;
                   ^
-main.cpp:20978:19: style: The scope of the variable 'instance' can be reduced. [variableScope]
+main.cpp:20854:19: style: The scope of the variable 'instance' can be reduced. [variableScope]
         Instance* instance;
                   ^
-main.cpp:21735:28: style: The scope of the variable 'dbnum' can be reduced. [variableScope]
+main.cpp:21612:28: style: The scope of the variable 'dbnum' can be reduced. [variableScope]
                     double dbnum;
                            ^
-main.cpp:21936:29: style: The scope of the variable 'os' can be reduced. [variableScope]
+main.cpp:21813:29: style: The scope of the variable 'os' can be reduced. [variableScope]
                     String* os;
                             ^
-main.cpp:22185:28: style: The scope of the variable 'klass' can be reduced. [variableScope]
+main.cpp:22062:28: style: The scope of the variable 'klass' can be reduced. [variableScope]
                     Class* klass;
                            ^
-main.cpp:22846:21: style: The scope of the variable 'linelength' can be reduced. [variableScope]
+main.cpp:22728:21: style: The scope of the variable 'linelength' can be reduced. [variableScope]
                 int linelength;
                     ^
-main.cpp:22853:23: style: The scope of the variable 'line' can be reduced. [variableScope]
+main.cpp:22735:23: style: The scope of the variable 'line' can be reduced. [variableScope]
                 char* line;
                       ^
-main.cpp:22999:21: style: The scope of the variable 'oldfile' can be reduced. [variableScope]
+main.cpp:22881:21: style: The scope of the variable 'oldfile' can be reduced. [variableScope]
         const char* oldfile;
                     ^
-main.cpp:23060:13: style: The scope of the variable 'len' can be reduced. [variableScope]
+main.cpp:22930:13: style: The scope of the variable 'len' can be reduced. [variableScope]
         int len;
             ^
-main.cpp:23061:13: style: The scope of the variable 'pos' can be reduced. [variableScope]
+main.cpp:22931:13: style: The scope of the variable 'pos' can be reduced. [variableScope]
         int pos;
             ^
-main.cpp:23116:14: style: The scope of the variable 'needval' can be reduced. [variableScope]
+main.cpp:22986:14: style: The scope of the variable 'needval' can be reduced. [variableScope]
         bool needval;
              ^
-main.cpp:23117:14: style: The scope of the variable 'maybeval' can be reduced. [variableScope]
+main.cpp:22987:14: style: The scope of the variable 'maybeval' can be reduced. [variableScope]
         bool maybeval;
              ^
-main.cpp:23118:14: style: The scope of the variable 'hadshort' can be reduced. [variableScope]
+main.cpp:22988:14: style: The scope of the variable 'hadshort' can be reduced. [variableScope]
         bool hadshort;
              ^
 main.cpp:5175:21: style: The scope of the variable 'capacity' can be reduced. [variableScope]
@@ -1665,67 +1659,67 @@ main.cpp:1755:24: style: The scope of the variable 'oldcap' can be reduced. [var
 main.cpp:1756:24: style: The scope of the variable 'oldbuf' can be reduced. [variableScope]
                 CharT* oldbuf;
                        ^
-main.cpp:16898:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:16779:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:16923:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:16804:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:16960:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:16841:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:18470:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:18351:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:18526:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:18407:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:18567:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:18448:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:18727:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:18608:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:19162:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:19043:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 1);
         ^
-main.cpp:19209:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:19090:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 2);
         ^
-main.cpp:19221:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
+main.cpp:19102:9: style: Checking if unsigned expression 'check.m_scriptfnctx.argc' is less than zero. [unsignedLessThanZero]
         NEON_ARGS_CHECKCOUNTRANGE(check, 0, 2);
         ^
-main.cpp:19935:18: style: Checking if unsigned expression 'times' is less than zero. [unsignedLessThanZero]
+main.cpp:19811:18: style: Checking if unsigned expression 'times' is less than zero. [unsignedLessThanZero]
         if(times <= 0)
                  ^
 lino.h:660:1: style: Label 'failed' is not used. There is #if in function body so the label might be used in code that is removed by the preprocessor. [unusedLabelConfiguration]
 failed:
 ^
-main.cpp:6451:21: style: Local variable 'length' shadows outer function [shadowFunction]
+main.cpp:6453:21: style: Local variable 'length' shadows outer function [shadowFunction]
                 int length;
                     ^
-main.cpp:6731:20: note: Shadowed declaration
+main.cpp:6733:20: note: Shadowed declaration
             size_t length() const
                    ^
-main.cpp:6451:21: note: Shadow variable
+main.cpp:6453:21: note: Shadow variable
                 int length;
                     ^
-main.cpp:6513:21: style: Local variable 'length' shadows outer function [shadowFunction]
+main.cpp:6515:21: style: Local variable 'length' shadows outer function [shadowFunction]
                 int length;
                     ^
-main.cpp:6731:20: note: Shadowed declaration
+main.cpp:6733:20: note: Shadowed declaration
             size_t length() const
                    ^
-main.cpp:6513:21: note: Shadow variable
+main.cpp:6515:21: note: Shadow variable
                 int length;
                     ^
-main.cpp:6522:21: style: Local variable 'length' shadows outer function [shadowFunction]
+main.cpp:6524:21: style: Local variable 'length' shadows outer function [shadowFunction]
                 int length;
                     ^
-main.cpp:6731:20: note: Shadowed declaration
+main.cpp:6733:20: note: Shadowed declaration
             size_t length() const
                    ^
-main.cpp:6522:21: note: Shadow variable
+main.cpp:6524:21: note: Shadow variable
                 int length;
                     ^
 main.cpp:5175:21: style: Local variable 'capacity' shadows outer function [shadowFunction]
@@ -1737,94 +1731,94 @@ main.cpp:4966:32: note: Shadowed declaration
 main.cpp:5175:21: note: Shadow variable
                 int capacity;
                     ^
-main.cpp:10227:64: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulebinary' is a callback function. [passedByValueCallback]
+main.cpp:10115:64: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulebinary' is a callback function. [passedByValueCallback]
             static bool astrulebinary(AstParser* prs, AstToken previous, bool canassign)
                                                                ^
-main.cpp:10847:21: note: Function pointer used here.
+main.cpp:10735:21: note: Function pointer used here.
                     dorule(AstToken::T_XOR, nullptr, astrulebinary, Rule::PREC_BITXOR);
                     ^
-main.cpp:10227:64: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulebinary' is a callback function.
+main.cpp:10115:64: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulebinary' is a callback function.
             static bool astrulebinary(AstParser* prs, AstToken previous, bool canassign)
                                                                ^
-main.cpp:10303:62: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulecall' is a callback function. [passedByValueCallback]
+main.cpp:10191:62: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulecall' is a callback function. [passedByValueCallback]
             static bool astrulecall(AstParser* prs, AstToken previous, bool canassign)
                                                              ^
-main.cpp:10802:21: note: Function pointer used here.
+main.cpp:10690:21: note: Function pointer used here.
                     dorule(AstToken::T_PARENOPEN, astrulegrouping, astrulecall, Rule::PREC_CALL);
                     ^
-main.cpp:10303:62: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulecall' is a callback function.
+main.cpp:10191:62: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulecall' is a callback function.
             static bool astrulecall(AstParser* prs, AstToken previous, bool canassign)
                                                              ^
-main.cpp:10334:61: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruledot' is a callback function. [passedByValueCallback]
+main.cpp:10222:61: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruledot' is a callback function. [passedByValueCallback]
             static bool astruledot(AstParser* prs, AstToken previous, bool canassign)
                                                             ^
-main.cpp:10815:21: note: Function pointer used here.
+main.cpp:10703:21: note: Function pointer used here.
                     dorule(AstToken::T_DOT, nullptr, astruledot, Rule::PREC_CALL);
                     ^
-main.cpp:10334:61: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruledot' is a callback function.
+main.cpp:10222:61: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruledot' is a callback function.
             static bool astruledot(AstParser* prs, AstToken previous, bool canassign)
                                                             ^
-main.cpp:10461:66: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleindexing' is a callback function. [passedByValueCallback]
+main.cpp:10349:66: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleindexing' is a callback function. [passedByValueCallback]
             static bool astruleindexing(AstParser* prs, AstToken previous, bool canassign)
                                                                  ^
-main.cpp:10804:21: note: Function pointer used here.
+main.cpp:10692:21: note: Function pointer used here.
                     dorule(AstToken::T_BRACKETOPEN, astrulearray, astruleindexing, Rule::PREC_CALL);
                     ^
-main.cpp:10461:66: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleindexing' is a callback function.
+main.cpp:10349:66: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleindexing' is a callback function.
             static bool astruleindexing(AstParser* prs, AstToken previous, bool canassign)
                                                                  ^
-main.cpp:10688:61: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleand' is a callback function. [passedByValueCallback]
+main.cpp:10576:61: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleand' is a callback function. [passedByValueCallback]
             static bool astruleand(AstParser* prs, AstToken previous, bool canassign)
                                                             ^
-main.cpp:10850:21: note: Function pointer used here.
+main.cpp:10738:21: note: Function pointer used here.
                     dorule(AstToken::T_KWAND, nullptr, astruleand, Rule::PREC_AND);
                     ^
-main.cpp:10688:61: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleand' is a callback function.
+main.cpp:10576:61: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleand' is a callback function.
             static bool astruleand(AstParser* prs, AstToken previous, bool canassign)
                                                             ^
-main.cpp:10700:60: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleor' is a callback function. [passedByValueCallback]
+main.cpp:10588:60: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleor' is a callback function. [passedByValueCallback]
             static bool astruleor(AstParser* prs, AstToken previous, bool canassign)
                                                            ^
-main.cpp:10872:21: note: Function pointer used here.
+main.cpp:10760:21: note: Function pointer used here.
                     dorule(AstToken::T_KWOR, nullptr, astruleor, Rule::PREC_OR);
                     ^
-main.cpp:10700:60: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleor' is a callback function.
+main.cpp:10588:60: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleor' is a callback function.
             static bool astruleor(AstParser* prs, AstToken previous, bool canassign)
                                                            ^
-main.cpp:10715:68: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleinstanceof' is a callback function. [passedByValueCallback]
+main.cpp:10603:68: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleinstanceof' is a callback function. [passedByValueCallback]
             static bool astruleinstanceof(AstParser* prs, AstToken previous, bool canassign)
                                                                    ^
-main.cpp:10866:21: note: Function pointer used here.
+main.cpp:10754:21: note: Function pointer used here.
                     dorule(AstToken::T_KWINSTANCEOF, nullptr, astruleinstanceof, Rule::PREC_OR);
                     ^
-main.cpp:10715:68: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleinstanceof' is a callback function.
+main.cpp:10603:68: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleinstanceof' is a callback function.
             static bool astruleinstanceof(AstParser* prs, AstToken previous, bool canassign)
                                                                    ^
-main.cpp:10725:69: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleconditional' is a callback function. [passedByValueCallback]
+main.cpp:10613:69: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleconditional' is a callback function. [passedByValueCallback]
             static bool astruleconditional(AstParser* prs, AstToken previous, bool canassign)
                                                                     ^
-main.cpp:10849:21: note: Function pointer used here.
+main.cpp:10737:21: note: Function pointer used here.
                     dorule(AstToken::T_QUESTION, nullptr, astruleconditional, Rule::PREC_CONDITIONAL);
                     ^
-main.cpp:10725:69: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleconditional' is a callback function.
+main.cpp:10613:69: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astruleconditional' is a callback function.
             static bool astruleconditional(AstParser* prs, AstToken previous, bool canassign)
                                                                     ^
-main.cpp:10776:70: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulenothinginfix' is a callback function. [passedByValueCallback]
+main.cpp:10664:70: performance: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulenothinginfix' is a callback function. [passedByValueCallback]
             static bool astrulenothinginfix(AstParser* prs, AstToken previous, bool canassign)
                                                                      ^
-main.cpp:10808:21: note: Function pointer used here.
+main.cpp:10696:21: note: Function pointer used here.
                     dorule(AstToken::T_SEMICOLON, astrulenothingprefix, astrulenothinginfix, Rule::PREC_NONE);
                     ^
-main.cpp:10776:70: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulenothinginfix' is a callback function.
+main.cpp:10664:70: note: Function parameter 'previous' should be passed by const reference. However it seems that 'astrulenothinginfix' is a callback function.
             static bool astrulenothinginfix(AstParser* prs, AstToken previous, bool canassign)
                                                                      ^
-main.cpp:11503:35: performance: Function parameter 'name' should be passed by const reference. [passedByValue]
+main.cpp:11391:35: performance: Function parameter 'name' should be passed by const reference. [passedByValue]
             int addlocal(AstToken name)
                                   ^
-main.cpp:12351:44: performance: Function parameter 'classname' should be passed by const reference. [passedByValue]
+main.cpp:12239:44: performance: Function parameter 'classname' should be passed by const reference. [passedByValue]
             void parseclassmethod(AstToken classname, AstToken methodname, bool havenametoken, bool isstatic)
                                            ^
-main.cpp:12351:64: performance: Function parameter 'methodname' should be passed by const reference. [passedByValue]
+main.cpp:12239:64: performance: Function parameter 'methodname' should be passed by const reference. [passedByValue]
             void parseclassmethod(AstToken classname, AstToken methodname, bool havenametoken, bool isstatic)
                                                                ^
 main.cpp:2362:68: style: Parameter 'i' can be declared as reference to const [constParameterReference]
@@ -1878,571 +1872,538 @@ main.cpp:2234:56: style: Parameter 'wmask' can be declared as pointer to const [
 main.cpp:2362:164: style: Parameter 'qgroupstate' can be declared as pointer to const [constParameterPointer]
             bool rewindDoSaveRaw(uint32_t k, bool isdum, uint64_t& i, uint16_t& stackn, uint64_t& range_min, uint64_t& range_max, uint32_t* qgroupstack, uint32_t* qgroupstate, MState* rewindstack)
                                                                                                                                                                    ^
-main.cpp:5712:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:5713:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
                 auto gcs = SharedState::get();
                      ^
-main.cpp:6225:75: style: Parameter 'argv' can be declared as pointer to const [constParameterPointer]
+main.cpp:6227:75: style: Parameter 'argv' can be declared as pointer to const [constParameterPointer]
             bool vmNestCallFunction(Value callable, Value thisval, Value* argv, size_t argc, Value* dest, bool fromoper)
                                                                           ^
-main.cpp:6529:61: style: Parameter 'pattern' can be declared as pointer to const [constParameterPointer]
+main.cpp:6531:61: style: Parameter 'pattern' can be declared as pointer to const [constParameterPointer]
             static Value regexMatch(String* string, String* pattern, bool capture)
                                                             ^
-main.cpp:6711:47: style: Parameter 'origos' can be declared as pointer to const [constParameterPointer]
+main.cpp:6713:47: style: Parameter 'origos' can be declared as pointer to const [constParameterPointer]
             static String* copyObject(String* origos)
                                               ^
-main.cpp:6763:39: style: Parameter 'other' can be declared as pointer to const [constParameterPointer]
+main.cpp:6765:39: style: Parameter 'other' can be declared as pointer to const [constParameterPointer]
             bool appendObject(String* other)
                                       ^
-main.cpp:6834:41: style: Parameter 'slot' can be declared as pointer to const [constParameterPointer]
+main.cpp:6836:41: style: Parameter 'slot' can be declared as pointer to const [constParameterPointer]
             static Upvalue* make(Value* slot, int stackpos)
                                         ^
-main.cpp:7003:53: style: Parameter 'name' can be declared as pointer to const [constParameterPointer]
+main.cpp:7005:53: style: Parameter 'name' can be declared as pointer to const [constParameterPointer]
             static bool methodNameIsPrivate(String* name)
                                                     ^
-main.cpp:7940:25: style: Variable 'pitem' can be declared as pointer to const [constVariablePointer]
+main.cpp:7865:25: style: Variable 'pitem' can be declared as pointer to const [constVariablePointer]
                 String* pitem;
                         ^
-main.cpp:8210:25: style: Variable 'obj' can be declared as pointer to const [constVariablePointer]
+main.cpp:8121:25: style: Variable 'obj' can be declared as pointer to const [constVariablePointer]
                 Object* obj;
                         ^
-main.cpp:8305:37: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:8216:37: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
                             String* string;
                                     ^
-main.cpp:8346:57: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
+main.cpp:8257:57: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
             static void printArray(IOStream* pr, Array* list)
                                                         ^
-main.cpp:8352:24: style: Variable 'subarr' can be declared as pointer to const [constVariablePointer]
+main.cpp:8263:24: style: Variable 'subarr' can be declared as pointer to const [constVariablePointer]
                 Array* subarr;
                        ^
-main.cpp:8395:23: style: Variable 'subdict' can be declared as pointer to const [constVariablePointer]
+main.cpp:8306:23: style: Variable 'subdict' can be declared as pointer to const [constVariablePointer]
                 Dict* subdict;
                       ^
-main.cpp:8464:78: style: Parameter 'table' can be declared as pointer to const [constParameterPointer]
-            static void printValTable(IOStream* pr, HashTable<Value, Value>* table, const char* name)
-                                                                             ^
-main.cpp:8487:75: style: Parameter 'table' can be declared as pointer to const [constParameterPointer]
+main.cpp:8375:75: style: Parameter 'table' can be declared as pointer to const [constParameterPointer]
             static void printTable(IOStream* pr, HashTable<Value, Value>* table)
                                                                           ^
-main.cpp:8590:70: style: Parameter 'argv' can be declared as pointer to const [constParameterPointer]
+main.cpp:8478:70: style: Parameter 'argv' can be declared as pointer to const [constParameterPointer]
             bool formatWithArgs(size_t argc, size_t argbegin, Value* argv)
                                                                      ^
-main.cpp:9960:36: style: Variable 'upvalue' can be declared as pointer to const [constVariablePointer]
+main.cpp:9848:36: style: Variable 'upvalue' can be declared as pointer to const [constVariablePointer]
                         UpvalInfo* upvalue;
                                    ^
-main.cpp:10188:51: style: Parameter 'a' can be declared as pointer to const [constParameterPointer]
+main.cpp:10076:51: style: Parameter 'a' can be declared as pointer to const [constParameterPointer]
             static bool utilIdentsEqual(AstToken* a, AstToken* b)
                                                   ^
-main.cpp:10188:64: style: Parameter 'b' can be declared as pointer to const [constParameterPointer]
+main.cpp:10076:64: style: Parameter 'b' can be declared as pointer to const [constParameterPointer]
             static bool utilIdentsEqual(AstToken* a, AstToken* b)
                                                                ^
-main.cpp:10230:23: style: Variable 'rule' can be declared as pointer to const [constVariablePointer]
+main.cpp:10118:23: style: Variable 'rule' can be declared as pointer to const [constVariablePointer]
                 Rule* rule;
                       ^
-main.cpp:10915:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:10803:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
                 auto gcs = SharedState::get();
                      ^
-main.cpp:10911:42: style: Parameter 't' can be declared as pointer to const [constParameterPointer]
+main.cpp:10799:42: style: Parameter 't' can be declared as pointer to const [constParameterPointer]
             bool raiseerroratv(AstToken* t, const char* message, va_list args)
                                          ^
-main.cpp:11228:27: style: Variable 'fn' can be declared as pointer to const [constVariablePointer]
+main.cpp:11116:27: style: Variable 'fn' can be declared as pointer to const [constVariablePointer]
                 Function* fn;
                           ^
-main.cpp:11671:30: style: Variable 'bcode' can be declared as pointer to const [constVariablePointer]
+main.cpp:11559:30: style: Variable 'bcode' can be declared as pointer to const [constVariablePointer]
                 Instruction* bcode;
                              ^
-main.cpp:11672:24: style: Variable 'cvals' can be declared as pointer to const [constVariablePointer]
+main.cpp:11560:24: style: Variable 'cvals' can be declared as pointer to const [constVariablePointer]
                 Value* cvals;
                        ^
-main.cpp:12004:23: style: Variable 'realstr' can be declared as pointer to const [constVariablePointer]
+main.cpp:11892:23: style: Variable 'realstr' can be declared as pointer to const [constVariablePointer]
                 char* realstr;
                       ^
-main.cpp:12169:23: style: Variable 'rule' can be declared as pointer to const [constVariablePointer]
+main.cpp:12057:23: style: Variable 'rule' can be declared as pointer to const [constVariablePointer]
                 Rule* rule;
                       ^
-main.cpp:12216:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:12104:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
                 auto gcs = SharedState::get();
                      ^
-main.cpp:12232:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:12120:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
                 auto gcs = SharedState::get();
                      ^
-main.cpp:12358:32: style: Variable 'tkns' can be declared as const array [constVariable]
+main.cpp:12246:32: style: Variable 'tkns' can be declared as const array [constVariable]
                 AstToken::Type tkns[] = { AstToken::T_IDENTNORMAL, AstToken::T_DECORATOR };
                                ^
-main.cpp:12565:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:12453:22: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
                 auto gcs = SharedState::get();
                      ^
-main.cpp:13311:47: style: Parameter 'cl' can be declared as pointer to const [constParameterPointer]
+main.cpp:13191:47: style: Parameter 'cl' can be declared as pointer to const [constParameterPointer]
     String* Wrappers::wrapClassGetName(Class* cl)
                                               ^
-main.cpp:13316:47: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
+main.cpp:13196:47: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
     uint32_t Wrappers::wrapStrGetHash(String* os)
                                               ^
-main.cpp:13321:50: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
+main.cpp:13201:50: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
     const char* Wrappers::wrapStrGetData(String* os)
                                                  ^
-main.cpp:13326:47: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
+main.cpp:13206:47: style: Parameter 'os' can be declared as pointer to const [constParameterPointer]
     size_t Wrappers::wrapStrGetLength(String* os)
                                               ^
-main.cpp:13387:46: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
+main.cpp:13267:46: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
     void Value::markValArray(ValList<Value>* list)
                                              ^
-main.cpp:13400:14: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
+main.cpp:13280:14: style: Variable 'gcs' can be declared as pointer to const [constVariablePointer]
         auto gcs = SharedState::get();
              ^
-main.cpp:13481:16: style: Variable 'arra' can be declared as pointer to const [constVariablePointer]
+main.cpp:13361:16: style: Variable 'arra' can be declared as pointer to const [constVariablePointer]
         Array* arra;
                ^
-main.cpp:13482:16: style: Variable 'arrb' can be declared as pointer to const [constVariablePointer]
+main.cpp:13362:16: style: Variable 'arrb' can be declared as pointer to const [constVariablePointer]
         Array* arrb;
                ^
-main.cpp:13506:17: style: Variable 'stra' can be declared as pointer to const [constVariablePointer]
+main.cpp:13386:17: style: Variable 'stra' can be declared as pointer to const [constVariablePointer]
         String* stra;
                 ^
-main.cpp:13507:17: style: Variable 'strb' can be declared as pointer to const [constVariablePointer]
+main.cpp:13387:17: style: Variable 'strb' can be declared as pointer to const [constVariablePointer]
         String* strb;
                 ^
-main.cpp:13525:19: style: Variable 'fielda' can be declared as pointer to const [constVariablePointer]
+main.cpp:13405:19: style: Variable 'fielda' can be declared as pointer to const [constVariablePointer]
         Property* fielda;
                   ^
-main.cpp:13526:19: style: Variable 'fieldb' can be declared as pointer to const [constVariablePointer]
+main.cpp:13406:19: style: Variable 'fieldb' can be declared as pointer to const [constVariablePointer]
         Property* fieldb;
                   ^
-main.cpp:13647:17: style: Variable 'osa' can be declared as pointer to const [constVariablePointer]
+main.cpp:13527:17: style: Variable 'osa' can be declared as pointer to const [constVariablePointer]
         String* osa;
                 ^
-main.cpp:13648:17: style: Variable 'osb' can be declared as pointer to const [constVariablePointer]
+main.cpp:13528:17: style: Variable 'osb' can be declared as pointer to const [constVariablePointer]
         String* osb;
                 ^
-main.cpp:13819:28: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:13699:28: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
                     Array* list;
                            ^
-main.cpp:13978:26: style: Variable 'upv' can be declared as pointer to const [constVariablePointer]
+main.cpp:13858:26: style: Variable 'upv' can be declared as pointer to const [constVariablePointer]
                     auto upv = (Upvalue*)object;
                          ^
-main.cpp:14574:27: style: Variable 'function' can be declared as pointer to const [constVariablePointer]
+main.cpp:14454:27: style: Variable 'function' can be declared as pointer to const [constVariablePointer]
                 Function* function;
                           ^
-main.cpp:14857:35: style: Variable 'handler' can be declared as pointer to const [constVariablePointer]
+main.cpp:14737:35: style: Variable 'handler' can be declared as pointer to const [constVariablePointer]
         CallFrame::ExceptionInfo* handler;
                                   ^
-main.cpp:14858:17: style: Variable 'emsg' can be declared as pointer to const [constVariablePointer]
+main.cpp:14738:17: style: Variable 'emsg' can be declared as pointer to const [constVariablePointer]
         String* emsg;
                 ^
-main.cpp:14855:16: style: Variable 'oa' can be declared as pointer to const [constVariablePointer]
+main.cpp:14735:16: style: Variable 'oa' can be declared as pointer to const [constVariablePointer]
         Array* oa;
                ^
-main.cpp:15077:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
+main.cpp:14958:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
         Array* selfarr;
                ^
-main.cpp:15078:17: style: Variable 'joinee' can be declared as pointer to const [constVariablePointer]
+main.cpp:14959:17: style: Variable 'joinee' can be declared as pointer to const [constVariablePointer]
         String* joinee;
                 ^
-main.cpp:15079:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:14960:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Value* list;
                ^
-main.cpp:15119:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
+main.cpp:15000:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
         Array* selfarr;
                ^
-main.cpp:15156:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15037:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15175:16: style: Variable 'list2' can be declared as pointer to const [constVariablePointer]
+main.cpp:15056:16: style: Variable 'list2' can be declared as pointer to const [constVariablePointer]
         Array* list2;
                ^
-main.cpp:15191:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15072:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15346:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15227:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+        Array* list;
+               ^
+main.cpp:15255:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+        Array* list;
+               ^
+main.cpp:15266:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+        Array* list;
+               ^
+main.cpp:15320:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+        Array* list;
+               ^
+main.cpp:15333:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
 main.cpp:15374:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15385:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15390:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15439:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15411:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15452:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15440:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15493:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15478:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15509:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
-        Array* list;
-               ^
-main.cpp:15530:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
-        Array* list;
-               ^
-main.cpp:15559:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
-        Array* list;
-               ^
-main.cpp:15597:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
-        Array* list;
-               ^
-main.cpp:15600:16: style: Variable 'arglist' can be declared as pointer to const [constVariablePointer]
+main.cpp:15481:16: style: Variable 'arglist' can be declared as pointer to const [constVariablePointer]
         Array* arglist;
                ^
-main.cpp:15638:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15519:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15653:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15534:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15669:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15550:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15700:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15581:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15734:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15615:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15778:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15659:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15821:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15702:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15862:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15743:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15904:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
+main.cpp:15785:16: style: Variable 'list' can be declared as pointer to const [constVariablePointer]
         Array* list;
                ^
-main.cpp:15965:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
+main.cpp:15846:16: style: Variable 'selfarr' can be declared as pointer to const [constVariablePointer]
         Array* selfarr;
                ^
-main.cpp:16185:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:16066:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:16225:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:16106:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:16669:17: style: Variable 'keywanted' can be declared as pointer to const [constVariablePointer]
+main.cpp:16550:17: style: Variable 'keywanted' can be declared as pointer to const [constVariablePointer]
         String* keywanted;
                 ^
-main.cpp:16719:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:16600:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:16734:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:16615:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:16750:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:16631:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:16763:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:16644:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:16773:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:16654:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         String* file;
                 ^
-main.cpp:16783:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:16664:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         String* file;
                 ^
-main.cpp:16793:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:16674:17: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         String* file;
                 ^
-main.cpp:16806:17: style: Variable 'filepath' can be declared as pointer to const [constVariablePointer]
+main.cpp:16687:17: style: Variable 'filepath' can be declared as pointer to const [constVariablePointer]
         String* filepath;
                 ^
-main.cpp:16832:17: style: Variable 'filepath' can be declared as pointer to const [constVariablePointer]
+main.cpp:16713:17: style: Variable 'filepath' can be declared as pointer to const [constVariablePointer]
         String* filepath;
                 ^
-main.cpp:16833:17: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
+main.cpp:16714:17: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
         String* data;
                 ^
-main.cpp:16880:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:16761:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         File* file;
               ^
-main.cpp:16887:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:16768:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         File* file;
               ^
-main.cpp:17033:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:16914:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:17031:24: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
+main.cpp:16912:24: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
         unsigned char* data;
                        ^
-main.cpp:17084:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:16965:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:17082:24: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
+main.cpp:16963:24: style: Variable 'data' can be declared as pointer to const [constVariablePointer]
         unsigned char* data;
                        ^
-main.cpp:17172:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
+main.cpp:17053:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
         String* ofmt;
                 ^
-main.cpp:17195:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
+main.cpp:17076:15: style: Variable 'file' can be declared as pointer to const [constVariablePointer]
         File* file;
               ^
-main.cpp:17253:15: style: Variable 'name' can be declared as pointer to const [constVariablePointer]
+main.cpp:17134:15: style: Variable 'name' can be declared as pointer to const [constVariablePointer]
         char* name;
               ^
-main.cpp:17417:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:17298:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:17430:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:17311:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:17441:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
+main.cpp:17322:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
         String* path;
                 ^
-main.cpp:17456:15: style: Variable 'r' can be declared as pointer to const [constVariablePointer]
+main.cpp:17337:15: style: Variable 'r' can be declared as pointer to const [constVariablePointer]
         char* r;
               ^
-main.cpp:17588:17: style: Variable 'os' can be declared as pointer to const [constVariablePointer]
+main.cpp:17469:17: style: Variable 'os' can be declared as pointer to const [constVariablePointer]
         String* os;
                 ^
-main.cpp:17918:17: style: Variable 'key' can be declared as pointer to const [constVariablePointer]
+main.cpp:17799:17: style: Variable 'key' can be declared as pointer to const [constVariablePointer]
         String* key;
                 ^
-main.cpp:17932:17: style: Variable 'key' can be declared as pointer to const [constVariablePointer]
+main.cpp:17813:17: style: Variable 'key' can be declared as pointer to const [constVariablePointer]
         String* key;
                 ^
-main.cpp:17933:17: style: Variable 'value' can be declared as pointer to const [constVariablePointer]
+main.cpp:17814:17: style: Variable 'value' can be declared as pointer to const [constVariablePointer]
         String* value;
                 ^
-main.cpp:18019:16: style: Variable 'range' can be declared as pointer to const [constVariablePointer]
+main.cpp:17900:16: style: Variable 'range' can be declared as pointer to const [constVariablePointer]
         Range* range;
                ^
-main.cpp:18047:16: style: Variable 'range' can be declared as pointer to const [constVariablePointer]
+main.cpp:17928:16: style: Variable 'range' can be declared as pointer to const [constVariablePointer]
         Range* range;
                ^
-main.cpp:18104:17: style: Variable 'instr' can be declared as pointer to const [constVariablePointer]
+main.cpp:17985:17: style: Variable 'instr' can be declared as pointer to const [constVariablePointer]
         String* instr;
                 ^
-main.cpp:18137:17: style: Variable 'instr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18018:17: style: Variable 'instr' can be declared as pointer to const [constVariablePointer]
         String* instr;
                 ^
-main.cpp:18207:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18088:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
         String* selfstr;
                 ^
-main.cpp:18285:15: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18166:15: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         char* string;
               ^
-main.cpp:18298:15: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18179:15: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         char* string;
               ^
-main.cpp:18350:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18231:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
         String* selfstr;
                 ^
-main.cpp:18607:17: style: Variable 'needle' can be declared as pointer to const [constVariablePointer]
+main.cpp:18488:17: style: Variable 'needle' can be declared as pointer to const [constVariablePointer]
         String* needle;
                 ^
-main.cpp:18604:15: style: Variable 'result' can be declared as pointer to const [constVariablePointer]
+main.cpp:18485:15: style: Variable 'result' can be declared as pointer to const [constVariablePointer]
         char* result;
               ^
-main.cpp:18634:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18515:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18633:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18514:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
         String* substr;
                 ^
-main.cpp:18651:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18532:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18650:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18531:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
         String* substr;
                 ^
-main.cpp:18693:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18574:17: style: Variable 'substr' can be declared as pointer to const [constVariablePointer]
         String* substr;
                 ^
-main.cpp:18716:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
+main.cpp:18597:17: style: Variable 'selfstr' can be declared as pointer to const [constVariablePointer]
         String* selfstr;
                 ^
-main.cpp:18743:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18624:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18793:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18674:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18836:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18717:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18877:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18758:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18878:17: style: Variable 'delimeter' can be declared as pointer to const [constVariablePointer]
+main.cpp:18759:17: style: Variable 'delimeter' can be declared as pointer to const [constVariablePointer]
         String* delimeter;
                 ^
-main.cpp:18922:17: style: Variable 'findme' can be declared as pointer to const [constVariablePointer]
+main.cpp:18803:17: style: Variable 'findme' can be declared as pointer to const [constVariablePointer]
         String* findme;
                 ^
-main.cpp:18924:17: style: Variable 'repwith' can be declared as pointer to const [constVariablePointer]
+main.cpp:18805:17: style: Variable 'repwith' can be declared as pointer to const [constVariablePointer]
         String* repwith;
                 ^
-main.cpp:18967:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18848:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:18999:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:18880:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:19188:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
+main.cpp:19069:17: style: Variable 'string' can be declared as pointer to const [constVariablePointer]
         String* string;
                 ^
-main.cpp:19246:17: style: Variable 'os' can be declared as pointer to const [constVariablePointer]
+main.cpp:19127:17: style: Variable 'os' can be declared as pointer to const [constVariablePointer]
         String* os;
                 ^
-main.cpp:19260:17: style: Variable 'path' can be declared as pointer to const [constVariablePointer]
-        String* path;
-                ^
-main.cpp:19261:15: style: Variable 'source' can be declared as pointer to const [constVariablePointer]
-        char* source;
-              ^
-main.cpp:19287:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
+main.cpp:19164:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
         String* ofmt;
                 ^
-main.cpp:19305:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
+main.cpp:19182:17: style: Variable 'ofmt' can be declared as pointer to const [constVariablePointer]
         String* ofmt;
                 ^
-main.cpp:19522:31: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:19398:31: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
                     Property* field;
                               ^
-main.cpp:19647:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:19523:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:19666:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:19542:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:19954:64: style: Parameter 'a' can be declared as pointer to const [constParameterPointer]
+main.cpp:19830:64: style: Parameter 'a' can be declared as pointer to const [constParameterPointer]
     NEON_INLINE Array* SharedState::vmUtilCombineArrays(Array* a, Array* b)
                                                                ^
-main.cpp:19954:74: style: Parameter 'b' can be declared as pointer to const [constParameterPointer]
+main.cpp:19830:74: style: Parameter 'b' can be declared as pointer to const [constParameterPointer]
     NEON_INLINE Array* SharedState::vmUtilCombineArrays(Array* a, Array* b)
                                                                          ^
-main.cpp:19972:58: style: Parameter 'from' can be declared as pointer to const [constParameterPointer]
+main.cpp:19848:58: style: Parameter 'from' can be declared as pointer to const [constParameterPointer]
     NEON_INLINE void SharedState::vmUtilMultArray(Array* from, Array* newlist, size_t times)
                                                          ^
-main.cpp:19985:72: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
+main.cpp:19861:72: style: Parameter 'list' can be declared as pointer to const [constParameterPointer]
     NEON_INLINE bool SharedState::vmUtilDoGetRangedIndexOfArray(Array* list, bool willassign)
                                                                        ^
-main.cpp:20049:74: style: Parameter 'string' can be declared as pointer to const [constParameterPointer]
+main.cpp:19925:74: style: Parameter 'string' can be declared as pointer to const [constParameterPointer]
     NEON_INLINE bool SharedState::vmUtilDoGetRangedIndexOfString(String* string, bool willassign)
                                                                          ^
-main.cpp:20158:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:20034:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:20204:16: style: Variable 'rng' can be declared as pointer to const [constVariablePointer]
+main.cpp:20080:16: style: Variable 'rng' can be declared as pointer to const [constVariablePointer]
         Range* rng;
                ^
-main.cpp:20266:16: style: Variable 'rng' can be declared as pointer to const [constVariablePointer]
+main.cpp:20142:16: style: Variable 'rng' can be declared as pointer to const [constVariablePointer]
         Range* rng;
                ^
-main.cpp:20335:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:20211:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:20864:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:20740:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:20903:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:20779:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:21256:14: style: Variable 'tab' can be declared as pointer to const [constVariablePointer]
+main.cpp:21132:14: style: Variable 'tab' can be declared as pointer to const [constVariablePointer]
         auto tab = &m_vmstate.currentframe->closure->m_fnvals.fnclosure.scriptfunc->m_fnvals.fnscriptfunc.module->m_deftable;
              ^
-main.cpp:21254:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
+main.cpp:21130:19: style: Variable 'field' can be declared as pointer to const [constVariablePointer]
         Property* field;
                   ^
-main.cpp:22103:31: style: Variable 'closure' can be declared as pointer to const [constVariablePointer]
+main.cpp:21980:31: style: Variable 'closure' can be declared as pointer to const [constVariablePointer]
                     Function* closure;
                               ^
-main.cpp:22510:15: style: Variable 'pathp' can be declared as pointer to const [constVariablePointer]
+main.cpp:22387:15: style: Variable 'pathp' can be declared as pointer to const [constVariablePointer]
         char* pathp;
               ^
-main.cpp:22757:15: style: Variable 'rp' can be declared as pointer to const [constVariablePointer]
+main.cpp:22634:15: style: Variable 'rp' can be declared as pointer to const [constVariablePointer]
         char* rp;
               ^
-main.cpp:23023:31: style: Parameter 'source' can be declared as pointer to const [constParameterPointer]
+main.cpp:22901:31: style: Parameter 'source' can be declared as pointer to const [constParameterPointer]
     static bool runCode(char* source)
                               ^
-main.cpp:23063:15: style: Variable 'valbuf' can be declared as pointer to const [constVariablePointer]
+main.cpp:22933:15: style: Variable 'valbuf' can be declared as pointer to const [constVariablePointer]
         char* valbuf;
               ^
-main.cpp:23119:25: style: Variable 'flag' can be declared as pointer to const [constVariablePointer]
+main.cpp:22989:25: style: Variable 'flag' can be declared as pointer to const [constVariablePointer]
         optlongflags_t* flag;
                         ^
-main.cpp:23153:39: style: Parameter 'argv' can be declared as const array [constParameter]
+main.cpp:23023:39: style: Parameter 'argv' can be declared as const array [constParameter]
     static void fprintUsageText(char* argv[], optlongflags_t* flags, bool fail)
                                       ^
 main.cpp:973:47: error: Signed integer overflow for expression '397-CONF_MERSENNESTATESIZE'. [integerOverflow]
                     binst[i] = binst[i + (397 - CONF_MERSENNESTATESIZE)] ^ (y >> 1) ^ ((y & 1) * 0x9908b0df);
                                               ^
-main.cpp:7849:33: style: class member 'DefExport::m_defmodname' is never used. [unusedStructMember]
-                    const char* m_defmodname;
-                                ^
-main.cpp:7852:28: style: class member 'DefExport::definedfields' is never used. [unusedStructMember]
-                    Field* definedfields;
-                           ^
-main.cpp:7855:31: style: class member 'DefExport::definedfunctions' is never used. [unusedStructMember]
-                    Function* definedfunctions;
-                              ^
-main.cpp:7868:28: style: class member 'DefExport::definedclasses' is never used. [unusedStructMember]
-                    Class* definedclasses;
-                           ^
-main.cpp:7871:41: style: class member 'DefExport::fnpreloaderfunc' is never used. [unusedStructMember]
-                    Module::ModLoaderFN fnpreloaderfunc;
-                                        ^
-main.cpp:7831:37: style: struct member 'Field::m_deffieldname' is never used. [unusedStructMember]
-                        const char* m_deffieldname;
-                                    ^
-main.cpp:7832:30: style: struct member 'Field::isstatic' is never used. [unusedStructMember]
-                        bool isstatic;
-                             ^
-main.cpp:7833:34: style: struct member 'Field::fieldvalfn' is never used. [unusedStructMember]
-                        NativeFN fieldvalfn;
-                                 ^
-main.cpp:13305:20: style: class member 'UClassComplex::re' is never used. [unusedStructMember]
-            double re;
-                   ^
-main.cpp:13306:20: style: class member 'UClassComplex::im' is never used. [unusedStructMember]
-            double im;
-                   ^
 main.cpp:4009:21: style: Variable 'bch' is assigned a value that is never used. [unreadVariable]
                 bch = 0;
                     ^
 main.cpp:5543:35: style: Variable 'sdata' is assigned a value that is never used. [unreadVariable]
                             sdata = Wrappers::wrapStrGetData(string);
                                   ^
-main.cpp:5885:24: style: Variable 'before' is not assigned a value. [unassignedVariable]
+main.cpp:5886:24: style: Variable 'before' is not assigned a value. [unassignedVariable]
                 size_t before;
                        ^
-main.cpp:8032:25: style: Variable 'os' is not assigned a value. [unassignedVariable]
+main.cpp:7861:23: style: Unused variable: retme [unusedVariable]
+                char* retme;
+                      ^
+main.cpp:7958:25: style: Variable 'os' is not assigned a value. [unassignedVariable]
                 String* os;
                         ^
-main.cpp:10028:39: style: Variable 'paramname' is assigned a value that is never used. [unreadVariable]
+main.cpp:9916:39: style: Variable 'paramname' is assigned a value that is never used. [unreadVariable]
                             paramname = m_sharedprs->m_prevtoken;
                                       ^
-main.cpp:11849:27: style: Variable 'fromclass' is assigned a value that is never used. [unreadVariable]
+main.cpp:11737:27: style: Variable 'fromclass' is assigned a value that is never used. [unreadVariable]
                 fromclass = m_currentclasscompiler != nullptr;
                           ^
-main.cpp:14142:25: style: Variable 'handler' is assigned a value that is never used. [unreadVariable]
+main.cpp:14022:25: style: Variable 'handler' is assigned a value that is never used. [unreadVariable]
                 handler = &m_vmstate.framevalues[i].handlers[j];
                         ^
-main.cpp:15031:36: style: Variable 'fnc' is assigned a value that is never used. [unreadVariable]
+main.cpp:14912:36: style: Variable 'fnc' is assigned a value that is never used. [unreadVariable]
         AstParser::FuncCompiler fnc(parser, Function::CTXTYPE_SCRIPT, true);
                                    ^
-main.cpp:15120:23: style: Variable 'check' is assigned a value that is never used. [unreadVariable]
+main.cpp:15001:23: style: Variable 'check' is assigned a value that is never used. [unreadVariable]
         ArgCheck check("length", scfn);
                       ^
-main.cpp:15988:19: style: Variable 'until' is assigned a value that is never used. [unreadVariable]
+main.cpp:15869:19: style: Variable 'until' is assigned a value that is never used. [unreadVariable]
             until = 0;
                   ^
-main.cpp:16623:15: style: Variable 'hnd' is not assigned a value. [unassignedVariable]
+main.cpp:16504:15: style: Variable 'hnd' is not assigned a value. [unassignedVariable]
         FILE* hnd;
               ^
-main.cpp:17458:23: style: Variable 'check' is assigned a value that is never used. [unreadVariable]
+main.cpp:17339:23: style: Variable 'check' is assigned a value that is never used. [unreadVariable]
         ArgCheck check(name, scfn);
                       ^
-main.cpp:18360:11: style: Variable 'f' is assigned a value that is never used. [unreadVariable]
+main.cpp:18241:11: style: Variable 'f' is assigned a value that is never used. [unreadVariable]
         f = strtod(selfstr->data(), &p);
           ^
-main.cpp:20223:19: style: Variable 'realindex' is assigned a value that is never used. [unreadVariable]
+main.cpp:20099:19: style: Variable 'realindex' is assigned a value that is never used. [unreadVariable]
         realindex = index;
                   ^
-main.cpp:22796:14: style: Variable 'argc' is assigned a value that is never used. [unreadVariable]
+main.cpp:21407:16: style: Variable 'exitstatus' is assigned a value that is never used. [unreadVariable]
+        Status exitstatus = Status::Ok;
+               ^
+main.cpp:22678:14: style: Variable 'argc' is assigned a value that is never used. [unreadVariable]
         argc = vmNestCallPrepare(callme, Value::makeNull(), nullptr, 0);
              ^
 main.cpp:5030:25: style: Variable 'valhash' is assigned a value that is never used. [unreadVariable]
@@ -2534,31 +2495,16 @@ main.cpp:4885:0: style: The function 'makeWithGetSet' is never used. [unusedFunc
 main.cpp:5236:0: style: The function 'importall' is never used. [unusedFunction]
             NEON_INLINE void importall(HashTable* from, HashTable* to)
 ^
-main.cpp:5710:0: style: The function 'raiseWarning' is never used. [unusedFunction]
+main.cpp:5711:0: style: The function 'raiseWarning' is never used. [unusedFunction]
             static void raiseWarning(const char* fmt, ArgsT&&... args)
 ^
-main.cpp:6775:0: style: The function 'appendfmt' is never used. [unusedFunction]
+main.cpp:6777:0: style: The function 'appendfmt' is never used. [unusedFunction]
             int appendfmt(const char* fmt, ArgsT&&... args)
 ^
-main.cpp:7443:0: style: The function 'getPropertycstr' is never used. [unusedFunction]
-            Property* getPropertycstr(const char* name)
-^
-main.cpp:7464:0: style: The function 'getMethodcstr' is never used. [unusedFunction]
-            Property* getMethodcstr(const char* name)
-^
-main.cpp:8023:0: style: The function 'loadScriptModule' is never used. [unusedFunction]
-            static Module* loadScriptModule(Module* intomodule, String* modulename)
-^
-main.cpp:8077:0: style: The function 'addNativeModule' is never used. [unusedFunction]
-            static void addNativeModule(Module* module, const char* as)
-^
-main.cpp:8464:0: style: The function 'printValTable' is never used. [unusedFunction]
-            static void printValTable(IOStream* pr, HashTable<Value, Value>* table, const char* name)
-^
-main.cpp:14205:0: style: The function 'vmDebugPrintVal' is never used. [unusedFunction]
+main.cpp:14085:0: style: The function 'vmDebugPrintVal' is never used. [unusedFunction]
     static void vmDebugPrintVal(Value val, const char* fmt, ArgsT&&... args)
 ^
-main.cpp:23310:0: style: The function 'replmain' is never used. [unusedFunction]
+main.cpp:23180:0: style: The function 'replmain' is never used. [unusedFunction]
 int replmain(const char* file)
 ^
 nofile:0:0: information: Active checkers: 161/592 (use --checkers-report=<filename> to see details) [checkersReport]

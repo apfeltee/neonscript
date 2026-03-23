@@ -1937,28 +1937,6 @@ namespace neon
                 return newstr;
             }
 
-            void toUppercase()
-            {
-                CharT* pos;
-                CharT* end;
-                end = m_data + m_length;
-                for(pos = m_data; pos < end; pos++)
-                {
-                    *pos = (CharT)toupper(*pos);
-                }
-            }
-
-            void toLowercase()
-            {
-                CharT* pos;
-                CharT* end;
-                end = m_data + m_length;
-                for(pos = m_data; pos < end; pos++)
-                {
-                    *pos = (CharT)tolower(*pos);
-                }
-            }
-
             /*
             // Copy N characters from a character array to the end of this StrBufBasic
             // strlen(str) must be >= len
@@ -7858,7 +7836,6 @@ namespace neon
                 size_t splen;
                 char* path1;
                 char* path2;
-                char* retme;
                 const char* cstrpath;
                 struct stat stroot;
                 struct stat stmod;
@@ -16529,19 +16506,19 @@ namespace neon
 
 
 
-    #define putorgetkey(md, name, value)                            \
-        {                                                           \
-            if(havekey && (keywanted != nullptr))                   \
-            {                                                       \
+    #define putorgetkey(md, name, value) \
+        { \
+            if(havekey && (keywanted != nullptr)) \
+            { \
                 if(strcmp(name, keywanted->data()) == 0) \
-                {                                                   \
-                    return value;                                   \
-                }                                                   \
-            }                                                       \
-            else                                                    \
-            {                                                       \
-                md->addCstr(name, value);              \
-            }                                                       \
+                { \
+                    return value; \
+                } \
+            } \
+            else \
+            { \
+                md->addCstr(name, value); \
+            } \
         }
 
     Value objfnfile_stat(const FuncContext& scfn)
@@ -16591,8 +16568,7 @@ namespace neon
         putorgetkey(md, "lastmodified", Value::fromObject(String::copy(Util::filestat_ctimetostring(nfs.m_tmlastmodified))));
         return Value::fromObject(md);
     }
-
-
+    #undef putorgetkey
 
     static Value objfnfile_basename(const FuncContext& scfn)
     {
@@ -21404,7 +21380,6 @@ namespace neon
         bool you_are_calling_exit_vm_outside_of_runvm;
         Value* dbgslot;
         Instruction currinstr;
-        Status exitstatus = Status::Ok;
     #if defined(NEON_CONFIG_USECOMPUTEDGOTO) && (NEON_CONFIG_USECOMPUTEDGOTO == 1)
         static void* dispatchtable[] = {
             NEON_SETDISPATCHIDX(OPC_GLOBALDEFINE, &&VM_MAKELABEL(OPC_GLOBALDEFINE)),
@@ -22694,27 +22669,26 @@ struct ConsoleProg
 
         public:
             neon::HashTable<const char*, CallbackFN> m_callbacks;
-            linocontext_t m_replctx;
+            LineReader m_replctx;
 
         public:
             InteractiveRepl()
             {
-                lino_context_init(&m_replctx);
             }
 
             char* replGetInput(const char* prompt)
             {
-                return lino_context_readline(&m_replctx, prompt);
+                return m_replctx.readLine(prompt);
             }
 
             void replHistoryAdd(const char* line)
             {
-                lino_context_historyadd(&m_replctx, line);
+                m_replctx.historyAdd(line);
             }
 
             void replFreeLine(char* line)
             {
-                lino_context_freeline(&m_replctx, line);
+                m_replctx.freeLine(line);
             }
 
             bool runRepl()
@@ -22750,8 +22724,8 @@ struct ConsoleProg
                 bracketcount = 0;
                 singlequotecount = 0;
                 doublequotecount = 0;
-                lino_context_setmultiline(&m_replctx, 0);
-                lino_context_historyadd(&m_replctx, ".exit");
+                m_replctx.setMultiline(0);
+                m_replctx.historyAdd(".exit");
                 while(true)
                 {
                     if(!continuerepl)

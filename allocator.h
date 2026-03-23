@@ -1664,15 +1664,26 @@ void* mempool_usermalloc(void* msp, size_t nsize)
 
 void* mempool_userfree(void* msp, void* ptr)
 {
+    size_t psize;
+    size_t prevsize;
+    size_t tsize;
+    size_t dsize;
+    size_t nsize;
+    MempoolState* fm;
+    MempoolTreeChunk* tp;
+    MempoolPlainChunk* p;
+    MempoolPlainChunk* prev;
+    MempoolPlainChunk* next;
     if(ptr != 0)
     {
-        MempoolPlainChunk* p = mempool_util_mem2chunk(ptr);
-        MempoolState* fm = (MempoolState*)msp;
-        size_t psize = mempool_util_chunksize(p);
-        MempoolPlainChunk* next = mempool_util_chunkplusoffset(p, psize);
+        p = mempool_util_mem2chunk(ptr);
+        fm = (MempoolState*)msp;
+        psize = mempool_util_chunksize(p);
+
+        next = mempool_util_chunkplusoffset(p, psize);
         if(!mempool_util_pinuse(p))
         {
-            size_t prevsize = p->prev_foot;
+            prevsize = p->prev_foot;
             if((prevsize & MEMPOOL_ISDIRECTBIT) != 0)
             {
                 prevsize &= ~MEMPOOL_ISDIRECTBIT;
@@ -1682,7 +1693,7 @@ void* mempool_userfree(void* msp, void* ptr)
             }
             else
             {
-                MempoolPlainChunk* prev = mempool_util_chunkminusoffset(p, prevsize);
+                prev = mempool_util_chunkminusoffset(p, prevsize);
                 psize += prevsize;
                 p = prev;
                 /* consolidate backward */
@@ -1702,7 +1713,7 @@ void* mempool_userfree(void* msp, void* ptr)
         { /* consolidate forward */
             if(next == fm->top)
             {
-                size_t tsize = fm->topsize += psize;
+                tsize = fm->topsize += psize;
                 fm->top = p;
                 p->head = tsize | MEMPOOL_PINUSE_BIT;
                 if(p == fm->dv)
@@ -1716,14 +1727,14 @@ void* mempool_userfree(void* msp, void* ptr)
             }
             else if(next == fm->dv)
             {
-                size_t dsize = fm->dvsize += psize;
+                dsize = fm->dvsize += psize;
                 fm->dv = p;
                 mempool_util_setsizeand_pinuseoffreechunk(p, dsize);
                 return NULL;
             }
             else
             {
-                size_t nsize = mempool_util_chunksize(next);
+                nsize = mempool_util_chunksize(next);
                 psize += nsize;
                 mempool_util_unlinkchunk(fm, next, nsize);
                 mempool_util_setsizeand_pinuseoffreechunk(p, psize);
@@ -1745,7 +1756,7 @@ void* mempool_userfree(void* msp, void* ptr)
         }
         else
         {
-            MempoolTreeChunk* tp = (MempoolTreeChunk*)p;
+            tp = (MempoolTreeChunk*)p;
             mempool_util_insertlargechunk(fm, tp, psize);
             if(--fm->release_checks == 0)
                 mempool_util_releaseunusedsegments(fm);
@@ -1756,18 +1767,29 @@ void* mempool_userfree(void* msp, void* ptr)
 
 void* mempool_userrealloc(void* msp, void* ptr, size_t nsize)
 {
+    size_t nb;
+    size_t oc;
+    size_t rsize;
+    size_t oldsize;
+    size_t newsize;
+    size_t newtopsize;
+    void* newmem;
+    MempoolState* m;
+    MempoolPlainChunk* oldp;
+    MempoolPlainChunk* next;
+    MempoolPlainChunk* newp;
     if(nsize >= MEMPOOL_REQUESTS_MAX)
     {
         return NULL;
     }
     else
     {
-        MempoolState* m = (MempoolState*)msp;
-        MempoolPlainChunk* oldp = mempool_util_mem2chunk(ptr);
-        size_t oldsize = mempool_util_chunksize(oldp);
-        MempoolPlainChunk* next = mempool_util_chunkplusoffset(oldp, oldsize);
-        MempoolPlainChunk* newp = 0;
-        size_t nb = mempool_util_request2size(nsize);
+        m = (MempoolState*)msp;
+        oldp = mempool_util_mem2chunk(ptr);
+        oldsize = mempool_util_chunksize(oldp);
+        next = mempool_util_chunkplusoffset(oldp, oldsize);
+        newp = 0;
+        nb = mempool_util_request2size(nsize);
 
         /* Try to either shrink or extend into top. Else malloc-copy-free */
         if(mempool_util_isdirect(oldp))
@@ -1776,7 +1798,7 @@ void* mempool_userrealloc(void* msp, void* ptr, size_t nsize)
         }
         else if(oldsize >= nb)
         { /* already big enough */
-            size_t rsize = oldsize - nb;
+            rsize = oldsize - nb;
             newp = oldp;
             if(rsize >= MEMPOOL_MINCHUNKSIZE)
             {
@@ -1789,8 +1811,8 @@ void* mempool_userrealloc(void* msp, void* ptr, size_t nsize)
         else if(next == m->top && oldsize + m->topsize > nb)
         {
             /* Expand into top */
-            size_t newsize = oldsize + m->topsize;
-            size_t newtopsize = newsize - nb;
+            newsize = oldsize + m->topsize;
+            newtopsize = newsize - nb;
             MempoolPlainChunk* newtop = mempool_util_chunkplusoffset(oldp, nb);
             mempool_util_setinuse(m, oldp, nb);
             newtop->head = newtopsize | MEMPOOL_PINUSE_BIT;
@@ -1805,10 +1827,10 @@ void* mempool_userrealloc(void* msp, void* ptr, size_t nsize)
         }
         else
         {
-            void* newmem = mempool_usermalloc(m, nsize);
+            newmem = mempool_usermalloc(m, nsize);
             if(newmem != 0)
             {
-                size_t oc = oldsize - mempool_util_overheadfor(oldp);
+                oc = oldsize - mempool_util_overheadfor(oldp);
                 memcpy(newmem, ptr, oc < nsize ? oc : nsize);
                 mempool_userfree(m, ptr);
             }
